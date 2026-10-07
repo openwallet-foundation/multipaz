@@ -55,6 +55,8 @@ struct Credential {
     std::vector<std::string> keyAuthorizedNamespaces;
     std::map<std::string, std::vector<std::string>> keyAuthorizedDataElements;
 
+    bool supportsPortraitImageEquivalence = false;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 
@@ -73,7 +75,8 @@ struct Credential {
         std::vector<std::vector<uint8_t>> readerIdentifiers_,
         std::vector<std::string> keyAuthorizedNamespaces_,
         std::map<std::string, std::vector<std::string>> keyAuthorizedDataElements_,
-        std::map<std::string, Claim> claims_
+        std::map<std::string, Claim> claims_,
+        bool supportsPortraitImageEquivalence_ = false
     ) : title(std::move(title_)),
         subtitle(std::move(subtitle_)),
         bitmap(std::move(bitmap_)),
@@ -85,7 +88,8 @@ struct Credential {
         readerIdentifiers(std::move(readerIdentifiers_)),
         keyAuthorizedNamespaces(std::move(keyAuthorizedNamespaces_)),
         keyAuthorizedDataElements(std::move(keyAuthorizedDataElements_)),
-        claims(std::move(claims_)) {}
+        claims(std::move(claims_)),
+        supportsPortraitImageEquivalence(supportsPortraitImageEquivalence_) {}
 
     Claim* findMatchingClaim(const DcqlRequestedClaim& claim);
 

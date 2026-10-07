@@ -14,12 +14,14 @@ import org.multipaz.request.RequestedClaim
  * @property transactionData list of transaction data to use for this credential presentment
  * @property transactionUserInput additional user input for transactions, indexed by the transaction
  *  type identifier
+ * @property faceMatchNeeded whether face matching is needed for this credential presentment
  */
 data class CredentialPresentmentSetOptionMemberMatch(
     val credential: Credential,
     val claims: Map<RequestedClaim, Claim>,
     val source: CredentialMatchSource,
     val transactionData: List<TransactionData<*>>,
-    val transactionUserInput: Map<String, TransactionUserInput> = emptyMap()
+    val transactionUserInput: Map<String, TransactionUserInput> = emptyMap(),
+    val faceMatchNeeded: Boolean = false,
 )
 

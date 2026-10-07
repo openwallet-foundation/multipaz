@@ -480,7 +480,8 @@ fun ConsentPromptScreen(
                         utopiaCbpIcon = utopiaCbpIcon,
                         identityReaderIcon = identityReaderIcon,
                         documentStore = documentStore,
-                        documentTypeRepository = documentTypeRepository
+                        documentTypeRepository = documentTypeRepository,
+                        faceMatcherRepository = faceMatcherRepository
                     )
                     val trustedRequesterIdentity =
                         queryResult.source.resolveTrust(queryResult.requester)
@@ -704,7 +705,8 @@ private suspend fun getQueryResult(
     utopiaCbpIcon: ByteString,
     identityReaderIcon: ByteString,
     documentStore: DocumentStore?,
-    documentTypeRepository: DocumentTypeRepository
+    documentTypeRepository: DocumentTypeRepository,
+    faceMatcherRepository: FaceMatcherRepository? = null
 ): QueryResult {
     val dcql = when (example) {
         Example.MDL_AGE_OVER_21_AND_PORTRAIT ->
@@ -1015,6 +1017,7 @@ private suspend fun getQueryResult(
     val source = SimplePresentmentSource(
         documentStore = documentStore!!,
         documentTypeRepository = documentTypeRepository,
+        getFaceMatcherFn = { faceMatcherRepository?.defaultMatcher },
         resolveTrustFn = { requester ->
             for (requesterIdentity in requester.requesterIdentities) {
                 val trustMetadata = resolveTrust(

@@ -11,6 +11,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import org.multipaz.compose.qrcode.generateQrCode
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
@@ -46,12 +48,25 @@ fun IsoMdocProximitySharingScreen(
     presentmentSource: PresentmentSource,
     settingsModel: TestAppSettingsModel,
     promptModel: PromptModel,
+    faceMatcherRepository: FaceMatcherRepository,
     showToast: (message: String) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope { promptModel }
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
     var disablePlatformImplementation by remember { mutableStateOf(false) }
+
+    val faceMatcherOptions = remember {
+        faceMatcherRepository.all.map { it.displayName } + listOf("None")
+    }
+    val faceMatcherDropdownExpanded = remember { mutableStateOf(false) }
+    val currentFaceMatcher = settingsModel.presentmentFaceMatcher.collectAsState()
+    val faceMatcherSelected = remember(currentFaceMatcher.value) {
+        mutableStateOf(
+            faceMatcherOptions.find { it == currentFaceMatcher.value }
+                ?: faceMatcherOptions.first()
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(5.dp),
@@ -93,6 +108,16 @@ fun IsoMdocProximitySharingScreen(
                 source = presentmentSource,
                 promptModel = promptModel,
                 prepareSettings = { generateQrCode ->
+                    ComboBox(
+                        headline = "Presentation Face Matcher",
+                        options = faceMatcherOptions,
+                        comboBoxSelected = faceMatcherSelected,
+                        comboBoxExpanded = faceMatcherDropdownExpanded,
+                        getDisplayName = { it },
+                        onSelected = { index, value ->
+                            settingsModel.presentmentFaceMatcher.value = value
+                        }
+                    )
                     Button(onClick = {
                         val connectionMethods = mutableListOf<MdocConnectionMethod>()
                         val bleUuid = UUID.randomUUID()

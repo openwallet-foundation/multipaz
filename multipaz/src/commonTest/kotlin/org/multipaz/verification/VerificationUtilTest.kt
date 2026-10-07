@@ -18,6 +18,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
+import org.multipaz.cbor.toDataItem
+import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -308,4 +311,74 @@ class VerificationUtilTest {
         assertNotNull(dataItem.getOrNull("readerAuthAll"))
         assertNotNull(dr.deviceRequestInfo)
     }
+
+    @Test
+    fun dcqlProcessedResponse_includesDeviceSignedClaims() = runTest {
+        val identity = createTestVerifierIdentity()
+        val now = Clock.System.now()
+        val presentation = MdocVerifiedPresentation(
+            documentSignerCertChain = identity.key.certChain,
+            issuerSignedClaims = listOf(
+                MdocClaim(
+                    displayName = "Given Name",
+                    attribute = null,
+                    docType = "org.iso.18013.5.1.mDL",
+                    namespaceName = "org.iso.18013.5.1",
+                    dataElementName = "given_name",
+                    value = "Erika".toDataItem(),
+                )
+            ),
+            deviceSignedClaims = listOf(
+                MdocClaim(
+                    displayName = "Credential Holder Verification",
+                    attribute = null,
+                    docType = "org.iso.18013.5.1.mDL",
+                    namespaceName = "org.iso.23220.5.1",
+                    dataElementName = "CHV_1",
+                    value = Simple.TRUE,
+                )
+            ),
+            zkpUsed = false,
+            validFrom = now,
+            validUntil = now + 365.days,
+            expectedUpdate = null,
+            signedAt = now,
+            docType = "org.iso.18013.5.1.mDL",
+            transactionResponses = null,
+            vpTokenIdentifier = null,
+            transactionData = emptyList(),
+        )
+
+        val dcql = """
+            {
+              "credentials": [{
+                  "id": "my_mdl",
+                  "format": "mso_mdoc",
+                  "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                  "claims": [
+                    { "id": "claim_given_name", "path": ["org.iso.18013.5.1", "given_name"] },
+                    { "id": "claim_chv1", "path": ["org.iso.23220.5.1", "CHV_1"] }
+                  ]
+              }]
+            }
+        """.trimIndent()
+
+        val processed = DcqlProcessedResponse(dcql, listOf(presentation))
+        val cred = processed.credentials["my_mdl"]
+        assertNotNull(cred)
+        assertEquals(1, cred.issuerSignedClaims.size)
+        assertTrue(cred.issuerSignedClaims.containsKey("claim_given_name"))
+
+        val givenNameClaim = cred.issuerSignedClaims["claim_given_name"] as MdocClaim
+        assertEquals("given_name", givenNameClaim.dataElementName)
+        assertEquals("Erika", givenNameClaim.value.asTstr)
+
+        assertEquals(1, cred.deviceSignedClaims.size)
+        assertTrue(cred.deviceSignedClaims.containsKey("claim_chv1"))
+
+        val chv1Claim = cred.deviceSignedClaims["claim_chv1"] as MdocClaim
+        assertEquals("CHV_1", chv1Claim.dataElementName)
+        assertEquals(Simple.TRUE, chv1Claim.value)
+    }
 }
+

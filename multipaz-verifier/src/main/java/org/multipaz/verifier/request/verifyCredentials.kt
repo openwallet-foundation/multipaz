@@ -17,6 +17,7 @@ import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
@@ -30,6 +31,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.claim.Claim
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.Algorithm
@@ -284,6 +286,31 @@ private suspend fun respondWithResult(
 private val standardJsonClaims =
     setOf("iss", "vct", "iat", "nbf", "exp", "nonce", "aud", "cnf", "sd_hash")
 
+private fun JsonObjectBuilder.putClaims(claims: Map<String, Claim>) {
+    for ((name, claim) in claims) {
+        val value = when (claim) {
+            is JsonClaim -> {
+                if (claim.claimPath.size == 1 &&
+                    standardJsonClaims.contains(claim.claimPath.last().jsonPrimitive.content)
+                ) {
+                    continue
+                }
+                claim.value
+            }
+            is MdocClaim -> when (val value = claim.value) {
+                is Tagged -> when (value.tagNumber) {
+                    Tagged.DATE_TIME_STRING,
+                    Tagged.FULL_DATE_STRING ->
+                        JsonPrimitive((value.taggedItem as Tstr).asTstr)
+                    else -> value.toJson()
+                }
+                else -> value.toJson()
+            }
+        }
+        put(name, value)
+    }
+}
+
 private suspend fun processPresentation(
     presentmentRecord: PresentmentRecord,
     dcql: String,
@@ -324,27 +351,12 @@ private suspend fun processPresentation(
         }
         val docResult = buildJsonObject {
             trusted?.let { put("trusted", trusted) }
-            putJsonObject("claims") {
-                for ((name, claim) in credential.claims) {
-                    val value = when (claim) {
-                        is JsonClaim -> {
-                            if (claim.claimPath.size == 1 &&
-                                standardJsonClaims.contains(claim.claimPath.last().jsonPrimitive.content)) {
-                                continue
-                            }
-                            claim.value
-                        }
-                        is MdocClaim -> when (val value = claim.value) {
-                            is Tagged -> when (value.tagNumber) {
-                                Tagged.DATE_TIME_STRING,
-                                Tagged.FULL_DATE_STRING ->
-                                    JsonPrimitive((value.taggedItem as Tstr).asTstr)
-                                else -> value.toJson()
-                            }
-                            else -> value.toJson()
-                        }
-                    }
-                    put(name, value)
+            putJsonObject("issuer_signed_claims") {
+                putClaims(credential.issuerSignedClaims)
+            }
+            if (credential.deviceSignedClaims.isNotEmpty()) {
+                putJsonObject("device_signed_claims") {
+                    putClaims(credential.deviceSignedClaims)
                 }
             }
             transactions?.let { put("transactions", it) }

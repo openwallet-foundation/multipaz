@@ -11,6 +11,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.PortraitEquivalenceRequest
 
 /**
  * PhotoID according to ISO/IEC 23220-4 Annex C.
@@ -31,6 +32,7 @@ object PhotoID {
 
         return with(DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_PHOTO_ID))) {
         addMdocDocumentType(PHOTO_ID_DOCTYPE)
+        setSupportsPortraitImageEquivalence(ISO_23220_2_NAMESPACE, "portrait")
 
         // Data elements from ISO/IEC 23220-4 Table C.1 — PhotoID data elements defined by ISO/IEC TS 23220-2
         //
@@ -667,6 +669,28 @@ object PhotoID {
                     "portrait" to false
                 )
             ),
+        )
+        addSampleRequest(
+            id = "age_over_18_and_portrait_equivalence",
+            displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_REQUEST_AGE_OVER_18_AND_PORTRAIT_EQUIVALENCE),
+            mdocDataElements = mapOf(
+                ISO_23220_2_NAMESPACE to mapOf(
+                    "age_over_18" to false,
+                )
+            ),
+            portraitEquivalenceRequest = PortraitEquivalenceRequest()
+        )
+        addSampleRequest(
+            id = "age_over_18_and_portrait_or_portrait_equivalence",
+            displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_REQUEST_AGE_OVER_18_AND_PORTRAIT_OR_PORTRAIT_EQUIVALENCE),
+            mdocDataElements = mapOf(
+                ISO_23220_2_NAMESPACE to mapOf(
+                    "age_over_18" to false,
+                )
+            ),
+            portraitEquivalenceRequest = PortraitEquivalenceRequest(
+                includePortrait = true
+            )
         )
         addSampleRequest(
             id = "mandatory",

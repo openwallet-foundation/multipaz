@@ -23,20 +23,24 @@ import org.multipaz.cbor.DataItem
  *
  * @property docType the ISO mdoc doc type e.g. `org.iso.18013.5.1.mDL`.
  * @property namespaces the namespaces of the doc type.
+ * @property supportsPortraitImageEquivalence if not null, indicates portrait image equivalence is supported.
  */
 class MdocDocumentType private constructor(
     val docType: String,
     val namespaces: Map<String, MdocNamespace>,
+    val supportsPortraitImageEquivalence: MdocPortraitEquivalenceData? = null,
 ) {
     /**
      * Builder class for class [MdocDocumentType].
      *
      * @param docType the docType of the ISO mdoc Document Type.
      * @property namespaces the mutable map of namespaces being built.
+     * @property supportsPortraitImageEquivalence if not null, indicates portrait image equivalence is supported.
      */
     data class Builder(
         val docType: String,
         internal val namespaces: MutableMap<String, MdocNamespace.Builder> = mutableMapOf(),
+        var supportsPortraitImageEquivalence: MdocPortraitEquivalenceData? = null,
     ) {
         /**
          * Add a data element to a namespace in the ISO mdoc Document Type.
@@ -102,11 +106,41 @@ class MdocDocumentType private constructor(
         }
 
         /**
+         * Sets portrait image equivalence support.
+         *
+         * @param namespace the namespace containing the portrait data element.
+         * @param dataElementName the name of the data element containing the portrait.
+         * @return the builder.
+         */
+        fun setSupportsPortraitImageEquivalence(
+            namespace: String,
+            dataElementName: String,
+        ) = apply {
+            this.supportsPortraitImageEquivalence = MdocPortraitEquivalenceData(namespace, dataElementName)
+        }
+
+        /**
+         * Sets portrait image equivalence support.
+         *
+         * @param supportsPortraitImageEquivalence the portrait equivalence data or `null`.
+         * @return the builder.
+         */
+        fun setSupportsPortraitImageEquivalence(
+            supportsPortraitImageEquivalence: MdocPortraitEquivalenceData?,
+        ) = apply {
+            this.supportsPortraitImageEquivalence = supportsPortraitImageEquivalence
+        }
+
+        /**
          * Build the [MdocDocumentType].
          *
          * @return the built [MdocDocumentType].
          */
         fun build() =
-            MdocDocumentType(docType, namespaces.map { Pair(it.key, it.value.build()) }.toMap())
+            MdocDocumentType(
+                docType = docType,
+                namespaces = namespaces.map { Pair(it.key, it.value.build()) }.toMap(),
+                supportsPortraitImageEquivalence = supportsPortraitImageEquivalence,
+            )
     }
 }

@@ -33,6 +33,7 @@ import org.multipaz.documenttype.IntegerOption
 import org.multipaz.documenttype.StringOption
 import org.multipaz.util.fromBase64Url
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.PortraitEquivalenceRequest
 
 /**
  * Object containing the metadata of the Driving License
@@ -51,6 +52,7 @@ object DrivingLicense {
 
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_DRIVING_LICENSE))
             .addMdocDocumentType(MDL_DOCTYPE)
+            .setSupportsPortraitImageEquivalence(MDL_NAMESPACE, "portrait")
             /*
              * First the attributes that the mDL and VC Credential Type have in common
              */
@@ -883,6 +885,28 @@ object DrivingLicense {
                         "portrait" to false
                     )
                 ),
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_equivalence",
+                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_REQUEST_AGE_OVER_18_AND_PORTRAIT_EQUIVALENCE),
+                mdocDataElements = mapOf(
+                    MDL_NAMESPACE to mapOf(
+                        "age_over_18" to false,
+                    ),
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest()
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_or_portrait_equivalence",
+                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_REQUEST_AGE_OVER_18_AND_PORTRAIT_OR_PORTRAIT_EQUIVALENCE),
+                mdocDataElements = mapOf(
+                    MDL_NAMESPACE to mapOf(
+                        "age_over_18" to false,
+                    ),
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest(
+                    includePortrait = true
+                )
             )
             .addSampleRequest(
                 id = "age_over_21_and_portrait",

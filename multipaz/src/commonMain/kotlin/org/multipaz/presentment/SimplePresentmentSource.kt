@@ -8,6 +8,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
@@ -38,6 +39,7 @@ private data class CredentialForPresentment(
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository the [ZkSystemRepository] to use or `null`.
  * @property eventLogger an [EventLogger] for logging events or `null`.
+ * @property getFaceMatcherFn a function returning the [FaceMatcher] to use or `null`.
  * @property resolveTrustFn a function which can be used to determine if a requester is trusted.
  * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
  * @property preferSignatureToKeyAgreement whether to use mdoc ECDSA authentication even if mdoc MAC authentication
@@ -55,9 +57,11 @@ class SimplePresentmentSource(
     override val documentTypeRepository: DocumentTypeRepository,
     override val zkSystemRepository: ZkSystemRepository? = null,
     override val eventLogger: EventLogger? = null,
+    private val getFaceMatcherFn: () -> FaceMatcher? = { null },
     private val resolveTrustFn: suspend (requester: Requester) -> TrustedRequesterIdentity? = { null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
     private val getBadgesFn: suspend (document: Document) -> List<DocumentBadge> = { document -> emptyList() },
+    private val getFaceMatchingModeFn: suspend (credential: Credential) -> FaceMatchingMode = { FaceMatchingMode.ONLY_IF_REQUESTED },
     val preferSignatureToKeyAgreement: Boolean = true,
     val domainsMdocSignature: List<String> = emptyList(),
     val domainsMdocKeyAgreement: List<String> = emptyList(),
@@ -69,6 +73,8 @@ class SimplePresentmentSource(
     zkSystemRepository = zkSystemRepository,
     eventLogger = eventLogger
 ) {
+    override fun getFaceMatcher(): FaceMatcher? = getFaceMatcherFn()
+
     override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? {
         return resolveTrustFn(requester)
     }
@@ -91,6 +97,10 @@ class SimplePresentmentSource(
 
     override suspend fun getBadges(document: Document): List<DocumentBadge> {
         return getBadgesFn(document)
+    }
+
+    override suspend fun getFaceMatchingMode(credential: Credential): FaceMatchingMode {
+        return getFaceMatchingModeFn(credential)
     }
 
     private suspend fun Document.findCredential(domains: List<String>, now: Instant): Credential? {

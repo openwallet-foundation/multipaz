@@ -50,6 +50,7 @@ class ViewModel {
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
     var faceMatcherRepository: FaceMatcherRepository!
+    var selectedFaceMatcher: String = "facenet"
 
     let promptModel = Platform.shared.promptModel
     
@@ -341,6 +342,12 @@ class ViewModel {
             readerIdentifiers: [],
             metadata: nil
         )
+        var deviceKeyAuthorizedDataElements: [String: [String]] = [:]
+        if documentType.mdocDocumentType?.supportsPortraitImageEquivalence != nil {
+            deviceKeyAuthorizedDataElements[ISO_23220_5_CHV_1_NAMESPACE] = [
+                ISO_23220_5_CHV_1_DATA_ELEMENT
+            ]
+        }
         let _ = try! await documentType.createMdocCredentialWithSampleData(
             document: document,
             secureArea: secureArea,
@@ -365,7 +372,7 @@ class ViewModel {
             randomProvider: KotlinRandom.companion,
             includeElement: { _, _ in KotlinBoolean(value: true) },
             deviceKeyAuthorizedNamespaces: [],
-            deviceKeyAuthorizedDataElements: [:]
+            deviceKeyAuthorizedDataElements: deviceKeyAuthorizedDataElements
         )
         try! await document.edit(editActionFn: { editor in
             editor.provisioned = true
@@ -377,6 +384,14 @@ class ViewModel {
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: nil,
+            getFaceMatcherFn: {
+                if self.selectedFaceMatcher == "None" {
+                    return nil
+                }
+                return self.faceMatcherRepository.lookup(name: self.selectedFaceMatcher)
+                    ?? self.faceMatcherRepository.all.first { $0.displayName == self.selectedFaceMatcher }
+                    ?? self.faceMatcherRepository.defaultMatcher
+            },
             resolveTrustFn: { requester in
                 for requesterIdentity in requester.requesterIdentities {
                     let certChain = requesterIdentity.certChain

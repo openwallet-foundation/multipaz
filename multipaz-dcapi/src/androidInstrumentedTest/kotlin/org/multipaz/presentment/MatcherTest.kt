@@ -14,6 +14,7 @@ import org.junit.Assert
 import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
@@ -34,13 +35,18 @@ import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.crypto.buildX509Cert
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
+import org.multipaz.document.Document
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
+import org.multipaz.mdoc.request.AlternativeDataElementSet
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.ElementReference
 import org.multipaz.mdoc.request.TransactionsInfo
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.util.MdocUtil
@@ -4487,5 +4493,881 @@ class MatcherTest {
         )
         println("Matcher result: '$result'")
         Assert.assertTrue("Expected match but got: '$result'", result.isNotEmpty())
+    }
+
+    private suspend fun DocumentStoreTestHarness.provisionMdlForFaceMatching(
+        displayName: String = "mDL",
+        includePortrait: Boolean = true,
+        keyAuthorizedNamespaces: List<String> = emptyList(),
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
+    ): Document {
+        val claims = mutableListOf<Pair<String, DataItem>>(
+            "given_name" to "Erika".toDataItem(),
+            "family_name" to "Mustermann".toDataItem(),
+            "age_over_18" to true.toDataItem(),
+        )
+        if (includePortrait) {
+            claims.add("portrait" to Bstr(byteArrayOf(1, 2, 3, 4)))
+        }
+        return provisionMdoc(
+            displayName = displayName,
+            docType = DrivingLicense.MDL_DOCTYPE,
+            data = mapOf(DrivingLicense.MDL_NAMESPACE to claims),
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            keyAuthorizedDataElements = keyAuthorizedDataElements,
+        )
+    }
+
+    private suspend fun DocumentStoreTestHarness.provisionCustomDocWithoutPortraitEquivalence(
+        displayName: String = "CustomDoc",
+        keyAuthorizedNamespaces: List<String> = emptyList(),
+    ): Document {
+        return provisionMdoc(
+            displayName = displayName,
+            docType = "org.example.customDoc",
+            data = mapOf(
+                "org.example.customDoc" to listOf(
+                    "custom_claim" to "value".toDataItem()
+                )
+            ),
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces,
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_chv1_namespaceAuthorized() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_chv1_dataElementAuthorized() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedDataElements = mapOf(
+                        ISO_23220_5_CHV_1_NAMESPACE to listOf(ISO_23220_5_CHV_1_DATA_ELEMENT)
+                    )
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_chv1_notKeyAuthorized() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = emptyList(),
+                    keyAuthorizedDataElements = emptyMap(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_chv1_noPortraitInDocument() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = false,
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_chv1_docTypeWithoutPortraitEquivalence() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionCustomDocWithoutPortraitEquivalence(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "custom",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.example.customDoc" },
+                          "claims": [
+                            { "path": ["org.example.customDoc", "custom_claim"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_nonChv1In23220_5_fails() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "other_element"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_claimSets_chv1SupportedMatchesOption0() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_claimSets_fallbackToPortrait() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = emptyList(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Given names: Erika
+                    Photo of holder: 4 bytes
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_claimSets_neitherSupportedFails() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = false,
+                    keyAuthorizedNamespaces = emptyList(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_alternativeDataElements_chv1Supported() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                            ),
+                            ISO_23220_5_CHV_1_NAMESPACE to mapOf(
+                                ISO_23220_5_CHV_1_DATA_ELEMENT to false,
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            alternativeDataElements = listOf(
+                                AlternativeDataElementSet(
+                                    requestedElement = ElementReference(
+                                        ISO_23220_5_CHV_1_NAMESPACE,
+                                        ISO_23220_5_CHV_1_DATA_ELEMENT
+                                    ),
+                                    alternativeElementSets = listOf(
+                                        listOf(
+                                            ElementReference(
+                                                DrivingLicense.MDL_NAMESPACE,
+                                                "portrait"
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_alternativeDataElements_fallbackToPortrait() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = emptyList(),
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                            ),
+                            ISO_23220_5_CHV_1_NAMESPACE to mapOf(
+                                ISO_23220_5_CHV_1_DATA_ELEMENT to false,
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            alternativeDataElements = listOf(
+                                AlternativeDataElementSet(
+                                    requestedElement = ElementReference(
+                                        ISO_23220_5_CHV_1_NAMESPACE,
+                                        ISO_23220_5_CHV_1_DATA_ELEMENT
+                                    ),
+                                    alternativeElementSets = listOf(
+                                        listOf(
+                                            ElementReference(
+                                                DrivingLicense.MDL_NAMESPACE,
+                                                "portrait"
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                    Photo of holder: 4 bytes
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_namespaceAuthorized() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_dataElementAuthorized() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedDataElements = mapOf(
+                        ISO_23220_5_CHV_1_NAMESPACE to listOf(ISO_23220_5_CHV_1_DATA_ELEMENT)
+                    )
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_notKeyAuthorized() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = emptyList(),
+                    keyAuthorizedDataElements = emptyMap(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_noPortraitInDocument() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = false,
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_docTypeWithoutPortraitEquivalence() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionCustomDocWithoutPortraitEquivalence(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "custom",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.example.customDoc" },
+                          "claims": [
+                            { "path": ["org.example.customDoc", "custom_claim"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_nonChv1In23220_5_fails() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "other_element"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_claimSets_chv1SupportedMatchesOption0() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_claimSets_fallbackToPortrait() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = true,
+                    keyAuthorizedNamespaces = emptyList(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                    Photo of holder: 4 bytes
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_claimSets_neitherSupportedFails() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    includePortrait = false,
+                    keyAuthorizedNamespaces = emptyList(),
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "id": "claim_given_name", "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                            { "id": "claim_chv1", "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] },
+                            { "id": "claim_portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                          ],
+                          "claim_sets": [
+                            ["claim_given_name", "claim_chv1"],
+                            ["claim_given_name", "claim_portrait"]
+                          ]
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_chv1_and_age_over_18() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "claims": [
+                            { "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_over_18"] },
+                            { "path": ["$ISO_23220_5_CHV_1_NAMESPACE", "$ISO_23220_5_CHV_1_DATA_ELEMENT"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 18 years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_canned_age_over_18_and_portrait_equivalence() = runTest {
+        val cannedRequest = DrivingLicense.getDocumentType().cannedRequests
+            .find { it.id == "age_over_18_and_portrait_equivalence" }!!
+        val dcql = cannedRequest.mdocRequest!!.toDcql(emptyList()).toString()
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            dcql = dcql,
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 18 years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_rawDeviceRequest_v10_chv1_and_age_over_18() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "age_over_18" to false,
+                            ),
+                            ISO_23220_5_CHV_1_NAMESPACE to mapOf(
+                                ISO_23220_5_CHV_1_DATA_ELEMENT to false,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 18 years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_rawDeviceRequest_v11_chv1_and_age_over_18() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdlForFaceMatching(
+                    keyAuthorizedNamespaces = listOf(ISO_23220_5_CHV_1_NAMESPACE)
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.1")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "age_over_18" to false,
+                            ),
+                            ISO_23220_5_CHV_1_NAMESPACE to mapOf(
+                                ISO_23220_5_CHV_1_DATA_ELEMENT to false,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 18 years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
     }
 }

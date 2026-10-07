@@ -24,8 +24,11 @@ import org.multipaz.presentment.CredentialPresentmentSet
 import org.multipaz.presentment.CredentialPresentmentSetOption
 import org.multipaz.presentment.CredentialPresentmentSetOptionMember
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
+import org.multipaz.presentment.FaceMatchingMode
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.canSatisfyChv1
+import org.multipaz.presentment.isChv1Claim
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
@@ -46,7 +49,8 @@ private data class QueryResponse(
 private data class QueryResponseMatch(
     val credential: Credential,
     val claims: Map<RequestedClaim, Claim>,
-    val transactionData: List<TransactionData<*>>
+    val transactionData: List<TransactionData<*>>,
+    val faceMatchNeeded: Boolean = false,
 )
 
 private fun DcqlCredentialSetOption.isSatisfied(
@@ -215,16 +219,26 @@ data class DcqlQuery(
                 }
                 if (credentialQuery.claimSets.isEmpty()) {
                     var didNotMatch = false
-                    val matchingClaimValues = mutableMapOf< RequestedClaim, Claim>()
+                    var chv1Matched = false
+                    val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
                     for (requestedClaim in credentialQuery.claims) {
-                        val matchingCredentialClaimValue =
-                            claimsInCredential.findMatchingClaim(requestedClaim)
-                        if (matchingCredentialClaimValue != null) {
-                            matchingClaimValues[requestedClaim] = matchingCredentialClaimValue
+                        if (isChv1Claim(requestedClaim)) {
+                            if (canSatisfyChv1(cred, presentmentSource)) {
+                                chv1Matched = true
+                            } else {
+                                Logger.w(TAG, "Cannot satisfy requested claim $requestedClaim")
+                                didNotMatch = true
+                                break
+                            }
                         } else {
-                            Logger.w(TAG, "Error resolving requested claim $requestedClaim")
-                            didNotMatch = true
-                            break
+                            val matchingCredentialClaimValue = claimsInCredential.findMatchingClaim(requestedClaim)
+                            if (matchingCredentialClaimValue != null) {
+                                matchingClaimValues[requestedClaim] = matchingCredentialClaimValue
+                            } else {
+                                Logger.w(TAG, "Error resolving requested claim $requestedClaim")
+                                didNotMatch = true
+                                break
+                            }
                         }
                     }
                     val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
@@ -237,19 +251,26 @@ data class DcqlQuery(
                     if (!didNotMatch) {
                         val credential = presentmentSource.selectCredential(
                             document = cred.document,
-                            requestedClaims = credentialQuery.claims,
+                            requestedClaims = matchingClaimValues.keys.toList(),
                             keyAgreementPossible = effectiveKeyAgreementPossible,
                             credential = cred,
                         )
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
                         }
+                        val faceMatchingMode = presentmentSource.getFaceMatchingMode(credential)
+                        val faceMatchNeeded = when (faceMatchingMode) {
+                            FaceMatchingMode.NEVER -> false
+                            FaceMatchingMode.ALWAYS -> true
+                            FaceMatchingMode.ONLY_IF_REQUESTED -> chv1Matched
+                        }
                         // All claims matched, we have a candidate
                         matches.add(
                             QueryResponseMatch(
                                 credential = credential,
                                 claims = matchingClaimValues,
-                                transactionData = transactionData
+                                transactionData = transactionData,
+                                faceMatchNeeded = faceMatchNeeded,
                             )
                         )
                     }
@@ -257,6 +278,7 @@ data class DcqlQuery(
                     // Go through all the claim sets, one at a time, pick the first to match
                     for (claimSet in credentialQuery.claimSets) {
                         var didNotMatch = false
+                        var chv1Matched = false
                         val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
                         for (claimId in claimSet.claimIdentifiers) {
                             val requestedClaim = credentialQuery.claimIdToClaim[claimId]
@@ -264,13 +286,21 @@ data class DcqlQuery(
                                 didNotMatch = true
                                 break
                             }
-                            val credentialClaimValue =
-                                claimsInCredential.findMatchingClaim(requestedClaim)
-                            if (credentialClaimValue != null) {
-                                matchingClaimValues[requestedClaim] = credentialClaimValue
+                            if (isChv1Claim(requestedClaim)) {
+                                if (canSatisfyChv1(cred, presentmentSource)) {
+                                    chv1Matched = true
+                                } else {
+                                    didNotMatch = true
+                                    break
+                                }
                             } else {
-                                didNotMatch = true
-                                break
+                                val credentialClaimValue = claimsInCredential.findMatchingClaim(requestedClaim)
+                                if (credentialClaimValue != null) {
+                                    matchingClaimValues[requestedClaim] = credentialClaimValue
+                                } else {
+                                    didNotMatch = true
+                                    break
+                                }
                             }
                         }
                         val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
@@ -281,17 +311,28 @@ data class DcqlQuery(
                             }
                         }
                         if (!didNotMatch) {
+                            val credential = presentmentSource.selectCredential(
+                                document = cred.document,
+                                requestedClaims = matchingClaimValues.keys.toList(),
+                                keyAgreementPossible = effectiveKeyAgreementPossible,
+                                credential = cred,
+                            )
+                            if (credential == null) {
+                                throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
+                            }
+                            val faceMatchingMode = presentmentSource.getFaceMatchingMode(credential)
+                            val faceMatchNeeded = when (faceMatchingMode) {
+                                FaceMatchingMode.NEVER -> false
+                                FaceMatchingMode.ALWAYS -> true
+                                FaceMatchingMode.ONLY_IF_REQUESTED -> chv1Matched
+                            }
                             // All claims matched, we have a candidate
                             matches.add(
                                 QueryResponseMatch(
-                                    credential = presentmentSource.selectCredential(
-                                        document = cred.document,
-                                        requestedClaims = credentialQuery.claims,
-                                        keyAgreementPossible = effectiveKeyAgreementPossible,
-                                        credential = cred,
-                                    )!!,
+                                    credential = credential,
                                     claims = matchingClaimValues,
-                                    transactionData = transactionData
+                                    transactionData = transactionData,
+                                    faceMatchNeeded = faceMatchNeeded,
                                 )
                             )
                             break
@@ -325,7 +366,8 @@ data class DcqlQuery(
                         credential = match.credential,
                         claims = match.claims,
                         source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
-                        transactionData = match.transactionData
+                        transactionData = match.transactionData,
+                        faceMatchNeeded = match.faceMatchNeeded,
                     ))
                 }
                 val options = mutableListOf<CredentialPresentmentSetOption>()
@@ -375,7 +417,8 @@ data class DcqlQuery(
                                     credential = match.credential,
                                     claims = match.claims,
                                     source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
-                                    transactionData = match.transactionData
+                                    transactionData = match.transactionData,
+                                    faceMatchNeeded = match.faceMatchNeeded,
                                 ))
                             }
                             members.add(

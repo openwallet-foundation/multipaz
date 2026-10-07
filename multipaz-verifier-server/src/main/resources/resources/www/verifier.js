@@ -69,17 +69,26 @@ async function onLoad() {
     const response = await callServer(
         'getAvailableRequests', {}
     )
-    var active = true
+    const targetMdocDocType = "org.iso.18013.5.1.mDL"
+    let defaultTabFound = false
+    for (const dtwr of response.documentTypesWithRequests) {
+        if (dtwr.mdocDocType === targetMdocDocType) {
+            defaultTabFound = true
+            break
+        }
+    }
+
+    let first = true
     for (const dtwr of response.documentTypesWithRequests) {
       if (dtwr.mdocDocType != null) {
-          var tabId = "mdoc-" + dtwr.mdocDocType
+          let active = defaultTabFound ? (dtwr.mdocDocType === targetMdocDocType) : first
           addTab(dtwr.documentDisplayName + " (mdoc)", "mdoc", dtwr.mdocDocType, dtwr.sampleRequests, active, null)
-          active = false
+          first = false
       }
       if (dtwr.vcVct != null) {
-          var tabId = "vc-" + dtwr.vcVct
+          let active = defaultTabFound ? false : first
           addTab(dtwr.documentDisplayName + " (VC)", "vc", dtwr.vcVct, dtwr.sampleRequests, active, null)
-          active = false
+          first = false
       }
     }
     for (const mdr of response.multiDocumentRequests) {
@@ -142,6 +151,12 @@ function addTab(tabName, mdocOrVc, docTypeOrVct, sampleRequests, active, multiDo
     } else {
         str += '  <div class="d-grid gap-2 mx-auto"> '
         for (sr of sampleRequests) {
+            if (mdocOrVc == 'mdoc' && !sr.supportsMdoc) {
+                continue
+            }
+            if (mdocOrVc == 'vc' && !sr.supportsVc) {
+                continue
+            }
             str += '    <button type="button" class="btn btn-primary btn-lg" '
             str += 'onclick="requestDocument(\'' + mdocOrVc + '\', \'' + docTypeOrVct + '\', \'' + sr.id + '\', null, null)" >'
             str += sr.displayName

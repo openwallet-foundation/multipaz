@@ -52,6 +52,8 @@ import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
@@ -766,6 +768,23 @@ object TestAppUtils {
         }
     }
 
+    private fun computeDeviceKeyAuthorizedDataElements(
+        documentType: DocumentType,
+        deviceKeyAuthorizedDataElements: Map<String, List<String>>,
+    ): Map<String, List<String>> {
+        if (documentType.mdocDocumentType?.supportsPortraitImageEquivalence == null) {
+            return deviceKeyAuthorizedDataElements
+        }
+        val existing = deviceKeyAuthorizedDataElements[ISO_23220_5_CHV_1_NAMESPACE] ?: emptyList()
+        return if (!existing.contains(ISO_23220_5_CHV_1_DATA_ELEMENT)) {
+            deviceKeyAuthorizedDataElements + (
+                ISO_23220_5_CHV_1_NAMESPACE to (existing + ISO_23220_5_CHV_1_DATA_ELEMENT)
+            )
+        } else {
+            deviceKeyAuthorizedDataElements
+        }
+    }
+
     private suspend fun addMdocCredentials(
         document: Document,
         documentType: DocumentType,
@@ -813,6 +832,11 @@ object TestAppUtils {
                 }
             }
         }
+
+        val effectiveAuthorizedDataElements = computeDeviceKeyAuthorizedDataElements(
+            documentType,
+            deviceKeyAuthorizedDataElements
+        )
 
         // Create authentication keys...
         for (domain in listOf(
@@ -864,7 +888,7 @@ object TestAppUtils {
                     valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                     deviceKey = mdocCredential.getAttestation().ecPublicKey,
                     deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
-                    deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
+                    deviceKeyAuthorizedDataElements = effectiveAuthorizedDataElements,
                 )
                 val taggedEncodedMso = Cbor.encode(Tagged(
                     Tagged.ENCODED_CBOR,
@@ -991,6 +1015,11 @@ object TestAppUtils {
             Pair(creds, null)
         }
 
+        val effectiveAuthorizedDataElements = computeDeviceKeyAuthorizedDataElements(
+            documentType,
+            deviceKeyAuthorizedDataElements
+        )
+
         for (mdocCredential in credentials) {
             // Generate an MSO and issuer-signed data for this authentication key.
             val mso = MobileSecurityObject(
@@ -1004,7 +1033,7 @@ object TestAppUtils {
                 valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                 deviceKey = mdocCredential.getAttestation().ecPublicKey,
                 deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
-                deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
+                deviceKeyAuthorizedDataElements = effectiveAuthorizedDataElements,
             )
             val taggedEncodedMso = Cbor.encode(Tagged(
                 Tagged.ENCODED_CBOR,

@@ -592,6 +592,7 @@ fun IsoMdocProximityReadingScreen(
                         }
                     )
                 }
+
                 item {
                     OutlinedTextField(
                         value = issuerIdentifiers.value,

@@ -61,9 +61,6 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
-import org.multipaz.mdoc.request.DocRequestInfo
-import org.multipaz.mdoc.request.ZkRequest
-import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.role.MdocRole
@@ -73,8 +70,6 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.request.JsonRequestedClaim
-import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.getTable
@@ -438,8 +433,12 @@ private fun lookupWellknownRequest(
     requestId: String
 ): SingleDocumentCannedRequest {
     return when (format) {
-        "mdoc" -> documentTypeRepo.getDocumentTypeForMdoc(docType)!!.cannedRequests.first { it.id == requestId}
-        "vc" -> documentTypeRepo.getDocumentTypeForJson(docType)!!.cannedRequests.first { it.id == requestId}
+        "mdoc" -> documentTypeRepo.getDocumentTypeForMdoc(docType)!!.cannedRequests.first {
+            it.id == requestId && it.mdocRequest != null
+        }
+        "vc" -> documentTypeRepo.getDocumentTypeForJson(docType)!!.cannedRequests.first {
+            it.id == requestId && it.jsonRequest != null
+        }
         else -> throw IllegalArgumentException("Unknown format $format")
     }
 }
@@ -1592,7 +1591,19 @@ private suspend fun handleGetDataMdoc(
                     )
                     lines.add(ResultLine(dataElementName, renderedValue))
                 }
-                // TODO: also iterate over DeviceSigned items
+            }
+            document.deviceNamespaces.data.forEach { (namespaceName, dataElementsMap) ->
+                lines.add(ResultLine("Namespace (device-signed)", namespaceName))
+                dataElementsMap.forEach { (dataElementName, dataElementValue) ->
+                    val renderedValue = Cbor.toDiagnostics(
+                        dataElementValue,
+                        setOf(
+                            DiagnosticOption.PRETTY_PRINT,
+                            DiagnosticOption.BSTR_PRINT_LENGTH
+                        )
+                    )
+                    lines.add(ResultLine(dataElementName, renderedValue))
+                }
             }
         }
         for (zkDocument in deviceResponse.zkDocuments) {
@@ -1662,7 +1673,25 @@ private suspend fun handleGetDataMdoc(
                         )
                     }
                 }
-                // TODO: also iterate over DeviceSigned items
+                for ((nameSpaceName, dataElements) in zkDocument.documentData.deviceSigned) {
+                    lines.add(ResultLine("Namespace (device-signed)", nameSpaceName))
+                    for ((dataElementName, dataElementValue) in dataElements) {
+                        val valueStr = Cbor.toDiagnostics(
+                            dataElementValue,
+                            setOf(
+                                DiagnosticOption.PRETTY_PRINT,
+                                DiagnosticOption.EMBEDDED_CBOR,
+                                DiagnosticOption.BSTR_PRINT_LENGTH,
+                            )
+                        )
+                        lines.add(
+                            ResultLine(
+                                dataElementName,
+                                valueStr,
+                            )
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 e.printStackTrace()
@@ -2117,77 +2146,39 @@ private suspend fun calcDcRequestNew(
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
-    val request = if (format == "vc") {
-        val claims = request.jsonRequest!!.claimsToRequest.map { documentAttribute ->
-            val path = mutableListOf<JsonElement>()
-            documentAttribute.parentAttribute?.let {
-                path.add(JsonPrimitive(it.identifier))
-            }
-            path.add(JsonPrimitive(documentAttribute.identifier))
-            JsonRequestedClaim(
-                vctValues = listOf(request.jsonRequest!!.vct),
-                claimPath = JsonArray(path),
-            )
-        }
-        Logger.i(TAG, "using VerificationUtil.generateDcRequestSdJwt()")
-        VerificationUtil.generateDcRequestSdJwt(
-            exchangeProtocols = exchangeProtocols,
-            vct = listOf(request.jsonRequest!!.vct),
-            claims = claims,
-            nonce = nonce,
-            origin = origin,
-            responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            verifierIdentities = listOf(
-                VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}")
-            ),
-            issuerIdentifiers = session.issuerIdentifiers,
-            deviceRequestVersion = session.deviceRequestVersion
-        )
+    val zkSystemSpecs = if (request.mdocRequest?.useZkp == true) {
+        getZkSystemRepository().getAllZkSystemSpecs()
     } else {
-        val claims = mutableListOf<MdocRequestedClaim>()
-        request.mdocRequest!!.namespacesToRequest.forEach { namespaceRequest ->
-            namespaceRequest.dataElementsToRequest.forEach { (mdocDataElement, intentToRetain) ->
-                claims.add(
-                    MdocRequestedClaim(
-                        docType = request.mdocRequest!!.docType,
-                        namespaceName = namespaceRequest.namespace,
-                        dataElementName = mdocDataElement.attribute.identifier,
-                        intentToRetain = intentToRetain
-                    )
-                )
-            }
-        }
-        val zkSystemSpecs = if (request.mdocRequest?.useZkp == true) {
-            getZkSystemRepository().getAllZkSystemSpecs()
-        } else {
-            emptyList()
-        }
-        Logger.i(TAG, "using VerificationUtil.generateDcRequestMdoc()")
-        VerificationUtil.generateDcRequestMdoc(
-            exchangeProtocols = exchangeProtocols,
-            docType = request.mdocRequest!!.docType,
-            claims = claims,
-            nonce = nonce,
-            origin = origin,
-            responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            verifierIdentities = buildList {
-                if (signRequest) {
-                    add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
-                }
-            },
-            zkSystemSpecs = zkSystemSpecs,
-            issuerIdentifiers = session.issuerIdentifiers,
-            deviceRequestVersion = session.deviceRequestVersion
-        )
+        emptyList()
     }
-    Logger.iJson(TAG, "request", request)
+    val dcql = if (format == "vc") {
+        request.jsonRequest!!.toDcql()
+    } else {
+        request.mdocRequest!!.toDcql(zkSystemSpecs)
+    }
+    val dcqlToUse = VerificationUtil.injectIssuerIdentifiersIntoDcql(dcql, session.issuerIdentifiers)
+    Logger.i(TAG, "using VerificationUtil.generateDcRequestDcql()")
+    val dcRequest = VerificationUtil.generateDcRequestDcql(
+        exchangeProtocols = exchangeProtocols,
+        dcql = dcqlToUse,
+        nonce = nonce,
+        origin = origin,
+        responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
+        verifierIdentities = buildList {
+            if (signRequest) {
+                add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
+            }
+        },
+        deviceRequestVersion = session.deviceRequestVersion
+    )
+    Logger.iJson(TAG, "request", dcRequest)
 
-    val dcRequestProtocol = request["requests"]!!.jsonArray[0].jsonObject["protocol"]!!.jsonPrimitive.content
-    val dcRequestString = Json.encodeToString(request["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject)
-    val (dcRequestProtocol2, dcRequestString2) = if (request["requests"]!!.jsonArray.size > 1) {
+    val dcRequestProtocol = dcRequest["requests"]!!.jsonArray[0].jsonObject["protocol"]!!.jsonPrimitive.content
+    val dcRequestString = Json.encodeToString(dcRequest["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject)
+    val (dcRequestProtocol2, dcRequestString2) = if (dcRequest["requests"]!!.jsonArray.size > 1) {
         Pair(
-            request["requests"]!!.jsonArray[1].jsonObject["protocol"]!!.jsonPrimitive.content,
-            Json.encodeToString(request["requests"]!!.jsonArray[1].jsonObject["data"]!!.jsonObject)
+            dcRequest["requests"]!!.jsonArray[1].jsonObject["protocol"]!!.jsonPrimitive.content,
+            Json.encodeToString(dcRequest["requests"]!!.jsonArray[1].jsonObject["data"]!!.jsonObject)
         )
     } else {
         Pair(null, null)
@@ -2257,96 +2248,12 @@ private suspend fun calcDcRequestStringOpenID4VP(
         VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
     } else {
         require(request != null) { "request cannot be null" }
-        buildJsonObject {
-            putJsonArray("credentials") {
-                if (format == "vc") {
-                    addJsonObject {
-                        put("id", JsonPrimitive("cred1"))
-                        put("format", JsonPrimitive("dc+sd-jwt"))
-                        putJsonObject("meta") {
-                            put(
-                                "vct_values",
-                                buildJsonArray {
-                                    add(JsonPrimitive(request.jsonRequest!!.vct))
-                                }
-                            )
-                        }
-                        if (session.issuerIdentifiers.isNotEmpty()) {
-                            putJsonArray("trusted_authorities") {
-                                addJsonObject {
-                                    put("type", "aki")
-                                    putJsonArray("values") {
-                                        session.issuerIdentifiers.forEach { aki ->
-                                            add(JsonPrimitive(aki.toByteArray().toBase64Url()))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        putJsonArray("claims") {
-                            for (claim in request.jsonRequest!!.claimsToRequest) {
-                                addJsonObject {
-                                    putJsonArray("path") {
-                                        claim.parentAttribute?.let { add(JsonPrimitive(it.identifier)) }
-                                        add(JsonPrimitive(claim.identifier))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    addJsonObject {
-                        put("id", JsonPrimitive("cred1"))
-                        if (zkSystemSpecs.isNotEmpty()) {
-                            put("format", JsonPrimitive("mso_mdoc_zk"))
-                        } else {
-                            put("format", JsonPrimitive("mso_mdoc"))
-                        }
-                        putJsonObject("meta") {
-                            put("doctype_value", JsonPrimitive(request.mdocRequest!!.docType))
-                            if (zkSystemSpecs.isNotEmpty()) {
-                                putJsonArray("zk_system_type") {
-                                    for (spec in zkSystemSpecs) {
-                                        addJsonObject {
-                                            put("system", spec.system)
-                                            put("id", spec.id)
-                                            spec.params.forEach { param ->
-                                                put(param.key, param.value.toJson())
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (session.issuerIdentifiers.isNotEmpty()) {
-                            putJsonArray("trusted_authorities") {
-                                addJsonObject {
-                                    put("type", "aki")
-                                    putJsonArray("values") {
-                                        session.issuerIdentifiers.forEach { aki ->
-                                            add(JsonPrimitive(aki.toByteArray().toBase64Url()))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        putJsonArray("claims") {
-                            for (ns in request.mdocRequest!!.namespacesToRequest) {
-                                for ((de, intentToRetain) in ns.dataElementsToRequest) {
-                                    addJsonObject {
-                                        putJsonArray("path") {
-                                            add(JsonPrimitive(ns.namespace))
-                                            add(JsonPrimitive(de.attribute.identifier))
-                                        }
-                                        put("intent_to_retain", JsonPrimitive(intentToRetain))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        val baseDcql = if (format == "vc") {
+            request.jsonRequest!!.toDcql()
+        } else {
+            request.mdocRequest!!.toDcql(zkSystemSpecs)
         }
+        VerificationUtil.injectIssuerIdentifiersIntoDcql(baseDcql, session.issuerIdentifiers)
     }
     return calcDcRequestStringOpenID4VPforDCQL(
         version = version,
@@ -2370,76 +2277,28 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
     readerAuthKey: AsymmetricKey.X509Certified,
-    issuerIdentifiers: List<ByteString> = emptyList()
+    issuerIdentifiers: List<ByteString> = emptyList(),
+    deviceRequestVersion: String? = null,
 ): String {
-    val encryptionInfo = buildCborArray {
-        add("dcapi")
-        addCborMap {
-            put("nonce", nonce.toByteArray())
-            put("recipientPublicKey", readerPublicKey.toCoseKey().toDataItem())
-        }
-    }
-    val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
-    val dcapiInfo = buildCborArray {
-        add(base64EncryptionInfo)
-        add(origin)
-    }
-
     val zkSystemSpecs: List<ZkSystemSpec> = if (request.mdocRequest!!.useZkp) {
         getZkSystemRepository().getAllZkSystemSpecs()
     } else {
         emptyList()
     }
-
-    //Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
-    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
-    val sessionTranscript = buildCborArray {
-        add(Simple.NULL) // DeviceEngagementBytes
-        add(Simple.NULL) // EReaderKeyBytes
-        addCborArray {
-            add("dcapi")
-            add(dcapiInfoDigest)
-        }
-    }
-
-    val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
-    for (ns in request.mdocRequest!!.namespacesToRequest) {
-        for ((de, intentToRetain) in ns.dataElementsToRequest) {
-            itemsToRequest.getOrPut(ns.namespace) { mutableMapOf() }
-                .put(de.attribute.identifier, intentToRetain)
-        }
-    }
-
-    val zkRequest = if (request.mdocRequest!!.useZkp) {
-        ZkRequest(
-            systemSpecs = zkSystemSpecs,
-            zkRequired = false
-        )
-    } else {
-        null
-    }
-
-    val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
-        sessionTranscript = sessionTranscript
-    ) {
-        addDocRequest(
-            docType = request.mdocRequest!!.docType,
-            nameSpaces = itemsToRequest,
-            docRequestInfo = DocRequestInfo(
-                zkRequest = zkRequest,
-                issuerIdentifiers = issuerIdentifiers
-            ),
-            readerKey = readerAuthKey
-        )
-        addReaderAuthAll(readerKey = readerAuthKey)
-    }.toDataItem())
-    //Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
-    val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
-
-    val top = JSONObject()
-    top.put("deviceRequest", base64DeviceRequest)
-    top.put("encryptionInfo", base64EncryptionInfo)
-    return top.toString(JSONStyle.NO_COMPRESS)
+    val dcql = VerificationUtil.injectIssuerIdentifiersIntoDcql(
+        request.mdocRequest!!.toDcql(zkSystemSpecs),
+        issuerIdentifiers
+    )
+    val dcRequest = VerificationUtil.generateDcRequestDcql(
+        exchangeProtocols = listOf("org-iso-mdoc"),
+        dcql = dcql,
+        nonce = nonce,
+        origin = origin,
+        responseEncryptionKey = readerPublicKey,
+        verifierIdentities = listOf(VerifierIdentity(readerAuthKey, "")),
+        deviceRequestVersion = deviceRequestVersion
+    )
+    return Json.encodeToString(dcRequest["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject)
 }
 
 private suspend fun AnnexACalcRequest(
@@ -2454,99 +2313,38 @@ private suspend fun AnnexACalcRequest(
     deviceRequestVersion: String? = null,
 ): DeviceRequest {
     val isVersion10 = deviceRequestVersion != null && deviceRequestVersion.mdocVersionCompareTo("1.1") < 0
-    if (requestId.isNotEmpty()) {
+    val dcql = if (requestId.isNotEmpty()) {
         val request = lookupWellknownRequest(requestFormat, requestDocType, requestId)
-
         if (requestFormat == "mdoc") {
             val zkSystemSpecs: List<ZkSystemSpec> = if (request.mdocRequest!!.useZkp) {
                 getZkSystemRepository().getAllZkSystemSpecs()
             } else {
                 emptyList()
             }
-            val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
-            for (ns in request.mdocRequest!!.namespacesToRequest) {
-                for ((de, intentToRetain) in ns.dataElementsToRequest) {
-                    itemsToRequest.getOrPut(ns.namespace) { mutableMapOf() }
-                        .put(de.attribute.identifier, intentToRetain)
-                }
-            }
-            val zkRequest = if (request.mdocRequest!!.useZkp) {
-                ZkRequest(
-                    systemSpecs = zkSystemSpecs,
-                    zkRequired = false
-                )
-            } else {
-                null
-            }
-            return buildDeviceRequest(
-                sessionTranscript = sessionTranscript,
-                version = deviceRequestVersion,
-            ) {
-                addDocRequest(
-                    docType = request.mdocRequest!!.docType,
-                    nameSpaces = itemsToRequest,
-                    docRequestInfo = if (isVersion10) null else DocRequestInfo(
-                        zkRequest = zkRequest,
-                        issuerIdentifiers = issuerIdentifiers
-                    ),
-                    readerKey = readerAuthKey
-                )
-                if (!isVersion10) {
-                    addReaderAuthAll(readerKey = readerAuthKey)
-                }
-            }
+            request.mdocRequest!!.toDcql(zkSystemSpecs)
         } else {
             check(requestFormat == "vc") { "unexpected request format $requestFormat" }
-            val claimsToRequest = mutableMapOf<String, Boolean>()
-            val mapping = mutableMapOf<String, JsonArray>()
-            request.jsonRequest!!.claimsToRequest.forEach { documentAttribute ->
-                val path = mutableListOf<JsonElement>()
-                documentAttribute.parentAttribute?.let {
-                    path.add(JsonPrimitive(it.identifier))
-                }
-                path.add(JsonPrimitive(documentAttribute.identifier))
-                val flattenedPath = path.joinToString(separator = "_") { it.jsonPrimitive.content }
-                val dataElementName = "sdjwtvc_$flattenedPath"
-                claimsToRequest[dataElementName] = false
-                mapping[dataElementName] = JsonArray(path)
-            }
-            return buildDeviceRequest(
-                sessionTranscript = sessionTranscript,
-                version = deviceRequestVersion,
-            ) {
-                addDocRequest(
-                    docType = request.jsonRequest!!.vct,
-                    nameSpaces = mapOf("_" to claimsToRequest),
-                    docRequestInfo = if (isVersion10) null else DocRequestInfo(
-                        docFormat = "dc+sd-jwt",
-                        dataElementIdentifierMapping = mapping,
-                        issuerIdentifiers = issuerIdentifiers
-                    ),
-                    readerKey = readerAuthKey
-                )
-                if (!isVersion10) {
-                    addReaderAuthAll(readerKey = readerAuthKey)
-                }
-            }
+            request.jsonRequest!!.toDcql()
         }
     } else {
-        val dcql = if (multiDocumentRequestId.isNotEmpty()) {
+        val dcqlString = if (multiDocumentRequestId.isNotEmpty()) {
             wellKnownMultipleDocumentRequests.find { it.id == multiDocumentRequestId }!!.dcqlString
         } else {
             rawDcql
         }
-        val dcqlJson = VerificationUtil.injectIssuerIdentifiersIntoDcql(
-            Json.decodeFromString<JsonObject>(dcql),
-            issuerIdentifiers
-        )
-        return buildDeviceRequestFromDcql(
-            dcql = dcqlJson,
-            sessionTranscript = sessionTranscript,
-            version = deviceRequestVersion,
-        ) {
-            if (!isVersion10) {
-                addReaderAuthAll(readerKey = readerAuthKey)
-            }
+        Json.decodeFromString<JsonObject>(dcqlString)
+    }
+    val dcqlJson = VerificationUtil.injectIssuerIdentifiersIntoDcql(
+        dcql,
+        issuerIdentifiers
+    )
+    return buildDeviceRequestFromDcql(
+        dcql = dcqlJson,
+        sessionTranscript = sessionTranscript,
+        version = deviceRequestVersion,
+    ) {
+        if (!isVersion10) {
+            addReaderAuthAll(readerKey = readerAuthKey)
         }
     }
 }

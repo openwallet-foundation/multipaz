@@ -13,6 +13,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.document.Document
@@ -52,6 +53,7 @@ private const val TAG = "Iso180135Presentment"
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
     Iso18013PresentmentTimeoutException::class,
@@ -93,6 +95,7 @@ suspend fun Iso18013Presentment(
         var activeDeviceRequest: DeviceRequest? = null
         var cachedSelection: CredentialSelection? = null
         var cachedKeyUnlockDataProvider: KeyUnlockDataProvider? = null
+        var cachedFaceMatchedCredentials: List<Credential>? = null
         lateinit var sessionTranscript: DataItem
         lateinit var encodedSessionTranscript: ByteArray
         while (true) {
@@ -193,16 +196,19 @@ suspend fun Iso18013Presentment(
 
             val selection: CredentialSelection
             val keyUnlockDataProvider: KeyUnlockDataProvider
+            val faceMatchedCredentials: List<Credential>
 
             val currentActiveRequest = activeDeviceRequest
             if (currentActiveRequest != null &&
                 deviceRequest.isStructurallyEquivalent(currentActiveRequest) &&
                 cachedSelection != null &&
-                cachedKeyUnlockDataProvider != null
+                cachedKeyUnlockDataProvider != null &&
+                cachedFaceMatchedCredentials != null
             ) {
                 Logger.i(TAG, "Reusing existing consent and key authentication for structurally equivalent DeviceRequest on re-tap")
                 selection = cachedSelection
                 keyUnlockDataProvider = cachedKeyUnlockDataProvider
+                faceMatchedCredentials = cachedFaceMatchedCredentials
             } else {
                 activeDeviceRequest = deviceRequest
                 selection = mdocPresentmentObtainConsent(
@@ -216,8 +222,14 @@ suspend fun Iso18013Presentment(
                     onDocumentsInFocus = onDocumentsInFocus
                 )
                 keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+                faceMatchedCredentials = mdocPerformFaceMatching(
+                    selection = selection,
+                    source = source,
+                    onWaitingForUserInput = onWaitingForUserInput,
+                )
                 cachedSelection = selection
                 cachedKeyUnlockDataProvider = keyUnlockDataProvider
+                cachedFaceMatchedCredentials = faceMatchedCredentials
             }
 
             onSendingResponse()
@@ -266,6 +278,7 @@ suspend fun Iso18013Presentment(
                     source = source,
                     requesterAppId = null,
                     requesterOrigin = null,
+                    faceMatchedCredentials = faceMatchedCredentials,
                 )
             }
             transport.sendMessage(

@@ -8,6 +8,7 @@ import org.multipaz.documenttype.Icon
 import org.multipaz.util.fromBase64Url
 import kotlinx.datetime.LocalDate
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.PortraitEquivalenceRequest
 
 /**
  * Object containing the metadata of the Aadhaar Document Type.
@@ -26,6 +27,7 @@ object Aadhaar {
     fun getDocumentType(): DocumentType {
         return DocumentType.Builder("Aadhaar")
             .addMdocDocumentType(AADHAAR_DOCTYPE)
+            .setSupportsPortraitImageEquivalence(AADHAAR_NAMESPACE, "resident_image")
             .addMdocAttribute(
                 type = DocumentAttributeType.Date,
                 identifier = "credential_issuing_date",
@@ -471,6 +473,28 @@ object Aadhaar {
                         "age_above18" to false,
                         "resident_image" to false,
                     )
+                )
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_equivalence",
+                displayName = "Age over 18 + portrait equivalence",
+                mdocDataElements = mapOf(
+                    AADHAAR_NAMESPACE to mapOf(
+                        "age_above18" to false,
+                    ),
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest()
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_or_portrait_equivalence",
+                displayName = "Age over 18 + (portrait OR portrait equivalence)",
+                mdocDataElements = mapOf(
+                    AADHAAR_NAMESPACE to mapOf(
+                        "age_above18" to false,
+                    ),
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest(
+                    includePortrait = true
                 )
             )
             .addSampleRequest(

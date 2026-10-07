@@ -246,6 +246,13 @@ private suspend fun exportMdocCredential(
         putCborMap("mdoc") {
             put("documentId", document.identifier)
             put("docType", credential.docType)
+            val peData = credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
+            val hasPortrait = peData != null && claims.any {
+                it.namespaceName == peData.namespace && it.dataElementName == peData.dataElementName
+            }
+            if (hasPortrait) {
+                put("supportsPortraitImageEquivalence", true)
+            }
             if (issuerIdentifiers.isNotEmpty()) {
                 putCborArray("issuerIdentifiers") {
                     issuerIdentifiers.forEach { add(it) }

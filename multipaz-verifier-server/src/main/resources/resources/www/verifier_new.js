@@ -5,9 +5,13 @@ async function onLoad() {
     const pillsTab = document.getElementById("pills-tab");
     const pillsTabContent = document.getElementById("pills-tabContent");
     const cannedList = await (await fetch("canned_requests")).json();
+    let defaultIndex = cannedList.findIndex(c => c.display_name === "Driving license (mdoc)");
+    if (defaultIndex === -1) {
+        defaultIndex = 0;
+    }
     for (let index = 0; index < cannedList.length; index++) {
         const canned = cannedList[index];
-        const extra = index == 0 ? " active" : "";
+        const extra = index === defaultIndex ? " active" : "";
         const li = document.createElement("li");
         li.className = "nav-item"
         li.role = "presentation"

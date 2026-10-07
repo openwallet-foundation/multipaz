@@ -30,6 +30,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.PortraitEquivalenceRequest
 
 /**
  * Object containing the metadata of the EU Personal ID Document Type.
@@ -49,6 +50,7 @@ object EUPersonalID {
 
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_EU_PERSONAL_ID))
             .addMdocDocumentType(EUPID_DOCTYPE)
+            .setSupportsPortraitImageEquivalence(EUPID_NAMESPACE, "portrait")
             .addJsonDocumentType(type = EUPID_VCT, keyBound = true)
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -508,6 +510,28 @@ object EUPersonalID {
                     )
                 ),
                 jsonClaims = listOf("age_equal_or_over.18", "picture")
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_equivalence",
+                displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_REQUEST_AGE_OVER_18_AND_PORTRAIT_EQUIVALENCE),
+                mdocDataElements = mapOf(
+                    EUPID_NAMESPACE to mapOf(
+                        "age_over_18" to false,
+                    )
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest()
+            )
+            .addSampleRequest(
+                id = "age_over_18_and_portrait_or_portrait_equivalence",
+                displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_REQUEST_AGE_OVER_18_AND_PORTRAIT_OR_PORTRAIT_EQUIVALENCE),
+                mdocDataElements = mapOf(
+                    EUPID_NAMESPACE to mapOf(
+                        "age_over_18" to false,
+                    )
+                ),
+                portraitEquivalenceRequest = PortraitEquivalenceRequest(
+                    includePortrait = true
+                )
             )
             .addSampleRequest(
                 id = "mandatory",

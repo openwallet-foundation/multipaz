@@ -81,35 +81,53 @@ class DcqlProcessedResponse(
     ) {
         /**
          * Mapping of DCQL ids (and simple claim name if id is not given) to the
-         * corresponding [Claim].
+         * corresponding issuer-signed [Claim].
          *
          * Simple claim name is defined as [MdocClaim.dataElementName] for ISO mdoc and the last
          * name in the path for IETF SD-JWT credentials.
          */
-        val claims: Map<String, Claim> = buildMap {
+        val issuerSignedClaims: Map<String, Claim>
+
+        /**
+         * Mapping of DCQL ids (and simple claim name if id is not given) to the
+         * corresponding device-signed [Claim].
+         *
+         * Simple claim name is defined as [MdocClaim.dataElementName] for ISO mdoc.
+         */
+        val deviceSignedClaims: Map<String, Claim>
+
+        init {
             val idMap = mutableMapOf<List<Any?>, String>()
-            for (claim in query["claims"]!!.jsonArray) {
+            for (claim in query["claims"]?.jsonArray ?: emptyList()) {
                 claim as JsonObject
                 val id = claim["id"]?.jsonPrimitive?.content ?: continue
                 idMap[pathKey(claim["path"]!!.jsonArray)] = id
             }
-            for (claim in presentation.issuerSignedClaims) {
-                val pathKey = when (claim) {
-                    is MdocClaim -> listOf<Any?>(claim.namespaceName, claim.dataElementName)
-                    is JsonClaim -> pathKey(claim.claimPath)
-                }
-                val name = idMap[pathKey] ?: when (claim) {
-                    is MdocClaim -> claim.dataElementName
-                    is JsonClaim -> claim.claimPath.last().jsonPrimitive.content
-                }
-                // ids take precedence over simple claim name
-                if (!containsKey(name) || idMap.containsKey(pathKey)) {
-                    put(name, claim)
-                }
-            }
+            issuerSignedClaims = mapClaims(presentation.issuerSignedClaims, idMap)
+            deviceSignedClaims = mapClaims(presentation.deviceSignedClaims, idMap)
         }
 
         companion object {
+            private fun mapClaims(
+                claimsList: List<Claim>,
+                idMap: Map<List<Any?>, String>
+            ): Map<String, Claim> = buildMap {
+                for (claim in claimsList) {
+                    val pathKey = when (claim) {
+                        is MdocClaim -> listOf<Any?>(claim.namespaceName, claim.dataElementName)
+                        is JsonClaim -> pathKey(claim.claimPath)
+                    }
+                    val name = idMap[pathKey] ?: when (claim) {
+                        is MdocClaim -> claim.dataElementName
+                        is JsonClaim -> claim.claimPath.last().jsonPrimitive.content
+                    }
+                    // ids take precedence over simple claim name
+                    if (!containsKey(name) || idMap.containsKey(pathKey)) {
+                        put(name, claim)
+                    }
+                }
+            }
+
             private fun pathKey(path: JsonArray): List<Any?> =
                 path.map { item ->
                     item as JsonPrimitive

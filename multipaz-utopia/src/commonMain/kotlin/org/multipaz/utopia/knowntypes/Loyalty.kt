@@ -24,6 +24,7 @@ object Loyalty {
 
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_LOYALTY_CARD))
             .addMdocDocumentType(LOYALTY_DOCTYPE)
+            .setSupportsPortraitImageEquivalence(LOYALTY_NAMESPACE, "portrait")
             // Core holder data relevant for a loyalty card
             //
             .addMdocAttribute(

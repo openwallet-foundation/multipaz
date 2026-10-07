@@ -9,6 +9,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -223,6 +224,17 @@ fun DcRequestScreen(
     val formatOptions = CredentialFormat.entries
     val formatDropdownExpanded = remember { mutableStateOf(false) }
     val formatSelected = remember { mutableStateOf(formatOptions[lastFormat]) }
+    val faceMatcherOptions = remember {
+        app.faceMatcherRepository.all.map { it.displayName } + listOf("None")
+    }
+    val faceMatcherDropdownExpanded = remember { mutableStateOf(false) }
+    val currentFaceMatcher = app.settingsModel.presentmentFaceMatcher.collectAsState()
+    val faceMatcherSelected = remember(currentFaceMatcher.value) {
+        mutableStateOf(
+            faceMatcherOptions.find { it == currentFaceMatcher.value }
+                ?: faceMatcherOptions.first()
+        )
+    }
     val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.dcRequestIssuerIdentifiers.value) }
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
 
@@ -261,6 +273,19 @@ fun DcRequestScreen(
                 onSelected = { index, value -> lastFormat = index }
             )
         }
+        item {
+            ComboBox(
+                headline = "Presentation Face Matcher",
+                options = faceMatcherOptions,
+                comboBoxSelected = faceMatcherSelected,
+                comboBoxExpanded = faceMatcherDropdownExpanded,
+                getDisplayName = { it },
+                onSelected = { index, value ->
+                    app.settingsModel.presentmentFaceMatcher.value = value
+                }
+            )
+        }
+
         item {
             OutlinedTextField(
                 value = issuerIdentifiers.value,

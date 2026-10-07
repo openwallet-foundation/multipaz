@@ -37,6 +37,7 @@ struct CredentialScreen: View {
                                     certificates: mdocCredential.issuerCertChain.certificates
                                 ))
                             }
+                        KvPair("Key authorizations", attributedString: keyAuthorizationsText(mdocCredential: mdocCredential))
                     }
                     if let sdjwtVcCredential = credentialInfo.credential as? SdJwtVcCredential {
                         KvPair("SD-JWT verifiable credential type", string: sdjwtVcCredential.vct)
@@ -77,5 +78,44 @@ struct CredentialScreen: View {
         }
         .navigationTitle("Credential")
         .padding()
+    }
+}
+
+private func keyAuthorizationsText(mdocCredential: MdocCredential) -> AttributedString {
+    do {
+        let mso = mdocCredential.mso
+        let authorizedNamespaces = mso.deviceKeyAuthorizedNamespaces
+        let authorizedDataElements = mso.deviceKeyAuthorizedDataElements
+        if authorizedNamespaces.isEmpty && authorizedDataElements.isEmpty {
+            return AttributedString("None")
+        }
+        var text = AttributedString()
+        var firstSection = true
+        if !authorizedNamespaces.isEmpty {
+            firstSection = false
+            var header = AttributedString("Namespaces:")
+            header.inlinePresentationIntent = .stronglyEmphasized
+            text.append(header)
+            for ns in authorizedNamespaces {
+                text.append(AttributedString("\n• \(ns)"))
+            }
+        }
+        if !authorizedDataElements.isEmpty {
+            if !firstSection {
+                text.append(AttributedString("\n\n"))
+            }
+            var header = AttributedString("Data Elements:")
+            header.inlinePresentationIntent = .stronglyEmphasized
+            text.append(header)
+            for (ns, elements) in authorizedDataElements.sorted(by: { $0.key < $1.key }) {
+                text.append(AttributedString("\n• \(ns):"))
+                for elem in elements {
+                    text.append(AttributedString("\n  - \(elem)"))
+                }
+            }
+        }
+        return text
+    } catch {
+        return AttributedString("Error parsing MSO")
     }
 }

@@ -1,14 +1,17 @@
 package org.multipaz.presentment
 
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
+import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
@@ -17,6 +20,8 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
+import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
@@ -32,7 +37,10 @@ import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP.processTransactions
+import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
@@ -143,6 +151,83 @@ suspend fun mdocPresentmentAuthenticateUser(
 }
 
 /**
+ * Performs face matching for credentials in [selection] according to the wallet policy.
+ *
+ * For each credential in [selection], [PresentmentSource.getFaceMatchingMode] is queried.
+ * If face matching is determined to be required, the user is prompted to perform face matching
+ * against the credential's reference portrait.
+ *
+ * @param selection The [CredentialSelection] obtained from consent.
+ * @param source The source of truth used for presentment.
+ * @param onWaitingForUserInput Called when waiting for input from the user (such as face matching).
+ * @return A list of [Credential] instances for which face matching was performed and succeeded.
+ * @throws CancellationException if the coroutine was canceled.
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
+ * @throws IllegalStateException if an unexpected error occurred.
+ */
+@Throws(
+    CancellationException::class,
+    FaceNotMatchedException::class,
+    IllegalStateException::class
+)
+suspend fun mdocPerformFaceMatching(
+    selection: CredentialSelection,
+    source: PresentmentSource,
+    onWaitingForUserInput: () -> Unit = {},
+): List<Credential> {
+    val matchedCredentials = mutableListOf<Credential>()
+    val matchedPortraits = mutableSetOf<ByteString>()
+
+    for (match in selection.matches) {
+        if (!match.faceMatchNeeded) {
+            continue
+        }
+
+        val credential = match.credential
+
+        if (credential !is MdocCredential) {
+            throw FaceNotMatchedException("Credential of type ${credential::class} does not support mdoc face matching")
+        }
+
+        val documentType = source.documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
+        val peData = documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
+            ?: throw FaceNotMatchedException("Credential docType '${credential.docType}' does not support portrait image equivalence")
+        val issuerSignedItem = credential.issuerNamespaces.data[peData.namespace]?.get(peData.dataElementName)
+            ?: throw FaceNotMatchedException("Portrait data element '${peData.dataElementName}' not found in namespace '${peData.namespace}'")
+        val referencePortrait = ByteString(issuerSignedItem.dataElementValue.asBstr)
+
+        if (!matchedPortraits.contains(referencePortrait)) {
+            val faceMatcher = source.getFaceMatcher()
+                ?: throw FaceNotMatchedException("No face matcher available")
+            val promptModel = try {
+                PromptModel.get()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                throw FaceNotMatchedException("PromptModel not available for face matching", e)
+            }
+            onWaitingForUserInput()
+            val matched = try {
+                promptModel.showFaceMatcherPrompt(
+                    matcher = faceMatcher,
+                    referencePortrait = referencePortrait
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                throw FaceNotMatchedException("Error displaying face matcher prompt", e)
+            }
+            if (!matched) {
+                throw FaceNotMatchedException("Face matching failed or was canceled")
+            }
+            matchedPortraits.add(referencePortrait)
+        }
+
+        matchedCredentials.add(credential)
+    }
+
+    return matchedCredentials
+}
+
+/**
  * Generates the ISO mdoc presentment response given a user's [CredentialSelection].
  *
  * @param selection The [CredentialSelection] obtained from consent.
@@ -153,6 +238,7 @@ suspend fun mdocPresentmentAuthenticateUser(
  * @param requesterAppId the appId if an app is making the request or `null`.
  * @param requesterOrigin the origin or `null`.
  * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
+ * @param faceMatchedCredentials the list of credentials for which face matching was performed and succeeded.
  * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
  */
 @Throws(
@@ -168,6 +254,7 @@ suspend fun mdocPresentmentGenerateResponse(
     requesterAppId: String? = null,
     requesterOrigin: String? = null,
     creationTime: Instant = Clock.System.now(),
+    faceMatchedCredentials: List<Credential> = emptyList(),
 ): Iso18013Response {
     val requester = Requester(
         requesterIdentities = deviceRequest.getRequesterIdentities(),
@@ -236,7 +323,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         eReaderKey = eReaderKey,
                         credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
-                        deviceNamespaces = computeTransactionResponse(match),
+                        deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),
                         errors = mapOf()
                     )
 
@@ -376,10 +463,10 @@ suspend fun mdocPresentmentGenerateResponse(
 /**
  * Present ISO mdoc credentials according to ISO/IEC 18013-5:2021.
  *
- * If the application needs to separate obtaining consent, user authentication, and response generation
+ * If the application needs to separate obtaining consent, user authentication, face matching, and response generation
  * (for example, arming the wallet so the user can deliver the response via an NFC tap later), it can use
- * [mdocPresentmentObtainConsent], [mdocPresentmentAuthenticateUser], and [mdocPresentmentGenerateResponse]
- * directly:
+ * [mdocPresentmentObtainConsent], [mdocPresentmentAuthenticateUser], [mdocPerformFaceMatching], and
+ * [mdocPresentmentGenerateResponse] directly:
  *
  * ```kotlin
  * // Step 1: Obtain consent from user
@@ -388,9 +475,20 @@ suspend fun mdocPresentmentGenerateResponse(
  * // Step 2: Perform user authentication and obtain key unlock data
  * val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
  *
- * // Step 3: Later (e.g. upon NFC tap), generate response using preloaded key unlock data
+ * // Step 3: Perform face matching if needed
+ * val faceMatchedCredentials = mdocPerformFaceMatching(selection, source, ...)
+ *
+ * // Step 4: Later (e.g. upon NFC tap), generate response using preloaded key unlock data
  * val response = withContext(keyUnlockDataProvider) {
- *     mdocPresentmentGenerateResponse(selection, deviceRequest, eReaderKey, sessionTranscript, source, ...)
+ *     mdocPresentmentGenerateResponse(
+ *         selection = selection,
+ *         deviceRequest = deviceRequest,
+ *         eReaderKey = eReaderKey,
+ *         sessionTranscript = sessionTranscript,
+ *         source = source,
+ *         faceMatchedCredentials = faceMatchedCredentials,
+ *         ...
+ *     )
  * }
  * ```
  *
@@ -409,11 +507,13 @@ suspend fun mdocPresentmentGenerateResponse(
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
     Iso18013PresentmentTimeoutException::class,
@@ -443,16 +543,114 @@ suspend fun mdocPresentment(
         onWaitingForUserInput = onWaitingForUserInput,
         onDocumentsInFocus = onDocumentsInFocus
     )
-    return mdocPresentmentGenerateResponse(
+    val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+    val faceMatchedCredentials = mdocPerformFaceMatching(
         selection = selection,
-        deviceRequest = deviceRequest,
-        eReaderKey = eReaderKey,
-        sessionTranscript = sessionTranscript,
         source = source,
-        requesterAppId = requesterAppId,
-        requesterOrigin = requesterOrigin,
-        creationTime = creationTime
+        onWaitingForUserInput = onWaitingForUserInput,
     )
+    return withContext(keyUnlockDataProvider) {
+        mdocPresentmentGenerateResponse(
+            selection = selection,
+            deviceRequest = deviceRequest,
+            eReaderKey = eReaderKey,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            requesterAppId = requesterAppId,
+            requesterOrigin = requesterOrigin,
+            creationTime = creationTime,
+            faceMatchedCredentials = faceMatchedCredentials,
+        )
+    }
+}
+
+internal suspend fun computeDeviceNamespaces(
+    match: CredentialPresentmentSetOptionMemberMatch,
+    faceMatchedCredentials: List<Credential>,
+): DeviceNamespaces {
+    val transactionResponse = computeTransactionResponse(match)
+    val requested = isChv1Requested(match)
+    val mso = (match.credential as? MdocCredential)?.mso
+    val authorized = mso?.let {
+        it.deviceKeyAuthorizedNamespaces.contains(ISO_23220_5_CHV_1_NAMESPACE) ||
+            it.deviceKeyAuthorizedDataElements[ISO_23220_5_CHV_1_NAMESPACE]
+                ?.contains(ISO_23220_5_CHV_1_DATA_ELEMENT) == true
+    } == true
+
+    val shouldIncludeChv1 = faceMatchedCredentials.contains(match.credential) && requested && authorized
+
+    if (!shouldIncludeChv1) {
+        return transactionResponse
+    }
+
+    val merged = mutableMapOf<String, MutableMap<String, DataItem>>()
+    for ((namespace, elements) in transactionResponse.data) {
+        merged.getOrPut(namespace) { mutableMapOf() }.putAll(elements)
+    }
+    merged.getOrPut(ISO_23220_5_CHV_1_NAMESPACE) { mutableMapOf() }[ISO_23220_5_CHV_1_DATA_ELEMENT] = Simple.TRUE
+
+    return buildDeviceNamespaces {
+        for ((namespace, elements) in merged) {
+            addNamespace(namespace) {
+                for ((elemName, elemValue) in elements) {
+                    addDataElement(elemName, elemValue)
+                }
+            }
+        }
+    }
+}
+
+internal fun isChv1Requested(match: CredentialPresentmentSetOptionMemberMatch): Boolean {
+    return when (val source = match.source) {
+        is CredentialMatchSourceIso18013 -> {
+            source.docRequest.nameSpaces[ISO_23220_5_CHV_1_NAMESPACE]
+                ?.containsKey(ISO_23220_5_CHV_1_DATA_ELEMENT) == true
+        }
+        is CredentialMatchSourceOpenID4VP -> {
+            val cq = source.credentialQuery
+            cq.claims.any { isChv1Claim(it) } ||
+                cq.claimSets.any { cs ->
+                    cs.claimIdentifiers.any { id ->
+                        cq.claimIdToClaim[id]?.let { isChv1Claim(it) } == true
+                    }
+                }
+        }
+    }
+}
+
+internal fun isChv1Claim(reqClaim: RequestedClaim): Boolean {
+    return reqClaim is MdocRequestedClaim &&
+            reqClaim.namespaceName == ISO_23220_5_CHV_1_NAMESPACE &&
+            reqClaim.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
+}
+
+internal suspend fun canSatisfyChv1(
+    cred: Credential,
+    presentmentSource: PresentmentSource
+): Boolean {
+    if (cred !is MdocCredential) {
+        return false
+    }
+    val mode = presentmentSource.getFaceMatchingMode(cred)
+    if (mode == FaceMatchingMode.NEVER) {
+        return false
+    }
+    val authorized = cred.mso.deviceKeyAuthorizedNamespaces.contains(ISO_23220_5_CHV_1_NAMESPACE) ||
+        cred.mso.deviceKeyAuthorizedDataElements[ISO_23220_5_CHV_1_NAMESPACE]
+            ?.contains(ISO_23220_5_CHV_1_DATA_ELEMENT) == true
+    if (!authorized) {
+        return false
+    }
+    val docType = presentmentSource.documentTypeRepository.getDocumentTypeForMdoc(cred.docType)
+    val peData = docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
+    val hasPortrait = cred.issuerNamespaces.data[peData.namespace]?.containsKey(peData.dataElementName) == true
+    if (!hasPortrait) {
+        return false
+    }
+    if (presentmentSource.getFaceMatcher() == null) {
+        return false
+    }
+    return true
 }
 
 internal suspend fun computeTransactionResponse(

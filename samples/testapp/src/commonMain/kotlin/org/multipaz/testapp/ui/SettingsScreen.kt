@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -305,6 +306,19 @@ fun SettingsScreen(
                 title = "Prefer Key Agreement to Signature",
                 isChecked = !app.settingsModel.presentmentPreferSignatureToKeyAgreement.collectAsState().value,
                 onCheckedChange = { app.settingsModel.presentmentPreferSignatureToKeyAgreement.value = !it },
+            )
+        }
+        item {
+            val choices = remember {
+                app.faceMatcherRepository.all.map { it.displayName } + listOf("None")
+            }
+            SettingMultipleChoice(
+                title = "Presentation Face Matcher",
+                choices = choices,
+                initialChoice = app.settingsModel.presentmentFaceMatcher.collectAsState().value,
+                onChoiceSelected = { choice ->
+                    app.settingsModel.presentmentFaceMatcher.value = choice
+                },
             )
         }
 

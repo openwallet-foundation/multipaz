@@ -3,6 +3,8 @@ package org.multipaz.documenttype
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -18,12 +20,16 @@ import kotlin.collections.iterator
  *
  * @param docType the ISO mdoc doctype.
  * @param useZkp `true` if the canned request should indicate a preference for use of Zero-Knowledge Proofs.
+ * @param portraitEquivalenceRequest if not `null`, request portrait equivalence data elements.
  * @param namespacesToRequest the namespaces to request.
+ * @param portraitEquivalenceData if not `null`, information about portrait image equivalence support for the doctype.
  */
 data class MdocCannedRequest(
     val docType: String,
     val useZkp: Boolean,
-    val namespacesToRequest: List<MdocNamespaceRequest>
+    val portraitEquivalenceRequest: PortraitEquivalenceRequest?,
+    val namespacesToRequest: List<MdocNamespaceRequest>,
+    val portraitEquivalenceData: MdocPortraitEquivalenceData? = null,
 ) {
     /**
      * Generates DCQL for the request.
@@ -57,16 +63,61 @@ data class MdocCannedRequest(
                         }
                     }
                 }
+                var claimCount = 0
                 putJsonArray("claims") {
                     for (ns in namespacesToRequest) {
                         for ((de, intentToRetain) in ns.dataElementsToRequest) {
                             addJsonObject {
+                                if (portraitEquivalenceRequest != null && portraitEquivalenceRequest.includePortrait) {
+                                    put("id", "c${claimCount++}")
+                                }
                                 putJsonArray("path") {
                                     add(JsonPrimitive(ns.namespace))
                                     add(JsonPrimitive(de.attribute.identifier))
                                 }
                                 put("intent_to_retain", JsonPrimitive(intentToRetain))
                             }
+                        }
+                    }
+                    portraitEquivalenceRequest?.let { portraitEquivalenceRequest ->
+                        addJsonObject {
+                            if (portraitEquivalenceRequest.includePortrait) {
+                                put("id", "pe_chv1")
+                            }
+                            putJsonArray("path") {
+                                add(JsonPrimitive(ISO_23220_5_CHV_1_NAMESPACE))
+                                add(JsonPrimitive(ISO_23220_5_CHV_1_DATA_ELEMENT))
+                            }
+                            put("intent_to_retain", JsonPrimitive(portraitEquivalenceRequest.intentToRetain))
+                        }
+                        if (portraitEquivalenceRequest.includePortrait) {
+                            val peData = checkNotNull(portraitEquivalenceData) {
+                                "portraitEquivalenceData must be set when includePortrait is true"
+                            }
+                            addJsonObject {
+                                put("id", "pe_portrait")
+                                putJsonArray("path") {
+                                    add(JsonPrimitive(peData.namespace))
+                                    add(JsonPrimitive(peData.dataElementName))
+                                }
+                                put("intent_to_retain", JsonPrimitive(portraitEquivalenceRequest.intentToRetain))
+                            }
+                        }
+                    }
+                }
+                if (portraitEquivalenceRequest != null && portraitEquivalenceRequest.includePortrait) {
+                    putJsonArray("claim_sets") {
+                        addJsonArray {
+                            for (n in 0 until claimCount) {
+                                add("c$n")
+                            }
+                            add("pe_chv1")
+                        }
+                        addJsonArray {
+                            for (n in 0 until claimCount) {
+                                add("c$n")
+                            }
+                            add("pe_portrait")
                         }
                     }
                 }

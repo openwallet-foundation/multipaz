@@ -163,6 +163,7 @@ class TestAppSettingsModel private constructor(
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
         bind(presentmentRequireAuthentication, "presentmentRequireAuthentication", true)
         bind(presentmentPreferSignatureToKeyAgreement, "presentmentPreferSignatureToKeyAgreement", false)
+        bind(presentmentFaceMatcher, "presentmentFaceMatcher", "MobileFaceNet")
 
         bind(readerBleCentralClientModeEnabled, "readerBleCentralClientModeEnabled", true)
         bind(readerBlePeripheralServerModeEnabled, "readerBlePeripheralServerModeEnabled", true)
@@ -208,6 +209,7 @@ class TestAppSettingsModel private constructor(
     val presentmentShowConsentPrompt = MutableStateFlow<Boolean>(false)
     val presentmentRequireAuthentication = MutableStateFlow<Boolean>(false)
     val presentmentPreferSignatureToKeyAgreement = MutableStateFlow<Boolean>(false)
+    val presentmentFaceMatcher = MutableStateFlow<String>("MobileFaceNet")
 
     val readerBleCentralClientModeEnabled = MutableStateFlow<Boolean>(false)
     val readerBlePeripheralServerModeEnabled = MutableStateFlow<Boolean>(false)

@@ -4,6 +4,7 @@ import Multipaz
 struct KvPair: View {
     let key: String
     let string: String?
+    let attributedString: AttributedString?
     let numBytes: Int32?
     let instant: KotlinInstant?
     let bool: Bool?
@@ -14,6 +15,7 @@ struct KvPair: View {
     init(
         _ key: String,
         string: String? = nil,
+        attributedString: AttributedString? = nil,
         numBytes: Int32? = nil,
         instant: KotlinInstant? = nil,
         bool: Bool? = nil,
@@ -21,6 +23,7 @@ struct KvPair: View {
     ) {
         self.key = key
         self.string = string
+        self.attributedString = attributedString
         self.numBytes = numBytes
         self.instant = instant
         self.bool = bool
@@ -36,6 +39,8 @@ struct KvPair: View {
             Text(key).bold()
             if string != nil {
                 Text(string!)
+            } else if attributedString != nil {
+                Text(attributedString!)
             } else if numBytes != nil {
                 if numBytes! < 0 {
                     Text("Not set")

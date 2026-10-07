@@ -255,6 +255,16 @@ class App private constructor (val promptModel: PromptModel) {
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             eventLogger = eventLogger,
+            getFaceMatcherFn = {
+                val selected = settingsModel.presentmentFaceMatcher.value
+                if (selected == "None") {
+                    null
+                } else {
+                    faceMatcherRepository.all.find { it.displayName == selected }
+                        ?: faceMatcherRepository.lookup(selected)
+                        ?: faceMatcherRepository.defaultMatcher
+                }
+            },
             resolveTrustFn = ::resolveTrust,
             showConsentPromptFn = if (settingsModel.presentmentShowConsentPrompt.value) {
                 ::promptModelRequestConsent
@@ -1643,6 +1653,7 @@ class App private constructor (val promptModel: PromptModel) {
                             presentmentSource = getPresentmentSource(),
                             settingsModel = settingsModel,
                             promptModel = promptModel,
+                            faceMatcherRepository = faceMatcherRepository,
                             showToast = { message -> showToast(message) },
                         )
                     }

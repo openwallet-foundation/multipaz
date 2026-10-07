@@ -151,6 +151,7 @@ private struct FaceMatcherPromptView: View {
                                 .font(.system(size: 32, weight: .bold))
                                 .foregroundColor(.white)
                         )
+                }
             }
             .frame(width: 220, height: 284)
             .contentShape(RoundedRectangle(cornerRadius: 36))

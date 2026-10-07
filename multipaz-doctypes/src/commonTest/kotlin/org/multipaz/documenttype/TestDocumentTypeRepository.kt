@@ -14,11 +14,21 @@ import kotlinx.datetime.TimeZone
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.Aadhaar
+import org.multipaz.documenttype.knowntypes.AgeVerification
+import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.documenttype.knowntypes.IDPass
+import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.VaccinationDocument
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TestDocumentTypeRepository {
@@ -88,6 +98,77 @@ class TestDocumentTypeRepository {
                 aadhaarNamespace.dataElements.containsKey(dataElementName),
                 "Expected data element '$dataElementName' in aadhaar namespace"
             )
+        }
+    }
+
+    @Test
+    fun testSupportsPortraitImageEquivalence() {
+        assertEquals(
+            MdocPortraitEquivalenceData(DrivingLicense.MDL_NAMESPACE, "portrait"),
+            DrivingLicense.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence
+        )
+        assertEquals(
+            MdocPortraitEquivalenceData(PhotoID.ISO_23220_2_NAMESPACE, "portrait"),
+            PhotoID.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence
+        )
+        assertEquals(
+            MdocPortraitEquivalenceData(EUPersonalID.EUPID_NAMESPACE, "portrait"),
+            EUPersonalID.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence
+        )
+        assertEquals(
+            MdocPortraitEquivalenceData(DrivingLicense.MDL_NAMESPACE, "portrait"),
+            IDPass.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence
+        )
+        assertEquals(
+            MdocPortraitEquivalenceData(Aadhaar.AADHAAR_NAMESPACE, "resident_image"),
+            Aadhaar.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence
+        )
+        assertNull(VaccinationDocument.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence)
+        assertNull(AgeVerification.getDocumentType().mdocDocumentType?.supportsPortraitImageEquivalence)
+    }
+
+    @Test
+    fun testPortraitEquivalenceCannedRequests() {
+        val testCases = listOf(
+            Triple(DrivingLicense.getDocumentType(), DrivingLicense.MDL_NAMESPACE, "portrait"),
+            Triple(PhotoID.getDocumentType(), PhotoID.ISO_23220_2_NAMESPACE, "portrait"),
+            Triple(EUPersonalID.getDocumentType(), EUPersonalID.EUPID_NAMESPACE, "portrait"),
+            Triple(IDPass.getDocumentType(), DrivingLicense.MDL_NAMESPACE, "portrait"),
+            Triple(Aadhaar.getDocumentType(), Aadhaar.AADHAAR_NAMESPACE, "resident_image"),
+        )
+        for ((dt, portraitNamespace, portraitDataElement) in testCases) {
+            val requestWithBoth = dt.cannedRequests.find {
+                it.id == "age_over_18_and_portrait_or_portrait_equivalence"
+            }!!.mdocRequest!!
+            val dcqlWithBoth = requestWithBoth.toDcql(emptyList())
+            val credWithBoth = dcqlWithBoth["credentials"]!!.jsonArray[0].jsonObject
+            val claimsWithBoth = credWithBoth["claims"]!!.jsonArray
+            assertEquals(3, claimsWithBoth.size, "Document type ${dt.displayName} claims size mismatch")
+            val pePortrait = claimsWithBoth.find {
+                it.jsonObject["id"]?.jsonPrimitive?.content == "pe_portrait"
+            }!!.jsonObject
+            val pePortraitPath = pePortrait["path"]!!.jsonArray
+            assertEquals(portraitNamespace, pePortraitPath[0].jsonPrimitive.content)
+            assertEquals(portraitDataElement, pePortraitPath[1].jsonPrimitive.content)
+
+            val peChv1 = claimsWithBoth.find {
+                it.jsonObject["id"]?.jsonPrimitive?.content == "pe_chv1"
+            }!!.jsonObject
+            val peChv1Path = peChv1["path"]!!.jsonArray
+            assertEquals(ISO_23220_5_CHV_1_NAMESPACE, peChv1Path[0].jsonPrimitive.content)
+            assertEquals(ISO_23220_5_CHV_1_DATA_ELEMENT, peChv1Path[1].jsonPrimitive.content)
+
+            val claimSets = credWithBoth["claim_sets"]!!.jsonArray
+            assertEquals(2, claimSets.size)
+
+            val requestWithChvOnly = dt.cannedRequests.find {
+                it.id == "age_over_18_and_portrait_equivalence"
+            }!!.mdocRequest!!
+            val dcqlWithChvOnly = requestWithChvOnly.toDcql(emptyList())
+            val credWithChvOnly = dcqlWithChvOnly["credentials"]!!.jsonArray[0].jsonObject
+            val claimsWithChvOnly = credWithChvOnly["claims"]!!.jsonArray
+            assertEquals(2, claimsWithChvOnly.size, "Document type ${dt.displayName} claims size mismatch")
+            assertNull(credWithChvOnly["claim_sets"])
         }
     }
 

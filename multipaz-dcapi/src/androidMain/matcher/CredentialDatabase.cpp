@@ -40,6 +40,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         std::vector<std::vector<uint8_t>> readerIdentifiers;
         std::vector<std::string> keyAuthorizedNamespaces;
         std::map<std::string, std::vector<std::string>> keyAuthorizedDataElements;
+        bool supportsPortraitImageEquivalence = false;
         std::map resultingClaims = std::map<std::string, Claim>();
 
         auto& docProtocolsPtr = cred->get("protocols");
@@ -58,6 +59,11 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             auto mdoc = mdocPtr->asMap();
             documentId = mdoc->get("documentId")->asTstr()->value();
             mdocDoctype = mdoc->get("docType")->asTstr()->value();
+
+            const auto& piePtr = mdoc->get("supportsPortraitImageEquivalence");
+            if (piePtr != nullptr && piePtr->asBool() != nullptr) {
+                supportsPortraitImageEquivalence = piePtr->asBool()->value();
+            }
 
             const auto& issuerIdentifiersPtr = mdoc->get("issuerIdentifiers");
             if (issuerIdentifiersPtr != nullptr && issuerIdentifiersPtr->asArray() != nullptr) {
@@ -175,7 +181,8 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 readerIdentifiers,
                 keyAuthorizedNamespaces,
                 keyAuthorizedDataElements,
-                resultingClaims
+                resultingClaims,
+                supportsPortraitImageEquivalence
             )
         );
     }
@@ -215,6 +222,19 @@ Claim* Credential::findMatchingClaim(const DcqlRequestedClaim& requestedClaim) {
         bool authorized = false;
         if (!vcVct.empty() && ns == "org.iso.transactiondata") {
             authorized = true;
+        } else if (ns == "org.iso.23220.5.1") {
+            if (elem == "CHV_1" && supportsPortraitImageEquivalence) {
+                if (std::find(keyAuthorizedNamespaces.begin(), keyAuthorizedNamespaces.end(), ns) != keyAuthorizedNamespaces.end()) {
+                    authorized = true;
+                } else {
+                    auto it = keyAuthorizedDataElements.find(ns);
+                    if (it != keyAuthorizedDataElements.end()) {
+                        if (std::find(it->second.begin(), it->second.end(), elem) != it->second.end()) {
+                            authorized = true;
+                        }
+                    }
+                }
+            }
         } else if (std::find(keyAuthorizedNamespaces.begin(), keyAuthorizedNamespaces.end(), ns) != keyAuthorizedNamespaces.end()) {
             authorized = true;
         } else {

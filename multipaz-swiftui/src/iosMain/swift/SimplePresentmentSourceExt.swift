@@ -7,11 +7,18 @@ private final class HandlersHolder: NSObject {
     let resolveTrustHandler: AnyObject
     let showConsentPromptHandler: AnyObject
     let getBadgesHandler: AnyObject
+    let getFaceMatchingModeHandler: AnyObject
     
-    init(resolveTrustHandler: AnyObject, showConsentPromptHandler: AnyObject, getBadgesHandler: AnyObject) {
+    init(
+        resolveTrustHandler: AnyObject,
+        showConsentPromptHandler: AnyObject,
+        getBadgesHandler: AnyObject,
+        getFaceMatchingModeHandler: AnyObject
+    ) {
         self.resolveTrustHandler = resolveTrustHandler
         self.showConsentPromptHandler = showConsentPromptHandler
         self.getBadgesHandler = getBadgesHandler
+        self.getFaceMatchingModeHandler = getFaceMatchingModeHandler
     }
 }
 
@@ -23,9 +30,12 @@ extension SimplePresentmentSource.Companion {
     ///   - documetStore: the [DocumentStore] which holds credentials that can be presented.
     ///   - documentTypeRepository: a [DocumentTypeRepository] which holds metadata for document types.
     ///   - zkSystemRepository: the [ZkSystemRepository] to use or `nil`.
+    ///   - faceMatcherRepository: the [FaceMatcherRepository] to use or `nil`.
     ///   - eventLogger: an [EventLogger] for logging events or `nil`.
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
     ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
+    ///   - getBadgesFn: a function to get badges for a document.
+    ///   - getFaceMatchingModeFn: a function to determine face matching mode for a credential.
     ///   - preferSignatureToKeyAgreement: whether to use mdoc ECDSA authentication even if mdoc MAC authentication is possible (ISO mdoc only).
     ///   - domainsMdocSignature: the domains to use for ``MdocCredential`` instances using mdoc ECDSA authentication.
     ///   - domainsMdocKeyAgreement: the domains to use for ``MdocCredential`` instances using mdoc MAC authentication.
@@ -36,6 +46,7 @@ extension SimplePresentmentSource.Companion {
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
         eventLogger: EventLogger? = nil,
+        getFaceMatcherFn: @escaping () -> FaceMatcher? = { nil },
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
         ) async -> TrustedRequesterIdentity?,
@@ -44,11 +55,14 @@ extension SimplePresentmentSource.Companion {
             _ trustMetadata: TrustedRequesterIdentity?,
             _ consentData: ConsentData,
             _ preselectedDocuments: [Document],
-            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
         ) async -> CredentialSelection?,
         getBadgesFn: @escaping @MainActor @Sendable (
             _ document: Document
         ) async -> [DocumentBadge] = { document in [] },
+        getFaceMatchingModeFn: @escaping @MainActor @Sendable (
+            _ credential: Credential
+        ) async -> FaceMatchingMode = { credential in .onlyIfRequested },
         preferSignatureToKeyAgreement: Bool = true,
         domainsMdocSignature: [ String ] = [],
         domainsMdocKeyAgreement: [ String ] = [],
@@ -58,15 +72,18 @@ extension SimplePresentmentSource.Companion {
         let resolveTrustHandler = ResolveTrustHandler(f: resolveTrustFn)
         let showConsentPromptHandler = ShowConsentPromptHandler(f: showConsentPromptFn)
         let getBadgesHandler = GetBadgesHandler(f: getBadgesFn)
+        let getFaceMatchingModeHandler = GetFaceMatchingModeHandler(f: getFaceMatchingModeFn)
         
         let source = SimplePresentmentSource(
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: zkSystemRepository,
             eventLogger: eventLogger,
+            getFaceMatcherFn: getFaceMatcherFn,
             resolveTrustFn: resolveTrustHandler,
             showConsentPromptFn: showConsentPromptHandler,
             getBadgesFn: getBadgesHandler,
+            getFaceMatchingModeFn: getFaceMatchingModeHandler,
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
             domainsMdocSignature: domainsMdocSignature,
             domainsMdocKeyAgreement: domainsMdocKeyAgreement,
@@ -77,7 +94,8 @@ extension SimplePresentmentSource.Companion {
         let holder = HandlersHolder(
             resolveTrustHandler: resolveTrustHandler,
             showConsentPromptHandler: showConsentPromptHandler,
-            getBadgesHandler: getBadgesHandler
+            getBadgesHandler: getBadgesHandler,
+            getFaceMatchingModeHandler: getFaceMatchingModeHandler
         )
         objc_setAssociatedObject(
             source,
@@ -268,3 +286,30 @@ private class GetBadgesHandler: KotlinSuspendFunction1 {
         runGetBadges(document: document, f: self.f, completionHandler: completionHandler)
     }
 }
+
+private func runGetFaceMatchingMode(
+    credential: Credential,
+    f: @escaping @MainActor @Sendable (Credential) async -> FaceMatchingMode,
+    completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
+) {
+    Task { @MainActor in
+        let value = await f(credential)
+        completionHandler(value, nil)
+    }
+}
+
+private class GetFaceMatchingModeHandler: KotlinSuspendFunction1 {
+    let f: @MainActor @Sendable (
+        _ credential: Credential
+    ) async -> FaceMatchingMode
+    
+    init(f: @escaping @MainActor @Sendable (_ credential: Credential) async -> FaceMatchingMode) {
+        self.f = f
+    }
+
+    func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
+        let credential = p1 as! Credential
+        runGetFaceMatchingMode(credential: credential, f: self.f, completionHandler: completionHandler)
+    }
+}
+

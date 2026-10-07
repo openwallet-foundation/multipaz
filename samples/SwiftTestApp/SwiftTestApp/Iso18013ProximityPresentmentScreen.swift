@@ -9,29 +9,44 @@ struct Iso18013ProximityPresentmentScreen: View {
             MdocProximityQrPresentment(
                 source: viewModel.getSource(),
                 prepareSettings: { generateQrCode in
-                    Button("Share mdoc using QR code") {
-                        let bleUuid = UUID.companion.randomUUID(random: KotlinRandom.companion)
-                        let connectionMethods = [
-                            MdocConnectionMethodBle(
-                                supportsPeripheralServerMode: true,
-                                supportsCentralClientMode: false,
-                                peripheralServerModeUuid: bleUuid,
-                                centralClientModeUuid: nil,
-                                peripheralServerModePsm: nil,
-                                peripheralServerModeMacAddress: nil
+                    @Bindable var viewModel = viewModel
+                    VStack(spacing: 24) {
+                        HStack {
+                            Text("Face matcher:")
+                            Spacer()
+                            Picker("Face Matcher", selection: $viewModel.selectedFaceMatcher) {
+                                Text("None").tag("None")
+                                Text("Facenet").tag("facenet")
+                                Text("Facenet (debug)").tag("facenet_debug")
+                            }
+                            .pickerStyle(.menu)
+                        }
+                        .padding(.horizontal)
+
+                        Button("Share mdoc using QR code") {
+                            let bleUuid = UUID.companion.randomUUID(random: KotlinRandom.companion)
+                            let connectionMethods = [
+                                MdocConnectionMethodBle(
+                                    supportsPeripheralServerMode: true,
+                                    supportsCentralClientMode: false,
+                                    peripheralServerModeUuid: bleUuid,
+                                    centralClientModeUuid: nil,
+                                    peripheralServerModePsm: nil,
+                                    peripheralServerModeMacAddress: nil
+                                )
+                            ]
+                            let settings = MdocProximityQrSettings(
+                                availableConnectionMethods: connectionMethods,
+                                createTransportOptions: MdocTransportOptions(
+                                    bleUseL2CAP: false,
+                                    bleUseL2CAPInEngagement: true
+                                )
                             )
-                        ]
-                        let settings = MdocProximityQrSettings(
-                            availableConnectionMethods: connectionMethods,
-                            createTransportOptions: MdocTransportOptions(
-                                bleUseL2CAP: false,
-                                bleUseL2CAPInEngagement: true
-                            )
-                        )
-                        generateQrCode(settings)
+                            generateQrCode(settings)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
                 },
                 showQrCode: { uri, cancel in
                     VStack {

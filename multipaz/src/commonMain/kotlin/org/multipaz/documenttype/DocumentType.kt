@@ -123,6 +123,34 @@ class DocumentType private constructor(
         }
 
         /**
+         * Sets portrait image equivalence support on the mdoc document type.
+         *
+         * @param namespace the namespace containing the portrait data element.
+         * @param dataElementName the name of the data element containing the portrait.
+         * @return the builder.
+         */
+        fun setSupportsPortraitImageEquivalence(
+            namespace: String,
+            dataElementName: String,
+        ) = apply {
+            checkNotNull(mdocBuilder) { "The Mdoc Document Type was not initialized" }
+            mdocBuilder!!.setSupportsPortraitImageEquivalence(namespace, dataElementName)
+        }
+
+        /**
+         * Sets portrait image equivalence support on the mdoc document type.
+         *
+         * @param supportsPortraitImageEquivalence the portrait equivalence data or `null`.
+         * @return the builder.
+         */
+        fun setSupportsPortraitImageEquivalence(
+            supportsPortraitImageEquivalence: MdocPortraitEquivalenceData?,
+        ) = apply {
+            checkNotNull(mdocBuilder) { "The Mdoc Document Type was not initialized" }
+            mdocBuilder!!.setSupportsPortraitImageEquivalence(supportsPortraitImageEquivalence)
+        }
+
+        /**
          * Add an attribute for both ISO mdoc and JSON-based document, using the same identifier.
          *
          * @param type the datatype of this attribute.
@@ -314,6 +342,7 @@ class DocumentType private constructor(
          *   defined claims will be included. Each claim name must use `.` to separate path components, e.g.
          *   `age_equal_or_over.18`.
          * @param cannedTransactionData transaction data list for the request
+         * @param portraitEquivalenceRequest if not null, request portrait image equivalence data elements.
          */
         fun addSampleRequest(
             id: String,
@@ -321,11 +350,18 @@ class DocumentType private constructor(
             mdocDataElements: Map<String, Map<String, Boolean>>? = null,
             mdocUseZkp: Boolean = false,
             jsonClaims: List<String>? = null,
-            cannedTransactionData: List<CannedTransactionData<*>> = listOf()
+            cannedTransactionData: List<CannedTransactionData<*>> = listOf(),
+            portraitEquivalenceRequest: PortraitEquivalenceRequest? = null,
         ) = apply {
             val mdocRequest = if (mdocDataElements == null) {
                 null
             } else {
+                checkNotNull(mdocBuilder)
+                if (portraitEquivalenceRequest?.includePortrait == true) {
+                    check(mdocBuilder!!.supportsPortraitImageEquivalence != null) {
+                        "Document type does not support portrait image equivalence"
+                    }
+                }
                 val nsRequests = mutableListOf<MdocNamespaceRequest>()
                 for ((namespace, dataElements) in mdocDataElements) {
                     val mdocNsBuilder = mdocBuilder!!.namespaces[namespace]!!
@@ -339,7 +375,13 @@ class DocumentType private constructor(
                     }
                     nsRequests.add(MdocNamespaceRequest(namespace, map))
                 }
-                MdocCannedRequest(mdocBuilder!!.docType, mdocUseZkp, nsRequests)
+                MdocCannedRequest(
+                    docType = mdocBuilder!!.docType,
+                    useZkp = mdocUseZkp,
+                    portraitEquivalenceRequest = portraitEquivalenceRequest,
+                    namespacesToRequest = nsRequests,
+                    portraitEquivalenceData = mdocBuilder!!.supportsPortraitImageEquivalence,
+                )
             }
             val jsonRequest = if (jsonClaims == null) {
                 null

@@ -7,6 +7,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
@@ -117,4 +118,23 @@ abstract class PresentmentSource(
      * @return the badges.
      */
     abstract suspend fun getBadges(document: Document): List<DocumentBadge>
+
+    /**
+     * Determines whether and when to perform face matching for a credential presentation.
+     *
+     * This is invoked for each presentation to query the wallet's policy regarding face matching
+     * for the credential planned to be returned.
+     *
+     * @param credential the [Credential] instance planned to be returned.
+     * @return the [FaceMatchingMode] indicating whether face matching should be performed.
+     */
+    open suspend fun getFaceMatchingMode(
+        credential: Credential
+    ): FaceMatchingMode = FaceMatchingMode.ONLY_IF_REQUESTED
+
+    /**
+     * Gets the [FaceMatcher] to use for face matching during presentment, or `null` if face matching is not available.
+     */
+    open fun getFaceMatcher(): FaceMatcher? = null
 }
+
