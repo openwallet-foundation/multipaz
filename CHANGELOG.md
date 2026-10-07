@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.102.0] - Not yet released, expected Oct or Nov 2026
 Significant changes since Multipaz 0.101.0 include:
 - TODO
+- Fixed `JsonWebEncryption.encrypt()` producing a JWE that no ECDH-ES decrypter could open, its own
+  `decrypt()` included, when `apu` or `apv` was `null`. An absent value now still contributes its
+  zero length to the Concat KDF input, as RFC 7518 section 4.6.2 requires.
 
 ## [0.101.0] - 2026-09-10
 Significant changes since Multipaz 0.100.0 include:

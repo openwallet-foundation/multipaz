@@ -81,8 +81,8 @@ object JsonWebEncryption {
                     sharedSecretZ = sharedSecret,
                     keyDataLenBits = keyDataLenBits,
                     algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
-                    partyUInfo =  buildByteString { apu?.let { appendInt32(it.size); append(it) } },
-                    partyVInfo =  buildByteString { apv?.let { appendInt32(it.size); append(it) } },
+                    partyUInfo =  buildByteString { val info = apu ?: ByteString(); appendInt32(info.size); append(info) },
+                    partyVInfo =  buildByteString { val info = apv ?: ByteString(); appendInt32(info.size); append(info) },
                     suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
                 )
             }

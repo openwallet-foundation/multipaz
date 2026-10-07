@@ -37,7 +37,9 @@ class JsonWebEncryptionTestsNimbus {
 
     @Test fun testEncryptEcdhEs_Compression() = runTest { testEncryptEcdhEs(Algorithm.A128GCM, true) }
 
-    private suspend fun testEncryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) {
+    @Test fun testEncryptEcdhEs_NoPartyInfo() = runTest { testEncryptEcdhEs(Algorithm.A128GCM, false, usePartyInfo = false) }
+
+    private suspend fun testEncryptEcdhEs(encAlg: Algorithm, useCompression: Boolean, usePartyInfo: Boolean = true) {
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
         val claims = buildJsonObject {
@@ -51,8 +53,8 @@ class JsonWebEncryptionTestsNimbus {
             claimsSet = claims,
             recipientPublicKey = recipientKey.publicKey,
             encAlg = encAlg,
-            apu = ByteString(1, 2, 3),
-            apv = ByteString(4, 5, 6),
+            apu = if (usePartyInfo) ByteString(1, 2, 3) else null,
+            apv = if (usePartyInfo) ByteString(4, 5, 6) else null,
             compressionLevel = if (useCompression) 5 else null,
         )
 
@@ -77,7 +79,9 @@ class JsonWebEncryptionTestsNimbus {
 
     @Test fun testDecryptEcdhEs_Compression() = runTest { testDecryptEcdhEs(Algorithm.A128GCM, true) }
 
-    private fun testDecryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) = runTest {
+    @Test fun testDecryptEcdhEs_NoPartyInfo() = runTest { testDecryptEcdhEs(Algorithm.A128GCM, false, usePartyInfo = false) }
+
+    private fun testDecryptEcdhEs(encAlg: Algorithm, useCompression: Boolean, usePartyInfo: Boolean = true) = runTest {
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val claims = buildJsonObject {
             put("vp_token", buildJsonObject {
@@ -94,8 +98,11 @@ class JsonWebEncryptionTestsNimbus {
         val responseEncryptionAlg = JWEAlgorithm.parse("ECDH-ES")
         val responseEncryptionMethod = EncryptionMethod.parse(encAlg.joseAlgorithmIdentifier)
         val builder = JWEHeader.Builder(responseEncryptionAlg, responseEncryptionMethod)
-            .agreementPartyUInfo(Base64URL(apu.toByteArray().toBase64Url()))
-            .agreementPartyVInfo(Base64URL(apv.toByteArray().toBase64Url()))
+        if (usePartyInfo) {
+            builder
+                .agreementPartyUInfo(Base64URL(apu.toByteArray().toBase64Url()))
+                .agreementPartyVInfo(Base64URL(apv.toByteArray().toBase64Url()))
+        }
         if (useCompression) {
             builder.compressionAlgorithm(CompressionAlgorithm.DEF)
         }

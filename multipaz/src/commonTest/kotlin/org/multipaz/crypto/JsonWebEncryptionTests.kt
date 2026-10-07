@@ -57,7 +57,9 @@ class JsonWebEncryptionTests {
 
     @Test fun roundTripCompression() = roundtrip(EcCurve.P256, Algorithm.A128GCM, true)
 
-    fun roundtrip(curve: EcCurve, encAlg: Algorithm, useCompression: Boolean) = runTest {
+    @Test fun roundTripNoPartyInfo() = roundtrip(EcCurve.P256, Algorithm.A128GCM, false, usePartyInfo = false)
+
+    fun roundtrip(curve: EcCurve, encAlg: Algorithm, useCompression: Boolean, usePartyInfo: Boolean = true) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
@@ -75,8 +77,8 @@ class JsonWebEncryptionTests {
                 })
             })
         }
-        val apu = ByteString(1, 2, 3)
-        val apv = ByteString(4, 5, 6)
+        val apu = if (usePartyInfo) ByteString(1, 2, 3) else null
+        val apv = if (usePartyInfo) ByteString(4, 5, 6) else null
         val encryptedJwt = JsonWebEncryption.encrypt(
             claimsSet = claims,
             recipientPublicKey = recipientKey.publicKey,
@@ -107,8 +109,8 @@ class JsonWebEncryptionTests {
         } else {
             assertNull(ph["zip"])
         }
-        assertEquals(apu.toByteArray().toBase64Url(), ph["apu"]!!.jsonPrimitive.content)
-        assertEquals(apv.toByteArray().toBase64Url(), ph["apv"]!!.jsonPrimitive.content)
+        assertEquals(apu?.toByteArray()?.toBase64Url(), ph["apu"]?.jsonPrimitive?.content)
+        assertEquals(apv?.toByteArray()?.toBase64Url(), ph["apv"]?.jsonPrimitive?.content)
     }
 
     @Test
