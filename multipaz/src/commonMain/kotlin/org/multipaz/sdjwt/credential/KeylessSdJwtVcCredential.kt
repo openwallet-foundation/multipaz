@@ -1,5 +1,6 @@
 package org.multipaz.sdjwt.credential
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
@@ -12,6 +13,7 @@ import org.multipaz.mpzpass.MpzPass
 import org.multipaz.mpzpass.MpzPassSdJwtVc
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
+import org.multipaz.validation.ValidationResult
 import kotlin.time.Instant
 
 class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
@@ -66,6 +68,11 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
         extractValidityFromIssuerDataImpl()
+
+    override suspend fun validate(
+        issuerProvidedAuthenticationData: ByteString,
+        now: Instant?
+    ): ValidationResult = validateSdJwtVc(issuerProvidedAuthenticationData, now)
 
     override suspend fun exportToMpzPass(keyUnlockData: KeyUnlockData?): MpzPass {
         return MpzPass(

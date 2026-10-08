@@ -9,6 +9,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.buildValidationResult
 
 /**
  * A data structure representing `IssuerSignedItem` in ISO/IEC 18013-5:2021.
@@ -50,6 +52,74 @@ data class IssuerSignedItem(
      */
     val dataElementValue: DataItem
         get() = dataItem["elementValue"]
+
+    /**
+     * Validates the internal structure of this [IssuerSignedItem].
+     *
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    fun validate(): ValidationResult = buildValidationResult {
+        if (dataItem !is CborMap) {
+            addError("IssuerSignedItem dataItem is not a CBOR map")
+            return@buildValidationResult
+        }
+        val expectedKeys = setOf("digestID", "random", "elementIdentifier", "elementValue")
+        val actualKeys = dataItem.asMap.keys.mapNotNull {
+            try {
+                it.asTstr
+            } catch (_: Throwable) {
+                null
+            }
+        }.toSet()
+
+        if (!dataItem.hasKey("digestID")) {
+            addError("IssuerSignedItem missing 'digestID'")
+        } else {
+            try {
+                val dId = dataItem["digestID"].asNumber
+                if (dId < 0) {
+                    addError("IssuerSignedItem 'digestID' must be non-negative (was $dId)")
+                }
+            } catch (e: Throwable) {
+                addError("IssuerSignedItem 'digestID' is not a number: ${e.message}")
+            }
+        }
+
+        if (!dataItem.hasKey("random")) {
+            addError("IssuerSignedItem missing 'random'")
+        } else {
+            try {
+                val rand = dataItem["random"].asBstr
+                if (rand.size < 16) {
+                    addError("IssuerSignedItem 'random' must be at least 16 bytes (was ${rand.size} bytes)")
+                }
+            } catch (e: Throwable) {
+                addError("IssuerSignedItem 'random' is not a byte string: ${e.message}")
+            }
+        }
+
+        if (!dataItem.hasKey("elementIdentifier")) {
+            addError("IssuerSignedItem missing 'elementIdentifier'")
+        } else {
+            try {
+                val elemId = dataItem["elementIdentifier"].asTstr
+                if (elemId.isEmpty()) {
+                    addError("IssuerSignedItem 'elementIdentifier' cannot be empty")
+                }
+            } catch (e: Throwable) {
+                addError("IssuerSignedItem 'elementIdentifier' is not a text string: ${e.message}")
+            }
+        }
+
+        if (!dataItem.hasKey("elementValue")) {
+            addError("IssuerSignedItem missing 'elementValue'")
+        }
+
+        val extraKeys = actualKeys - expectedKeys
+        if (extraKeys.isNotEmpty()) {
+            addWarning("IssuerSignedItem contains unexpected keys: ${extraKeys.joinToString(", ")}")
+        }
+    }
 
     /**
      * Calculates the digest of `IssuerSignedItemBytes`.

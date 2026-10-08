@@ -28,7 +28,11 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.revocation.RevocationStatus
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.ValidationResultBuilder
+import org.multipaz.validation.buildValidationResult
 import org.multipaz.sdjwt.DisclosureMetadata.Companion.isClaimSelectivelyDisclosable
 import org.multipaz.sdjwt.DisclosureMetadata.Companion.isIndexSelectivelyDisclosable
 import org.multipaz.sdjwt.DisclosureMetadata.Companion.toDisclosureMetadata
@@ -162,6 +166,336 @@ class SdJwt private constructor(
             path = mutableListOf(),
             visitor = { path, value, disclosure -> }
         )
+    }
+
+    /**
+     * Validates this [SdJwt] according to RFC 9901.
+     *
+     * @param now reference time to check expiration and validity windows, or `null`.
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    suspend fun validate(now: Instant? = null): ValidationResult = buildValidationResult {
+        // 1. Header validation
+        val typ = jwtHeader["typ"]?.jsonPrimitive?.content
+        val recognizedTypes = listOf(
+            "sd-jwt",
+            "application/sd-jwt",
+            "dc+sd-jwt",
+            "vc+sd-jwt",
+            "application/dc+sd-jwt",
+            "application/vc+sd-jwt"
+        )
+        if (typ == null) {
+            addWarning("SD-JWT header is missing 'typ' parameter")
+        } else if (typ !in recognizedTypes) {
+            addWarning("SD-JWT header has unrecognized 'typ': '$typ'")
+        }
+
+        val algStr = jwtHeader["alg"]?.jsonPrimitive?.content
+        if (algStr == null) {
+            addError("SD-JWT header is missing 'alg' parameter")
+        } else {
+            val alg = try {
+                Algorithm.fromJoseAlgorithmIdentifier(algStr)
+            } catch (_: Throwable) {
+                null
+            }
+            if (alg == null) {
+                addError("Unsupported signing algorithm in SD-JWT header: '$algStr'")
+            }
+        }
+
+        val certChain = x5c
+        if (certChain == null) {
+            addWarning("SD-JWT header does not contain 'x5c' certificate chain")
+        } else {
+            if (certChain.certificates.isEmpty()) {
+                addError("SD-JWT 'x5c' certificate chain is empty")
+            } else {
+                val leafCert = certChain.certificates.first()
+                if (leafCert.keyUsage.isNotEmpty()) {
+                    if (!leafCert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+                        addError("Issuer certificate in 'x5c' does not have DIGITAL_SIGNATURE key usage")
+                    }
+                    if (leafCert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
+                        addWarning("Issuer certificate in 'x5c' has KEY_CERT_SIGN key usage (issuer certificate should not be a CA)")
+                    }
+                }
+                if (leafCert.basicConstraints?.first == true) {
+                    addWarning("Issuer certificate in 'x5c' has Basic Constraints CA=true (issuer certificate should not be a CA)")
+                }
+                if (now != null) {
+                    if (now < leafCert.validityNotBefore) {
+                        addWarning("Issuer certificate is not yet valid (notBefore: ${leafCert.validityNotBefore}, current time: $now)")
+                    }
+                    if (now > leafCert.validityNotAfter) {
+                        addWarning("Issuer certificate is expired (notAfter: ${leafCert.validityNotAfter}, current time: $now)")
+                    }
+                }
+                try {
+                    JsonWebSignature.verify("$header.$body.$signature", leafCert.publicKey)
+                } catch (e: SignatureVerificationException) {
+                    addError("SD-JWT issuer signature verification failed: ${e.message}")
+                } catch (e: Throwable) {
+                    if (e is CancellationException) throw e
+                    addError("Error verifying SD-JWT issuer signature: ${e.message}")
+                }
+            }
+        }
+
+        // 2. Payload validation
+        val sdAlgStr = jwtBody["_sd_alg"]?.jsonPrimitive?.content
+        if (sdAlgStr != null) {
+            val supported = listOf("sha-256", "sha-384", "sha-512")
+            if (sdAlgStr.lowercase() !in supported) {
+                addError("Unsupported digest algorithm in '_sd_alg': '$sdAlgStr'")
+            }
+        }
+
+        val iss = issuer
+        if (iss.isNullOrEmpty()) {
+            addError("SD-JWT missing 'iss' claim")
+        }
+
+        if (validFrom != null && validUntil != null && validUntil!! <= validFrom!!) {
+            addError("SD-JWT 'exp' ($validUntil) must be later than 'nbf' ($validFrom)")
+        }
+        if (issuedAt != null && validUntil != null && validUntil!! <= issuedAt!!) {
+            addError("SD-JWT 'exp' ($validUntil) must be later than 'iat' ($issuedAt)")
+        }
+        if (issuedAt != null && validFrom != null && validFrom!! < issuedAt!!) {
+            addWarning("SD-JWT 'nbf' ($validFrom) is earlier than 'iat' ($issuedAt)")
+        }
+        if (now != null) {
+            if (validFrom != null && now < validFrom!!) {
+                addWarning("SD-JWT is not yet valid ('nbf': $validFrom, current time: $now)")
+            }
+            if (validUntil != null && now > validUntil!!) {
+                addError("SD-JWT is expired ('exp': $validUntil, current time: $now)")
+            }
+        }
+        if (certChain != null && certChain.certificates.isNotEmpty()) {
+            val leafCert = certChain.certificates.first()
+            val referenceTimestamp = issuedAt ?: validFrom
+            if (referenceTimestamp != null) {
+                if (referenceTimestamp < leafCert.validityNotBefore) {
+                    addError("SD-JWT issuance/validity ($referenceTimestamp) is before issuer certificate validity period (notBefore: ${leafCert.validityNotBefore})")
+                }
+                if (referenceTimestamp > leafCert.validityNotAfter) {
+                    addError("SD-JWT issuance/validity ($referenceTimestamp) is after issuer certificate validity period (notAfter: ${leafCert.validityNotAfter})")
+                }
+            }
+            if (validUntil != null && validUntil!! > leafCert.validityNotAfter) {
+                addWarning("SD-JWT 'exp' ($validUntil) is after issuer certificate validity period (notAfter: ${leafCert.validityNotAfter})")
+            }
+        }
+
+        if (jwtBody.containsKey("cnf")) {
+            val cnfObj = jwtBody["cnf"]
+            if (cnfObj !is JsonObject) {
+                addError("SD-JWT 'cnf' claim is not a JSON object")
+            } else if (!cnfObj.containsKey("jwk")) {
+                addWarning("SD-JWT 'cnf' claim does not contain 'jwk'")
+            } else {
+                try {
+                    kbKey
+                } catch (e: Throwable) {
+                    addError("Failed to parse public key from 'cnf.jwk': ${e.message}")
+                }
+            }
+        }
+
+        // 3. Disclosures and tree validation
+        val parsedDisclosures = mutableMapOf<String, Disclosure>()
+        val seenHashes = mutableSetOf<String>()
+        for (discStr in disclosures) {
+            val disc = try {
+                Disclosure.fromDisclosureString(discStr)
+            } catch (e: Throwable) {
+                addError("Failed to parse disclosure: ${e.message}")
+                null
+            }
+            if (disc != null) {
+                addAll(disc.validate())
+                val hash = disc.calculateDigest(digestAlg)
+                if (!seenHashes.add(hash)) {
+                    addWarning("Duplicate disclosure with digest '$hash' in SD-JWT")
+                }
+                parsedDisclosures[hash] = disc
+            }
+        }
+
+        val referencedDigests = mutableSetOf<String>()
+        val visitedDigests = mutableSetOf<String>()
+        validateDigestTree(this, jwtBody, referencedDigests, visitedDigests, parsedDisclosures)
+
+        for (refDigest in referencedDigests) {
+            if (!hashToDisclosureString.containsKey(refDigest)) {
+                addError("Digest '$refDigest' referenced in claims tree is missing from SD-JWT disclosures")
+            }
+        }
+
+        for ((hash, disc) in parsedDisclosures) {
+            if (hash !in referencedDigests) {
+                val label = disc.claimName ?: "<array-element>"
+                addWarning("Orphaned disclosure '$label' (digest $hash) is not referenced in the SD-JWT claims tree")
+            }
+        }
+    }
+
+    /**
+     * Validates this [SdJwt] according to the SD-JWT VC specification.
+     *
+     * This runs all RFC 9901 checks via [validate] and additionally enforces SD-JWT VC profile requirements:
+     * - The header 'typ' must be a recognized VC type ('vc+sd-jwt', 'dc+sd-jwt', or mime-type equivalent).
+     * - The 'vct' claim must be present (and match [expectedVct] if provided).
+     * - Disclosures must not selectively disclose 'vct' or 'status'.
+     * - The 'status' claim (if present) must be a valid status list claim.
+     *
+     * @param expectedVct the expected Verifiable Credential Type, or `null` to only check that 'vct' is present.
+     * @param now reference time to check expiration and validity windows, or `null`.
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    suspend fun validateVc(
+        expectedVct: String? = null,
+        now: Instant? = null
+    ): ValidationResult = buildValidationResult {
+        addAll(validate(now))
+
+        val typ = jwtHeader["typ"]?.jsonPrimitive?.content
+        val vcTypes = listOf("dc+sd-jwt", "vc+sd-jwt", "application/dc+sd-jwt", "application/vc+sd-jwt")
+        if (typ == null) {
+            addError("SD-JWT VC header is missing 'typ' parameter (expected 'vc+sd-jwt' or 'dc+sd-jwt')")
+        } else if (typ !in vcTypes) {
+            addError("SD-JWT VC header 'typ' must be one of ${vcTypes.joinToString(", ")} (found '$typ')")
+        }
+
+        val vctClaim = credentialType
+        if (vctClaim.isNullOrEmpty()) {
+            addError("SD-JWT VC missing 'vct' claim")
+        } else if (expectedVct != null && vctClaim != expectedVct) {
+            addError("SD-JWT VC 'vct' claim '$vctClaim' does not match expected '$expectedVct'")
+        }
+
+        for (discStr in disclosures) {
+            val disc = try {
+                Disclosure.fromDisclosureString(discStr)
+            } catch (_: Throwable) {
+                null
+            }
+            if (disc != null && !disc.isArrayElement) {
+                if (disc.claimName in setOf("vct", "status")) {
+                    addError("Claim '${disc.claimName}' cannot be selectively disclosed in an SD-JWT VC")
+                }
+            }
+        }
+
+        if (jwtBody.containsKey("status")) {
+            val statusObj = jwtBody["status"]
+            if (statusObj !is JsonObject) {
+                addError("SD-JWT VC 'status' claim is not a JSON object")
+            } else {
+                try {
+                    revocationStatus
+                } catch (e: Throwable) {
+                    addError("Failed to parse 'status' claim: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun validateDigestTree(
+        builder: ValidationResultBuilder,
+        obj: JsonObject,
+        referencedDigests: MutableSet<String>,
+        visitedDigests: MutableSet<String>,
+        hashToDisclosure: Map<String, Disclosure>
+    ) {
+        val directSd = obj["_sd"]
+        val directDigests = mutableListOf<String>()
+        if (directSd is JsonArray) {
+            for (digestElem in directSd) {
+                if (digestElem is JsonPrimitive && digestElem.isString) {
+                    val digest = digestElem.content
+                    directDigests.add(digest)
+                    referencedDigests.add(digest)
+                } else {
+                    builder.addError("Element in '_sd' array is not a string primitive: $digestElem")
+                }
+            }
+        }
+
+        for (digest in directDigests) {
+            if (!visitedDigests.add(digest)) {
+                builder.addError("Circular disclosure reference detected for digest '$digest'")
+                continue
+            }
+            val disclosure = hashToDisclosure[digest]
+            if (disclosure != null) {
+                if (disclosure.isArrayElement) {
+                    builder.addError("Array element disclosure (digest $digest) is referenced in an object '_sd' array")
+                } else {
+                    val claimName = disclosure.claimName!!
+                    if (obj.containsKey(claimName)) {
+                        builder.addError("Disclosed claim '$claimName' collides with existing claim in the containing object (RFC 9901 Section 5.1)")
+                    }
+                    if (disclosure.claimValue is JsonObject) {
+                        validateDigestTree(builder, disclosure.claimValue, referencedDigests, visitedDigests, hashToDisclosure)
+                    } else if (disclosure.claimValue is JsonArray) {
+                        validateArrayDigestTree(builder, disclosure.claimValue, referencedDigests, visitedDigests, hashToDisclosure)
+                    }
+                }
+            }
+        }
+
+        for ((key, value) in obj) {
+            if (key != "_sd" && key != "_sd_alg") {
+                if (value is JsonObject) {
+                    validateDigestTree(builder, value, referencedDigests, visitedDigests, hashToDisclosure)
+                } else if (value is JsonArray) {
+                    validateArrayDigestTree(builder, value, referencedDigests, visitedDigests, hashToDisclosure)
+                }
+            }
+        }
+    }
+
+    private fun validateArrayDigestTree(
+        builder: ValidationResultBuilder,
+        array: JsonArray,
+        referencedDigests: MutableSet<String>,
+        visitedDigests: MutableSet<String>,
+        hashToDisclosure: Map<String, Disclosure>
+    ) {
+        for (elem in array) {
+            if (elem is JsonObject && elem.size == 1 && elem.containsKey("...")) {
+                val digestElem = elem["..."]
+                if (digestElem is JsonPrimitive && digestElem.isString) {
+                    val digest = digestElem.content
+                    referencedDigests.add(digest)
+                    if (!visitedDigests.add(digest)) {
+                        builder.addError("Circular disclosure reference detected for digest '$digest'")
+                        continue
+                    }
+                    val disclosure = hashToDisclosure[digest]
+                    if (disclosure != null) {
+                        if (!disclosure.isArrayElement) {
+                            builder.addError("Object property disclosure '${disclosure.claimName}' (digest $digest) is referenced in an array '...' element")
+                        }
+                        if (disclosure.claimValue is JsonObject) {
+                            validateDigestTree(builder, disclosure.claimValue, referencedDigests, visitedDigests, hashToDisclosure)
+                        } else if (disclosure.claimValue is JsonArray) {
+                            validateArrayDigestTree(builder, disclosure.claimValue, referencedDigests, visitedDigests, hashToDisclosure)
+                        }
+                    }
+                } else {
+                    builder.addError("Array digest element '...' is not a string primitive: $elem")
+                }
+            } else if (elem is JsonObject) {
+                validateDigestTree(builder, elem, referencedDigests, visitedDigests, hashToDisclosure)
+            } else if (elem is JsonArray) {
+                validateArrayDigestTree(builder, elem, referencedDigests, visitedDigests, hashToDisclosure)
+            }
+        }
     }
 
     /**
@@ -390,6 +724,85 @@ class SdJwt private constructor(
             )
         }
 
+        /**
+         * Defensively validates a compact serialization string for an SD-JWT according to RFC 9901.
+         *
+         * @param compactSerialization the compact serialization string.
+         * @param now reference time to check expiration and validity windows, or `null`.
+         * @return a [ValidationResult] containing any errors or warnings.
+         */
+        suspend fun validate(
+            compactSerialization: String,
+            now: Instant? = null
+        ): ValidationResult = buildValidationResult {
+            val sdJwt = validateCompactSerializationStructure(this, compactSerialization)
+            if (sdJwt != null) {
+                addAll(sdJwt.validate(now))
+            }
+        }
+
+        /**
+         * Defensively validates a compact serialization string for an SD-JWT VC according to the
+         * SD-JWT VC specification.
+         *
+         * @param compactSerialization the compact serialization string.
+         * @param expectedVct the expected Verifiable Credential Type, or `null`.
+         * @param now reference time to check expiration and validity windows, or `null`.
+         * @return a [ValidationResult] containing any errors or warnings.
+         */
+        suspend fun validateVc(
+            compactSerialization: String,
+            expectedVct: String? = null,
+            now: Instant? = null
+        ): ValidationResult = buildValidationResult {
+            val sdJwt = validateCompactSerializationStructure(this, compactSerialization)
+            if (sdJwt != null) {
+                addAll(sdJwt.validateVc(expectedVct, now))
+            }
+        }
+
+        private suspend fun validateCompactSerializationStructure(
+            builder: ValidationResultBuilder,
+            compactSerialization: String
+        ): SdJwt? {
+            if (!compactSerialization.endsWith('~')) {
+                builder.addError("SD-JWT compact serialization must end with '~'")
+                return null
+            }
+            val splits = compactSerialization.split("~")
+            val jwtSplits = splits[0].split(".")
+            if (jwtSplits.size != 3) {
+                builder.addError("JWS in SD-JWT does not consist of three parts (header, body, signature)")
+                return null
+            }
+            val headerStr = jwtSplits[0]
+            val bodyStr = jwtSplits[1]
+
+            try {
+                Json.decodeFromString(JsonObject.serializer(), headerStr.fromBase64Url().decodeToString())
+            } catch (e: Throwable) {
+                builder.addError("Failed to decode JWS header from base64url/JSON: ${e.message}")
+            }
+            try {
+                Json.decodeFromString(JsonObject.serializer(), bodyStr.fromBase64Url().decodeToString())
+            } catch (e: Throwable) {
+                builder.addError("Failed to decode JWS payload from base64url/JSON: ${e.message}")
+            }
+
+            for (n in 1 until (splits.size - 1)) {
+                val discStr = splits[n]
+                builder.addAll(Disclosure.validate(discStr))
+            }
+
+            return try {
+                fromCompactSerialization(compactSerialization)
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e
+                builder.addError("Failed to parse SD-JWT: ${e.message}")
+                null
+            }
+        }
+
         private fun toCompactSerialization(
             jwt: String,
             disclosures: List<JsonArray>
@@ -606,6 +1019,7 @@ class SdJwt private constructor(
          * @param saltSizeNumBits number of bits to use for each salt.
          * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
          * @param expiresIn the duration in which the SD-JWT expire or `null`.
+         * @param type the type of the SD-JWT in the JWS `typ` header parameter, defaults to `"dc+sd-jwt"`.
          */
         suspend fun create(
             issuerKey: AsymmetricKey,
@@ -616,7 +1030,8 @@ class SdJwt private constructor(
             random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
-            expiresIn: Duration? = null
+            expiresIn: Duration? = null,
+            type: String = "dc+sd-jwt"
         ): SdJwt {
             return create(
                 issuerKey = issuerKey,
@@ -627,7 +1042,8 @@ class SdJwt private constructor(
                 random = random,
                 saltSizeNumBits = saltSizeNumBits,
                 creationTime = creationTime,
-                expiresIn = expiresIn
+                expiresIn = expiresIn,
+                type = type
             )
         }
 
@@ -647,6 +1063,7 @@ class SdJwt private constructor(
          * @param saltSizeNumBits number of bits to use for each salt.
          * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
          * @param expiresIn the duration in which the SD-JWT expire or `null`.
+         * @param type the type of the SD-JWT in the JWS `typ` header parameter, defaults to `"dc+sd-jwt"`.
          */
         suspend fun create(
             issuerKey: AsymmetricKey,
@@ -657,7 +1074,8 @@ class SdJwt private constructor(
             random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
-            expiresIn: Duration? = null
+            expiresIn: Duration? = null,
+            type: String = "dc+sd-jwt"
         ): SdJwt {
             require(nonSdClaims["iss"] != null) { "Must include `iss` claim in nonSdClaims" }
 
@@ -666,7 +1084,7 @@ class SdJwt private constructor(
             val disclosures = mutableListOf<JsonArray>()
 
             val jwt = buildJwt(
-                type = "dc+sd-jwt",
+                type = type,
                 key = issuerKey,
                 creationTime = creationTime,
                 expiresIn = expiresIn

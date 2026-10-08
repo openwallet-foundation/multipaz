@@ -40,6 +40,7 @@ import org.multipaz.webtoken.buildJwt
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
+import kotlin.time.Clock
 
 private const val TAG = "ProvisioningModel"
 
@@ -504,6 +505,14 @@ private suspend fun requestCredentials(
                     throw IllegalStateException("Only a single keyless credential is expected to be issued")
                 }
                 val issuerData = credentialData.first().issuerData
+                val validationResult = pendingCredential.validate(issuerData, Clock.System.now())
+                for (warning in validationResult.warnings) {
+                    Logger.w(TAG, "Validation warning on credential '${pendingCredential.identifier}': ${warning.message}")
+                }
+                for (error in validationResult.errors) {
+                    Logger.e(TAG, "Validation error on credential '${pendingCredential.identifier}': ${error.message}")
+                }
+                // TODO: Consider being stricter and aborting provisioning / throwing on validation errors.
                 pendingCredential.certify(issuerData)
 
                 documentProvisioningHandler.updateDocument(
@@ -557,6 +566,14 @@ private suspend fun requestCredentials(
                     } else if (pendingCredential.isCertified) {
                         Logger.e(TAG, "Credential '$credentialId' is already certified")
                     } else {
+                        val validationResult = pendingCredential.validate(credentialData, Clock.System.now())
+                        for (warning in validationResult.warnings) {
+                            Logger.w(TAG, "Validation warning on credential '$credentialId': ${warning.message}")
+                        }
+                        for (error in validationResult.errors) {
+                            Logger.e(TAG, "Validation error on credential '$credentialId': ${error.message}")
+                        }
+                        // TODO: Consider being stricter and aborting provisioning / throwing on validation errors.
                         pendingCredential.certify(credentialData)
                         val domainList = credentialsFetched.getOrPut(key = pendingCredential.domain) { mutableListOf() }
                         domainList.add(EventProvisioningCredentialData(credentialData))

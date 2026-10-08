@@ -35,6 +35,9 @@ import org.multipaz.mpzpass.MpzPass
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.tags.Tags
+import org.multipaz.validation.ValidationFinding
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.ValidationSeverity
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -299,6 +302,10 @@ abstract class Credential {
     /**
      * Certifies the credential.
      *
+     * Applications are strongly urged to call [validate] on [issuerProvidedAuthenticationData]
+     * to verify structural integrity, cryptographic signatures, and key bindings before calling
+     * this method.
+     *
      * @param issuerProvidedAuthenticationData the issuer-provided static authentication data.
      */
     open suspend fun certify(issuerProvidedAuthenticationData: ByteString) {
@@ -318,6 +325,38 @@ abstract class Credential {
         if (replacementForIdentifier != null) {
             document.deleteCredential(replacementForIdentifier)
         }
+    }
+
+    /**
+     * Validates candidate issuer-provided static authentication data against this credential.
+     *
+     * Applications are strongly urged to call this method to verify cryptographic signatures,
+     * certificate chains, and key-binding alignment prior to calling [certify].
+     *
+     * The default implementation returns an empty [ValidationResult] with no findings.
+     *
+     * @param issuerProvidedAuthenticationData the candidate issuer-provided static authentication data.
+     * @param now reference time for checking expiration and validity intervals, or `null` to skip.
+     * @return a [ValidationResult] containing any errors or warnings found.
+     */
+    open suspend fun validate(
+        issuerProvidedAuthenticationData: ByteString,
+        now: Instant? = null
+    ): ValidationResult = ValidationResult.SUCCESS
+
+    /**
+     * Validates this certified credential against its current [issuerProvidedData].
+     *
+     * @param now reference time for checking expiration and validity intervals, or `null` to skip.
+     * @return a [ValidationResult] containing any errors or warnings found.
+     */
+    open suspend fun validate(now: Instant? = null): ValidationResult {
+        if (!isCertified) {
+            return ValidationResult(
+                listOf(ValidationFinding(ValidationSeverity.ERROR, "Credential is not certified"))
+            )
+        }
+        return validate(issuerProvidedData, now)
     }
 
     /**

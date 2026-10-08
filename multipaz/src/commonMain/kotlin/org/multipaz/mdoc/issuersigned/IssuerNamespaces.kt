@@ -3,13 +3,19 @@ package org.multipaz.mdoc.issuersigned
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.buildValidationResult
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -83,7 +89,163 @@ data class IssuerNamespaces(
         return ret
     }
 
+    /**
+     * Validates the internal structure of this [IssuerNamespaces].
+     *
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    fun validate(): ValidationResult = buildValidationResult {
+        if (data.isEmpty()) {
+            addWarning("IssuerNamespaces has no namespaces")
+        }
+        data.forEach { (namespaceName, innerMap) ->
+            if (namespaceName.isEmpty()) {
+                addError("Namespace name cannot be empty")
+            }
+            if (innerMap.isEmpty()) {
+                addError("Namespace '$namespaceName' contains no data elements")
+            }
+            val digestIdsSeen = mutableMapOf<Long, String>()
+            innerMap.forEach { (elementName, item) ->
+                if (elementName != item.dataElementIdentifier) {
+                    addError("Key '$elementName' in namespace '$namespaceName' does not match dataElementIdentifier '${item.dataElementIdentifier}'")
+                }
+                addAll(item.validate())
+                val prevLocation = digestIdsSeen[item.digestId]
+                if (prevLocation != null) {
+                    addError("Duplicate digestID ${item.digestId} used in namespace '$namespaceName' for both '$prevLocation' and '$elementName'")
+                } else {
+                    digestIdsSeen[item.digestId] = elementName
+                }
+            }
+        }
+    }
+
+    /**
+     * Validates that all data elements in this [IssuerNamespaces] are authorized by and match the digests
+     * in the given [MobileSecurityObject].
+     *
+     * @param mso the [MobileSecurityObject] to validate against.
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    suspend fun validateAgainstMso(mso: MobileSecurityObject): ValidationResult = buildValidationResult {
+        data.forEach { (namespace, innerMap) ->
+            val digestMap = mso.valueDigests[namespace]
+            if (digestMap == null) {
+                addError("Namespace '$namespace' in IssuerNamespaces is not present in MSO valueDigests")
+                return@forEach
+            }
+            innerMap.forEach { (elementName, item) ->
+                val expectedDigest = digestMap[item.digestId]
+                if (expectedDigest == null) {
+                    addError("digestID ${item.digestId} for element '$elementName' in namespace '$namespace' is not present in MSO valueDigests")
+                } else {
+                    val digest = item.calculateDigest(mso.digestAlgorithm)
+                    if (digest != expectedDigest) {
+                        addError("Digest mismatch for data element '$elementName' in namespace '$namespace' (digestID ${item.digestId})")
+                    }
+                }
+            }
+        }
+
+        mso.valueDigests.forEach { (namespace, digestMap) ->
+            val innerMap = data[namespace]
+            if (innerMap == null) {
+                addWarning("Namespace '$namespace' is present in MSO valueDigests but missing from IssuerNamespaces")
+            } else {
+                val presentDigestIds = innerMap.values.map { it.digestId }.toSet()
+                digestMap.keys.forEach { digestId ->
+                    if (digestId !in presentDigestIds) {
+                        addWarning("digestID $digestId in namespace '$namespace' is present in MSO valueDigests but missing from IssuerNamespaces")
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
+        /**
+         * Validates the CBOR structure of `IssuerNameSpaces` according to ISO/IEC 18013-5:2021.
+         *
+         * @param nameSpaces a [DataItem] for `IssuerNameSpaces` CBOR.
+         * @return a [ValidationResult] containing any errors or warnings.
+         */
+        fun validate(nameSpaces: DataItem): ValidationResult = buildValidationResult {
+            if (nameSpaces !is CborMap) {
+                addError("IssuerNamespaces dataItem is not a CBOR map")
+                return@buildValidationResult
+            }
+            if (nameSpaces.asMap.isEmpty()) {
+                addWarning("IssuerNamespaces has no namespaces")
+            }
+            for ((namespaceKey, namespaceValue) in nameSpaces.asMap) {
+                if (namespaceKey !is Tstr) {
+                    addError("Namespace key is not a text string")
+                    continue
+                }
+                val namespaceName = namespaceKey.asTstr
+                if (namespaceName.isEmpty()) {
+                    addError("Namespace name cannot be empty")
+                }
+                if (namespaceValue !is CborArray) {
+                    addError("Value for namespace '$namespaceName' is not a CBOR array")
+                    continue
+                }
+                if (namespaceValue.asArray.isEmpty()) {
+                    addError("Namespace '$namespaceName' array contains no elements")
+                    continue
+                }
+                val seenInNamespace = mutableSetOf<String>()
+                val digestIdsSeen = mutableMapOf<Long, String>()
+                for ((idx, item) in namespaceValue.asArray.withIndex()) {
+                    if (item !is Tagged || item.tagNumber != Tagged.ENCODED_CBOR) {
+                        addError("Item at index $idx in namespace '$namespaceName' is not tagged with CBOR tag 24")
+                        continue
+                    }
+                    if (item.taggedItem !is Bstr) {
+                        addError("Tag 24 item at index $idx in namespace '$namespaceName' does not wrap a byte string")
+                        continue
+                    }
+                    val decoded = try {
+                        Cbor.decode(item.taggedItem.asBstr)
+                    } catch (e: Throwable) {
+                        addError("Failed to decode CBOR for IssuerSignedItem at index $idx in namespace '$namespaceName': ${e.message}")
+                        continue
+                    }
+                    val signedItem = IssuerSignedItem(decoded)
+                    addAll(signedItem.validate())
+                    if (signedItem.dataItem.hasKey("elementIdentifier")) {
+                        val elemId = try {
+                            signedItem.dataElementIdentifier
+                        } catch (_: Throwable) {
+                            null
+                        }
+                        if (elemId != null) {
+                            if (!seenInNamespace.add(elemId)) {
+                                addError("Duplicate elementIdentifier '$elemId' in namespace '$namespaceName'")
+                            }
+                        }
+                    }
+                    if (signedItem.dataItem.hasKey("digestID")) {
+                        val dId = try {
+                            signedItem.digestId
+                        } catch (_: Throwable) {
+                            null
+                        }
+                        if (dId != null) {
+                            val elementName = signedItem.dataItem.getOrNull("elementIdentifier")?.asTstr ?: "index_$idx"
+                            val prev = digestIdsSeen[dId]
+                            if (prev != null) {
+                                addError("Duplicate digestID $dId used in namespace '$namespaceName' for both '$prev' and '$elementName'")
+                            } else {
+                                digestIdsSeen[dId] = elementName
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         /**
          * Parse `IssuerNameSpaces` CBOR.
          *

@@ -3,7 +3,9 @@ package org.multipaz.mdoc.mso
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -11,9 +13,10 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.util.Logger
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.buildValidationResult
 import kotlin.time.Instant
 
 /**
@@ -127,8 +130,180 @@ data class MobileSecurityObject(
         }
     }
 
+    /**
+     * Validates the internal structure and contents of this [MobileSecurityObject] according to
+     * ISO/IEC 18013-5:2021.
+     *
+     * @param now the reference time to check for expiration or validity interval, or `null` to skip
+     * current time validity checks.
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    fun validate(now: Instant? = null): ValidationResult = buildValidationResult {
+        if (version !in listOf("1.0", "1.1")) {
+            if (version.isEmpty()) {
+                addError("MSO version cannot be empty")
+            } else {
+                addWarning("MSO version '$version' is unrecognized; expected '1.0' or '1.1'")
+            }
+        }
+
+        val expectedDigestSize = when (digestAlgorithm) {
+            Algorithm.SHA256 -> 32
+            Algorithm.SHA384 -> 48
+            Algorithm.SHA512 -> 64
+            else -> {
+                addError("Unsupported digest algorithm: $digestAlgorithm (must be SHA-256, SHA-384, or SHA-512)")
+                null
+            }
+        }
+
+        if (docType.isEmpty()) {
+            addError("MSO docType cannot be empty")
+        }
+
+        // Validity info checks
+        if (signedAt.nanosecondsOfSecond != 0) {
+            addError("MSO signed timestamp must not have fractional seconds")
+        }
+        if (validFrom.nanosecondsOfSecond != 0) {
+            addError("MSO validFrom timestamp must not have fractional seconds")
+        }
+        if (validUntil.nanosecondsOfSecond != 0) {
+            addError("MSO validUntil timestamp must not have fractional seconds")
+        }
+        if (expectedUpdate != null && expectedUpdate.nanosecondsOfSecond != 0) {
+            addError("MSO expectedUpdate timestamp must not have fractional seconds")
+        }
+
+        if (validFrom < signedAt) {
+            addError("MSO validFrom ($validFrom) must be equal to or later than signed ($signedAt)")
+        }
+        if (validUntil <= validFrom) {
+            addError("MSO validUntil ($validUntil) must be later than validFrom ($validFrom)")
+        }
+        if (expectedUpdate != null) {
+            if (expectedUpdate < validFrom) {
+                addError("MSO expectedUpdate ($expectedUpdate) cannot be earlier than validFrom ($validFrom)")
+            }
+            if (expectedUpdate > validUntil) {
+                addWarning("MSO expectedUpdate ($expectedUpdate) is later than validUntil ($validUntil)")
+            }
+        }
+
+        if (now != null) {
+            if (now < validFrom) {
+                addWarning("MSO is not yet valid (validFrom: $validFrom, current time: $now)")
+            }
+            if (now > validUntil) {
+                addError("MSO is expired (validUntil: $validUntil, current time: $now)")
+            }
+        }
+
+        // Value digests checks
+        if (valueDigests.isEmpty()) {
+            addError("MSO valueDigests cannot be empty")
+        }
+        valueDigests.forEach { (namespace, digestMap) ->
+            if (namespace.isEmpty()) {
+                addError("MSO valueDigests contains an empty namespace name")
+            }
+            if (digestMap.isEmpty()) {
+                addError("MSO valueDigests for namespace '$namespace' is empty")
+            }
+            digestMap.forEach { (digestId, digest) ->
+                if (digestId < 0) {
+                    addError("MSO digestID $digestId in namespace '$namespace' must be non-negative")
+                }
+                if (expectedDigestSize != null && digest.size != expectedDigestSize) {
+                    addError("MSO digest for digestID $digestId in namespace '$namespace' has length ${digest.size} bytes, expected $expectedDigestSize bytes for $digestAlgorithm")
+                }
+            }
+        }
+
+        // Key authorizations checks
+        deviceKeyAuthorizedNamespaces.forEach { ns ->
+            if (ns.isEmpty()) {
+                addError("deviceKeyAuthorizedNamespaces contains an empty namespace name")
+            }
+        }
+        deviceKeyAuthorizedDataElements.forEach { (ns, elemList) ->
+            if (ns.isEmpty()) {
+                addError("deviceKeyAuthorizedDataElements contains an empty namespace name")
+            }
+            elemList.forEach { elem ->
+                if (elem.isEmpty()) {
+                    addError("deviceKeyAuthorizedDataElements for namespace '$ns' contains an empty element identifier")
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "MobileSecurityObject"
+
+        /**
+         * Validates the CBOR structure of `MobileSecurityObject` according to ISO/IEC 18013-5:2021.
+         *
+         * @param dataItem a [DataItem] containing CBOR for `MobileSecurityObject`.
+         * @param now the reference time to check for expiration or validity interval, or `null`.
+         * @return a [ValidationResult] containing any errors or warnings.
+         */
+        fun validate(dataItem: DataItem, now: Instant? = null): ValidationResult = buildValidationResult {
+            if (dataItem !is CborMap) {
+                addError("MobileSecurityObject dataItem is not a CBOR map")
+                return@buildValidationResult
+            }
+            val requiredKeys = listOf(
+                "version",
+                "digestAlgorithm",
+                "docType",
+                "valueDigests",
+                "deviceKeyInfo",
+                "validityInfo"
+            )
+            for (key in requiredKeys) {
+                if (!dataItem.hasKey(key)) {
+                    addError("MobileSecurityObject missing required key '$key'")
+                }
+            }
+            if (dataItem.hasKey("digestAlgorithm")) {
+                val algStr = try {
+                    dataItem["digestAlgorithm"].asTstr
+                } catch (_: Throwable) {
+                    null
+                }
+                if (algStr !in listOf("SHA-256", "SHA-384", "SHA-512")) {
+                    addError("Unsupported digest algorithm '$algStr' in MSO (must be SHA-256, SHA-384, or SHA-512)")
+                }
+            }
+            if (dataItem.hasKey("validityInfo")) {
+                val vi = dataItem["validityInfo"]
+                if (vi !is CborMap) {
+                    addError("validityInfo is not a CBOR map")
+                } else {
+                    for (viKey in listOf("signed", "validFrom", "validUntil")) {
+                        if (!vi.hasKey(viKey)) {
+                            addError("validityInfo missing required timestamp '$viKey'")
+                        }
+                    }
+                }
+            }
+            if (dataItem.hasKey("deviceKeyInfo")) {
+                val dki = dataItem["deviceKeyInfo"]
+                if (dki !is CborMap) {
+                    addError("deviceKeyInfo is not a CBOR map")
+                } else if (!dki.hasKey("deviceKey")) {
+                    addError("deviceKeyInfo missing 'deviceKey'")
+                }
+            }
+            try {
+                val mso = fromDataItem(dataItem)
+                addAll(mso.validate(now))
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e
+                addError("Failed to parse MobileSecurityObject: ${e.message}")
+            }
+        }
 
         /**
          * Parses CBOR compliant with the CDDL for `MobileSecurityObject` according to ISO 18013-5.

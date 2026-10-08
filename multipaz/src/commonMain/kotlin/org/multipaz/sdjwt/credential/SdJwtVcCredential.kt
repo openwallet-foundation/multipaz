@@ -5,9 +5,14 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.claim.JsonClaim
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.sdjwt.SdJwt
+import org.multipaz.validation.ValidationFinding
+import org.multipaz.validation.ValidationResult
+import org.multipaz.validation.ValidationSeverity
+import org.multipaz.validation.buildValidationResult
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -84,4 +89,95 @@ interface SdJwtVcCredential {
         val validUntil = sdJwt.validUntil ?: Instant.fromEpochMilliseconds(Long.MAX_VALUE)
         return Pair(validFrom, validUntil)
     }
+
+    /**
+     * Validates candidate issuer-provided static authentication data against this SD-JWT VC
+     * credential according to RFC 9901 and the SD-JWT VC profile.
+     *
+     * @param issuerProvidedAuthenticationData candidate issuer-provided static authentication data.
+     * @param now reference time to check expiration and validity windows, or `null`.
+     * @return a [ValidationResult] containing any errors or warnings.
+     */
+    suspend fun validateSdJwtVc(
+        issuerProvidedAuthenticationData: ByteString,
+        now: Instant? = null
+    ): ValidationResult = buildValidationResult {
+        val compactSerialization = try {
+            issuerProvidedAuthenticationData.decodeToString()
+        } catch (e: Throwable) {
+            addError("Failed to decode issuerProvidedAuthenticationData as UTF-8: ${e.message}")
+            return@buildValidationResult
+        }
+
+        val sdJwtValidation = SdJwt.validateVc(
+            compactSerialization = compactSerialization,
+            expectedVct = vct,
+            now = now
+        )
+        addAll(sdJwtValidation)
+
+        val sdJwt = try {
+            SdJwt.fromCompactSerialization(compactSerialization)
+        } catch (_: Throwable) {
+            null
+        }
+
+        if (sdJwt != null) {
+            val cred = this@SdJwtVcCredential as? Credential
+            if (cred != null && cred.isCertified) {
+                val expectedValidFrom = sdJwt.validFrom ?: Instant.fromEpochMilliseconds(0)
+                if (cred.validFrom != expectedValidFrom) {
+                    addError("Credential validFrom (${cred.validFrom}) does not match SD-JWT validFrom ($expectedValidFrom)")
+                }
+                val expectedValidUntil = sdJwt.validUntil ?: Instant.fromEpochMilliseconds(Long.MAX_VALUE)
+                if (cred.validUntil != expectedValidUntil) {
+                    addError("Credential validUntil (${cred.validUntil}) does not match SD-JWT validUntil ($expectedValidUntil)")
+                }
+            }
+
+            if (this@SdJwtVcCredential is KeyBoundSdJwtVcCredential) {
+                val kbCred = this@SdJwtVcCredential
+                val kbKey = sdJwt.kbKey
+                if (kbKey == null) {
+                    addError("Key-bound credential is missing 'cnf.jwk' key-binding in SD-JWT")
+                } else {
+                    val keyInfo = try {
+                        kbCred.secureArea.getKeyInfo(kbCred.alias)
+                    } catch (e: Throwable) {
+                        addError("Failed to get key info from SecureArea for alias '${kbCred.alias}': ${e.message}")
+                        null
+                    }
+                    if (keyInfo != null && keyInfo.publicKey != kbKey) {
+                        addError("Credential authentication key in SecureArea does not match 'cnf.jwk' in SD-JWT (presentations will fail)")
+                    }
+                }
+            } else if (this@SdJwtVcCredential is KeylessSdJwtVcCredential) {
+                if (sdJwt.kbKey != null) {
+                    addWarning("Keyless credential contains unexpected key-binding 'cnf' claim in SD-JWT")
+                }
+            }
+        }
+    }
 }
+
+/**
+ * Validates candidate issuer-provided static authentication data against this SD-JWT VC credential.
+ *
+ * @param issuerProvidedAuthenticationData candidate issuer-provided static authentication data.
+ * @param now reference time for checking expiration and validity intervals, or `null`.
+ * @return a [ValidationResult] containing any errors or warnings.
+ */
+suspend fun SdJwtVcCredential.validate(
+    issuerProvidedAuthenticationData: ByteString,
+    now: Instant? = null
+): ValidationResult = (this as Credential).validate(issuerProvidedAuthenticationData, now)
+
+/**
+ * Validates this certified SD-JWT VC credential against its current issuer-provided data.
+ *
+ * @param now reference time for checking expiration and validity intervals, or `null`.
+ * @return a [ValidationResult] containing any errors or warnings.
+ */
+suspend fun SdJwtVcCredential.validate(
+    now: Instant? = null
+): ValidationResult = (this as Credential).validate(now)
