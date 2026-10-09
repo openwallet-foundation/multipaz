@@ -74,11 +74,13 @@ internal fun parseQueryParameters(uri: String) = uri.substringAfter('?', "").par
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return the redirect URI, caller should open this in the user's default browser or `null` if this is not required.
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,
     PresentmentCannotSatisfyRequestException::class

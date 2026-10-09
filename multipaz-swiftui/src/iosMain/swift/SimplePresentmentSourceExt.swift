@@ -61,8 +61,9 @@ extension SimplePresentmentSource.Companion {
             _ document: Document
         ) async -> [DocumentBadge] = { document in [] },
         getFaceMatchingModeFn: @escaping @MainActor @Sendable (
-            _ credential: Credential
-        ) async -> FaceMatchingMode = { credential in .onlyIfRequested },
+            _ credential: Credential,
+            _ requesterIdentities: [RequesterIdentity]
+        ) async -> FaceMatchingMode = { credential, requesterIdentities in .onlyIfRequested },
         preferSignatureToKeyAgreement: Bool = true,
         domainsMdocSignature: [ String ] = [],
         domainsMdocKeyAgreement: [ String ] = [],
@@ -289,27 +290,38 @@ private class GetBadgesHandler: KotlinSuspendFunction1 {
 
 private func runGetFaceMatchingMode(
     credential: Credential,
-    f: @escaping @MainActor @Sendable (Credential) async -> FaceMatchingMode,
+    requesterIdentities: [RequesterIdentity],
+    f: @escaping @MainActor @Sendable (Credential, [RequesterIdentity]) async -> FaceMatchingMode,
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
-        let value = await f(credential)
+        let value = await f(credential, requesterIdentities)
         completionHandler(value, nil)
     }
 }
 
-private class GetFaceMatchingModeHandler: KotlinSuspendFunction1 {
+private class GetFaceMatchingModeHandler: KotlinSuspendFunction2 {
     let f: @MainActor @Sendable (
-        _ credential: Credential
+        _ credential: Credential,
+        _ requesterIdentities: [RequesterIdentity]
     ) async -> FaceMatchingMode
     
-    init(f: @escaping @MainActor @Sendable (_ credential: Credential) async -> FaceMatchingMode) {
+    init(f: @escaping @MainActor @Sendable (
+        _ credential: Credential,
+        _ requesterIdentities: [RequesterIdentity]
+    ) async -> FaceMatchingMode) {
         self.f = f
     }
 
-    func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
+    func __invoke(p1: Any?, p2: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let credential = p1 as! Credential
-        runGetFaceMatchingMode(credential: credential, f: self.f, completionHandler: completionHandler)
+        let requesterIdentities = p2 as! [RequesterIdentity]
+        runGetFaceMatchingMode(
+            credential: credential,
+            requesterIdentities: requesterIdentities,
+            f: self.f,
+            completionHandler: completionHandler
+        )
     }
 }
 

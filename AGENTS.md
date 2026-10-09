@@ -44,6 +44,7 @@ You should also be familiar with the project's [README.md](README.md) and [CODIN
 * **Security First:** Never hardcode secrets. Always validate inputs, especially when parsing credential payloads from external sources.
 * **Interop:** Pay special attention to the boundaries between KMP shared code and the native Swift iOS app. Ensure data types serialize and bridge cleanly without memory leaks.
 * **Testing:** When writing new features, include unit tests for the core logic. Mock external identity providers when testing validation flows.
+* **API Evolution & Breaking Changes:** Do not worry about API backward compatibility. Multipaz is a library, not an immutable platform API (like the Android framework or iOS SDK). It is fine to introduce breaking API changes when evolving or improving interfaces, as consuming applications can update their code when upgrading library versions. Avoid keeping legacy overloads, secondary constructors, or deprecated shims solely for backward compatibility.
 
 ## 5. Compilation and testing
 It is critical that all code you deliver compiles successfully and passes all relevant test suites. A task is not considered complete until these verification steps have been performed.
@@ -66,7 +67,7 @@ Do not automatically create a commit when implementing the code, only create one
 ### Core SDK & Libraries (`multipaz/`, `multipaz-compose/`, `multipaz-doctypes/`, etc.)
 *   **Compile Core:** `./gradlew :multipaz:assemble`
 *   **Test Core (JVM/Host):** `./gradlew :multipaz:jvmTest` (or check individual target tasks like `jsTest`, `iosX64Test`)
-*   **Run Detekt Linter:** `./gradlew detekt`
+*   **Run Detekt Linter:** `./gradlew detektMetadataCommonMain`
 
 ### Command-line Tool (`multipazctl/`)
 *   **Compile:** `./gradlew :multipazctl:assemble`

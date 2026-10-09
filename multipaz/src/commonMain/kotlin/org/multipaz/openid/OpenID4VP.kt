@@ -328,6 +328,7 @@ object OpenID4VP {
      * @param requesterIdentities verifier identities that were used to sign the request (there
      *  may be multiple for multisigned requests, or none for unsigned requests).
      * @return the generated response according to OpenID4VP Section 8 Response.
+     * @throws FaceNotMatchedException if face matching failed or was canceled.
      * @throws PresentmentCanceledException if the user canceled in a consent prompt.
      * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
      */
@@ -445,6 +446,14 @@ object OpenID4VP {
                 throw IllegalStateException("Problem processing transaction(s)", err)
             }
         } ?: emptyMap()
+        val requester = Requester(
+            requesterIdentities = requesterIdentities,
+            appId = appId,
+            origin = origin
+        )
+
+        val trustedRequesterIdentity = source.resolveTrust(requester)
+
         val dcqlResponse = try {
             dcqlQuery.execute(
                 presentmentSource = source,
@@ -454,14 +463,6 @@ object OpenID4VP {
         } catch (e: DcqlCredentialQueryException) {
             throw PresentmentCannotSatisfyRequestException("Unable to satisfy the request", e)
         }
-
-        val requester = Requester(
-            requesterIdentities = requesterIdentities,
-            appId = appId,
-            origin = origin
-        )
-
-        val trustedRequesterIdentity = source.resolveTrust(requester)
 
         // For unsigned requests, we must ignore client_id as per OpenID4VP section A.2. Request:
         //

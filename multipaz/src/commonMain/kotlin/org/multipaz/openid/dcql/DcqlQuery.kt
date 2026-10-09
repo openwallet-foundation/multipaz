@@ -126,6 +126,16 @@ data class DcqlQuery(
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
         requesterIdentities: List<RequesterIdentity> = emptyList(),
     ): CredentialQueryResult {
+        val faceMatchingModeCache = mutableMapOf<String, FaceMatchingMode>()
+        suspend fun getOrComputeFaceMatchingMode(credential: Credential): FaceMatchingMode {
+            return faceMatchingModeCache.getOrPut(credential.document.identifier) {
+                presentmentSource.getFaceMatchingMode(
+                    credential = credential,
+                    requesterIdentities = requesterIdentities
+                )
+            }
+        }
+
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
             val credsSatisfyingMeta = when (credentialQuery.format) {
@@ -223,7 +233,8 @@ data class DcqlQuery(
                     val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
                     for (requestedClaim in credentialQuery.claims) {
                         if (isChv1Claim(requestedClaim)) {
-                            if (canSatisfyChv1(cred, presentmentSource)) {
+                            val faceMatchingMode = getOrComputeFaceMatchingMode(cred)
+                            if (canSatisfyChv1(cred, presentmentSource, faceMatchingMode)) {
                                 chv1Matched = true
                             } else {
                                 Logger.w(TAG, "Cannot satisfy requested claim $requestedClaim")
@@ -258,7 +269,7 @@ data class DcqlQuery(
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
                         }
-                        val faceMatchingMode = presentmentSource.getFaceMatchingMode(credential)
+                        val faceMatchingMode = getOrComputeFaceMatchingMode(credential)
                         val faceMatchNeeded = when (faceMatchingMode) {
                             FaceMatchingMode.NEVER -> false
                             FaceMatchingMode.ALWAYS -> true
@@ -287,7 +298,8 @@ data class DcqlQuery(
                                 break
                             }
                             if (isChv1Claim(requestedClaim)) {
-                                if (canSatisfyChv1(cred, presentmentSource)) {
+                                val faceMatchingMode = getOrComputeFaceMatchingMode(cred)
+                                if (canSatisfyChv1(cred, presentmentSource, faceMatchingMode)) {
                                     chv1Matched = true
                                 } else {
                                     didNotMatch = true
@@ -320,7 +332,7 @@ data class DcqlQuery(
                             if (credential == null) {
                                 throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
                             }
-                            val faceMatchingMode = presentmentSource.getFaceMatchingMode(credential)
+                            val faceMatchingMode = getOrComputeFaceMatchingMode(credential)
                             val faceMatchNeeded = when (faceMatchingMode) {
                                 FaceMatchingMode.NEVER -> false
                                 FaceMatchingMode.ALWAYS -> true

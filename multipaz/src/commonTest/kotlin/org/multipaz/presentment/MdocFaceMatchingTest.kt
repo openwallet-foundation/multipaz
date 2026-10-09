@@ -129,7 +129,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -202,7 +202,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -273,7 +273,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -342,7 +342,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.NEVER }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.NEVER }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -409,7 +409,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ALWAYS }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ALWAYS }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -475,7 +475,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -533,7 +533,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.NEVER }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.NEVER }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -590,7 +590,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -686,7 +686,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.NEVER }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.NEVER }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -778,7 +778,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -869,7 +869,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ONLY_IF_REQUESTED }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -959,7 +959,7 @@ class MdocFaceMatchingTest {
             getFaceMatcherFn = { testMatcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { FaceMatchingMode.ALWAYS }
+            getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ALWAYS }
         )
 
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
@@ -993,5 +993,67 @@ class MdocFaceMatchingTest {
         dr.verify(sessionTranscript)
         val doc = dr.documents[0]
         assertNull(doc.deviceNamespaces.data[ISO_23220_5_CHV_1_NAMESPACE]?.get(ISO_23220_5_CHV_1_DATA_ELEMENT))
+    }
+
+    @Test
+    fun testGetFaceMatchingModeCalledAtMostOnce() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionMdoc(
+            displayName = "mDL",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            data = mapOf(
+                DrivingLicense.MDL_NAMESPACE to listOf(
+                    "given_name" to "Erika".toDataItem(),
+                    "portrait" to byteArrayOf(1, 2, 3, 4).toDataItem(),
+                )
+            ),
+            keyAuthorizedDataElements = mapOf(
+                ISO_23220_5_CHV_1_NAMESPACE to listOf(ISO_23220_5_CHV_1_DATA_ELEMENT)
+            )
+        )
+
+        val testMatcher = TestFaceMatcher()
+        val promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+        setupDialogMock(promptModel) { true }
+
+        var callCount = 0
+        val source = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            getFaceMatcherFn = { testMatcher },
+            showConsentPromptFn = ::promptModelSilentConsent,
+            domainsMdocSignature = listOf("mdoc"),
+            getFaceMatchingModeFn = { credential, requesterIdentities ->
+                callCount++
+                FaceMatchingMode.ONLY_IF_REQUESTED
+            }
+        )
+
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                    ISO_23220_5_CHV_1_NAMESPACE to mapOf(ISO_23220_5_CHV_1_DATA_ELEMENT to false),
+                )
+            )
+        }
+
+        withContext(promptModel) {
+            mdocPresentment(
+                deviceRequest = deviceRequest,
+                eReaderKey = null,
+                sessionTranscript = sessionTranscript,
+                source = source,
+                keyAgreementPossible = emptyList(),
+                requesterAppId = null,
+                requesterOrigin = null,
+                onDocumentsInFocus = {}
+            )
+        }
+
+        assertEquals(1, callCount)
     }
 }
