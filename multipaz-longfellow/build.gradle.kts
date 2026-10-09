@@ -140,7 +140,7 @@ kotlin {
         it.compilations.getByName("main") {
             val Longfellow by cinterops.creating {
                 definitionFile.set(project.file("$rootDir/multipaz-longfellow/src/iosMain/MdocZk.def"))
-                includeDirs.headerFilterOnly("$rootDir/multipaz-longfellow/src/iosMain/nativelibs/$zkLibExt/include")
+                includeDirs.headerFilterOnly("$rootDir/multipaz-longfellow/rust/include")
                 extraOpts("-libraryPath", "$rootDir/multipaz-longfellow/src/iosMain/nativelibs/$zkLibExt/lib")
                 packageName = "Longfellow"
             }
@@ -186,14 +186,27 @@ kotlin {
 
         val javaSharedMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                compileOnly(libs.jna)
+            }
         }
 
         val jvmMain by getting {
             dependsOn(javaSharedMain)
+            dependencies {
+                implementation(libs.jna)
+            }
         }
 
         val androidMain by getting {
             dependsOn(javaSharedMain)
+            dependencies {
+                implementation(libs.jna.get()) {
+                    artifact {
+                        type = "aar"
+                    }
+                }
+            }
         }
     }
 }

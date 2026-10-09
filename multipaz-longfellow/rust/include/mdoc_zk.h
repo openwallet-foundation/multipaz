@@ -131,8 +131,6 @@ typedef struct {
   size_t block_enc_hash, block_enc_sig;
 } ZkSpecStruct;
 
-static const char kDefaultDocType[] = "org.iso.18013.5.1.mDL";
-
 // An upper-bound on the decompressed circuit size. It is better to make this
 // bound tight to avoid memory failure in the resource restricted Android
 // gmscore environment.
@@ -161,7 +159,9 @@ MdocProverErrorCode run_mdoc_prover(
     const uint8_t* transcript, size_t tr_len, /* session transcript */
     const RequestedAttribute* attrs, size_t attrs_len,
     const char* now, /* time formatted as "2023-11-02T09:00:00Z" */
-    uint8_t** prf, size_t* proof_len, const ZkSpecStruct* zk_spec_version);
+    uint8_t** prf, size_t* proof_len,
+    const char* docType,
+    const ZkSpecStruct* zk_spec_version);
 
 // The run_mdoc2_verifier method accepts a byte representation of the circuit,
 // the public key of the issuer, the transcript, an array of RequestedAttribute
