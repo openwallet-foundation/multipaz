@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = ["."]
+
+[workspace.lints.clippy]
+shadow_same = "warn"
+shadow_reuse = "warn"
+shadow_unrelated = "warn"
+type_complexity = "allow"
+
+[package]
+name = "multipaz-longfellow-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "zkp"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+mdoc-zk-runtime = { path = "longfellow-zk/rust/applications/mdoc_zk/runtime" }
+libc = "0.2"
+zstd = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

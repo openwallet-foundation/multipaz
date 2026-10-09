@@ -1,4 +1,3 @@
-
 headers = mdoc_zk.h
 headerFilter = *.h
-staticLibraries = libmdoc_static.a libzstd.a
+staticLibraries = libmdoc_static.a

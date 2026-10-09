@@ -44,6 +44,7 @@ internal actual object LongfellowNatives {
         transcript: ByteString,
         transcriptSize: Int,
         now: String,
+        docType: String,
         zkSpec: LongfellowZkSystemSpec,
         statements: List<NativeAttribute>
     ): ByteArray {
@@ -131,6 +132,7 @@ internal actual object LongfellowNatives {
                 now = now,
                 prf = proofPtr,
                 proof_len = proofLenPtr,
+                docType = docType,
                 zk_spec_version = zkSpecStruct.ptr
             )
             if (rc == MDOC_PROVER_SUCCESS) {

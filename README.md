@@ -25,7 +25,7 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
 - `multipaz-doctypes` contains standardized document and transaction data
   types (including ISO/IEC 18013-5:2021 mDL and EU PID) along with human-readable
   descriptions of claims / data elements, sample data, and sample requests.
-- `multipaz-longfellow` bundles the [Google Longfellow-ZK](https://github.com/google/longfellow-zk) library
+- [`multipaz-longfellow`](multipaz-longfellow/README.md) bundles the [Google Longfellow-ZK](https://github.com/google/longfellow-zk) library
   and integrates with the core `multipaz` for Zero-Knowledge Proofs
   according to latest available [ISO/IEC 18013-5 Second Edition draft](https://github.com/ISOWG10/ISO-18013).
 - `multipaz-swiftui` contains SwiftUI components which can be used in

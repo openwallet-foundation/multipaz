@@ -1,0 +1,4 @@
+[submodule "multipaz-longfellow/rust/longfellow-zk"]
+	path = multipaz-longfellow/rust/longfellow-zk
+	url = https://github.com/longfellow-zk/longfellow-zk.git
+	branch = main

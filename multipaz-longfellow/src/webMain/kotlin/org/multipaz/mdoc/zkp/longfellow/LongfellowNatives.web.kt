@@ -17,6 +17,7 @@ internal actual object LongfellowNatives {
         transcript: ByteString,
         transcriptSize: Int,
         now: String,
+        docType: String,
         zkSpec: LongfellowZkSystemSpec,
         statements: List<NativeAttribute>
     ): ByteArray {

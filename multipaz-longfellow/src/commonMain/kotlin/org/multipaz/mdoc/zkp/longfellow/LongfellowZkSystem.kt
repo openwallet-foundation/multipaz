@@ -204,6 +204,7 @@ class LongfellowZkSystem(): ZkSystem {
                 transcript = encodedSessionTranscript,
                 transcriptSize = encodedSessionTranscript.size,
                 now = formatDate(adjustedTimestamp),
+                docType = docType,
                 zkSpec = longfellowZkSystemSpec,
                 statements = attributes
             )
