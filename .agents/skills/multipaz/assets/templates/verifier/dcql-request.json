@@ -1,0 +1,11 @@
+{
+  "credentials": [
+    {
+      "id": "mdl-mandatory",
+      "format": "mso_mdoc",
+      "meta": {
+        "doctype_value": "org.iso.18013.5.1.mDL"
+      }
+    }
+  ]
+}
