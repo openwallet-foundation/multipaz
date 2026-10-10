@@ -57,13 +57,16 @@ private const val TAG = "digitalCredentialsPresentment"
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
-    PresentmentCanceledException::class
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
 )
 suspend fun digitalCredentialsPresentment(
     protocol: String,
@@ -104,11 +107,13 @@ suspend fun digitalCredentialsPresentment(
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,
     PresentmentCannotSatisfyRequestException::class

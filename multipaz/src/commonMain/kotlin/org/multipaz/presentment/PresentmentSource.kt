@@ -122,14 +122,16 @@ abstract class PresentmentSource(
     /**
      * Determines whether and when to perform face matching for a credential presentation.
      *
-     * This is invoked for each presentation to query the wallet's policy regarding face matching
-     * for the credential planned to be returned.
+     * This method is called at most once per credential per presentation to query the wallet's policy regarding
+     * face matching for that credential.
      *
      * @param credential the [Credential] instance planned to be returned.
+     * @param requesterIdentities the list of requester identities associated with the request.
      * @return the [FaceMatchingMode] indicating whether face matching should be performed.
      */
     open suspend fun getFaceMatchingMode(
-        credential: Credential
+        credential: Credential,
+        requesterIdentities: List<RequesterIdentity>,
     ): FaceMatchingMode = FaceMatchingMode.ONLY_IF_REQUESTED
 
     /**

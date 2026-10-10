@@ -2,6 +2,7 @@ package org.multipaz.presentment
 
 import kotlinx.coroutines.test.runTest
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.RequesterIdentity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
@@ -21,7 +22,10 @@ class SimplePresentmentSourceTest {
         )
 
         val cred = harness.docMdl.getCredentials().first()
-        assertEquals(FaceMatchingMode.ONLY_IF_REQUESTED, source.getFaceMatchingMode(cred))
+        assertEquals(
+            FaceMatchingMode.ONLY_IF_REQUESTED,
+            source.getFaceMatchingMode(cred, emptyList())
+        )
     }
 
     @Test
@@ -31,26 +35,25 @@ class SimplePresentmentSourceTest {
         harness.provisionStandardDocuments()
 
         var queriedCred: Any? = null
+        var queriedIdentities: Any? = null
         val sourceNever = SimplePresentmentSource(
             documentStore = harness.documentStore,
             documentTypeRepository = harness.documentTypeRepository,
             showConsentPromptFn = ::promptModelSilentConsent,
-            getFaceMatchingModeFn = { credential ->
+            getFaceMatchingModeFn = { credential, requesterIdentities ->
                 queriedCred = credential
+                queriedIdentities = requesterIdentities
                 FaceMatchingMode.NEVER
             }
         )
 
         val cred = harness.docMdl.getCredentials().first()
-        assertEquals(FaceMatchingMode.NEVER, sourceNever.getFaceMatchingMode(cred))
-        assertSame(cred, queriedCred)
-
-        val sourceAlways = SimplePresentmentSource(
-            documentStore = harness.documentStore,
-            documentTypeRepository = harness.documentTypeRepository,
-            showConsentPromptFn = ::promptModelSilentConsent,
-            getFaceMatchingModeFn = { FaceMatchingMode.ALWAYS }
+        val identities = emptyList<RequesterIdentity>()
+        assertEquals(
+            FaceMatchingMode.NEVER,
+            sourceNever.getFaceMatchingMode(cred, identities)
         )
-        assertEquals(FaceMatchingMode.ALWAYS, sourceAlways.getFaceMatchingMode(cred))
+        assertSame(cred, queriedCred)
+        assertSame(identities, queriedIdentities)
     }
 }

@@ -42,6 +42,11 @@ abstract class FaceMatcherLivenessSession {
 
     /**
      * Atomically updates the prompt UI state.
+     *
+     * @param message instructional or status message displayed to the user, or `null`.
+     * @param status overall verification status.
+     * @param overlay optional bitmap overlay to draw on top of the camera video stream, or `null`.
+     * @param capturedImage captured portrait photo bytes when [status] is [FaceMatcherLivenessPromptState.Status.SUCCESS], or `null`.
      */
     protected fun updateState(
         message: String? = _state.value.message,

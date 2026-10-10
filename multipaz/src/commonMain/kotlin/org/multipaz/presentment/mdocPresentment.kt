@@ -624,15 +624,15 @@ internal fun isChv1Claim(reqClaim: RequestedClaim): Boolean {
             reqClaim.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
 }
 
-internal suspend fun canSatisfyChv1(
+internal fun canSatisfyChv1(
     cred: Credential,
-    presentmentSource: PresentmentSource
+    presentmentSource: PresentmentSource,
+    faceMatchingMode: FaceMatchingMode
 ): Boolean {
     if (cred !is MdocCredential) {
         return false
     }
-    val mode = presentmentSource.getFaceMatchingMode(cred)
-    if (mode == FaceMatchingMode.NEVER) {
+    if (faceMatchingMode == FaceMatchingMode.NEVER) {
         return false
     }
     val authorized = cred.mso.deviceKeyAuthorizedNamespaces.contains(ISO_23220_5_CHV_1_NAMESPACE) ||

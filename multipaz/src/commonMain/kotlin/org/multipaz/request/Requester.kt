@@ -14,7 +14,7 @@ package org.multipaz.request
  *   If empty it means that the requester is a website but the origin wasn't passed from the web browser.
  */
 data class Requester(
-    val requesterIdentities: List<RequesterIdentity>,
+    val requesterIdentities: List<RequesterIdentity> = emptyList(),
     val appId: String? = null,
     val origin: String? = null,
 ) {

@@ -50,6 +50,9 @@ private const val TAG = "Iso180135Presentment"
  * @param onWaitingForUserInput callback when waiting for user input.
  * @param onDocumentsInFocus callback with selected documents.
  * @param onSendingResponse callback when sending response.
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
@@ -344,9 +347,13 @@ suspend fun Iso18013Presentment(
  * @param onWaitingForUserInput callback when waiting for user input.
  * @param onDocumentsInFocus callback with selected documents.
  * @param onSendingResponse callback when sending response.
+ * @throws FaceNotMatchedException if face matching failed or was canceled.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
+    FaceNotMatchedException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
     Iso18013PresentmentTimeoutException::class,

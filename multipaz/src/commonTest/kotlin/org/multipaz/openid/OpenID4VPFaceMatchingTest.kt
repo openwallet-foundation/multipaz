@@ -191,7 +191,7 @@ class OpenID4VPFaceMatchingTest {
             getFaceMatcherFn = { matcher },
             showConsentPromptFn = ::promptModelSilentConsent,
             domainsMdocSignature = listOf("mdoc"),
-            getFaceMatchingModeFn = { faceMatchingMode }
+            getFaceMatchingModeFn = { _, _ -> faceMatchingMode }
         )
     }
 
@@ -577,5 +577,61 @@ class OpenID4VPFaceMatchingTest {
         // CHV_1 should not be present in device namespaces
         val chv1 = doc.deviceNamespaces.data[ISO_23220_5_CHV_1_NAMESPACE]?.get(ISO_23220_5_CHV_1_DATA_ELEMENT)
         assertNull(chv1)
+    }
+
+    @Test
+    fun testGetFaceMatchingModeCalledAtMostOnce() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        val testMatcher = TestFaceMatcher()
+        provisionMdl(
+            harness = harness,
+            authorizeChv1 = true,
+            authorizeViaNamespace = true
+        )
+
+        val promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+        setupDialogMock(promptModel) { true }
+
+        var callCount = 0
+        val source = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            getFaceMatcherFn = { testMatcher },
+            showConsentPromptFn = ::promptModelSilentConsent,
+            domainsMdocSignature = listOf("mdoc"),
+            getFaceMatchingModeFn = { credential, requesterIdentities ->
+                callCount++
+                FaceMatchingMode.ONLY_IF_REQUESTED
+            }
+        )
+
+        val dcql = chv1DirectDcql()
+        val origin = "https://verifier.example.com"
+        val nonce = Random.nextBytes(16).toBase64Url()
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = origin,
+            nonce = nonce,
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = dcql,
+        )
+
+        withContext(promptModel) {
+            OpenID4VP.generateResponse(
+                version = OpenID4VP.Version.DRAFT_29,
+                preselectedDocuments = emptyList(),
+                source = source,
+                appId = null,
+                origin = origin,
+                request = request,
+                requesterIdentities = emptyList(),
+            )
+        }
+
+        assertEquals(1, callCount)
     }
 }

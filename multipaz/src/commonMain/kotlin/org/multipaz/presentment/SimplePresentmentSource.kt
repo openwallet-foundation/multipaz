@@ -17,6 +17,7 @@ import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
@@ -61,7 +62,10 @@ class SimplePresentmentSource(
     private val resolveTrustFn: suspend (requester: Requester) -> TrustedRequesterIdentity? = { null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
     private val getBadgesFn: suspend (document: Document) -> List<DocumentBadge> = { document -> emptyList() },
-    private val getFaceMatchingModeFn: suspend (credential: Credential) -> FaceMatchingMode = { FaceMatchingMode.ONLY_IF_REQUESTED },
+    private val getFaceMatchingModeFn: suspend (
+        credential: Credential,
+        requesterIdentities: List<RequesterIdentity>
+    ) -> FaceMatchingMode = { _, _ -> FaceMatchingMode.ONLY_IF_REQUESTED },
     val preferSignatureToKeyAgreement: Boolean = true,
     val domainsMdocSignature: List<String> = emptyList(),
     val domainsMdocKeyAgreement: List<String> = emptyList(),
@@ -99,8 +103,11 @@ class SimplePresentmentSource(
         return getBadgesFn(document)
     }
 
-    override suspend fun getFaceMatchingMode(credential: Credential): FaceMatchingMode {
-        return getFaceMatchingModeFn(credential)
+    override suspend fun getFaceMatchingMode(
+        credential: Credential,
+        requesterIdentities: List<RequesterIdentity>
+    ): FaceMatchingMode {
+        return getFaceMatchingModeFn(credential, requesterIdentities)
     }
 
     private suspend fun Document.findCredential(domains: List<String>, now: Instant): Credential? {
