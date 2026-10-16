@@ -187,6 +187,7 @@ to the Multipaz project
 - [TESTING.md](TESTING.md) explains our approach to unit and manual testing.
 - [DEVELOPER-ENVIRONMENT.md](DEVELOPER-ENVIRONMENT.md) for how to set up your system for building Multipaz.
 - [Lokalize Plugin](build-logic/lokalize/README.md) for managing translations in `multipaz-compose`, `multipaz-doctypes`, and `multipaz-utopia` (AI-assisted translation and validation).
+- [Multipaz agent skill](.agents/skills/multipaz/SKILL.md) provides guidance for AI coding agents; see its [installation guide](.agents/skills/multipaz/docs/INSTALL.md).
 
 Note: If you're just looking to use the Multipaz libraries you do not need to build
 the entire Multipaz project from source. Instead, just use our released libraries,

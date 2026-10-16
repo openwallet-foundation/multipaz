@@ -1,0 +1,24 @@
+<!-- Merge this into an existing AndroidManifest.xml; do not paste it as a second manifest. -->
+<!-- Copy/adapt the matching res/xml/combined_nfc_service.xml before using this service. -->
+<!-- Reference: references/android-platform.md, references/proximity-presentation.md, and upstream-source.md. -->
+<!-- Multipaz NFC credential presentation is currently Android-only. Do not reuse this for iOS. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
+    <uses-permission android:name="android.permission.NFC" />
+
+    <application>
+        <service
+            android:name=".YourCombinedNfcService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/combined_nfc_service" />
+        </service>
+    </application>
+</manifest>
