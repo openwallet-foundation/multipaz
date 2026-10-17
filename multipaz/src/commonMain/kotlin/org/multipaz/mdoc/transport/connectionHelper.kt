@@ -97,7 +97,8 @@ suspend fun List<MdocTransport>.waitForConnection(
     try {
         coroutineScope {
             lateinit var jobs: Map<MdocTransport, Job>
-            jobs = associateWith { transport ->
+            // Deduplicate before creating lazy jobs so none are overwritten and left unstarted.
+            jobs = distinct().associateWith { transport ->
                 launch(start = CoroutineStart.LAZY) {
                     try {
                         Logger.i(TAG, "opening connection ${transport.connectionMethod}")

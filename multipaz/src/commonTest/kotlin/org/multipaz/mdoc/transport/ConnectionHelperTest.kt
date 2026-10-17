@@ -55,6 +55,70 @@ class ConnectionHelperTest {
     }
 
     @Test
+    fun duplicateTransportCanConnect() = runTest {
+        val transport = TestTransport()
+        val deferred = async { listOf(transport, transport).waitForConnection(senderKey) }
+        runCurrent()
+        assertFalse(deferred.isCompleted)
+
+        transport.state.value = MdocTransport.State.CONNECTING
+        runCurrent()
+        assertFalse(deferred.isCompleted)
+
+        transport.finishOpen.complete(Unit)
+        runCurrent()
+
+        assertTrue(deferred.isCompleted)
+        assertSame(transport, deferred.await())
+        assertEquals(1, transport.openCalls)
+        assertEquals(MdocTransport.State.CONNECTED, transport.state.value)
+        assertEquals(0, transport.closeCalls)
+    }
+
+    @Test
+    fun duplicateLosingTransportDoesNotPreventCompletion() = runTest {
+        val winner = TestTransport()
+        val loser = TestTransport()
+        val deferred = async { listOf(loser, winner, loser).waitForConnection(senderKey) }
+        runCurrent()
+
+        winner.finishOpen.complete(Unit)
+        runCurrent()
+
+        assertTrue(deferred.isCompleted)
+        assertSame(winner, deferred.await())
+        assertEquals(1, winner.openCalls)
+        assertEquals(1, loser.openCalls)
+        assertEquals(0, winner.closeCalls)
+        assertTrue(loser.openCancelled)
+        assertTrue(loser.closeCalls > 0)
+        assertEquals(MdocTransport.State.CLOSED, loser.state.value)
+    }
+
+    @Test
+    fun duplicateFailedTransportClosesAndThrows() = runTest {
+        val transport = TestTransport()
+        val result = CompletableDeferred<MdocTransport>()
+        val job = launch {
+            try {
+                result.complete(listOf(transport, transport).waitForConnection(senderKey))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                result.completeExceptionally(e)
+            }
+        }
+        runCurrent()
+
+        transport.failOpen()
+        runCurrent()
+
+        assertTrue(job.isCompleted)
+        assertFailsWith<IllegalStateException> { result.await() }
+        assertEquals(1, transport.openCalls)
+        assertTrue(transport.closeCalls > 0)
+    }
+
+    @Test
     fun closesLosingTransportsWhenWinnerConnects() = runTest {
         val winner = TestTransport()
         val loser = TestTransport()
@@ -112,6 +176,28 @@ class ConnectionHelperTest {
         for (transport in listOf(first, second)) {
             assertTrue(transport.openCancelled)
             assertEquals(1, transport.closeCalls)
+            assertEquals(MdocTransport.State.CLOSED, transport.state.value)
+        }
+    }
+
+    @Test
+    fun cancellationClosesDuplicateTransports() = runTest {
+        val first = TestTransport()
+        val second = TestTransport()
+        val deferred = async { listOf(first, second, first, second).waitForConnection(senderKey) }
+        runCurrent()
+        assertFalse(deferred.isCompleted)
+
+        deferred.cancel()
+        runCurrent()
+
+        assertTrue(deferred.isCompleted)
+        assertTrue(deferred.isCancelled)
+        assertFailsWith<CancellationException> { deferred.await() }
+        for (transport in listOf(first, second)) {
+            assertEquals(1, transport.openCalls)
+            assertTrue(transport.openCancelled)
+            assertTrue(transport.closeCalls > 0)
             assertEquals(MdocTransport.State.CLOSED, transport.state.value)
         }
     }
@@ -270,6 +356,7 @@ class ConnectionHelperTest {
         var finishAdvertise: CompletableDeferred<Unit>? = null
         var advertiseError: Exception? = null
         var openStarted = false
+        var openCalls = 0
         var openCancelled = false
         var closeCalls = 0
 
@@ -289,6 +376,7 @@ class ConnectionHelperTest {
 
         override suspend fun open(eSenderKey: EcPublicKey) {
             openStarted = true
+            openCalls += 1
             try {
                 finishOpen.await()
                 state.value = State.CONNECTED
