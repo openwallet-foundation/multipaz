@@ -53,10 +53,10 @@ extension SimplePresentmentSource.Companion {
         showConsentPromptFn: @escaping @MainActor @Sendable (
             _ requester: Requester,
             _ trustMetadata: TrustedRequesterIdentity?,
-            _ consentData: ConsentData,
+            _ presentmentData: PresentmentData,
             _ preselectedDocuments: [Document],
             _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-        ) async -> CredentialSelection?,
+        ) async -> PresentmentSelection?,
         getBadgesFn: @escaping @MainActor @Sendable (
             _ document: Document
         ) async -> [DocumentBadge] = { document in [] },
@@ -184,23 +184,23 @@ private func runResolveTrust(
 private func runShowConsentPrompt(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: [Document],
     onDocumentsInFocusCallback: Any?,
     f: @escaping @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
+        _ presentmentData: PresentmentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?,
+    ) async -> PresentmentSelection?,
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
         let value = await f(
             requester,
             trustedRequesterIdentity,
-            consentData,
+            presentmentData,
             preselectedDocuments,
             { documents in
                 invokeOnDocumentsInFocus(callback: onDocumentsInFocusCallback, documents: documents)
@@ -240,31 +240,31 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
     let f: @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
+        _ presentmentData: PresentmentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?
+    ) async -> PresentmentSelection?
     
     init(f: @escaping @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
+        _ presentmentData: PresentmentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?) {
+    ) async -> PresentmentSelection?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
         let trustedRequesterIdentity = p2 as! TrustedRequesterIdentity?
-        let consentData = p3 as! ConsentData
+        let presentmentData = p3 as! PresentmentData
         let preselectedDocuments = p4 as! [Document]
         let onDocumentsInFocusCallback = p5
         runShowConsentPrompt(
             requester: requester,
             trustedRequesterIdentity: trustedRequesterIdentity,
-            consentData: consentData,
+            presentmentData: presentmentData,
             preselectedDocuments: preselectedDocuments,
             onDocumentsInFocusCallback: onDocumentsInFocusCallback,
             f: self.f,

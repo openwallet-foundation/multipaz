@@ -224,11 +224,10 @@ class OpenID4VPFaceMatchingTest {
         val query = DcqlQuery.fromJson(chv1DirectDcql())
         val result = query.execute(source)
 
-        assertEquals(1, result.credentialSets.size)
-        val option = result.credentialSets[0].options[0]
-        val member = option.members[0]
-        assertEquals(1, member.matches.size)
-        val match = member.matches[0]
+        assertEquals(1, result.useCases.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        val match = solution.matches[0]
         assertTrue(match.faceMatchNeeded)
     }
 
@@ -242,11 +241,10 @@ class OpenID4VPFaceMatchingTest {
         val query = DcqlQuery.fromJson(chv1DirectDcql())
         val result = query.execute(source)
 
-        assertEquals(1, result.credentialSets.size)
-        val option = result.credentialSets[0].options[0]
-        val member = option.members[0]
-        assertEquals(1, member.matches.size)
-        val match = member.matches[0]
+        assertEquals(1, result.useCases.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        val match = solution.matches[0]
         assertTrue(match.faceMatchNeeded)
     }
 
@@ -299,7 +297,7 @@ class OpenID4VPFaceMatchingTest {
         val query = DcqlQuery.fromJson(claimSetsFallbackDcql())
         val result = query.execute(source)
 
-        val match = result.credentialSets[0].options[0].members[0].matches[0]
+        val match = result.useCases[0].solutions[0].matches[0]
         assertTrue(match.faceMatchNeeded)
         assertFalse(match.claims.values.any { it is MdocClaim && it.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT })
         assertFalse(match.claims.values.any { it is MdocClaim && it.dataElementName == "portrait" })
@@ -316,7 +314,7 @@ class OpenID4VPFaceMatchingTest {
         val query = DcqlQuery.fromJson(claimSetsFallbackDcql())
         val result = query.execute(source)
 
-        val match = result.credentialSets[0].options[0].members[0].matches[0]
+        val match = result.useCases[0].solutions[0].matches[0]
         assertFalse(match.faceMatchNeeded)
         assertTrue(match.claims.values.any { it is MdocClaim && it.dataElementName == "portrait" })
     }
@@ -331,7 +329,7 @@ class OpenID4VPFaceMatchingTest {
         val query = DcqlQuery.fromJson(claimSetsFallbackDcql())
         val result = query.execute(source)
 
-        val match = result.credentialSets[0].options[0].members[0].matches[0]
+        val match = result.useCases[0].solutions[0].matches[0]
         assertFalse(match.faceMatchNeeded)
         assertTrue(match.claims.values.any { it is MdocClaim && it.dataElementName == "portrait" })
     }

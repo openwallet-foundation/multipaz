@@ -1,13 +1,13 @@
 package org.multipaz.prompt
 
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 
 class ConsentPromptDialogModel():
-    PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>() {
+    PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection>() {
     override val dialogType: PromptDialogModel.DialogType<ConsentPromptDialogModel>
         get() = DialogType
 
@@ -18,7 +18,7 @@ class ConsentPromptDialogModel():
      *
      * @param requester the relying party which is requesting the data.
      * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
-     * @param consentData the combinations of credentials and claims that the user can select.
+     * @param presentmentData the combinations of credentials and claims that the user can select.
      * @param preselectedDocuments a list of documents the user may have preselected earlier (for
      *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
      *   if the user didn't preselect.
@@ -30,7 +30,7 @@ class ConsentPromptDialogModel():
     class ConsentPromptRequest(
         val requester: Requester,
         val trustedRequesterIdentity: TrustedRequesterIdentity?,
-        val consentData: ConsentData,
+        val presentmentData: PresentmentData,
         val preselectedDocuments: List<Document>,
         val onDocumentsInFocus: (documents: List<Document>) -> Unit,
         val transactionDataRendererRepository: TransactionDataRendererRepository?

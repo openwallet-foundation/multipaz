@@ -129,12 +129,12 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_anonymous
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_app
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_website
-import org.multipaz.presentment.CredentialMatchSourceIso18013
-import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
-import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
-import org.multipaz.presentment.ConsentUseCase
+import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
+import org.multipaz.presentment.PresentmentCredentialMatchSourceOpenID4VP
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.PresentmentUseCase
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.prompt.TransactionDataRendererRepository
@@ -161,7 +161,7 @@ private const val TAG = "Consent"
  * @param modifier a [Modifier].
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
- * @param consentData the combinations of credentials and claims that the user can select.
+ * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  * example an OS-provided credential picker like Android's Credential Manager) or the empty list
  * if the user didn't preselect.
@@ -179,12 +179,12 @@ fun Consent(
     modifier: Modifier = Modifier,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     imageLoader: ImageLoader?,
     transactionDataRendererRepository: TransactionDataRendererRepository? = null,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
-    onConfirm: (selection: CredentialSelection) -> Unit,
+    onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
 ) {
     val currentBranding = Branding.Current.collectAsState().value
@@ -201,15 +201,15 @@ fun Consent(
         }
     }
 
-    val initialSelections = remember(consentData, preselectedDocuments) {
-        consentData.useCases.map { useCase ->
+    val initialSelections = remember(presentmentData, preselectedDocuments) {
+        presentmentData.useCases.map { useCase ->
             if (preselectedDocuments.isEmpty()) {
                 if (useCase.solutions.isNotEmpty()) 0 else -1
             } else {
                 val preselectedSet = preselectedDocuments.toSet()
                 val matchingIndex = useCase.solutions.indexOfFirst { solution ->
-                    solution.credentials.isNotEmpty() && solution.credentials.all {
-                        it.match.credential.document in preselectedSet
+                    solution.matches.isNotEmpty() && solution.matches.all {
+                        it.credential.document in preselectedSet
                     }
                 }
                 if (matchingIndex != -1) {
@@ -225,13 +225,13 @@ fun Consent(
 
     var selections by remember(initialSelections) { mutableStateOf(initialSelections) }
     var transactionUserInput by remember {
-        mutableStateOf(emptyMap<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>())
+        mutableStateOf(emptyMap<PresentmentCredentialMatch, Map<String, TransactionUserInput>>())
     }
     var activeUseCaseIndex by remember { mutableStateOf(0) }
     var isFlipped by remember { mutableStateOf(false) }
     var transactionDetails by remember { mutableStateOf<TransactionDetailsTarget?>(null) }
 
-    val onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Unit =
+    val onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit =
         { match, type, userInput ->
             val current = transactionUserInput[match] ?: emptyMap()
             transactionUserInput = transactionUserInput.plus(
@@ -240,9 +240,9 @@ fun Consent(
         }
 
     // TODO: it seems that we do not need to worry about transactionUserInput here; if we actually
-    //  do, we should add it BOTH as key to remember and as a parameter to toCredentialSelection
-    val currentSelection = remember(selections, consentData) {
-        consentData.toCredentialSelection(selections, emptyMap())
+    //  do, we should add it BOTH as key to remember and as a parameter to toPresentmentSelection
+    val currentSelection = remember(selections, presentmentData) {
+        presentmentData.toPresentmentSelection(selections, emptyMap())
     }
     val currentDocumentsInFocus = remember(currentSelection) {
         currentSelection.matches.map { it.credential.document }
@@ -303,7 +303,7 @@ fun Consent(
                             trustedRequesterIdentity = trustedRequesterIdentity,
                             appInfo = appInfo,
                             imageLoader = imageLoader,
-                            consentData = consentData,
+                            presentmentData = presentmentData,
                             selections = selections,
                             transactionUserInput = transactionUserInput,
                             transactionDataRendererRepository = transactionDataRendererRepository,
@@ -360,7 +360,7 @@ fun Consent(
             back = {
                 PickSolutionPage(
                     useCaseIndex = activeUseCaseIndex,
-                    useCase = consentData.useCases[activeUseCaseIndex],
+                    useCase = presentmentData.useCases[activeUseCaseIndex],
                     currentSolutionIndex = selections[activeUseCaseIndex],
                     onBackClicked = {
                         isFlipped = false
@@ -482,7 +482,7 @@ private data class RequesterDisplayData(
 
 /** The transaction data the details page shows: one application-drawn group of one credential. */
 private class TransactionDetailsTarget(
-    val match: CredentialPresentmentSetOptionMemberMatch,
+    val match: PresentmentCredentialMatch,
     val block: TransactionDataBlock.Wallet,
     val hasClaims: Boolean,
 )
@@ -544,16 +544,16 @@ private fun ConsentPage(
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     appInfo: ApplicationInfo?,
     imageLoader: ImageLoader?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     selections: List<Int>,
-    transactionUserInput: Map<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>,
+    transactionUserInput: Map<PresentmentCredentialMatch, Map<String, TransactionUserInput>>,
     transactionDataRendererRepository: TransactionDataRendererRepository?,
     onSelectionChanged: (Int, Int) -> Unit,
-    onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Unit,
+    onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit,
     onShowRequesterInfo: () -> Unit,
     onShowTransactionDetails: (TransactionDetailsTarget) -> Unit,
     onNavigateToPickSolution: (Int) -> Unit,
-    onConfirm: (selection: CredentialSelection) -> Unit,
+    onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -587,7 +587,7 @@ private fun ConsentPage(
             trustedRequesterIdentity = trustedRequesterIdentity,
             requesterDisplayData = requesterDisplayData,
             imageLoader = imageLoader,
-            consentData = consentData,
+            presentmentData = presentmentData,
             selections = selections,
             onShowRequesterInfo = onShowRequesterInfo
         )
@@ -602,7 +602,7 @@ private fun ConsentPage(
                     .padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                consentData.useCases.forEachIndexed { index, useCase ->
+                presentmentData.useCases.forEachIndexed { index, useCase ->
                     FloatingItemList {
                         UseCaseViewer(
                             useCaseIndex = index,
@@ -658,7 +658,7 @@ private fun ConsentPage(
 
         ButtonSection(
             onConfirm = {
-                onConfirm(consentData.toCredentialSelection(selections, transactionUserInput))
+                onConfirm(presentmentData.toPresentmentSelection(selections, transactionUserInput))
             },
             onCancel = onCancel,
             scrollState = scrollState
@@ -669,17 +669,17 @@ private fun ConsentPage(
 @Composable
 private fun UseCaseViewer(
     useCaseIndex: Int,
-    useCase: ConsentUseCase,
+    useCase: PresentmentUseCase,
     selectionIndex: Int,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     requesterDisplayData: RequesterDisplayData,
-    transactionUserInput: Map<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>,
+    transactionUserInput: Map<PresentmentCredentialMatch, Map<String, TransactionUserInput>>,
     transactionDataRendererRepository: TransactionDataRendererRepository?,
     trustMetadata: TrustMetadata?,
     appInfo: ApplicationInfo?,
     onSelectionChanged: (Int) -> Unit,
-    onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Unit,
+    onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit,
     onShowTransactionDetails: (TransactionDetailsTarget) -> Unit,
     onNavigateToPickSolution: () -> Unit
 ) {
@@ -694,18 +694,18 @@ private fun UseCaseViewer(
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
         ) {
-            solution.credentials.forEachIndexed { matchIndex, credential ->
+            solution.matches.forEachIndexed { matchIndex, credential ->
                 FloatingItemContainer {
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (!isSelected) {
                             CredentialViewerNotSelected(
-                                typeDisplayName = credential.match.credential.document.typeDisplayName
-                                    ?: when (val source = credential.match.source) {
-                                        is CredentialMatchSourceIso18013 ->
+                                typeDisplayName = credential.credential.document.typeDisplayName
+                                    ?: when (val source = credential.source) {
+                                        is PresentmentCredentialMatchSourceIso18013 ->
                                             source.docRequest.docType
-                                        is CredentialMatchSourceOpenID4VP ->
+                                        is PresentmentCredentialMatchSourceOpenID4VP ->
                                             source.credentialQuery.mdocDocType
                                                 ?: source.credentialQuery.vctValues?.firstOrNull()
                                                 ?: source.credentialQuery.id
@@ -715,18 +715,18 @@ private fun UseCaseViewer(
                             )
                         } else {
                             CredentialViewer(
-                                credential = credential.match.credential,
+                                credential = credential.credential,
                                 showChevron = showChevron && (matchIndex == 0),
                                 onChevronClicked = { onNavigateToPickSolution() }
                             )
-                            val notStoredClaims = credential.match.claims.mapNotNull { (requestedClaim, claim) ->
+                            val notStoredClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
                                 if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
                                     null
                                 } else {
                                     claim
                                 }
                             }
-                            val storedClaims = credential.match.claims.mapNotNull { (requestedClaim, claim) ->
+                            val storedClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
                                 if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
                                     claim
                                 } else {
@@ -766,10 +766,10 @@ private fun UseCaseViewer(
                                 ClaimsGridView(claims = storedClaims, useColumns = true)
                             }
 
-                            if (credential.match.transactionData.isNotEmpty()) {
+                            if (credential.transactionData.isNotEmpty()) {
                                 val hasClaims = storedClaims.isNotEmpty() || notStoredClaims.isNotEmpty()
                                 val blocks = transactionDataBlocks(
-                                    transactionData = credential.match.transactionData,
+                                    transactionData = credential.transactionData,
                                     transactionDataRendererRepository = transactionDataRendererRepository,
                                 )
                                 for (block in blocks) {
@@ -777,11 +777,11 @@ private fun UseCaseViewer(
                                         is TransactionDataBlock.BuiltIn -> DisplayTransactionData(
                                             transactionData = block.item,
                                             hasClaims = hasClaims,
-                                            userInput = transactionUserInput[credential.match]
+                                            userInput = transactionUserInput[credential]
                                                 ?.get(block.item.type.identifier),
                                             onUserInputChanged = { userInput ->
                                                 onTransactionUserInputChanged.invoke(
-                                                    credential.match,
+                                                    credential,
                                                     block.item.type.identifier,
                                                     userInput
                                                 )
@@ -789,7 +789,7 @@ private fun UseCaseViewer(
                                         )
                                         is TransactionDataBlock.Wallet -> {
                                             val target = TransactionDetailsTarget(
-                                                match = credential.match,
+                                                match = credential,
                                                 block = block,
                                                 hasClaims = hasClaims,
                                             )
@@ -799,11 +799,11 @@ private fun UseCaseViewer(
                                                     requester = requester,
                                                     trustedRequesterIdentity = trustedRequesterIdentity,
                                                     hasClaims = hasClaims,
-                                                    userInput = transactionUserInput[credential.match]
+                                                    userInput = transactionUserInput[credential]
                                                         ?.get(block.identifier),
                                                     onUserInputChanged = { userInput ->
                                                         onTransactionUserInputChanged.invoke(
-                                                            credential.match,
+                                                            credential,
                                                             block.identifier,
                                                             userInput
                                                         )
@@ -1129,7 +1129,7 @@ private fun calcSharedWithTextWithoutEncryption(
 @Composable
 private fun PickSolutionPage(
     useCaseIndex: Int,
-    useCase: ConsentUseCase,
+    useCase: PresentmentUseCase,
     currentSolutionIndex: Int,
     onBackClicked: () -> Unit,
     onSolutionSelected: (Int) -> Unit
@@ -1169,12 +1169,12 @@ private fun PickSolutionPage(
         ) {
             useCase.solutions.forEachIndexed { index, solution ->
                 FloatingItemList {
-                    solution.credentials.forEachIndexed { matchIndex, credential ->
+                    solution.matches.forEachIndexed { matchIndex, credential ->
                         FloatingItemContainer(
                             modifier = Modifier.clickable { onSolutionSelected(index) }
                         ) {
                             CredentialViewer(
-                                credential = credential.match.credential,
+                                credential = credential.credential,
                                 showChevron = false,
                                 onChevronClicked = {}
                             )
@@ -1549,7 +1549,7 @@ private fun RelyingPartySection(
     requesterDisplayData: RequesterDisplayData,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     imageLoader: ImageLoader?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     selections: List<Int>,
     onShowRequesterInfo: () -> Unit,
 ) {

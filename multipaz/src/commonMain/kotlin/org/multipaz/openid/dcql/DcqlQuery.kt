@@ -18,14 +18,13 @@ import org.multipaz.claim.findMatchingClaim
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
-import org.multipaz.presentment.CredentialQueryResult
-import org.multipaz.presentment.CredentialPresentmentSet
-import org.multipaz.presentment.CredentialPresentmentSetOption
-import org.multipaz.presentment.CredentialPresentmentSetOptionMember
-import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.FaceMatchingMode
+import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentCredentialMatchSourceOpenID4VP
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentUseCase
+import org.multipaz.presentment.PresentmentUseCaseSolution
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.canSatisfyChv1
 import org.multipaz.presentment.isChv1Claim
@@ -36,6 +35,7 @@ import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.generateAllPaths
 import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -105,7 +105,7 @@ data class DcqlQuery(
     /**
      * Executes the DCQL query.
      *
-     * If successful, this returns a [CredentialQueryResult] which can be used in
+     * If successful, this returns a [PresentmentData] which can be used in
      * an user interface for the user to select which combination of credentials to return, see
      * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
      * of how to do this.
@@ -116,7 +116,7 @@ data class DcqlQuery(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *  its private key is using one of the given curves.
      * @param transactionDataMap list of transaction data for each queried document by query id
-     * @return the resulting [CredentialQueryResult] if the query was successful.
+     * @return the resulting [PresentmentData] if the query was successful.
      * @throws [DcqlCredentialQueryException] if it's not possible satisfy the query.
      */
     @Throws(DcqlCredentialQueryException::class, CancellationException::class)
@@ -125,7 +125,7 @@ data class DcqlQuery(
         keyAgreementPossible: List<EcCurve> = emptyList(),
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
         requesterIdentities: List<RequesterIdentity> = emptyList(),
-    ): CredentialQueryResult {
+    ): PresentmentData {
         val faceMatchingModeCache = mutableMapOf<String, FaceMatchingMode>()
         suspend fun getOrComputeFaceMatchingMode(credential: Credential): FaceMatchingMode {
             return faceMatchingModeCache.getOrPut(credential.document.identifier) {
@@ -359,7 +359,7 @@ data class DcqlQuery(
             )
         }
 
-        val credentialSets = mutableListOf<CredentialPresentmentSet>()
+        val useCases = mutableListOf<PresentmentUseCase>()
         if (credentialSetQueries.isEmpty()) {
             // From 6.4.2. Selecting Credentials:
             //
@@ -372,30 +372,23 @@ data class DcqlQuery(
                         "No matches for credential query with id ${response.credentialQuery.id}"
                     )
                 }
-                val matches = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
-                for (match in response.matches) {
-                    matches.add(CredentialPresentmentSetOptionMemberMatch(
-                        credential = match.credential,
-                        claims = match.claims,
-                        source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
-                        transactionData = match.transactionData,
-                        faceMatchNeeded = match.faceMatchNeeded,
-                    ))
-                }
-                val options = mutableListOf<CredentialPresentmentSetOption>()
-                options.add(
-                    CredentialPresentmentSetOption(
-                        members = listOf(
-                            CredentialPresentmentSetOptionMember(
-                                matches = matches
+                val solutions = response.matches.map { match ->
+                    PresentmentUseCaseSolution(
+                        listOf(
+                            PresentmentCredentialMatch(
+                                credential = match.credential,
+                                claims = match.claims,
+                                source = PresentmentCredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
+                                transactionData = match.transactionData,
+                                faceMatchNeeded = match.faceMatchNeeded,
                             )
                         )
                     )
-                )
-                credentialSets.add(
-                    CredentialPresentmentSet(
+                }
+                useCases.add(
+                    PresentmentUseCase(
                         optional = false,
-                        options = options
+                        solutions = solutions
                     )
                 )
             }
@@ -409,37 +402,26 @@ data class DcqlQuery(
             //     - optionally, any of the other Credential Set Queries.
             //
             for (csq in credentialSetQueries) {
-                val options = mutableListOf<CredentialPresentmentSetOption>()
-                // In this case, simply go through all the matches produced above and pick the
-                // credentials from the highest preferred option. If none of them work, bail only
-                // if the credential set was required.
-                //
-                // It's possible multiple options are satisfied and we _could_ ask the user which
-                // one of the options they want to send credentials for...
-                //
+                val solutions = mutableListOf<PresentmentUseCaseSolution>()
                 var satisfiedCsq = false
                 for (option in csq.options) {
                     if (option.isSatisfied(credentialQueryIdToResponse)) {
-                        val members = mutableListOf<CredentialPresentmentSetOptionMember>()
-                        option.credentialIds.forEachIndexed { n, credentialId ->
-                            val response = credentialQueryIdToResponse[credentialId]!!
-                            val matches = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
-                            for (match in response.matches) {
-                                matches.add(CredentialPresentmentSetOptionMemberMatch(
+                        val paths = option.credentialIds.map { credentialQueryIdToResponse[it]!!.matches.size }.generateAllPaths()
+                        for (path in paths) {
+                            val matches = path.mapIndexed { index, n ->
+                                val credentialId = option.credentialIds[index]
+                                val response = credentialQueryIdToResponse[credentialId]!!
+                                val match = response.matches[n]
+                                PresentmentCredentialMatch(
                                     credential = match.credential,
                                     claims = match.claims,
-                                    source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
+                                    source = PresentmentCredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
                                     transactionData = match.transactionData,
                                     faceMatchNeeded = match.faceMatchNeeded,
-                                ))
-                            }
-                            members.add(
-                                CredentialPresentmentSetOptionMember(
-                                    matches = matches
                                 )
-                            )
+                            }
+                            solutions.add(PresentmentUseCaseSolution(matches))
                         }
-                        options.add(CredentialPresentmentSetOption(members = members))
                         satisfiedCsq = true
                     }
                 }
@@ -448,18 +430,18 @@ data class DcqlQuery(
                         "No credentials match required credential_set query"
                     )
                 }
-                if (options.isNotEmpty()) {
-                    credentialSets.add(
-                        CredentialPresentmentSet(
+                if (solutions.isNotEmpty()) {
+                    useCases.add(
+                        PresentmentUseCase(
                             optional = !csq.required,
-                            options = options
+                            solutions = solutions
                         )
                     )
                 }
             }
         }
-        return CredentialQueryResult(
-            credentialSets = credentialSets
+        return PresentmentData(
+            useCases = useCases
         )
     }
 

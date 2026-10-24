@@ -166,27 +166,27 @@ class TestSingleSdJwtVcQuery {
         // Checks we get one match with one matching credential
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: Resident street
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             singlePidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -203,40 +203,45 @@ class TestSingleSdJwtVcQuery {
         // Checks we get two matches with two matching credentials
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: Resident street
-                                      value: Sample Street 123
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Max
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: Resident street
-                                      value: Sample Street 456
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Max
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Sample Street 456
             """.trimIndent().trim(),
             singlePidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -253,27 +258,27 @@ class TestSingleSdJwtVcQuery {
         // Checks we get one match with one matching credential if the other PID lacks the street_address claim
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: Resident street
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             singlePidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -289,27 +294,27 @@ class TestSingleSdJwtVcQuery {
         // Checks we get one match with one matching credential if the other PID lacks the street_address claim
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address"]
-                                      displayName: Address
-                                      value: {"country":"US","state":"CA","postal_code":"90210","street_address":"Sample Street 123"}
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address"]
+                                  displayName: Address
+                                  value: {"country":"US","state":"CA","postal_code":"90210","street_address":"Sample Street 123"}
             """.trimIndent().trim(),
             singlePidQueryForEntireAddress().execute(
                 presentmentSource = harness.presentmentSource
@@ -348,31 +353,31 @@ class TestSingleSdJwtVcQuery {
 
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["nationalities"]
-                                      displayName: Nationality
-                                      value: ["DE","US"]
-                                    claim:
-                                      path: ["nationalities",null]
-                                      displayName: Nationality
-                                      value: ["DE","US"]
-                                    claim:
-                                      path: ["nationalities",0]
-                                      displayName: Nationality
-                                      value: DE
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["nationalities"]
+                                  displayName: Nationality
+                                  value: ["DE","US"]
+                                claim:
+                                  path: ["nationalities",null]
+                                  displayName: Nationality
+                                  value: ["DE","US"]
+                                claim:
+                                  path: ["nationalities",0]
+                                  displayName: Nationality
+                                  value: DE
             """.trimIndent().trim(),
             queryAll.execute(
                 presentmentSource = harness.presentmentSource

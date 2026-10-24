@@ -73,11 +73,11 @@ import org.multipaz.nfc.ResponseApdu
 import org.multipaz.nfc.ServiceParameterRecord
 import org.multipaz.nfc.ServiceSelectRecord
 import org.multipaz.nfc.TnepStatusRecord
-import org.multipaz.presentment.ConsentData
-import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.EngagementParams
 import org.multipaz.presentment.FaceMatchingMode
 import org.multipaz.presentment.Iso18013Presentment
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.RequestedClaim
@@ -752,14 +752,14 @@ class MdocNfcV1TranscriptTest {
         override suspend fun showConsentPrompt(
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
-            consentData: ConsentData,
+            presentmentData: PresentmentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
-        ): CredentialSelection? {
+        ): PresentmentSelection? {
             return promptModelSilentConsent(
                 requester = requester,
                 trustedRequesterIdentity = trustedRequesterIdentity,
-                consentData = consentData,
+                presentmentData = presentmentData,
                 preselectedDocuments = preselectedDocuments,
                 onDocumentsInFocus = onDocumentsInFocus,
             )

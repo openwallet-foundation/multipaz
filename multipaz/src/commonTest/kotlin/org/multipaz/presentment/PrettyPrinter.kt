@@ -27,7 +27,7 @@ internal class PrettyPrinter() {
     override fun toString(): String = sb.toString()
 }
 
-internal fun CredentialPresentmentSetOptionMemberMatch.print(pp: PrettyPrinter) {
+internal fun PresentmentCredentialMatch.print(pp: PrettyPrinter) {
     pp.append("match:")
     pp.pushIndent()
     pp.append("credential:")
@@ -57,71 +57,7 @@ internal fun CredentialPresentmentSetOptionMemberMatch.print(pp: PrettyPrinter) 
     pp.popIndent()
 }
 
-internal fun CredentialPresentmentSetOptionMember.print(pp: PrettyPrinter) {
-    pp.append("member:")
-    pp.pushIndent()
-    pp.append("matches:")
-    pp.pushIndent()
-    if (matches.isEmpty()) {
-        pp.append("<empty>")
-    } else {
-        for (match in matches) {
-            match.print(pp)
-        }
-    }
-    pp.popIndent()
-    pp.popIndent()
-}
-
-internal fun CredentialPresentmentSetOption.print(pp: PrettyPrinter) {
-    pp.append("option:")
-    pp.pushIndent()
-    pp.append("members:")
-    pp.pushIndent()
-    if (members.isEmpty()) {
-        pp.append("<empty>")
-    } else {
-        for (member in members) {
-            member.print(pp)
-        }
-    }
-    pp.popIndent()
-    pp.popIndent()
-}
-
-internal fun CredentialPresentmentSet.print(pp: PrettyPrinter) {
-    pp.append("credentialSet:")
-    pp.pushIndent()
-    pp.append("optional: $optional")
-    pp.append("options:")
-    pp.pushIndent()
-    if (options.isEmpty()) {
-        pp.append("<empty>")
-    } else {
-        for (option in options) {
-            option.print(pp)
-        }
-    }
-    pp.popIndent()
-    pp.popIndent()
-}
-
-internal fun CredentialQueryResult.prettyPrint(): String {
-    val pp = PrettyPrinter()
-    pp.append("credentialSets:")
-    pp.pushIndent()
-    if (credentialSets.isEmpty()) {
-        pp.append("<empty>")
-    } else {
-        for (credentialSet in credentialSets) {
-            credentialSet.print(pp)
-        }
-    }
-    pp.popIndent()
-    return pp.toString()
-}
-
-internal fun CredentialSelection.print(pp: PrettyPrinter): String {
+internal fun PresentmentSelection.print(pp: PrettyPrinter): String {
     pp.append("matches:")
     pp.pushIndent()
     if (matches.isEmpty()) {
@@ -134,12 +70,12 @@ internal fun CredentialSelection.print(pp: PrettyPrinter): String {
     pp.popIndent()
     return pp.toString()
 }
-internal fun CredentialSelection.prettyPrint(): String {
+internal fun PresentmentSelection.prettyPrint(): String {
     val pp = PrettyPrinter()
     return print(pp)
 }
 
-internal fun List<CredentialSelection>.prettyPrint(): String {
+internal fun List<PresentmentSelection>.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("selections:")
     pp.pushIndent()
@@ -154,7 +90,7 @@ internal fun List<CredentialSelection>.prettyPrint(): String {
     return pp.toString()
 }
 
-internal fun ConsentCredential.print(pp: PrettyPrinter) {
+internal fun PresentmentCredentialMatch.printPresentmentCredential(pp: PrettyPrinter) {
     pp.append("credential:")
     pp.pushIndent()
     pp.append("encryptionRequested: $encryptionRequested")
@@ -162,27 +98,39 @@ internal fun ConsentCredential.print(pp: PrettyPrinter) {
     pp.pushIndent()
     pp.append("displayName: ${encryptionTargetTrustMetadata?.displayName}")
     pp.popIndent()
-    match.print(pp)
+    print(pp)
     pp.popIndent()
 }
 
-internal fun ConsentUseCaseSolution.print(pp: PrettyPrinter) {
+internal fun PresentmentUseCaseSolution.print(pp: PrettyPrinter) {
     pp.append("solution:")
     pp.pushIndent()
-    if (credentials.isEmpty()) {
+    if (matches.isEmpty()) {
         pp.append("<empty>")
     } else {
-        for (credential in credentials) {
-            credential.print(pp)
+        for (match in matches) {
+            match.printPresentmentCredential(pp)
         }
     }
     pp.popIndent()
 }
 
-internal fun ConsentUseCase.print(pp: PrettyPrinter) {
+internal fun PresentmentUseCase.print(pp: PrettyPrinter) {
     pp.append("useCase:")
     pp.pushIndent()
     pp.append("optional: $optional")
+    if (purposeHints.isNotEmpty()) {
+        pp.append("purposeHints:")
+        pp.pushIndent()
+        for (purposeHint in purposeHints) {
+            when (purposeHint) {
+                is PresentmentPurposeHintIso18013 -> {
+                    pp.append("iso18013: ${purposeHint.controllerId} -> ${purposeHint.purposeHintCode}")
+                }
+            }
+        }
+        pp.popIndent()
+    }
     pp.pushIndent()
     if (solutions.isEmpty()) {
         pp.append("<empty>")
@@ -195,7 +143,7 @@ internal fun ConsentUseCase.print(pp: PrettyPrinter) {
     pp.popIndent()
 }
 
-internal fun ConsentData.prettyPrint(): String {
+internal fun PresentmentData.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("useCases:")
     pp.pushIndent()

@@ -213,29 +213,29 @@ class Iso18013TestIssuerIdentifiers {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Issuer1
-                                  claims:
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Issuer1
+                              claims:
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             result.prettyPrint().trim()
         )
@@ -253,29 +253,29 @@ class Iso18013TestIssuerIdentifiers {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Issuer1
-                                  claims:
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Issuer1
+                              claims:
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             result.prettyPrint().trim()
         )
@@ -309,27 +309,27 @@ class Iso18013TestIssuerIdentifiers {
         val resultIssuer1 = mdlQuery(issuerIdentifiers = listOf(aki1)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIssuer1.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-Issuer1", resultIssuer1.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIssuer1.useCases[0].solutions.size)
+        assertEquals("my-mDL-Issuer1", resultIssuer1.useCases[0].solutions[0].matches[0].credential.document.displayName)
 
         // Query matching only Issuer 2
         val resultIssuer2 = mdlQuery(issuerIdentifiers = listOf(aki2)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIssuer2.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-Issuer2", resultIssuer2.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIssuer2.useCases[0].solutions.size)
+        assertEquals("my-mDL-Issuer2", resultIssuer2.useCases[0].solutions[0].matches[0].credential.document.displayName)
 
         // Query matching both Issuer 1 and Issuer 2
         val resultBoth = mdlQuery(issuerIdentifiers = listOf(aki1, aki2)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(2, resultBoth.credentialSets[0].options[0].members[0].matches.size)
+        assertEquals(2, resultBoth.useCases[0].solutions.size)
 
         // Query with no issuer identifiers returns both
         val resultAll = mdlQuery(issuerIdentifiers = null).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(2, resultAll.credentialSets[0].options[0].members[0].matches.size)
+        assertEquals(2, resultAll.useCases[0].solutions.size)
 
         // Query matching unknown issuer fails
         assertFailsWith(Iso18015ResponseException::class) {
@@ -351,27 +351,27 @@ class Iso18013TestIssuerIdentifiers {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Issuer1
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","formatted"]
-                                      displayName: Resident address
-                                      value: Sample Street 123, CA 90210, US
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Issuer1
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","formatted"]
+                                  displayName: Resident address
+                                  value: Sample Street 123, CA 90210, US
             """.trimIndent().trim(),
             result.prettyPrint().trim()
         )
@@ -405,21 +405,21 @@ class Iso18013TestIssuerIdentifiers {
         val resultIssuer1 = pidSdJwtQuery(issuerIdentifiers = listOf(aki1)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIssuer1.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-Issuer1", resultIssuer1.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIssuer1.useCases[0].solutions.size)
+        assertEquals("my-PID-Issuer1", resultIssuer1.useCases[0].solutions[0].matches[0].credential.document.displayName)
 
         // Query matching only Issuer 2
         val resultIssuer2 = pidSdJwtQuery(issuerIdentifiers = listOf(aki2)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIssuer2.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-Issuer2", resultIssuer2.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIssuer2.useCases[0].solutions.size)
+        assertEquals("my-PID-Issuer2", resultIssuer2.useCases[0].solutions[0].matches[0].credential.document.displayName)
 
         // Query matching both
         val resultBoth = pidSdJwtQuery(issuerIdentifiers = listOf(aki1, aki2)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(2, resultBoth.credentialSets[0].options[0].members[0].matches.size)
+        assertEquals(2, resultBoth.useCases[0].solutions.size)
 
         // Query with unknown issuer
         assertFailsWith(Iso18015ResponseException::class) {
@@ -464,9 +464,9 @@ class Iso18013TestIssuerIdentifiers {
         }
 
         val result = request.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        assertEquals(1, result.credentialSets[0].options.size)
-        val matches = result.credentialSets[0].options[0].members[0].matches
+        assertEquals(1, result.useCases.size)
+        assertEquals(1, result.useCases[0].solutions.size)
+        val matches = result.useCases[0].solutions[0].matches
         assertEquals(1, matches.size)
         assertEquals("my-mDL-Issuer2", matches[0].credential.document.displayName)
     }
@@ -483,8 +483,8 @@ class Iso18013TestIssuerIdentifiers {
         val resultIntermediate = mdlQuery(issuerIdentifiers = listOf(skiIntermediate)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIntermediate.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-3Tier", resultIntermediate.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIntermediate.useCases[0].solutions.size)
+        assertEquals("my-mDL-3Tier", resultIntermediate.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -499,8 +499,8 @@ class Iso18013TestIssuerIdentifiers {
         val resultRoot = mdlQuery(issuerIdentifiers = listOf(skiRoot)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultRoot.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-3Tier", resultRoot.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultRoot.useCases[0].solutions.size)
+        assertEquals("my-mDL-3Tier", resultRoot.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -515,8 +515,8 @@ class Iso18013TestIssuerIdentifiers {
         val resultIntermediate = pidSdJwtQuery(issuerIdentifiers = listOf(skiIntermediate)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIntermediate.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-3Tier", resultIntermediate.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIntermediate.useCases[0].solutions.size)
+        assertEquals("my-PID-3Tier", resultIntermediate.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -531,7 +531,7 @@ class Iso18013TestIssuerIdentifiers {
         val resultRoot = pidSdJwtQuery(issuerIdentifiers = listOf(skiRoot)).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultRoot.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-3Tier", resultRoot.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultRoot.useCases[0].solutions.size)
+        assertEquals("my-PID-3Tier", resultRoot.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 }

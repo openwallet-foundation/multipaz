@@ -333,16 +333,16 @@ class DigitalCredentialsPresentmentTest {
         override suspend fun showConsentPrompt(
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
-            consentData: ConsentData,
+            presentmentData: PresentmentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
-        ): CredentialSelection? {
-            val selections = consentData.useCases.mapIndexed { useCaseIndex, useCase ->
+        ): PresentmentSelection? {
+            val selections = presentmentData.useCases.mapIndexed { useCaseIndex, useCase ->
                 if (preselectedDocuments.isNotEmpty()) {
                     val targetDoc = preselectedDocuments.getOrNull(useCaseIndex)
                     if (targetDoc != null) {
                         val matchingIndex = useCase.solutions.indexOfFirst { solution ->
-                            solution.credentials.any { it.match.credential.document == targetDoc }
+                            solution.matches.any { it.credential.document == targetDoc }
                         }
                         if (matchingIndex != -1) matchingIndex else 0
                     } else {
@@ -352,21 +352,21 @@ class DigitalCredentialsPresentmentTest {
                     if (useCase.solutions.isNotEmpty()) 0 else -1
                 }
             }
-            val userInput = mutableMapOf<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>()
-            consentData.useCases.forEachIndexed { index, useCase ->
+            val userInput = mutableMapOf<PresentmentCredentialMatch, Map<String, TransactionUserInput>>()
+            presentmentData.useCases.forEachIndexed { index, useCase ->
                 val selection = selections[index]
                 if (selection >= 0 && selection < useCase.solutions.size) {
-                    for (cred in useCase.solutions[selection].credentials) {
-                        val tip = tipPercentByCredential[cred.match.credential] ?: tipPercent
+                    for (match in useCase.solutions[selection].matches) {
+                        val tip = tipPercentByCredential[match.credential] ?: tipPercent
                         if (tip != null) {
-                            userInput[cred.match] = mapOf(
+                            userInput[match] = mapOf(
                                 PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
                             )
                         }
                     }
                 }
             }
-            val ret = consentData.toCredentialSelection(selections, userInput)
+            val ret = presentmentData.toPresentmentSelection(selections, userInput)
             onDocumentsInFocus(ret.matches.map { it.credential.document })
             return ret
         }
@@ -384,7 +384,7 @@ class DigitalCredentialsPresentmentTest {
     }
 
     private data class ShownConsentPrompt(
-        val credentialQueryResult: CredentialQueryResult,
+        val presentmentData: PresentmentData,
         val preselectedDocuments: List<Document>,
         val requester: Requester,
         val trustPoint: TrustPoint?

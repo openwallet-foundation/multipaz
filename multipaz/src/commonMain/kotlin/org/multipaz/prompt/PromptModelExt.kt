@@ -4,8 +4,8 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FacePose
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -69,7 +69,7 @@ suspend fun PromptModel.requestPassphrase(
  *
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
- * @param consentData the combinations of credentials and claims that the user can select.
+ * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments a list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
@@ -77,7 +77,7 @@ suspend fun PromptModel.requestPassphrase(
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
  *   find renderers for transaction data, or `null` to use only the built-in rendering.
- * @return a [CredentialSelection] object conveying which credentials the user selected, if multiple
+ * @return a [PresentmentSelection] object conveying which credentials the user selected, if multiple
  *   options are available.
  * @throws PromptDismissedException if the user dismissed the prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
@@ -93,16 +93,16 @@ suspend fun PromptModel.requestPassphrase(
 suspend fun PromptModel.requestConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
     transactionDataRendererRepository: TransactionDataRendererRepository? = null
-): CredentialSelection {
+): PresentmentSelection {
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = consentData,
+            presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
             transactionDataRendererRepository = transactionDataRendererRepository,

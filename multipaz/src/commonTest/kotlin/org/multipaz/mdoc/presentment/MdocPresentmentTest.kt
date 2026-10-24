@@ -28,8 +28,8 @@ import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.mdocPresentment
 import org.multipaz.presentment.mdocPresentmentGenerateResponse
 import org.multipaz.presentment.mdocPresentmentObtainConsent
@@ -152,12 +152,9 @@ class MdocPresentmentTest {
             decryptedDocuments.documents[0].issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["portrait"]!!.dataElementValue.asBstr
         )
 
-        // Check that converting to ConsentData includes the Encrypted Receiver...
-        val cd = ConsentData.fromCredentialQueryResult(
-            credentialQueryResult = deviceRequest.execute(
-                presentmentSource = harness.presentmentSource,
-            ),
-            source = harness.presentmentSource
+        // Check that PresentmentData includes the Encrypted Receiver...
+        val cd = deviceRequest.execute(
+            presentmentSource = harness.presentmentSource,
         )
         assertEquals(
             """

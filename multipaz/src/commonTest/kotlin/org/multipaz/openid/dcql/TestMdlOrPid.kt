@@ -110,29 +110,29 @@ class TestMdlOrPid {
 
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -147,27 +147,27 @@ class TestMdlOrPid {
         addPidErika(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["family_name"]
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -183,46 +183,47 @@ class TestMdlOrPid {
         addPidErika(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["family_name"]
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource

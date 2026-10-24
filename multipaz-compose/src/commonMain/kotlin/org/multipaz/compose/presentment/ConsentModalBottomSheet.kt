@@ -13,8 +13,8 @@ import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -25,7 +25,7 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @param sheetState a [SheetState] for state.
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
- * @param consentData the combinations of credentials and claims that the user can select.
+ * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
@@ -44,13 +44,13 @@ fun ConsentModalBottomSheet(
     sheetState: SheetState,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     imageLoader: ImageLoader?,
     maxHeight: Dp? = null,
     transactionDataRendererRepository: TransactionDataRendererRepository? = null,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
-    onConfirm: (selection: CredentialSelection) -> Unit,
+    onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -65,7 +65,7 @@ fun ConsentModalBottomSheet(
                 .animateContentSize(),
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = consentData,
+            presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             imageLoader = imageLoader,
             transactionDataRendererRepository = transactionDataRendererRepository,

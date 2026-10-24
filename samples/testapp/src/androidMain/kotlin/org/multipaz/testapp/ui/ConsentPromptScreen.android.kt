@@ -10,12 +10,12 @@ import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
 import org.multipaz.documenttype.knowntypes.SampleData
 import org.multipaz.presentment.AuthenticationFailedException
-import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.FaceNotMatchedException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.prompt.showFaceMatcherPrompt
@@ -30,10 +30,10 @@ actual suspend fun launchAndroidPresentmentActivity(
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection? {
+): PresentmentSelection? {
     PresentmentActivity.presentmentModel.reset(
         source = source,
         preselectedDocuments = paData.preselectedDocuments
@@ -52,7 +52,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                 val selection = source.showConsentPrompt(
                     requester = requester,
                     trustedRequesterIdentity = trustedRequesterIdentity,
-                    consentData = consentData,
+                    presentmentData = presentmentData,
                     preselectedDocuments = paData.preselectedDocuments,
                     onDocumentsInFocus = { documents ->
                         PresentmentActivity.presentmentModel.setDocumentsSelected(selectedDocuments = documents)
@@ -63,7 +63,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                 }
             } else {
                 PresentmentActivity.presentmentModel.setDocumentsSelected(
-                    selectedDocuments = consentData.credentialQueryResult.select(emptyList())
+                    selectedDocuments = presentmentData.select(emptyList())
                         .matches.map { it.credential.document }
                 )
             }
@@ -118,5 +118,5 @@ actual suspend fun launchAndroidPresentmentActivity(
     consentAndAuthJob.join()
     listenForCancellationFromUiJob.cancel()
 
-    return consentData.credentialQueryResult.select(emptyList())
+    return presentmentData.select(emptyList())
 }

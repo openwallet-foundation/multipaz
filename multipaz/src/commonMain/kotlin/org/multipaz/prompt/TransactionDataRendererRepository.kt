@@ -16,11 +16,11 @@ package org.multipaz.prompt
  * ```
  * val source = SimplePresentmentSource(
  *     // ...
- *     showConsentPromptFn = { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus ->
+ *     showConsentPromptFn = { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
  *         promptModelRequestConsent(
  *             requester = requester,
  *             trustedRequesterIdentity = trustedRequesterIdentity,
- *             consentData = consentData,
+ *             presentmentData = presentmentData,
  *             preselectedDocuments = preselectedDocuments,
  *             onDocumentsInFocus = onDocumentsInFocus,
  *             transactionDataRendererRepository = renderers,

@@ -45,27 +45,27 @@ import org.multipaz.openid.dcql.DcqlCredentialQueryException
 import kotlinx.coroutines.withContext
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.AuthenticationFailedException
-import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
-import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.FaceNotMatchedException
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
+import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentCredentialMatchSourceOpenID4VP
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentUnlockReason
+import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.computeDeviceNamespaces
 import org.multipaz.presentment.mdocPerformFaceMatching
 import org.multipaz.presentment.mdocPresentmentAuthenticateUser
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.presentment.PresentmentUnlockReason
-import org.multipaz.presentment.ConsentData
-import org.multipaz.presentment.TransactionData
-import org.multipaz.presentment.TransactionProtocol
-import org.multipaz.request.OpenID4VPRequesterIdentity
-import org.multipaz.request.RequesterIdentity
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -458,7 +458,7 @@ object OpenID4VP {
 
         val trustedRequesterIdentity = source.resolveTrust(requester)
 
-        val dcqlResponse = try {
+        val presentmentData = try {
             dcqlQuery.execute(
                 presentmentSource = source,
                 transactionDataMap = transactionDataMap,
@@ -500,10 +500,7 @@ object OpenID4VP {
         val selection = source.showConsentPrompt(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = ConsentData.fromCredentialQueryResult(
-                credentialQueryResult = dcqlResponse,
-                source = source
-            ),
+            presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus
         )
@@ -519,7 +516,7 @@ object OpenID4VP {
         try {
             withContext(keyUnlockDataProvider) {
                 selection.matches.forEach { match ->
-                    match.source as CredentialMatchSourceOpenID4VP
+                    match.source as PresentmentCredentialMatchSourceOpenID4VP
                     val requestIsForZk = match.source.credentialQuery.format == "mso_mdoc_zk"
                     if (requestIsForZk) {
                         usingZk = true
@@ -626,7 +623,7 @@ object OpenID4VP {
 
     private suspend fun openID4VPMsoMdoc(
         version: Version,
-        match: CredentialPresentmentSetOptionMemberMatch,
+        match: PresentmentCredentialMatch,
         source: PresentmentSource,
         origin: String?,
         clientId: String,
@@ -637,7 +634,7 @@ object OpenID4VP {
         faceMatchedCredentials: List<Credential> = emptyList(),
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): String {
-        match.source as CredentialMatchSourceOpenID4VP
+        match.source as PresentmentCredentialMatchSourceOpenID4VP
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (requestIsForZk) {
@@ -817,13 +814,13 @@ object OpenID4VP {
 
     private suspend fun openID4VPSdJwt(
         version: Version,
-        match: CredentialPresentmentSetOptionMemberMatch,
+        match: PresentmentCredentialMatch,
         origin: String?,
         clientId: String,
         nonce: String,
         responseMode: ResponseMode
     ): String {
-        match.source as CredentialMatchSourceOpenID4VP
+        match.source as PresentmentCredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
         val claims = match.source.credentialQuery.claims as List<JsonRequestedClaim>
 

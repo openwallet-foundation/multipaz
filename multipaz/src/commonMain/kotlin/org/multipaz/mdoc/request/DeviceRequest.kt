@@ -50,14 +50,14 @@ import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.presentment.CredentialMatchSourceIso18013
-import org.multipaz.presentment.CredentialQueryResult
-import org.multipaz.presentment.CredentialPresentmentSet
-import org.multipaz.presentment.CredentialPresentmentSetOption
-import org.multipaz.presentment.CredentialPresentmentSetOptionMember
-import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.FaceMatchingMode
+import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentPurposeHintIso18013
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentUseCase
+import org.multipaz.presentment.PresentmentUseCaseSolution
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.canSatisfyChv1
 import org.multipaz.presentment.isChv1Claim
@@ -65,10 +65,12 @@ import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
+import org.multipaz.util.generateAllPaths
 import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -554,7 +556,7 @@ data class DeviceRequest private constructor(
     /**
      * Executes the ISO 18013-5 request against a [PresentmentSource].
      *
-     * If successful, this returns a [CredentialQueryResult] which can be used in
+     * If successful, this returns a [PresentmentData] which can be used in
      * an user interface for the user to select which combination of credentials to return, see
      * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
      * of how to do this.
@@ -565,7 +567,7 @@ data class DeviceRequest private constructor(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
      * @param requesterIdentities additional identities of the requester used for matching reader identifiers, if any.
-     * @return the resulting [CredentialQueryResult] if the query was successful.
+     * @return the resulting [PresentmentData] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
     @Throws(Iso18015ResponseException::class, CancellationException::class)
@@ -573,7 +575,7 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
         requesterIdentities: List<RequesterIdentity> = emptyList(),
-    ): CredentialQueryResult {
+    ): PresentmentData {
         val effectiveRequesterIdentities = requesterIdentities.ifEmpty { getRequesterIdentities() }
         val faceMatchingModeCache = mutableMapOf<String, FaceMatchingMode>()
         suspend fun getOrComputeFaceMatchingMode(credential: Credential): FaceMatchingMode {
@@ -583,6 +585,36 @@ data class DeviceRequest private constructor(
                     requesterIdentities = effectiveRequesterIdentities
                 )
             }
+        }
+
+        suspend fun DocRequestMatch.toPresentmentCredentialMatch(): PresentmentCredentialMatch {
+            val docRequestInfo = docRequest.docRequestInfo
+            val encryptionTargetCertificationChain =
+                docRequestInfo?.docResponseEncryption?.recipientCertificates?.let {
+                    if (it.isNotEmpty()) {
+                        X509CertChain(it)
+                    } else {
+                        null
+                    }
+                }
+            val encryptionTargetTrustMetadata = encryptionTargetCertificationChain?.let {
+                val requester = Requester(
+                    requesterIdentities = listOf(
+                        Iso18013RequesterIdentity(certChain = it)
+                    )
+                )
+                presentmentSource.resolveTrust(requester)?.trustMetadata
+            }
+            return PresentmentCredentialMatch(
+                credential = credential,
+                claims = claims,
+                source = PresentmentCredentialMatchSourceIso18013(docRequest = docRequest),
+                transactionData = transactionData,
+                faceMatchNeeded = faceMatchNeeded,
+                encryptionRequested = docRequestInfo?.docResponseEncryption != null,
+                encryptionTargetCertificationChain = encryptionTargetCertificationChain,
+                encryptionTargetTrustMetadata = encryptionTargetTrustMetadata,
+            )
         }
 
         // First find all matches for all DocRequests
@@ -596,7 +628,7 @@ data class DeviceRequest private constructor(
             )
         }
 
-        val credentialSets = mutableListOf<CredentialPresentmentSet>()
+        val useCases = mutableListOf<PresentmentUseCase>()
 
         if (deviceRequestInfo == null || deviceRequestInfo.useCases.isEmpty()) {
             // If useCases isn't set, treat as 18013-5:2021 request. In this case it's undefined
@@ -612,28 +644,20 @@ data class DeviceRequest private constructor(
                 throw Iso18015ResponseException("No matching credentials for first DocRequest$detail")
             }
 
-            // Create a single set, with a single option, containing matches for the first DocRequest.
-            val memberMatches = result.matches.map { match ->
-                CredentialPresentmentSetOptionMemberMatch(
-                    credential = match.credential,
-                    claims = match.claims,
-                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
-                    transactionData = match.transactionData,
-                    faceMatchNeeded = match.faceMatchNeeded,
-                )
+            // Create a single use-case containing a solution for each match for the first DocRequest.
+            val solutions = result.matches.map { match ->
+                PresentmentUseCaseSolution(listOf(match.toPresentmentCredentialMatch()))
             }
-            val member = CredentialPresentmentSetOptionMember(memberMatches)
-            val option = CredentialPresentmentSetOption(listOf(member))
-            credentialSets.add(
-                CredentialPresentmentSet(
+            useCases.add(
+                PresentmentUseCase(
                     optional = false,
-                    options = listOf(option)
+                    solutions = solutions
                 )
             )
         } else {
             // Handle ISO 18013-5 Second Edition UseCases (similar to DCQL credential sets)
             for (useCase in deviceRequestInfo.useCases) {
-                val options = mutableListOf<CredentialPresentmentSetOption>()
+                val solutions = mutableListOf<PresentmentUseCaseSolution>()
                 var satisfied = false
 
                 // A UseCase has multiple DocumentSets (which act as options).
@@ -646,20 +670,14 @@ data class DeviceRequest private constructor(
                     }
 
                     if (allRequestsSatisfied) {
-                        // Create a member for each DocRequest in this set
-                        val members = docRequestIds.map { id ->
-                            val matches = docRequestResults[id].matches.map { match ->
-                                CredentialPresentmentSetOptionMemberMatch(
-                                    credential = match.credential,
-                                    claims = match.claims,
-                                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
-                                    transactionData = match.transactionData,
-                                    faceMatchNeeded = match.faceMatchNeeded,
-                                )
+                        val paths = docRequestIds.map { id -> docRequestResults[id].matches.size }.generateAllPaths()
+                        for (path in paths) {
+                            val matches = path.mapIndexed { index, n ->
+                                val id = docRequestIds[index]
+                                docRequestResults[id].matches[n].toPresentmentCredentialMatch()
                             }
-                            CredentialPresentmentSetOptionMember(matches)
+                            solutions.add(PresentmentUseCaseSolution(matches))
                         }
-                        options.add(CredentialPresentmentSetOption(members))
                         satisfied = true
                     }
                 }
@@ -674,18 +692,24 @@ data class DeviceRequest private constructor(
                     throw Iso18015ResponseException("No credentials match required UseCase$detail")
                 }
 
-                if (options.isNotEmpty()) {
-                    credentialSets.add(
-                        CredentialPresentmentSet(
+                if (solutions.isNotEmpty()) {
+                    useCases.add(
+                        PresentmentUseCase(
                             optional = !useCase.mandatory,
-                            options = options
+                            solutions = solutions,
+                            purposeHints = useCase.purposeHints.map { (controllerId, purposeHintCode) ->
+                                PresentmentPurposeHintIso18013(
+                                    controllerId = controllerId,
+                                    purposeHintCode = purposeHintCode
+                                )
+                            }
                         )
                     )
                 }
             }
         }
 
-        return CredentialQueryResult(credentialSets)
+        return PresentmentData(useCases)
     }
 
     private suspend fun findMatchesForDocRequest(

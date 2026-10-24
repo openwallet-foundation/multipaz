@@ -3,17 +3,17 @@ package org.multipaz.presentment
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
- * A selection of credentials and claims in a [CredentialQueryResult].
+ * A selection of credentials and claims from a [PresentmentData].
  *
- * This object represents the result of selecting a concrete set of options, members, and matches
- * from a [CredentialQueryResult] object.
+ * This object represents the result of selecting a concrete solution for each use-case
+ * from a [PresentmentData] object.
  *
  * This is typically returned from a consent prompt user interface.
  *
  * @property matches the list of credentials and claims to return to the relying party.
  */
-data class CredentialSelection(
-    val matches: List<CredentialPresentmentSetOptionMemberMatch>
+data class PresentmentSelection(
+    val matches: List<PresentmentCredentialMatch>
 ) {
 
     /**

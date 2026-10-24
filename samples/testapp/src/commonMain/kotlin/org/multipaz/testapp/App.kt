@@ -278,11 +278,11 @@ class App private constructor (val promptModel: PromptModel) {
             },
             resolveTrustFn = ::resolveTrust,
             showConsentPromptFn = if (settingsModel.presentmentShowConsentPrompt.value) {
-                { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus ->
+                { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
                     promptModelRequestConsent(
                         requester = requester,
                         trustedRequesterIdentity = trustedRequesterIdentity,
-                        consentData = consentData,
+                        presentmentData = presentmentData,
                         preselectedDocuments = preselectedDocuments,
                         onDocumentsInFocus = onDocumentsInFocus,
                         transactionDataRendererRepository = transactionDataRendererRepository,

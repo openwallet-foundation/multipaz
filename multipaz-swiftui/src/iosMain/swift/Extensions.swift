@@ -30,8 +30,7 @@ extension Requester: @unchecked Sendable {}
 extension Document: @unchecked Sendable {}
 extension PresentmentSource: @unchecked Sendable {}
 extension DocumentTypeRepository: @unchecked Sendable {}
-extension CredentialQueryResult: @unchecked Sendable {}
-extension CredentialSelection: @unchecked Sendable {}
+extension PresentmentSelection: @unchecked Sendable {}
 extension Tags: @unchecked Sendable {}
 extension Tags.Editor: @unchecked Sendable {}
 extension PassphraseEvaluation: @unchecked Sendable {}
@@ -40,7 +39,7 @@ extension DocumentProvisioningSettings: @unchecked Sendable {}
 extension CredentialMetadata: @unchecked Sendable {}
 extension ProvisioningMetadata: @unchecked Sendable {}
 extension DocumentBadge: @unchecked Sendable {}
-extension ConsentData: @unchecked Sendable {}
+extension PresentmentData: @unchecked Sendable {}
 extension CreateKeySettings: @unchecked Sendable {}
 extension SelectedSecureArea: @unchecked Sendable {}
 extension ByteString: @unchecked Sendable {}

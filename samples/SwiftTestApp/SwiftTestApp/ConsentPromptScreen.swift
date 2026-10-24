@@ -101,7 +101,7 @@ struct ConsentPromptScreen: View {
                             let selection = try await promptModelRequestConsent(
                                 requester: requestData.requester,
                                 trustedRequesterIdentity: requestData.trustedRequesterIdentity,
-                                consentData: requestData.consentData,
+                                presentmentData: requestData.presentmentData,
                                 preselectedDocuments: [],
                                 onDocumentsInFocus: { documents in },
                                 transactionDataRendererRepository: viewModel.transactionDataRendererRepository
@@ -127,7 +127,7 @@ struct ConsentPromptScreen: View {
 
 private struct RequestData {
     let requester: Requester
-    let consentData: ConsentData
+    let presentmentData: PresentmentData
     let trustedRequesterIdentity: TrustedRequesterIdentity?
 }
 
@@ -842,11 +842,11 @@ private func calcRequestData(
             }
             return nil
         },
-        showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus in
             return try! await promptModelSilentConsent(
                 requester: requester,
                 trustedRequesterIdentity: trustedRequesterIdentity,
-                consentData: consentData,
+                presentmentData: presentmentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
             )
@@ -866,20 +866,15 @@ private func calcRequestData(
     
     if dcqlString != nil {
         let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString!)
-        let credentialQueryResult = try! await query.execute(
+        let presentmentData = try! await query.execute(
             presentmentSource: source,
             keyAgreementPossible: [],
             transactionDataMap: transactionDataMap,
             requesterIdentities: requester.requesterIdentities
         )
-        
-        let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
-            credentialQueryResult: credentialQueryResult,
-            source: source,
-        )
         return RequestData(
             requester: requester,
-            consentData: consentData,
+            presentmentData: presentmentData,
             trustedRequesterIdentity: trustedRequesterIdentity
         )
     }
@@ -970,18 +965,14 @@ private func calcRequestData(
         deviceRequest = drBuilder.build()
     }
     
-    let iso18013Response = try! await deviceRequest!.execute(
+    let presentmentData = try! await deviceRequest!.execute(
         presentmentSource: source,
         keyAgreementPossible: [],
         requesterIdentities: requester.requesterIdentities
     )
-    let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
-        credentialQueryResult: iso18013Response,
-        source: source,
-    )
     return RequestData(
         requester: requester,
-        consentData: consentData,
+        presentmentData: presentmentData,
         trustedRequesterIdentity: trustedRequesterIdentity
     )
 }

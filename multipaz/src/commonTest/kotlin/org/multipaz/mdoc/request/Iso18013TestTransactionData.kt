@@ -144,7 +144,7 @@ class Iso18013TestTransactionData {
 
         // Query execution check
         val queryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertEquals(1, match.transactionData.size)
         assertEquals(TxA, match.transactionData[0].type)
 
@@ -239,7 +239,7 @@ class Iso18013TestTransactionData {
 
         // Query execution check
         val queryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertEquals(1, match.transactionData.size)
         assertEquals(TxB, match.transactionData[0].type)
 
@@ -334,7 +334,7 @@ class Iso18013TestTransactionData {
 
         // Query execution check: Option 0 (TxA) must be preferred over Option 1 (TxB)
         val queryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertEquals(1, match.transactionData.size)
         assertEquals(TxA, match.transactionData[0].type)
 
@@ -488,7 +488,7 @@ class Iso18013TestTransactionData {
 
         // Query execution check: fallback to given_name succeeded without transactions
         val queryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(match.transactionData.isEmpty())
 
         // End-to-end presentment and verification check
@@ -566,7 +566,7 @@ class Iso18013TestTransactionData {
 
         // Query execution check: only TxA is included
         val queryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertEquals(1, match.transactionData.size)
         assertEquals(TxA, match.transactionData[0].type)
 

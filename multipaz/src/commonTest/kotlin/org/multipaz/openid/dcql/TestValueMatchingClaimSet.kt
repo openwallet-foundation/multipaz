@@ -127,54 +127,59 @@ class TestValueMatchingClaimSet {
         addMdl_EU_organ_donor(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika-donor
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1.us
-                                      dataElement: organ_donor
-                                      displayName: organ_donor
-                                      value: true
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max-donor
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1.eu
-                                      dataElement: organ_donor
-                                      displayName: organ_donor
-                                      value: true
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika-donor
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1.us
+                                  dataElement: organ_donor
+                                  displayName: organ_donor
+                                  value: true
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max-donor
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1.eu
+                                  dataElement: organ_donor
+                                  displayName: organ_donor
+                                  value: true
             """.trimIndent().trim(),
             mdl_match_USOrganDonor_or_EUOrganDonor().execute(
                 presentmentSource = harness.presentmentSource
@@ -190,34 +195,34 @@ class TestValueMatchingClaimSet {
         addMdl_EU_not_organ_donor(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika-donor
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1.us
-                                      dataElement: organ_donor
-                                      displayName: organ_donor
-                                      value: true
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika-donor
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1.us
+                                  dataElement: organ_donor
+                                  displayName: organ_donor
+                                  value: true
             """.trimIndent().trim(),
             mdl_match_USOrganDonor_or_EUOrganDonor().execute(
                 presentmentSource = harness.presentmentSource
@@ -233,34 +238,34 @@ class TestValueMatchingClaimSet {
         addMdl_EU_organ_donor(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max-donor
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1.eu
-                                      dataElement: organ_donor
-                                      displayName: organ_donor
-                                      value: true
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max-donor
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1.eu
+                                  dataElement: organ_donor
+                                  displayName: organ_donor
+                                  value: true
             """.trimIndent().trim(),
             mdl_match_USOrganDonor_or_EUOrganDonor().execute(
                 presentmentSource = harness.presentmentSource

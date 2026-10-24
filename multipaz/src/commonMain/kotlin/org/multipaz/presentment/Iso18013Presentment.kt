@@ -103,7 +103,7 @@ private class Iso18013PresentmentSession(
     private var sessionEncryption: SessionEncryption? = null
     private var activeEReaderKey: EReaderKey? = null
     private var activeDeviceRequest: DeviceRequest? = null
-    private var cachedSelection: CredentialSelection? = null
+    private var cachedSelection: PresentmentSelection? = null
     private var cachedKeyUnlockDataProvider: KeyUnlockDataProvider? = null
     private var cachedFaceMatchedCredentials: List<Credential>? = null
     private lateinit var sessionTranscript: DataItem
@@ -379,7 +379,7 @@ private class Iso18013PresentmentSession(
                     transport.markResponsePending()
                 }
 
-                val selection: CredentialSelection
+                val selection: PresentmentSelection
                 val keyUnlockDataProvider: KeyUnlockDataProvider
                 val faceMatchedCredentials: List<Credential>
 

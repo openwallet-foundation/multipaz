@@ -68,10 +68,10 @@ import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.prompt.PromptModel
@@ -201,10 +201,10 @@ expect suspend fun launchAndroidPresentmentActivity(
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection?
+): PresentmentSelection?
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -470,10 +470,10 @@ fun ConsentPromptScreen(
             paData: AndroidPresentmentActivityData,
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
-            consentData: ConsentData,
+            presentmentData: PresentmentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
-            ) -> CredentialSelection?,
+            ) -> PresentmentSelection?,
                           paData: AndroidPresentmentActivityData,
         ) {
             coroutineScope.launch {
@@ -500,7 +500,7 @@ fun ConsentPromptScreen(
                         paData,
                         queryResult.requester,
                         trustedRequesterIdentity,
-                        queryResult.consentData,
+                        queryResult.presentmentData,
                         emptyList(),
                         { documents ->
                             onDocumentsInFocus = documents
@@ -520,12 +520,12 @@ fun ConsentPromptScreen(
             Button(
                 enabled = documentModel != null,
                 onClick = {
-                    launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, consentData,
+                    launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, presentmentData,
                                                preselectedDocuments, onDocumentsInFocus ->
                             promptModel.requestConsent(
                                 requester = requester,
                                 trustedRequesterIdentity = trustedRequesterIdentity,
-                                consentData = consentData,
+                                presentmentData = presentmentData,
                                 preselectedDocuments = preselectedDocuments,
                                 onDocumentsInFocus = onDocumentsInFocus,
                                 transactionDataRendererRepository = transactionDataRendererRepository,
@@ -712,7 +712,7 @@ fun ConsentPromptScreen(
 private data class QueryResult(
     val requester: Requester,
     val source: PresentmentSource,
-    val consentData: ConsentData
+    val presentmentData: PresentmentData
 )
 
 private suspend fun getQueryResult(
@@ -1074,11 +1074,11 @@ private suspend fun getQueryResult(
                 TrustedRequesterIdentity(requester.requesterIdentities.first(), it)
             }
         },
-        showConsentPromptFn = { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus ->
+        showConsentPromptFn = { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
             promptModelRequestConsent(
                 requester = requester,
                 trustedRequesterIdentity = trustedRequesterIdentity,
-                consentData = consentData,
+                presentmentData = presentmentData,
                 preselectedDocuments = preselectedDocuments,
                 onDocumentsInFocus = onDocumentsInFocus,
                 transactionDataRendererRepository = transactionDataRendererRepository,
@@ -1106,15 +1106,11 @@ private suspend fun getQueryResult(
 
             else -> emptyMap()
         }
-        val dcqlResponse = dcqlQuery.execute(
+        val presentmentData = dcqlQuery.execute(
             presentmentSource = source,
             transactionDataMap = transactionDataMap
         )
-        val consentData = ConsentData.fromCredentialQueryResult(
-            credentialQueryResult = dcqlResponse,
-            source = source
-        )
-        return QueryResult(requester, source, consentData)
+        return QueryResult(requester, source, presentmentData)
     }
 
     val deviceRequest = when (example) {
@@ -1197,15 +1193,11 @@ private suspend fun getQueryResult(
             }
         }
     }
-    val iso18013Response = deviceRequest.execute(
+    val presentmentData = deviceRequest.execute(
         presentmentSource = source,
         keyAgreementPossible = emptyList()
     )
-    val consentData = ConsentData.fromCredentialQueryResult(
-        credentialQueryResult = iso18013Response,
-        source = source
-    )
-    return QueryResult(requester, source, consentData)
+    return QueryResult(requester, source, presentmentData)
 }
 
 private fun resolveTrust(

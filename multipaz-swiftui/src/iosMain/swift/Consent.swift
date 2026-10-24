@@ -245,7 +245,7 @@ private struct RequestedDocumentSection : View {
     let document: Document
     let retainedClaims: [Claim]
     let notRetainedClaims: [Claim]
-    let match: CredentialPresentmentSetOptionMemberMatch
+    let match: PresentmentCredentialMatch
     let trustedRequesterIdentity: TrustedRequesterIdentity?
     let transactionData: [TransactionData<AnyObject>]
     let transactionDataRendererRepository: TransactionDataRendererRepository?
@@ -448,7 +448,7 @@ private struct InfoSection: View {
 
 /// The transaction data the details page shows: one application-drawn group of one credential.
 private struct TransactionDetailsTarget {
-    let match: CredentialPresentmentSetOptionMemberMatch
+    let match: PresentmentCredentialMatch
     let identifier: String
     let items: [TransactionData<AnyObject>]
     let renderer: TransactionDataRendererSwiftUi
@@ -498,7 +498,7 @@ private enum ConsentDestinations: Hashable {
 /// A ``View`` which asks the user to approve sharing of credentials.
 ///
 /// - Parameters:
-///   - consentData: the consent data containing use cases and solutions.
+///   - presentmentData: the presentment data containing use cases and solutions.
 ///   - requester: the relying party which is requesting the data.
 ///   - trustedRequesterIdentity: the identity of the trusted requester, if any.
 ///   - preselectedDocuments: list of documents that should be preselected.
@@ -510,27 +510,27 @@ private enum ConsentDestinations: Hashable {
 ///   - onCancel: callback when the user presses the Cancel button.
 public struct Consent: View {
     let maxHeight: CGFloat
-    let consentData: ConsentData
+    let presentmentData: PresentmentData
     let requester: Requester
     let trustedRequesterIdentity: TrustedRequesterIdentity?
     let preselectedDocuments: [Document]
     let transactionDataRendererRepository: TransactionDataRendererRepository?
     let onDocumentsInFocus: ((_ documents: [Document]) -> Void)?
-    let onConfirm: (_: CredentialSelection) -> Void
+    let onConfirm: (_: PresentmentSelection) -> Void
     let onCancel: () -> Void
 
     public init(
-        consentData: ConsentData,
+        presentmentData: PresentmentData,
         requester: Requester,
         trustedRequesterIdentity: TrustedRequesterIdentity?,
         preselectedDocuments: [Document] = [],
         maxHeight: CGFloat = .infinity,
         transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
         onDocumentsInFocus: ((_ documents: [Document]) -> Void)? = nil,
-        onConfirm: @escaping (_: CredentialSelection) -> Void,
+        onConfirm: @escaping (_: PresentmentSelection) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self.consentData = consentData
+        self.presentmentData = presentmentData
         self.requester = requester
         self.trustedRequesterIdentity = trustedRequesterIdentity
         self.preselectedDocuments = preselectedDocuments
@@ -543,19 +543,19 @@ public struct Consent: View {
 
     @State private var path = NavigationPath()
     @State private var selections: [Int] = []
-    @State private var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]] = [:]
+    @State private var transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]] = [:]
     @State private var sheetHeight: CGFloat = 450
     @State private var transactionDetails: TransactionDetailsTarget? = nil
 
     private func getDocumentsForSelections(_ selections: [Int]) -> [Document] {
         var documents: [Document] = []
         for (useCaseIndex, solutionIndex) in selections.enumerated() {
-            if useCaseIndex < consentData.useCases.count && solutionIndex >= 0 {
-                let useCase = consentData.useCases[useCaseIndex]
+            if useCaseIndex < presentmentData.useCases.count && solutionIndex >= 0 {
+                let useCase = presentmentData.useCases[useCaseIndex]
                 if solutionIndex < useCase.solutions.count {
                     let solution = useCase.solutions[solutionIndex]
-                    for credential in solution.credentials {
-                        let doc = credential.match.credential.document
+                    for match in solution.matches {
+                        let doc = match.credential.document
                         if !documents.contains(where: { $0.identifier == doc.identifier }) {
                             documents.append(doc)
                         }
@@ -568,8 +568,8 @@ public struct Consent: View {
 
     private func getInitialSelections(preselectedDocuments: [Document]) -> [Int] {
         var result: [Int] = []
-        for i in 0..<consentData.useCases.count {
-            let useCase = consentData.useCases[i]
+        for i in 0..<presentmentData.useCases.count {
+            let useCase = presentmentData.useCases[i]
             if preselectedDocuments.isEmpty {
                 result.append(useCase.solutions.count > 0 ? 0 : -1)
             } else {
@@ -577,10 +577,10 @@ public struct Consent: View {
                 var matchingIndex = -1
                 for j in 0..<useCase.solutions.count {
                     let solution = useCase.solutions[j]
-                    if solution.credentials.count > 0 {
+                    if solution.matches.count > 0 {
                         var allMatch = true
-                        for k in 0..<solution.credentials.count {
-                            let doc = solution.credentials[k].match.credential.document
+                        for k in 0..<solution.matches.count {
+                            let doc = solution.matches[k].credential.document
                             if !preselectedSet.contains(doc) {
                                 allMatch = false
                                 break
@@ -617,7 +617,7 @@ public struct Consent: View {
                 } else {
                     ConsentMain(
                         maxHeight: maxHeight,
-                        consentData: consentData,
+                        presentmentData: presentmentData,
                         rpName: rpName,
                         requester: requester,
                         trustedRequesterIdentity: trustedRequesterIdentity,
@@ -668,7 +668,7 @@ public struct Consent: View {
                 case .pickSolution(let useCaseIndex):
                     PickSolutionView(
                         maxHeight: maxHeight,
-                        useCase: consentData.useCases[useCaseIndex],
+                        useCase: presentmentData.useCases[useCaseIndex],
                         currentSolutionIndex: selections[useCaseIndex],
                         onSolutionSelected: { solutionIndex in
                             selections[useCaseIndex] = solutionIndex
@@ -784,19 +784,19 @@ private struct PageHeightsKey: PreferenceKey {
 
 private struct ConsentMain: View {
     let maxHeight: CGFloat
-    let consentData: ConsentData
+    let presentmentData: PresentmentData
     let rpName: String
     let requester: Requester
     let trustedRequesterIdentity: TrustedRequesterIdentity?
     let transactionDataRendererRepository: TransactionDataRendererRepository?
     let selections: [Int]
-    @Binding var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
+    @Binding var transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]]
     @Binding var sheetHeight: CGFloat
     let isActive: Bool
     let onRequesterClicked: () -> Void
     let onNavigateToPickSolution: (Int) -> Void
     let onShowTransactionDetails: (TransactionDetailsTarget) -> Void
-    let onConfirm: (_: CredentialSelection) -> Void
+    let onConfirm: (_: PresentmentSelection) -> Void
     let onCancel: () -> Void
 
     private var trustMetadata: TrustMetadata? { trustedRequesterIdentity?.trustMetadata }
@@ -814,7 +814,7 @@ private struct ConsentMain: View {
         } content: {
             VStack {
                 VStack(spacing: 10) {
-                    ForEach(0..<consentData.useCases.count, id: \.self) { idx in
+                    ForEach(0..<presentmentData.useCases.count, id: \.self) { idx in
                         FloatingItemList {
                             UseCaseSection(
                                 rpName: rpName,
@@ -822,7 +822,7 @@ private struct ConsentMain: View {
                                 trustMetadata: trustMetadata,
                                 trustedRequesterIdentity: trustedRequesterIdentity,
                                 transactionDataRendererRepository: transactionDataRendererRepository,
-                                useCase: consentData.useCases[idx],
+                                useCase: presentmentData.useCases[idx],
                                 selectionIndex: selections[idx],
                                 transactionUserInput: transactionUserInput,
                                 onTransactionUserInputChanged: { match, typeId, input in
@@ -879,7 +879,7 @@ private struct ConsentMain: View {
                         if (!isAtBottom) {
                             scrollDown()
                         } else {
-                            onConfirm(consentData.toCredentialSelection(
+                            onConfirm(presentmentData.toPresentmentSelection(
                                 selections: selections.map { KotlinInt(int: Int32($0)) },
                                 transactionUserInput: transactionUserInput
                             ))
@@ -904,10 +904,10 @@ private struct UseCaseSection: View {
     let trustMetadata: TrustMetadata?
     let trustedRequesterIdentity: TrustedRequesterIdentity?
     let transactionDataRendererRepository: TransactionDataRendererRepository?
-    let useCase: ConsentUseCase
+    let useCase: PresentmentUseCase
     let selectionIndex: Int
-    let transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
-    let onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Void
+    let transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]]
+    let onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Void
     let onShowTransactionDetails: (TransactionDetailsTarget) -> Void
     let onNavigateToPickSolution: () -> Void
 
@@ -922,8 +922,8 @@ private struct UseCaseSection: View {
             
             Group {
                 if !isSelected {
-                    let firstCred = solution.credentials.first
-                    let typeDisplayName = firstCred?.match.credential.document.typeDisplayName ?? "Unknown Document"
+                    let firstMatch = solution.matches.first
+                    let typeDisplayName = firstMatch?.credential.document.typeDisplayName ?? "Unknown Document"
                     FloatingItemContainer {
                         HStack {
                             Image(systemName: "slash.circle")
@@ -947,9 +947,8 @@ private struct UseCaseSection: View {
                         .opacity(opacity)
                     }
                 } else {
-                    ForEach(0..<solution.credentials.count, id: \.self) { credIdx in
-                        let credential = solution.credentials[credIdx]
-                        let match = credential.match
+                    ForEach(0..<solution.matches.count, id: \.self) { credIdx in
+                        let match = solution.matches[credIdx]
                         
                         let retainedClaims = Array(match.claims.filter( {
                             if $0.value is MdocClaim {
@@ -984,8 +983,8 @@ private struct UseCaseSection: View {
                                 RequestedDocumentSection(
                                     rpName: rpName,
                                     requester: requester,
-                                    encryptionRequested: credential.encryptionRequested,
-                                    encryptionTargetTrustMetadata: credential.encryptionTargetTrustMetadata,
+                                    encryptionRequested: match.encryptionRequested,
+                                    encryptionTargetTrustMetadata: match.encryptionTargetTrustMetadata,
                                     document: match.credential.document,
                                     retainedClaims: retainedClaims,
                                     notRetainedClaims: notRetainedClaims,
@@ -1016,7 +1015,7 @@ private struct UseCaseSection: View {
 
 private struct PickSolutionView: View {
     let maxHeight: CGFloat
-    let useCase: ConsentUseCase
+    let useCase: PresentmentUseCase
     let currentSolutionIndex: Int
     let onSolutionSelected: (Int) -> Void
 
@@ -1027,20 +1026,20 @@ private struct PickSolutionView: View {
                 ForEach(0..<useCase.solutions.count, id: \.self) { idx in
                     let solution = useCase.solutions[idx]
                     FloatingItemList {
-                        ForEach(0..<solution.credentials.count, id: \.self) { credIdx in
-                            let credential = solution.credentials[credIdx]
+                        ForEach(0..<solution.matches.count, id: \.self) { credIdx in
+                            let match = solution.matches[credIdx]
                             FloatingItemContainer {
                                 HStack {
-                                    Image(uiImage: credential.match.credential.document.renderCardArt())
+                                    Image(uiImage: match.credential.document.renderCardArt())
                                         .resizable()
                                         .scaledToFit()
                                         .frame(height: 40)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(credential.match.credential.document.displayName ?? "Unknown Document")
+                                        Text(match.credential.document.displayName ?? "Unknown Document")
                                             .font(.body)
                                             .fontWeight(.medium)
-                                        if let type = credential.match.credential.document.typeDisplayName {
+                                        if let type = match.credential.document.typeDisplayName {
                                             Text(type)
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)

@@ -2,7 +2,7 @@ import SwiftUI
 
 private struct ConsentPromptDialogData: Identifiable, Equatable {
     let id = UUID()
-    let state: PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>
+    let state: PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection>
 }
 
 struct ConsentPromptDialog: View {
@@ -18,10 +18,10 @@ struct ConsentPromptDialog: View {
         VStack {}
             .task {
                 for await state in model.dialogState {
-                    if state is PromptDialogModelNoDialogState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection> {
+                    if state is PromptDialogModelNoDialogState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection> {
                         data = nil
-                    } else if state is PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection> {
-                        data = ConsentPromptDialogData(state: state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>)
+                    } else if state is PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection> {
+                        data = ConsentPromptDialogData(state: state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection>)
                     }
                 }
             }
@@ -32,7 +32,7 @@ struct ConsentPromptDialog: View {
             }
             .sheet(item: $data) { data in
                 Consent(
-                    consentData: data.state.parameters!.consentData,
+                    presentmentData: data.state.parameters!.presentmentData,
                     requester: data.state.parameters!.requester,
                     trustedRequesterIdentity: data.state.parameters!.trustedRequesterIdentity,
                     preselectedDocuments: data.state.parameters!.preselectedDocuments,

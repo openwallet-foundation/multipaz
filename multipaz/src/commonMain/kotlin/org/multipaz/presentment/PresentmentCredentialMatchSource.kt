@@ -6,22 +6,22 @@ import org.multipaz.openid.dcql.DcqlCredentialQuery
 /**
  * Base class for source of a match.
  */
-sealed class CredentialMatchSource
+sealed class PresentmentCredentialMatchSource
 
 /**
  * OpenID4VP version for the source of a match.
  *
  * @property credentialQuery The [DcqlCredentialQuery] which was used for this match.
  */
-data class CredentialMatchSourceOpenID4VP(
+data class PresentmentCredentialMatchSourceOpenID4VP(
     val credentialQuery: DcqlCredentialQuery
-): CredentialMatchSource()
+): PresentmentCredentialMatchSource()
 
 /**
  * ISO 18013-5 version for the source of a match.
  *
  * @property docRequest The [DocRequest] which was used for this match.
  */
-data class CredentialMatchSourceIso18013(
+data class PresentmentCredentialMatchSourceIso18013(
     val docRequest: DocRequest
-): CredentialMatchSource()
+): PresentmentCredentialMatchSource()

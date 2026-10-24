@@ -127,49 +127,49 @@ class TestMdlAndPid {
         addPidErika(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
-                  credentialSet:
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: given_name
+                                  value: Erika
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: address.street_address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             mdlAndPidQuery().execute(
                 presentmentSource = harness.presentmentSource

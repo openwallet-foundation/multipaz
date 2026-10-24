@@ -17,7 +17,11 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.response.Iso18015ResponseException
+import org.multipaz.mdoc.request.DeviceRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.UseCase
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
@@ -258,13 +262,12 @@ class CredentialQueryResultTest {
         )
 
         val result = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        assertEquals(1, result.credentialSets[0].options.size)
-        assertEquals(1, result.credentialSets[0].options[0].members.size)
-        val member = result.credentialSets[0].options[0].members[0]
-        assertEquals(1, member.matches.size)
-        assertEquals(1, member.matches[0].transactionData.size)
-        assertEquals(PingTransaction, member.matches[0].transactionData[0].type)
+        assertEquals(1, result.useCases.size)
+        assertEquals(1, result.useCases[0].solutions.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        assertEquals(1, solution.matches[0].transactionData.size)
+        assertEquals(PingTransaction, solution.matches[0].transactionData[0].type)
     }
 
     private object DummyPaymentTransaction: TransactionType<String>(
@@ -426,10 +429,70 @@ class CredentialQueryResultTest {
         )
 
         val result = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        val member = result.credentialSets[0].options[0].members[0]
-        assertEquals(1, member.matches.size)
-        assertEquals(1, member.matches[0].transactionData.size)
-        assertEquals(PaymentTransaction, member.matches[0].transactionData[0].type)
+        assertEquals(1, result.useCases.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        assertEquals(1, solution.matches[0].transactionData.size)
+        assertEquals(PaymentTransaction, solution.matches[0].transactionData[0].type)
+    }
+
+    @Test
+    fun testPurposeHints() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdl_with_AgeOver_AgeInYears_BirthDate(harness)
+
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("session"); add("transcript") },
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = mapOf("org.iso.jtc1.sc17" to 3)
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "age_over_18" to false
+                    )
+                )
+            )
+        }
+
+        val presentmentData = deviceRequest.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(
+            listOf(PresentmentPurposeHintIso18013("org.iso.jtc1.sc17", 3)),
+            presentmentData.useCases[0].purposeHints
+        )
+        assertEquals(
+            """
+                useCases:
+                  useCase:
+                    optional: false
+                    purposeHints:
+                      iso18013: org.iso.jtc1.sc17 -> 3
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: age_over_18
+                                  displayName: Older than 18 years
+                                  value: True
+            """.trimIndent() + "\n",
+            presentmentData.prettyPrint()
+        )
     }
 }

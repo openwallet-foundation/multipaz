@@ -11,7 +11,7 @@ final class RequestAuthorizationViewModel: ObservableObject {
     @Published var isLoading: Bool = true
 
     var source: PresentmentSource!
-    var consentData: ConsentData!
+    var presentmentData: PresentmentData!
     var requester: Requester!
     var trustedRequesterIdentity: TrustedRequesterIdentity? = nil
 
@@ -63,14 +63,10 @@ final class RequestAuthorizationViewModel: ObservableObject {
                         )
                     }
                 )
-                let credentialQueryResult = try await request.getCredentialQueryResult(
-                    source: source,
+                presentmentData = try await request.execute(
+                    presentmentSource: source,
                     keyAgreementPossible: [],
                     requesterIdentities: requesterIdentities
-                )
-                consentData = try await ConsentData.companion.fromCredentialQueryResult(
-                    credentialQueryResult: credentialQueryResult,
-                    source: source
                 )
             }
             Logger.shared.d(
@@ -118,7 +114,7 @@ public struct RequestAuthorizationView : View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Consent(
-                    consentData: viewModel.consentData,
+                    presentmentData: viewModel.presentmentData,
                     requester: viewModel.requester,
                     trustedRequesterIdentity: viewModel.trustedRequesterIdentity,
                     maxHeight: .infinity,

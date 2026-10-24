@@ -129,29 +129,29 @@ class TestSingleMdlQuery {
         // Checks we get one match with one matching credential
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             singleMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -168,44 +168,49 @@ class TestSingleMdlQuery {
         // Checks we get two matches with two matching credentials
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 456
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 456
             """.trimIndent().trim(),
             singleMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -222,29 +227,29 @@ class TestSingleMdlQuery {
         // Checks we get one match with one matching credential if the other mDL lacks the resident_address claim
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             singleMdlQuery().execute(
                 presentmentSource = harness.presentmentSource

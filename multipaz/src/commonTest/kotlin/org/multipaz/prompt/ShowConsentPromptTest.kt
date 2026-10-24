@@ -10,8 +10,8 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
-import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.request.Requester
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -22,7 +22,7 @@ class ShowConsentPromptTest {
 
     private class TestRenderer : TransactionDataRenderer()
 
-    private suspend fun consentData(): ConsentData {
+    private suspend fun presentmentData(): PresentmentData {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
         harness.provisionMdoc(
@@ -53,10 +53,7 @@ class ShowConsentPromptTest {
                 }
             """.trimIndent()
         )
-        return ConsentData.fromCredentialQueryResult(
-            credentialQueryResult = deviceRequest.execute(presentmentSource = harness.presentmentSource),
-            source = harness.presentmentSource
-        )
+        return deviceRequest.execute(presentmentSource = harness.presentmentSource)
     }
 
     // Binds a mock consent UI which records each request and confirms it with the preselected documents.
@@ -70,7 +67,7 @@ class ShowConsentPromptTest {
                 if (state is PromptDialogModel.DialogShownState) {
                     requests.add(state.parameters)
                     state.resultChannel.send(
-                        state.parameters.consentData.credentialQueryResult.select(state.parameters.preselectedDocuments)
+                        state.parameters.presentmentData.select(state.parameters.preselectedDocuments)
                     )
                 }
             }
@@ -90,7 +87,7 @@ class ShowConsentPromptTest {
             promptModelRequestConsent(
                 requester = Requester(origin = "https://verifier.example.com"),
                 trustedRequesterIdentity = null,
-                consentData = consentData(),
+                presentmentData = presentmentData(),
                 preselectedDocuments = emptyList(),
                 onDocumentsInFocus = {},
                 transactionDataRendererRepository = repository,
@@ -110,7 +107,7 @@ class ShowConsentPromptTest {
             promptModelRequestConsent(
                 requester = Requester(origin = "https://verifier.example.com"),
                 trustedRequesterIdentity = null,
-                consentData = consentData(),
+                presentmentData = presentmentData(),
                 preselectedDocuments = emptyList(),
                 onDocumentsInFocus = {},
             )

@@ -619,7 +619,7 @@ class MdocFaceMatchingTest {
         }
 
         val queryResult = deviceRequest.execute(source)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(match.faceMatchNeeded)
         val chv1ClaimKey = match.claims.keys.find {
             it is MdocRequestedClaim && it.namespaceName == ISO_23220_5_CHV_1_NAMESPACE && it.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
@@ -715,7 +715,7 @@ class MdocFaceMatchingTest {
         }
 
         val queryResult = deviceRequest.execute(source)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(!match.faceMatchNeeded)
         val chv1ClaimKey = match.claims.keys.find {
             it is MdocRequestedClaim && it.namespaceName == ISO_23220_5_CHV_1_NAMESPACE && it.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
@@ -807,7 +807,7 @@ class MdocFaceMatchingTest {
         }
 
         val queryResult = deviceRequest.execute(source)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(!match.faceMatchNeeded)
         val portraitClaimKey = match.claims.keys.find {
             it is MdocRequestedClaim && it.namespaceName == DrivingLicense.MDL_NAMESPACE && it.dataElementName == "portrait"
@@ -897,7 +897,7 @@ class MdocFaceMatchingTest {
         }
 
         val queryResult = deviceRequest.execute(source)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(!match.faceMatchNeeded)
         val portraitClaimKey = match.claims.keys.find {
             it is MdocRequestedClaim && it.namespaceName == DrivingLicense.MDL_NAMESPACE && it.dataElementName == "portrait"
@@ -973,7 +973,7 @@ class MdocFaceMatchingTest {
         }
 
         val queryResult = deviceRequest.execute(source)
-        val match = queryResult.credentialSets[0].options[0].members[0].matches[0]
+        val match = queryResult.useCases[0].solutions[0].matches[0]
         assertTrue(match.faceMatchNeeded)
 
         val (dr, _) = withContext(promptModel) {

@@ -1335,14 +1335,14 @@ class MdocNfcServiceTest {
         val source = SimplePresentmentSource(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
-            showConsentPromptFn = { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus ->
+            showConsentPromptFn = { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
                 fixture.consentPromptCalls += 1
                 fixture.consentPromptShown.complete(Unit)
                 fixture.approveConsent.await()
                 promptModelSilentConsent(
                     requester = requester,
                     trustedRequesterIdentity = trustedRequesterIdentity,
-                    consentData = consentData,
+                    presentmentData = presentmentData,
                     preselectedDocuments = preselectedDocuments,
                     onDocumentsInFocus = onDocumentsInFocus,
                 )
