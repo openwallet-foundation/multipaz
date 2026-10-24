@@ -1,6 +1,8 @@
 package org.multipaz.mdoc.nfc
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
@@ -11,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -26,10 +30,12 @@ import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
+import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
 import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcIsoTag
+import org.multipaz.nfc.NfcTagLostException
 import org.multipaz.nfc.ResponseApdu
 import org.multipaz.util.Constants
 import org.multipaz.util.UUID
@@ -37,12 +43,14 @@ import org.multipaz.util.fromHex
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "MdocNfcV2EngagementHelperTest"
 
@@ -55,17 +63,25 @@ class MdocNfcV2EngagementHelperTest {
     // Provides access to MdocNfcV2EngagementHelper via NfcIsoTag abstraction
     class LoopbackIsoTag(val engagementHelper: MdocNfcV2EngagementHelper): NfcIsoTag() {
         val transcript = StringBuilder()
+        var failNextTransceive = false
+        var closeCount = 0
+        val closedDeferred = CompletableDeferred<Unit>()
 
         override val maxTransceiveLength: Int
             get() = 65536
 
         override suspend fun close() {
+            closeCount++
             transcript.appendLine("close")
+            closedDeferred.complete(Unit)
         }
 
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
+            if (failNextTransceive) {
+                throw NfcTagLostException("Tag was lost during transceive")
+            }
             transcript.appendLine("$command")
             val response = engagementHelper.processApdu(command)
             transcript.appendLine("$response")
@@ -160,7 +176,19 @@ class MdocNfcV2EngagementHelperTest {
         val sessionTermination = SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
 
         mdocReaderTransport.sendMessage(sessionTermination)
+        // Calling close() twice immediately after sending session termination (as reader flows do via try/finally)
+        // must not close the tag prematurely before the 500ms grace period delivers the termination APDU.
+        mdocReaderTransport.close()
+        mdocReaderTransport.close()
+        assertEquals(0, tag.closeCount)
         assertContentEquals(sessionTermination, mdocTransport.waitForMessage())
+        withContext(Dispatchers.Default) {
+            withTimeout(5.seconds) {
+                tag.closedDeferred.await()
+            }
+        }
+        assertEquals(1, tag.closeCount)
+        mdocTransport.close()
 
         assertEquals(
             """
@@ -171,6 +199,7 @@ class MdocNfcV2EngagementHelperTest {
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65530)
                 ResponseApdu(status=36864, payload=ByteString(size=13 hex=530ba164646174614401020304))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65530)
+                close
             """.trimIndent().trim(),
             tag.transcript.toString().trim()
         )
@@ -199,6 +228,7 @@ class MdocNfcV2EngagementHelperTest {
         }
 
         override suspend fun open(eSenderKey: EcPublicKey) {
+            mutableState.value = State.CONNECTED
         }
 
         override suspend fun sendMessage(message: ByteArray) {
@@ -696,6 +726,182 @@ class MdocNfcV2EngagementHelperTest {
         val cm = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
         assertEquals(mdocUuid, cm.peripheralServerModeUuid)
         assertNull(cm.centralClientModeUuid)
+    }
+
+    @Test
+    fun testTagClosedOnNfcDisconnectWithBleFallback() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val eReaderKey = getEReaderKey()
+
+        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
+        lateinit var mdocTransport: NfcHybridTransportMdoc
+
+        val methods = listOf(
+            MdocConnectionMethodBle(
+                supportsPeripheralServerMode = false,
+                supportsCentralClientMode = true,
+                peripheralServerModeUuid = null,
+                centralClientModeUuid = UUID(1UL, 2UL),
+                peripheralServerModePsm = 192,
+                peripheralServerModeMacAddress = null
+            )
+        )
+
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _ -> },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            handoverPicker = { connectionMethods ->
+                connectionMethods[1]
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = methods,
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(0, tag.closeCount)
+
+        val mdocToReader = Channel<ByteString>(Channel.UNLIMITED)
+        val readerToMdoc = Channel<ByteString>(Channel.UNLIMITED)
+
+        val bleMdocReaderTransport = LoopbackTransport(
+            role = MdocRole.MDOC_READER,
+            connectionMethod = methods[0],
+            incomingMessages = mdocToReader,
+            outgoingMessages = readerToMdoc
+        )
+
+        val bleMdocTransport = LoopbackTransport(
+            role = MdocRole.MDOC,
+            connectionMethod = methods[0],
+            incomingMessages = readerToMdoc,
+            outgoingMessages = mdocToReader
+        )
+
+        mdocReaderTransport = NfcHybridTransportMdocReader(
+            nfcTag = tag,
+            negotiatedTransport = bleMdocReaderTransport
+        )
+        mdocReaderTransport.open(eReaderKey.publicKey)
+
+        mdocTransport = NfcHybridTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.setTransport(bleMdocTransport)
+
+        // Simulate the holder leaving the NFC field before DeviceRequest is sent.
+        tag.failNextTransceive = true
+
+        val request = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(1, 2, 3)))
+        })
+        mdocReaderTransport.sendMessage(request)
+
+        // The NFC tag must be closed immediately upon NFC transceive failure, before the BLE transaction completes.
+        withContext(Dispatchers.Default) {
+            withTimeout(5.seconds) {
+                tag.closedDeferred.await()
+            }
+        }
+        assertEquals(1, tag.closeCount)
+        assertTrue(mdocReaderTransport.stats.nfcDisconnectedDuringTransaction)
+
+        // Meanwhile, the transaction continues and succeeds over BLE.
+        assertContentEquals(request, mdocTransport.waitForMessage())
+        val response = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(1, 2, 3, 4)))
+        })
+        mdocTransport.sendMessage(response)
+        assertContentEquals(response, mdocReaderTransport.waitForMessage())
+
+        // Closing the hybrid transport afterwards must be idempotent and not close the tag a second time.
+        mdocReaderTransport.close()
+        assertEquals(1, tag.closeCount)
+        assertEquals(MdocTransport.State.CLOSED, mdocReaderTransport.state.value)
+        mdocTransport.close()
+    }
+
+    @Test
+    fun testTagClosedOnNfcDisconnectWithoutBle() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val eReaderKey = getEReaderKey()
+
+        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
+        lateinit var mdocTransport: NfcHybridTransportMdoc
+
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _ -> },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            handoverPicker = { connectionMethods ->
+                connectionMethods.first()
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = emptyList(),
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(0, tag.closeCount)
+
+        mdocReaderTransport = NfcHybridTransportMdocReader(
+            nfcTag = tag,
+            negotiatedTransport = null
+        )
+        mdocReaderTransport.open(eReaderKey.publicKey)
+
+        mdocTransport = NfcHybridTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(eDeviceKey.publicKey)
+
+        tag.failNextTransceive = true
+
+        val request = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(1, 2, 3)))
+        })
+        mdocReaderTransport.sendMessage(request)
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5.seconds) {
+                tag.closedDeferred.await()
+            }
+        }
+        assertEquals(1, tag.closeCount)
+
+        assertFailsWith<MdocTransportException> {
+            mdocReaderTransport.waitForMessage()
+        }
+        assertEquals(MdocTransport.State.FAILED, mdocReaderTransport.state.value)
+
+        // Calling close() after failure must be idempotent and not close the tag a second time.
+        mdocReaderTransport.close()
+        assertEquals(1, tag.closeCount)
+        mdocTransport.close()
     }
 }
 

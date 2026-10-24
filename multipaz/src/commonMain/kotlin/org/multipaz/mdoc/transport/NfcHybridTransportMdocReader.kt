@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
@@ -75,7 +77,20 @@ class NfcHybridTransportMdocReader(
     }
 
     private val mutex = Mutex()
+    private val tagMutex = Mutex()
+    private var tagClosed = false
     private var ioJob: Job? = null
+
+    private suspend fun closeTag() {
+        tagMutex.withLock {
+            if (!tagClosed) {
+                tagClosed = true
+                withContext(NonCancellable) {
+                    nfcTag.close()
+                }
+            }
+        }
+    }
     private val writingQueue = Channel<ByteString>(Channel.UNLIMITED)
     private val incomingMessages = Channel<ByteString>(Channel.UNLIMITED)
 
@@ -183,10 +198,13 @@ class NfcHybridTransportMdocReader(
                     Logger.i(TAG, "Received message over NFC of length ${responseMessage.size}")
                     conveyMessage(responseMessage, true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 if (negotiatedTransport != null) {
                     Logger.w(TAG, "Error while transacting on NFC - continuing on non-NFC transport", e)
                     nfcNotAvailable = true
+                    closeTag()
                 } else {
                     mutex.withLock {
                         failTransport(e)
@@ -225,7 +243,9 @@ class NfcHybridTransportMdocReader(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
-            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
+            check(_state.value == State.CONNECTED || _state.value == State.FAILED) {
+                "Expected state CONNECTED or FAILED, got ${_state.value}"
+            }
         }
         try {
             return incomingMessages.receive().toByteArray()
@@ -245,36 +265,35 @@ class NfcHybridTransportMdocReader(
 
     override suspend fun close() {
         mutex.withLock {
-            if (_state.value == State.CLOSED) {
+            if (_state.value == State.CLOSED || _state.value == State.FAILED) {
                 return
             }
-        }
-        mutex.withLock {
             // Wait 500ms with canceling the I/O job to give the last sent message a chance to be sent. This
             // is very common because a mdoc reader typically receives a response, then sends session a termination
             // message, and then immediately closes the connection.
-            val tag = nfcTag
-            ioJob?.let {
+            val job = ioJob
+            if (job != null && !nfcNotAvailable) {
                 CoroutineScope(Dispatchers.Default).launch {
                     delay(500.milliseconds)
-                    it.cancel()
-                    tag.close()
+                    job.cancel()
+                    closeTag()
                 }
-            } ?: tag.close()
+            } else {
+                job?.cancel()
+                closeTag()
+            }
             ioJob = null
             incomingMessages.close()
             negotiatedTransportOpenJob?.cancel()
             negotiatedTransportOpenJob = null
             negotiatedTransport?.close()
-            if (_state.value != State.FAILED) {
-                _state.value = State.CLOSED
-            }
+            _state.value = State.CLOSED
         }
     }
 
     private var inError = false
 
-    private fun failTransport(error: Throwable) {
+    private suspend fun failTransport(error: Throwable) {
         check(mutex.isLocked) { "failTransport called without holding lock" }
         inError = true
         if (_state.value == State.FAILED || _state.value == State.CLOSED) {
@@ -284,6 +303,7 @@ class NfcHybridTransportMdocReader(
         incomingMessages.close(error)
         ioJob?.cancel()
         ioJob = null
+        closeTag()
         incomingMessages.close()
         _state.value = State.FAILED
     }

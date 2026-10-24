@@ -29,8 +29,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import org.multipaz.compose.rememberUiBoundCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -191,7 +191,7 @@ fun IsoMdocProximityReadingScreen(
     val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.readerIssuerIdentifiers.value) }
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
-    val coroutineScope = rememberCoroutineScope { app.promptModel }
+    val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
     val readerShowQrScanner = remember { mutableStateOf(false) }
     val readerTransport = remember { mutableStateOf<MdocTransport?>(null) }
     val readerSessionEncryption = remember { mutableStateOf<SessionEncryption?>(null) }
@@ -658,7 +658,11 @@ fun IsoMdocProximityReadingScreen(
                             Logger.i(TAG, "nfcScanOptions: $nfcScanOptions")
                             val reader =  readerSelected.value.getNfcTagReader()
                             val scanResult = reader.scanMdocReader(
-                                message = "Hold near credential holder's phone.",
+                                message = if (reader.external) {
+                                    "Hold credential holder's phone near the external NFC reader."
+                                } else {
+                                    "Hold near credential holder's phone."
+                                },
                                 options = MdocTransportOptions(
                                     bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                     bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value
@@ -912,7 +916,11 @@ private suspend fun doReaderFlow(
         )
         if (transport is NfcTransportMdocReader) {
             nfcTagReader!!.scan(
-                message = "QR engagement with NFC Data Transfer. Move into NFC field of the mdoc",
+                message = if (nfcTagReader.external) {
+                    "QR engagement with NFC Data Transfer. Hold credential holder's phone near the external NFC reader."
+                } else {
+                    "QR engagement with NFC Data Transfer. Move into NFC field of the mdoc"
+                },
                 tagInteractionFunc = { tag ->
                     transport.setTag(tag)
                     doReaderFlowWithTransport(

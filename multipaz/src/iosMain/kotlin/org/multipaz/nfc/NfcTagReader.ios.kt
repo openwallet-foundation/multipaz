@@ -132,9 +132,6 @@ private object NfcTagReaderIos: NfcTagReader {
     override val dialogAlwaysShown: Boolean
         get() = true
 
-    override val dialogNeverShown: Boolean
-        get() = false
-
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,

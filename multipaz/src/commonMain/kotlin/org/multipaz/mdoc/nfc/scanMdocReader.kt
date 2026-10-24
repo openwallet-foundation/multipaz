@@ -29,8 +29,12 @@ private const val TAG = "scanMdocReader"
  * instance is returned with the transport, device engagement, handover, and the time spent exchanging APDUs
  * with the remote mdoc.
  *
+ * Make sure to launch this from a coroutine which is properly bound to the UI, see
+ * [org.multipaz.context.UiContext] for details, and include [org.multipaz.prompt.PromptModel] in the
+ * coroutine context if a prompt dialog should be shown when [message] is non-null.
+ *
  * @param message the message to display in the NFC tag scanning dialog or `null` to not show a dialog. Not all
- *   platforms supports not showing a dialog, use [org.multipaz.nfc.nfcTagScanningSupportedWithoutDialog] to check at
+ *   platforms supports not showing a dialog, use [NfcTagReader.dialogAlwaysShown] to check at
  *   runtime if the platform supports this.
  * @param options the [MdocTransportOptions] used to create new [MdocTransport] instances.
  * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control handover behavior.
@@ -81,8 +85,12 @@ suspend fun NfcTagReader.scanMdocReader(
  * the NFC scanning dialog is dismissed immediately upon first tap handover, and [onHandover] is executed
  * after the dialog has been removed.
  *
+ * Make sure to launch this from a coroutine which is properly bound to the UI, see
+ * [org.multipaz.context.UiContext] for details, and include [org.multipaz.prompt.PromptModel] in the
+ * coroutine context if a prompt dialog should be shown when [message] is non-null.
+ *
  * @param message the message to display in the NFC tag scanning dialog or `null` to not show a dialog. Not all
- *   platforms support not showing a dialog, use [org.multipaz.nfc.nfcTagScanningSupportedWithoutDialog] to check at
+ *   platforms support not showing a dialog, use [NfcTagReader.dialogAlwaysShown] to check at
  *   runtime if the platform supports this.
  * @param options the [MdocTransportOptions] used to create new [MdocTransport] instances.
  * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control handover behavior.

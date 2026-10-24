@@ -16,6 +16,7 @@ private const val TAG = "NfcTagReaderUsb"
 
 private class NfcIsoTagUsb(
     private val driver: CcidDriver,
+    private val updateMessage: (message: String) -> Unit
 ): NfcIsoTag() {
     override val maxTransceiveLength: Int
         get() = driver.maxCommandLength
@@ -36,6 +37,7 @@ private class NfcIsoTagUsb(
     }
 
     override suspend fun updateDialogMessage(message: String) {
+        updateMessage(message)
     }
 
 }
@@ -50,9 +52,6 @@ internal class NfcTagReaderUsb(
 
     override val dialogAlwaysShown: Boolean
         get() = false
-
-    override val dialogNeverShown: Boolean
-        get() = true
 
     /**
      * Scans for an NFC tag using the USB CCID reader and executes [tagInteractionFunc].
@@ -79,60 +78,67 @@ internal class NfcTagReaderUsb(
         )
         driver.connect()
         try {
-            val result = suspendCancellableCoroutine<T> { continuation ->
-                var readJob: Job? = null
+            return scanNfcWithPromptDialog(message) { updateMessage, resetMessage ->
+                suspendCancellableCoroutine { continuation ->
+                    var readJob: Job? = null
 
-                val listener = object : CcidDriverListener {
-                    override fun onCardInserted() {
-                        Logger.i(TAG, "Card inserted")
-                        if (readJob == null) {
-                            readJob = CoroutineScope(context).launch {
-                                val tag = NfcIsoTagUsb(driver = driver)
-                                try {
-                                    val funcResult = tagInteractionFunc(tag)
-                                    if (funcResult != null) {
+                    val listener = object : CcidDriverListener {
+                        override fun onCardInserted() {
+                            Logger.i(TAG, "Card inserted")
+                            if (readJob == null) {
+                                readJob = CoroutineScope(context).launch {
+                                    val tag = NfcIsoTagUsb(
+                                        driver = driver,
+                                        updateMessage = updateMessage
+                                    )
+                                    try {
+                                        val funcResult = tagInteractionFunc(tag)
+                                        if (funcResult != null) {
+                                            if (continuation.isActive) {
+                                                continuation.resume(funcResult)
+                                            }
+                                        } else {
+                                            resetMessage()
+                                        }
+                                    } catch (e: NfcTagLostException) {
+                                        // This is to properly handle emulated tags - such as on Android - which may be showing
+                                        // disambiguation UI if multiple applications have registered for the same AID.
+                                        resetMessage()
+                                        Logger.w(TAG, "Tag lost", e)
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException) throw e
                                         if (continuation.isActive) {
-                                            continuation.resume(funcResult)
+                                            continuation.resumeWithException(e)
                                         }
                                     }
-                                } catch (e: NfcTagLostException) {
-                                    // This is to properly handle emulated tags - such as on Android - which may be showing
-                                    // disambiguation UI if multiple applications have registered for the same AID.
-                                    Logger.w(TAG, "Tag lost", e)
-                                } catch (e: Exception) {
-                                    if (e is CancellationException) throw e
-                                    if (continuation.isActive) {
-                                        continuation.resumeWithException(e)
-                                    }
+                                    readJob = null
                                 }
-                                readJob = null
                             }
+                        }
+
+                        override fun onCardRemoved() {
+                            Logger.i(TAG, "Card removed")
                         }
                     }
 
-                    override fun onCardRemoved() {
-                        Logger.i(TAG, "Card removed")
+                    driver.setListener(listener = listener)
+
+                    try {
+                        val status = driver.getCardStatus()
+                        if (status == CardStatus.PRESENT_ACTIVE || status == CardStatus.PRESENT_INACTIVE) {
+                            listener.onCardInserted()
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Logger.w(TAG, "Failed to query initial card status", e)
                     }
-                }
 
-                driver.setListener(listener = listener)
-
-                try {
-                    val status = driver.getCardStatus()
-                    if (status == CardStatus.PRESENT_ACTIVE || status == CardStatus.PRESENT_INACTIVE) {
-                        listener.onCardInserted()
+                    continuation.invokeOnCancellation {
+                        readJob?.cancel()
+                        driver.disconnect()
                     }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Logger.w(TAG, "Failed to query initial card status", e)
-                }
-
-                continuation.invokeOnCancellation {
-                    readJob?.cancel()
-                    driver.disconnect()
                 }
             }
-            return result
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw e

@@ -9,6 +9,8 @@ import org.multipaz.util.Logger
 import platform.CoreNFC.NFCISO7816APDU
 import platform.CoreNFC.NFCISO7816TagProtocol
 import platform.CoreNFC.NFCErrorDomain
+import platform.CoreNFC.NFCReaderTransceiveErrorTagConnectionLost
+import platform.CoreNFC.NFCReaderTransceiveErrorTagNotConnected
 import platform.CoreNFC.NFCReaderTransceiveErrorTagResponseError
 import platform.CoreNFC.NFCTagReaderSession
 import kotlin.coroutines.resumeWithException
@@ -54,8 +56,11 @@ internal class NfcIsoTagIos(
             val apdu = NFCISO7816APDU(encodedCommand.toNSData())
             tag.sendCommandAPDU(apdu, { responseData, sw1, sw2, error ->
                 if (error != null) {
-                    val kotlinError = if (error.domain == NFCErrorDomain &&
-                        error.code == NFCReaderTransceiveErrorTagResponseError) {
+                    val kotlinError = if (error.domain == NFCErrorDomain && (
+                        error.code == NFCReaderTransceiveErrorTagConnectionLost ||
+                        error.code == NFCReaderTransceiveErrorTagResponseError ||
+                        error.code == NFCReaderTransceiveErrorTagNotConnected
+                    )) {
                         NfcTagLostException("Tag was lost during transceive", error.toKotlinError())
                     } else {
                         error.toKotlinError()

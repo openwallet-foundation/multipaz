@@ -21,18 +21,11 @@ interface NfcTagReader {
     val dialogAlwaysShown: Boolean
 
     /**
-     * If true, a system dialog is never shown when scanning.
-     *
-     * This is true for external NFC readers connected via e.g. USB or Bluetooth.
-     */
-    val dialogNeverShown: Boolean
-
-    /**
      * Scans a NFC tag.
      *
      * When a tag is in the field, [tagInteractionFunc] is called and is passed a [NfcIsoTag] which can be
      * used to communicate with the remote tag (using [NfcIsoTag.transceive]) and update the message shown in
-     * the dialog (using [NfcIsoTag.updateDialogMessage]. The latter is useful if the transaction is expected
+     * the dialog (using [NfcIsoTag.updateDialogMessage]). The latter is useful if the transaction is expected
      * to take a long time, for example if reading data from a passport this can be used to convey the progress.
      *
      * If the given [tagInteractionFunc] returns `null` then polling is restarted, the session is kept alive,
@@ -55,9 +48,13 @@ interface NfcTagReader {
      * This behavior is to properly handle emulated tags - such as on Android - which may be showing
      * disambiguation UI if multiple applications have registered for the same AID.
      *
-     * If the [message] parameter is `null` no user dialog is shown but everything else works as expected
-     * and scanning will continue until the view-model holding [org.multipaz.prompt.PromptModel] is cleared
-     * or programmatically dismissed by canceling the coroutine this is launched from.
+     * If the [message] parameter is `null` no user dialog is shown, or if no [org.multipaz.prompt.PromptModel]
+     * or prompt dialog UI is set up, scanning will still work without showing a dialog and will continue
+     * until a tag is scanned or programmatically dismissed by canceling the coroutine this is launched from.
+     *
+     * Make sure to launch this from a coroutine which is properly bound to the UI, see
+     * [org.multipaz.context.UiContext] for details, and include [org.multipaz.prompt.PromptModel] in the
+     * coroutine context if a prompt dialog should be shown when [message] is non-null.
      *
      * @param message the message to initially show in the dialog or `null` to not show a dialog. Not all
      *   platforms supports not showing a dialog, use [dialogAlwaysShown] to check at runtime

@@ -146,14 +146,15 @@ expect fun ImageBitmap.cropRotateScaleImage(
  * Like [androidx.compose.runtime.rememberCoroutineScope] but also makes a platform-specific UI context available in
  * the coroutine context.
  *
- * On Android this makes [org.multipaz.context.UiContext] available in the coroutine-context and
- * callers can use [org.multipaz.context.UiContext.Companion.current] to get a [android.content.Context]
- * object for which [android.content.Context.getActivity] will return the Activity the coroutine is bound to.
+ * On Android this makes [org.multipaz.context.AndroidUiContext] available in the coroutine context and
+ * callers can use `AndroidUiContext.current()` to get a [android.content.Context]
+ * object for which `Context.getActivity()` will return the `Activity` the coroutine is bound to.
  *
  * On iOS this is equivalent to [androidx.compose.runtime.rememberCoroutineScope].
  *
- * @param getContext optional context.
+ * @param getContext optional additional coroutine context elements (such as a [org.multipaz.prompt.PromptModel]).
  * @return the [CoroutineScope].
+ * @see org.multipaz.context.UiContext
  */
 @Composable
 expect fun rememberUiBoundCoroutineScope(

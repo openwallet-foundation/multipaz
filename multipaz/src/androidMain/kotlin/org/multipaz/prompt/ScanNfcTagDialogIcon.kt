@@ -1,7 +1,7 @@
 package org.multipaz.prompt
 
 /**
- * Constants used to convey which icon to show when using [UiViewAndroid.showScanNfcTagDialog].
+ * Constants used to convey which icon to show in [ScanNfcPromptDialogModel].
  */
 enum class ScanNfcTagDialogIcon {
     /** The user should initiate the NFC scanning procedure. */
