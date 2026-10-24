@@ -246,7 +246,7 @@ class NfcHybridTransportMdoc(
                     numSentViaNfc += 1
                 } else {
                     val e = MdocTransportException("Error sending on NFC after re-tap and no non-NFC transport is expected")
-                    mutex.lock {
+                    mutex.withLock {
                         failTransport(e)
                     }
                     throw e

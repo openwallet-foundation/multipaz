@@ -1,6 +1,5 @@
 package org.multipaz.mdoc.transport
 
-import kotlinx.coroutines.CancellationException
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -17,145 +16,68 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.os.Build
 import android.os.ParcelUuid
-import android.widget.Toast
 import androidx.annotation.RequiresApi
-import org.multipaz.cbor.Bstr
-import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.Tagged
-import org.multipaz.context.applicationContext
-import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
-import org.multipaz.util.Logger
-import org.multipaz.util.UUID
-import org.multipaz.util.toHex
-import org.multipaz.util.toJavaUuid
-import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.io.bytestring.ByteStringBuilder
-import kotlinx.io.bytestring.buildByteString
-import org.multipaz.crypto.Hkdf
-import org.multipaz.crypto.SecretKey
-import org.multipaz.util.appendByteArray
-import org.multipaz.util.appendUInt32
-import org.multipaz.util.getUInt32
-import java.io.InputStream
-import kotlin.compareTo
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.math.min
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
+import org.multipaz.context.applicationContext
+import org.multipaz.util.Logger
+import org.multipaz.util.UUID
+import org.multipaz.util.fromJavaUuid
+import org.multipaz.util.toJavaUuid
 import kotlin.time.Duration.Companion.seconds
 
-internal class BleCentralManagerAndroid : BleCentralManager {
+internal fun createBleCentralManagerAndroid(): BleCentralManager =
+    BleCentralManagerImpl(
+        hal = BleCentralHalAndroid(),
+    )
+
+internal class BluetoothSocketL2capChannel(
+    val socket: BluetoothSocket
+) : BleL2capChannel {
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        withContext(Dispatchers.IO) {
+            socket.inputStream.read(buffer, offset, length)
+        }
+
+    override suspend fun write(data: ByteArray) =
+        withContext(Dispatchers.IO) {
+            socket.outputStream.write(data)
+            socket.outputStream.flush()
+        }
+
+    override fun close() {
+        try {
+            socket.close()
+        } catch (_: Exception) {
+        }
+    }
+}
+
+internal class BleCentralHalAndroid : BleCentralHal {
     companion object {
-        private const val TAG = "BleCentralManagerAndroid"
+        private const val TAG = "BleCentralHalAndroid"
+        private val CLIENT_CHARACTERISTIC_CONFIG_UUID =
+            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb").toJavaUuid()
 
         @Volatile
         private var deferredCloseJob: Job? = null
         private var deferredCloseSocket: BluetoothSocket? = null
     }
 
-    private lateinit var stateCharacteristicUuid: UUID
-    private lateinit var client2ServerCharacteristicUuid: UUID
-    private lateinit var server2ClientCharacteristicUuid: UUID
-    private var identCharacteristicUuid: UUID? = null
-    private var l2capCharacteristicUuid: UUID? = null
-
-    override fun setUuids(
-        stateCharacteristicUuid: UUID,
-        client2ServerCharacteristicUuid: UUID,
-        server2ClientCharacteristicUuid: UUID,
-        identCharacteristicUuid: UUID?,
-        l2capUuid: UUID?,
-    ) {
-        this.stateCharacteristicUuid = stateCharacteristicUuid
-        this.client2ServerCharacteristicUuid = client2ServerCharacteristicUuid
-        this.server2ClientCharacteristicUuid = server2ClientCharacteristicUuid
-        this.identCharacteristicUuid = identCharacteristicUuid
-        this.l2capCharacteristicUuid = l2capUuid
-    }
-
-    private lateinit var onError: (error: Throwable) -> Unit
-    private lateinit var onClosed: () -> Unit
-
-    override fun setCallbacks(onError: (Throwable) -> Unit, onClosed: () -> Unit) {
-        this.onError = onError
-        this.onClosed = onClosed
-    }
-
-    internal enum class WaitState {
-        PERIPHERAL_DISCOVERED,
-        CONNECT_TO_PERIPHERAL,
-        REQUEST_MTU,
-        PERIPHERAL_DISCOVER_SERVICES,
-        GET_READER_IDENT,
-        GET_L2CAP_PSM,
-        WRITE_TO_DESCRIPTOR,
-        CHARACTERISTIC_WRITE_COMPLETED,
-    }
-
-    private data class WaitFor(
-        val state: WaitState,
-        val continuation: CancellableContinuation<Boolean>,
-    )
-
-    private var waitFor: WaitFor? = null
-
-    private fun setWaitCondition(
-        state: WaitState,
-        continuation: CancellableContinuation<Boolean>,
-    ) {
-        check(waitFor == null)
-        waitFor = WaitFor(
-            state,
-            continuation,
-        )
-        continuation.invokeOnCancellation {
-            if (waitFor?.continuation === continuation) {
-                waitFor = null
-            }
-        }
-    }
-
-    private fun clearWaitCondition() {
-        waitFor = null
-    }
-
-    private fun resumeWait() {
-        val continuation = waitFor!!.continuation
-        waitFor = null
-        continuation.resume(true)
-    }
-
-    private fun resumeWaitWithException(exception: Throwable) {
-        val continuation = waitFor!!.continuation
-        waitFor = null
-        continuation.resumeWithException(exception)
-    }
-
-    override val incomingMessages = Channel<ByteArray>(Channel.UNLIMITED)
-
+    private lateinit var callback: BleCentralHal.Callback
     private val bluetoothManager = applicationContext.getSystemService(BluetoothManager::class.java)
     private var device: BluetoothDevice? = null
     private var gatt: BluetoothGatt? = null
     private var service: BluetoothGattService? = null
-
-    private var characteristicState: BluetoothGattCharacteristic? = null
-    private var characteristicClient2Server: BluetoothGattCharacteristic? = null
-    private var characteristicServer2Client: BluetoothGattCharacteristic? = null
-    private var characteristicIdent: BluetoothGattCharacteristic? = null
-    private var characteristicL2cap: BluetoothGattCharacteristic? = null
+    private var targetServiceUuid: UUID? = null
+    private val characteristicsByUuid = mutableMapOf<UUID, BluetoothGattCharacteristic>()
+    private var l2capSocket: BluetoothSocket? = null
+    private var l2capConnectJob: Job? = null
 
     init {
         if (bluetoothManager.adapter == null) {
@@ -180,123 +102,79 @@ internal class BleCentralManagerAndroid : BleCentralManager {
         }
     }
 
-    private class ConnectionFailedException(
-        message: String
-    ) : Exception(message)
+    override val isConnected: Boolean
+        get() = gatt != null
 
-    private class ServiceDiscoveryFailedException(
-        message: String,
-        cause: Throwable? = null,
-    ) : Exception(message, cause)
+    override fun setCallback(callback: BleCentralHal.Callback) {
+        this.callback = callback
+    }
 
     private val scanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             Logger.d(TAG, "onScanResult: callbackType=$callbackType result=$result")
-            try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    device = result.device
-                    resumeWait()
-                } else {
-                    Logger.w(TAG, "onScanResult but not waiting")
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onScanResult failed", error))
-            }
+            device = result.device
+            callback.onPeripheralDiscovered()
         }
 
         override fun onScanFailed(errorCode: Int) {
             Logger.d(TAG, "onScanFailed: errorCode=$errorCode")
-            try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    resumeWaitWithException(IllegalStateException("BLE scan failed with error code $errorCode"))
-                } else {
-                    Logger.w(TAG, "onScanFailed but not waiting")
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onScanFailed failed", error))
-            }
+            callback.onScanFailed(IllegalStateException("BLE scan failed with error code $errorCode"))
         }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             Logger.d(TAG, "onConnectionStateChange: status=$status newState=$newState")
-            try {
-                when (newState) {
-                    BluetoothProfile.STATE_CONNECTED -> {
-                        gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
-                        if (waitFor?.state == WaitState.CONNECT_TO_PERIPHERAL) {
-                            resumeWait()
-                        } else {
-                            Logger.w(TAG, "onConnectionStateChange but not waiting")
-                        }
-                    }
-
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        if (waitFor?.state == WaitState.CONNECT_TO_PERIPHERAL) {
-                            // See connectToPeripheral() for retries based on this exception
-                            resumeWaitWithException(ConnectionFailedException("Failed to connect to peripheral"))
-                        } else {
-                            throw IllegalStateException("Peripheral unexpectedly disconnected")
-                        }
-                    }
-
-                    else -> {
-                        Logger.w(TAG, "onConnectionStateChange(): Unexpected newState $newState")
-                    }
+            if (gatt !== this@BleCentralHalAndroid.gatt) {
+                Logger.d(TAG, "Ignoring onConnectionStateChange for stale BluetoothGatt instance")
+                return
+            }
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                    callback.onConnected()
                 }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onConnectionStateChange failed", error))
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    // Immediately clear and close the disconnected BluetoothGatt instance.
+                    // On Android, when a connection attempt fails (e.g. status=147), BluetoothGatt
+                    // can invoke onConnectionStateChange(..., STATE_DISCONNECTED) a second time a
+                    // few milliseconds later (e.g. status=133) when unregistering the client.
+                    // Clearing this@BleCentralHalAndroid.gatt here both releases the clientIf
+                    // immediately and filters out any trailing callbacks from this BluetoothGatt.
+                    this@BleCentralHalAndroid.gatt = null
+                    try {
+                        gatt.close()
+                    } catch (_: Exception) {
+                    }
+                    callback.onDisconnected()
+                }
+                else -> {
+                    Logger.w(TAG, "onConnectionStateChange(): Unexpected newState $newState")
+                }
             }
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
             Logger.d(TAG, "onMtuChanged: mtu=$mtu status=$status")
-            try {
-                if (waitFor?.state == WaitState.REQUEST_MTU) {
-                    if (status != BluetoothGatt.GATT_SUCCESS) {
-                        resumeWaitWithException(IllegalStateException("Expected GATT_SUCCESS but got $status"))
-                    } else {
-                        if (mtu < 22) {
-                            resumeWaitWithException(IllegalStateException("Unexpected MTU size $mtu"))
-                        } else {
-                            maxCharacteristicSize = min(mtu - 3, 512)
-                            Logger.i(
-                                TAG,
-                                "MTU is $mtu, using $maxCharacteristicSize as maximum data size for characteristics"
-                            )
-                            resumeWait()
-                        }
-                    }
-                } else {
-                    Logger.w(TAG, "onMtuChanged but not waiting")
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onMtuChanged failed", error))
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                callback.onMtuChanged(mtu, IllegalStateException("Expected GATT_SUCCESS but got $status"))
+            } else {
+                callback.onMtuChanged(mtu, null)
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             Logger.d(TAG, "onServicesDiscovered: status=$status")
-            try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_SERVICES) {
-                    if (status != BluetoothGatt.GATT_SUCCESS) {
-                        resumeWaitWithException(
-                            ServiceDiscoveryFailedException("Expected GATT_SUCCESS but got $status")
-                        )
-                    } else {
-                        resumeWait()
-                    }
-                } else {
-                    Logger.w(TAG, "onServicesDiscovered but not waiting")
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onServicesDiscovered failed", error))
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                callback.onServicesDiscovered(
+                    hasTargetService = false,
+                    error = IllegalStateException("Expected GATT_SUCCESS but got $status")
+                )
+            } else {
+                val targetUuid = targetServiceUuid
+                val foundService = if (targetUuid != null) gatt.getService(targetUuid.toJavaUuid()) else null
+                service = foundService
+                callback.onServicesDiscovered(hasTargetService = foundService != null, error = null)
             }
         }
 
@@ -306,55 +184,15 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             value: ByteArray,
             status: Int
         ) {
-            Logger.d(
-                TAG,
-                "onCharacteristicRead: characteristic=${characteristic.uuid} value=[${value.size} bytes] status=$status"
-            )
-            try {
-                if (characteristic.uuid == l2capCharacteristicUuid?.toJavaUuid()) {
-                    if (waitFor?.state == WaitState.GET_L2CAP_PSM) {
-                        if (status != BluetoothGatt.GATT_SUCCESS) {
-                            resumeWaitWithException(
-                                IllegalStateException("onCharacteristicRead: Expected GATT_SUCCESS but got $status")
-                            )
-                        } else {
-                            if (value.size != 4) {
-                                resumeWaitWithException(
-                                    IllegalStateException("onCharacteristicRead: Expected four bytes for PSM, got ${value.size}")
-                                )
-                            }
-                            _l2capPsm = value.getUInt32(0).toInt()
-                            Logger.i(TAG, "L2CAP PSM is $_l2capPsm")
-                            resumeWait()
-                        }
-                    } else {
-                        Logger.w(TAG, "onCharacteristicRead for L2CAP PSM but not waiting")
-                    }
-
-                } else if (characteristic.uuid == identCharacteristicUuid!!.toJavaUuid()) {
-                    if (waitFor?.state == WaitState.GET_READER_IDENT) {
-                        if (status != BluetoothGatt.GATT_SUCCESS) {
-                            resumeWaitWithException(
-                                IllegalStateException("onCharacteristicRead: Expected GATT_SUCCESS but got $status")
-                            )
-                        }
-                        if (expectedIdentValue contentEquals value) {
-                            resumeWait()
-                        } else {
-                            resumeWaitWithException(
-                                IllegalStateException(
-                                    "onCharacteristicRead: Expected ${expectedIdentValue!!.toHex()} " +
-                                            "for ident, got ${value.toHex()} instead"
-                                )
-                            )
-                        }
-                    } else {
-                        Logger.w(TAG, "onCharacteristicRead for ident but not waiting")
-                    }
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onCharacteristicRead failed", error))
+            val uuid = UUID.fromJavaUuid(characteristic.uuid)
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                callback.onCharacteristicRead(
+                    uuid,
+                    null,
+                    IllegalStateException("onCharacteristicRead: Expected GATT_SUCCESS but got $status")
+                )
+            } else {
+                callback.onCharacteristicRead(uuid, value, null)
             }
         }
 
@@ -374,15 +212,14 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
-            Logger.d(TAG, "onCharacteristicWrite: characteristic=${characteristic?.uuid ?: ""} status=$status")
-            if (waitFor?.state == WaitState.CHARACTERISTIC_WRITE_COMPLETED) {
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    resumeWaitWithException(IllegalStateException("onCharacteristicWrite: Expected GATT_SUCCESS but got $status"))
-                } else {
-                    resumeWait()
-                }
+            val uuid = UUID.fromJavaUuid(characteristic!!.uuid)
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                callback.onCharacteristicWrite(
+                    uuid,
+                    IllegalStateException("onCharacteristicWrite: Expected GATT_SUCCESS but got $status")
+                )
             } else {
-                Logger.w(TAG, "onCharacteristicWrite for characteristic ${characteristic?.uuid} but not waiting")
+                callback.onCharacteristicWrite(uuid, null)
             }
         }
 
@@ -391,15 +228,14 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             descriptor: BluetoothGattDescriptor?,
             status: Int
         ) {
-            Logger.d(TAG, "onDescriptorWrite: descriptor=${descriptor?.uuid ?: ""} status=$status")
-            if (waitFor?.state == WaitState.WRITE_TO_DESCRIPTOR) {
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    resumeWaitWithException(IllegalStateException("Expected GATT_SUCCESS but got $status"))
-                } else {
-                    resumeWait()
-                }
+            val charUuid = UUID.fromJavaUuid(descriptor!!.characteristic.uuid)
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                callback.onDescriptorWrite(
+                    charUuid,
+                    IllegalStateException("Expected GATT_SUCCESS but got $status")
+                )
             } else {
-                Logger.w(TAG, "onDescriptorWrite but not waiting")
+                callback.onDescriptorWrite(charUuid, null)
             }
         }
 
@@ -408,25 +244,7 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            Logger.d(TAG, "onCharacteristicChanged: characteristic=${characteristic.uuid} value=[${value.size} bytes]")
-            try {
-                if (characteristic.uuid == server2ClientCharacteristicUuid.toJavaUuid()) {
-                    handleIncomingData(value)
-                } else if (characteristic.uuid == stateCharacteristicUuid.toJavaUuid()) {
-                    // Transport-specific session termination as per 18013-5 clause 8.3.3.1.1.5 Connection state
-                    if (value contentEquals byteArrayOf(BleTransportConstants.STATE_CHARACTERISTIC_END.toByte())) {
-                        Logger.i(TAG, "Received transport-specific termination message")
-                        runBlocking {
-                            incomingMessages.send(byteArrayOf())
-                        }
-                    } else {
-                        Logger.w(TAG, "Ignoring unexpected write to state characteristic")
-                    }
-                }
-            } catch (error: Exception) {
-                if (error is CancellationException) throw error
-                onError(IllegalStateException("onCharacteristicChanged failed", error))
-            }
+            callback.onCharacteristicChanged(UUID.fromJavaUuid(characteristic.uuid), value)
         }
 
         @Suppress("DEPRECATION")
@@ -440,94 +258,27 @@ internal class BleCentralManagerAndroid : BleCentralManager {
         ) = onCharacteristicChanged(gatt!!, characteristic!!, characteristic.value)
     }
 
-    var incomingMessage = ByteStringBuilder()
-
-    var maxCharacteristicSize = -1
-
-    private fun handleIncomingData(chunk: ByteArray) {
-        if (chunk.size < 1) {
-            throw IllegalStateException("Invalid data length ${chunk.size} for Server2Client characteristic")
-        }
-        incomingMessage.append(chunk, 1, chunk.size)
-        when {
-            chunk[0].toInt() == 0x00 -> {
-                // Last message.
-                val newMessage = incomingMessage.toByteString().toByteArray()
-                incomingMessage = ByteStringBuilder()
-                runBlocking {
-                    incomingMessages.send(newMessage)
-                }
-            }
-
-            chunk[0].toInt() == 0x01 -> {
-                if (chunk.size != maxCharacteristicSize) {
-                    // Because this is not fatal and some buggy implementations do this, we treat
-                    // it just as a warning, not an error.
-                    Logger.w(
-                        TAG, "Server2Client received ${chunk.size} bytes which is not the " +
-                                "expected $maxCharacteristicSize bytes"
-                    )
-                }
-            }
-
-            else -> {
-                throw IllegalStateException(
-                    "Invalid first byte ${chunk[0]} in Server2Client data chunk, " +
-                            "expected 0 or 1"
-                )
-            }
-        }
+    override fun waitForPowerOn() {
+        callback.onPowerOn(null)
     }
 
-
-    override suspend fun waitForPowerOn() {
-        // Not needed on Android
-        return
+    override fun startScan(serviceUuid: UUID) {
+        val filter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(serviceUuid.toJavaUuid()))
+            .build()
+        val settings = ScanSettings.Builder()
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        bluetoothManager.adapter.bluetoothLeScanner
+            .startScan(listOf(filter), settings, scanCallback)
     }
 
-    override suspend fun waitForPeripheralWithUuid(uuid: UUID) {
+    override fun stopScan() {
+        bluetoothManager.adapter.bluetoothLeScanner?.stopScan(scanCallback)
+    }
 
-        // The Android Bluetooth stack has protection built-in against applications scanning
-        // too frequently. The way this works is that Android will simply not report
-        // anything back to the app but will print
-        //
-        //   App 'com.example.appname' is scanning too frequently
-        //
-        // to logcat. We work around this by retrying the scan operation if we haven't
-        // gotten a result in 10 seconds.
-        //
-        var retryCount = 0
-        while (true) {
-            val rc = try {
-                withTimeoutOrNull(10.seconds) {
-                    suspendCancellableCoroutine<Boolean> { continuation ->
-                        setWaitCondition(WaitState.PERIPHERAL_DISCOVERED, continuation)
-                        val filter = ScanFilter.Builder()
-                            .setServiceUuid(ParcelUuid(uuid.toJavaUuid()))
-                            .build()
-                        val settings = ScanSettings.Builder()
-                            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                            .build()
-                        bluetoothManager.adapter.bluetoothLeScanner
-                            .startScan(listOf(filter), settings, scanCallback)
-                    }
-                    true
-                }
-            } finally {
-                bluetoothManager.adapter.bluetoothLeScanner?.stopScan(scanCallback)
-            }
-            if (rc != null) {
-                break
-            }
-            clearWaitCondition()
-            retryCount++
-            // Note: we never give up b/c it's possible this is used by a wallet app which is simply
-            // sitting at the "Show QR code" dialog.
-            //
-            Logger.i(TAG, "Failed to find peripheral after $retryCount attempt(s) of 10 secs. Restarting scan.")
-        }
-        // Defensively cancel Classic Discovery.
+    override fun onScanStoppedAfterDiscovery() {
         if (bluetoothManager.adapter.isDiscovering) {
             try {
                 Logger.i(TAG, "Calling cancelDiscovery()")
@@ -537,247 +288,228 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 Logger.w(TAG, "Ignoring error when calling cancelDiscovery", e)
             }
         }
-        // Give the radio time to actually transition out of the scanning state.
-        delay(150.milliseconds)
     }
 
-    override suspend fun connectToPeripheral() {
-        check(device != null)
-
-        // Connection attempts sometimes fail... but will work on subsequent
-        // tries. So we implement a simple retry loop.
-        var retryCount = 0
-        while (true) {
+    override fun connectToPeripheral() {
+        val dev = checkNotNull(device) { "device is null" }
+        // Close any previous BluetoothGatt instance from a failed connection attempt before
+        // retrying. Failing to call close() leaks a registered clientIf in Android's Bluetooth
+        // daemon (com.android.bluetooth) for the lifetime of the process, which can interfere
+        // with subsequent BLE connections and ATT MTU negotiation when this device later acts
+        // as a BLE peripheral.
+        gatt?.let { prevGatt ->
             try {
-                suspendCancellableCoroutine<Boolean> { continuation ->
-                    setWaitCondition(WaitState.CONNECT_TO_PERIPHERAL, continuation)
-                    gatt = device!!.connectGatt(applicationContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-                }
-                break
-            } catch (error: ConnectionFailedException) {
-                if (retryCount < 10) {
-                    retryCount++
-                    Logger.w(TAG, "Failed connecting to peripheral after $retryCount attempt(s), retrying in 500 msec")
-                    delay(500.milliseconds)
-                } else {
-                    Logger.w(TAG, "Failed connecting to peripheral after $retryCount attempts. Giving up.")
-                    throw error
-                }
+                prevGatt.disconnect()
+            } catch (_: Exception) {
+            }
+            try {
+                prevGatt.close()
+            } catch (_: Exception) {
             }
         }
+        gatt = dev.connectGatt(applicationContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
-    override suspend fun requestMtu() {
-        check(device != null && gatt != null)
-        suspendCancellableCoroutine<Boolean> { continuation ->
-            setWaitCondition(WaitState.REQUEST_MTU, continuation)
-            // 515 is the largest MTU that makes sense given that characteristics must be 512
-            // bytes or less.
-            gatt!!.requestMtu(515)
+    override fun requestMtu(mtu: Int) {
+        val g = checkNotNull(gatt) { "gatt is null" }
+        g.requestMtu(mtu)
+    }
+
+    override fun discoverServices(serviceUuid: UUID) {
+        val g = checkNotNull(gatt) { "gatt is null" }
+        targetServiceUuid = serviceUuid
+        if (!g.discoverServices()) {
+            callback.onServicesDiscovered(
+                hasTargetService = false,
+                error = IllegalStateException("discoverServices() returned false")
+            )
         }
     }
 
-    override suspend fun peripheralDiscoverServices(uuid: UUID) {
-        check(device != null && gatt != null)
+    override fun discoverCharacteristics(
+        stateCharacteristicUuid: UUID,
+        client2ServerCharacteristicUuid: UUID,
+        server2ClientCharacteristicUuid: UUID,
+        identCharacteristicUuid: UUID?,
+        l2capCharacteristicUuid: UUID?
+    ) {
+        val svc = checkNotNull(service) { "service is null" }
+        characteristicsByUuid.clear()
 
-        // Service discovery sometimes fails initially if services have not yet
-        // been updated or populated by the peripheral/stack. We implement a retry loop.
-        var retryCount = 0
-        while (true) {
-            try {
-                suspendCancellableCoroutine<Boolean> { continuation ->
-                    setWaitCondition(WaitState.PERIPHERAL_DISCOVER_SERVICES, continuation)
-                    if (!gatt!!.discoverServices()) {
-                        resumeWaitWithException(
-                            ServiceDiscoveryFailedException("discoverServices() returned false")
-                        )
-                    }
-                }
-                service = gatt!!.getService(uuid.toJavaUuid())
-                if (service == null) {
-                    val discoveredUuids = gatt!!.services.map { it.uuid }
-                    throw ServiceDiscoveryFailedException(
-                        "No service with UUID $uuid. Discovered services: $discoveredUuids"
-                    )
-                }
-                break
-            } catch (error: ServiceDiscoveryFailedException) {
-                if (retryCount < 10) {
-                    retryCount++
-                    Logger.w(
-                        TAG,
-                        "Failed discovering service with UUID $uuid after $retryCount attempt(s), " +
-                                "retrying in 500 msec: ${error.message}"
-                    )
-                    delay(500.milliseconds)
-                } else {
-                    Logger.w(
-                        TAG,
-                        "Failed discovering service with UUID $uuid after $retryCount attempts. " +
-                                "Giving up."
-                    )
-                    throw IllegalStateException("No service with the given UUID", error)
-                }
+        val stateChar = svc.getCharacteristic(stateCharacteristicUuid.toJavaUuid())
+            ?: run {
+                callback.onCharacteristicsDiscovered(null, false, IllegalStateException("State characteristic not found"))
+                return
             }
-        }
-    }
+        characteristicsByUuid[stateCharacteristicUuid] = stateChar
 
-    override suspend fun peripheralDiscoverCharacteristics() {
-        check(device != null && gatt != null && service != null)
-        characteristicState = service!!.getCharacteristic(stateCharacteristicUuid.toJavaUuid())
-        if (characteristicState == null) {
-            throw IllegalStateException("State characteristic not found")
-        }
-        characteristicClient2Server =
-            service!!.getCharacteristic(client2ServerCharacteristicUuid.toJavaUuid())
-        if (characteristicClient2Server == null) {
-            throw IllegalStateException("Client2Server characteristic not found")
-        }
-        characteristicServer2Client =
-            service!!.getCharacteristic(server2ClientCharacteristicUuid.toJavaUuid())
-        if (characteristicServer2Client == null) {
-            throw IllegalStateException("Server2Client characteristic not found")
-        }
+        val c2sChar = svc.getCharacteristic(client2ServerCharacteristicUuid.toJavaUuid())
+            ?: run {
+                callback.onCharacteristicsDiscovered(null, false, IllegalStateException("Client2Server characteristic not found"))
+                return
+            }
+        characteristicsByUuid[client2ServerCharacteristicUuid] = c2sChar
+
+        val s2cChar = svc.getCharacteristic(server2ClientCharacteristicUuid.toJavaUuid())
+            ?: run {
+                callback.onCharacteristicsDiscovered(null, false, IllegalStateException("Server2Client characteristic not found"))
+                return
+            }
+        characteristicsByUuid[server2ClientCharacteristicUuid] = s2cChar
+
         if (identCharacteristicUuid != null) {
-            characteristicIdent = service!!.getCharacteristic(identCharacteristicUuid!!.toJavaUuid())
-            if (characteristicIdent == null) {
-                throw IllegalStateException("Ident characteristic not found")
-            }
+            val identChar = svc.getCharacteristic(identCharacteristicUuid.toJavaUuid())
+                ?: run {
+                    callback.onCharacteristicsDiscovered(null, false, IllegalStateException("Ident characteristic not found"))
+                    return
+                }
+            characteristicsByUuid[identCharacteristicUuid] = identChar
         }
+
+        var hasL2cap = false
         if (l2capCharacteristicUuid != null) {
-            characteristicL2cap = service!!.getCharacteristic(l2capCharacteristicUuid!!.toJavaUuid())
-            if (characteristicL2cap == null) {
+            val l2capChar = svc.getCharacteristic(l2capCharacteristicUuid.toJavaUuid())
+            if (l2capChar != null) {
+                characteristicsByUuid[l2capCharacteristicUuid] = l2capChar
+                hasL2cap = true
+            } else {
                 Logger.i(TAG, "L2CAP characteristic requested but not found")
-            } else {
-                suspendCancellableCoroutine<Boolean> { continuation ->
-                    setWaitCondition(WaitState.GET_L2CAP_PSM, continuation)
-                    gatt!!.readCharacteristic(characteristicL2cap)
-                }
             }
         }
+
+        callback.onCharacteristicsDiscovered(
+            maxWriteSize = null,
+            hasL2capCharacteristic = hasL2cap,
+            error = null
+        )
     }
 
-    var expectedIdentValue: ByteArray? = null
+    override fun readCharacteristic(uuid: UUID) {
+        val g = checkNotNull(gatt) { "gatt is null" }
+        val char = checkNotNull(characteristicsByUuid[uuid]) { "Characteristic $uuid not found" }
+        g.readCharacteristic(char)
+    }
 
-    override suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey) {
-        check(device != null && gatt != null && identCharacteristicUuid != null)
-
-        val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
-        val info = "BLEIdent".encodeToByteArray()
-        val salt = null
-        expectedIdentValue = SecretKey(ikm).use {
-            Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, info, 16).use { key -> key.encoded }
+    override fun enableNotifications(characteristicUuid: UUID) {
+        val g = checkNotNull(gatt) { "gatt is null" }
+        val characteristic = checkNotNull(characteristicsByUuid[characteristicUuid]) {
+            "Characteristic $characteristicUuid not found"
         }
-
-        suspendCancellableCoroutine<Boolean> { continuation ->
-            setWaitCondition(WaitState.GET_READER_IDENT, continuation)
-            gatt!!.readCharacteristic(characteristicIdent)
-        }
-    }
-
-    private suspend fun enableNotifications(
-        characteristic: BluetoothGattCharacteristic
-    ) {
-        suspendCancellableCoroutine<Boolean> { continuation ->
-            setWaitCondition(WaitState.WRITE_TO_DESCRIPTOR, continuation)
-
-            // This is what the 16-bit UUID 0x29 0x02 is encoded like.
-            val clientCharacteristicConfigUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-            if (!gatt!!.setCharacteristicNotification(characteristic, true)) {
-                throw IllegalStateException("Error setting notification")
-            }
-            val descriptor = characteristic.getDescriptor(clientCharacteristicConfigUuid.toJavaUuid())
-                ?: throw IllegalStateException("Error getting clientCharacteristicConfig descriptor")
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val rc = gatt!!.writeDescriptor(
-                    descriptor,
-                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                )
-                if (rc != BluetoothStatusCodes.SUCCESS) {
-                    throw IllegalStateException("Error writing to clientCharacteristicConfig descriptor rc=$rc")
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                @Suppress("DEPRECATION")
-                if (!gatt!!.writeDescriptor(descriptor)) {
-                    throw IllegalStateException("Error writing to clientCharacteristicConfig descriptor")
-                }
-            }
-        }
-    }
-
-    override suspend fun subscribeToCharacteristics() {
-        enableNotifications(characteristicState!!)
-        enableNotifications(characteristicServer2Client!!)
-    }
-
-    private suspend fun writeToCharacteristic(
-        characteristic: BluetoothGattCharacteristic,
-        value: ByteArray,
-    ) {
-        suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val rc = gatt!!.writeCharacteristic(
-                    characteristic,
-                    value,
-                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                )
-                if (rc != BluetoothStatusCodes.SUCCESS) {
-                    throw IllegalStateException("Error writing to characteristic ${characteristic.uuid}, rc=$rc")
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                characteristic.setValue(value)
-                @Suppress("DEPRECATION")
-                if (!gatt!!.writeCharacteristic(characteristic)) {
-                    throw IllegalStateException("Error writing to characteristic ${characteristic.uuid}")
-                }
-            }
-        }
-    }
-
-    override suspend fun writeToStateCharacteristic(value: Int) {
-        writeToCharacteristic(characteristicState!!, byteArrayOf(value.toByte()))
-    }
-
-    override suspend fun sendMessage(message: ByteArray) {
-        if (l2capSocket != null) {
-            l2capSendMessage(message)
+        if (!g.setCharacteristicNotification(characteristic, true)) {
+            callback.onDescriptorWrite(characteristicUuid, IllegalStateException("Error setting notification"))
             return
         }
-        Logger.i(TAG, "sendMessage ${message.size} length")
-        val maxChunkSize = maxCharacteristicSize - 1  // Need room for the leading 0x00 or 0x01
-        val offsets = 0 until message.size step maxChunkSize
-        for (offset in offsets) {
-            val moreDataComing = (offset != offsets.last)
-            val size = min(maxChunkSize, message.size - offset)
-
-            val builder = ByteStringBuilder(size + 1)
-            builder.append(if (moreDataComing) 0x01 else 0x00)
-            builder.append(message, offset, offset + size)
-            val chunk = builder.toByteString().toByteArray()
-
-            writeToCharacteristic(characteristicClient2Server!!, chunk)
+        val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID)
+        if (descriptor == null) {
+            callback.onDescriptorWrite(
+                characteristicUuid,
+                IllegalStateException("Error getting clientCharacteristicConfig descriptor")
+            )
+            return
         }
-        Logger.i(TAG, "sendMessage completed")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val rc = g.writeDescriptor(
+                descriptor,
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            )
+            if (rc != BluetoothStatusCodes.SUCCESS) {
+                callback.onDescriptorWrite(
+                    characteristicUuid,
+                    IllegalStateException("Error writing to clientCharacteristicConfig descriptor rc=$rc")
+                )
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            @Suppress("DEPRECATION")
+            if (!g.writeDescriptor(descriptor)) {
+                callback.onDescriptorWrite(
+                    characteristicUuid,
+                    IllegalStateException("Error writing to clientCharacteristicConfig descriptor")
+                )
+            }
+        }
+    }
+
+    override fun writeCharacteristic(uuid: UUID, value: ByteArray) {
+        val g = checkNotNull(gatt) { "gatt is null" }
+        val characteristic = checkNotNull(characteristicsByUuid[uuid]) { "Characteristic $uuid not found" }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val rc = g.writeCharacteristic(
+                characteristic,
+                value,
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            )
+            if (rc != BluetoothStatusCodes.SUCCESS) {
+                callback.onCharacteristicWrite(
+                    uuid,
+                    IllegalStateException("Error writing to characteristic ${characteristic.uuid}, rc=$rc")
+                )
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.setValue(value)
+            @Suppress("DEPRECATION")
+            if (!g.writeCharacteristic(characteristic)) {
+                callback.onCharacteristicWrite(
+                    uuid,
+                    IllegalStateException("Error writing to characteristic ${characteristic.uuid}")
+                )
+            }
+        }
+    }
+
+    override fun connectL2cap(psm: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            connectL2capQ(psm)
+        } else {
+            callback.onL2capConnected(null, IllegalStateException("L2CAP only supported on API 29 or later"))
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    private fun connectL2capQ(psm: Int) {
+        val dev = checkNotNull(device) { "device is null" }
+        try {
+            val socket = dev.createInsecureL2capChannel(psm)
+            l2capSocket = socket
+            l2capConnectJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    socket.connect()
+                    callback.onL2capConnected(BluetoothSocketL2capChannel(socket), null)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    callback.onL2capConnected(null, e)
+                }
+            }
+        } catch (e: Exception) {
+            callback.onL2capConnected(null, e)
+        }
+    }
+
+    override fun closeConnectedL2capAttempt() {
+        try {
+            l2capSocket?.close()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Error during L2CAP cleanup close", e)
+        }
+        l2capConnectJob?.cancel()
+        l2capConnectJob = null
+        l2capSocket = null
     }
 
     override fun close() {
         Logger.d(TAG, "close()")
-        bluetoothManager.adapter.bluetoothLeScanner.stopScan(scanCallback)
+        bluetoothManager.adapter.bluetoothLeScanner?.stopScan(scanCallback)
         gatt?.disconnect()
         gatt?.close()
         gatt = null
         device = null
-        // Need to wait a short while since close() discards data in-flight.
+        l2capConnectJob?.cancel()
+        l2capConnectJob = null
         l2capSocket?.let {
             deferredCloseSocket = it
-            deferredCloseJob = CoroutineScope(Dispatchers.IO).launch() {
+            deferredCloseJob = CoroutineScope(Dispatchers.IO).launch {
                 delay(2.seconds)
                 Logger.i(TAG, "Closing deferred L2CAP socket (via delay)")
                 try {
@@ -791,148 +523,5 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             }
         }
         l2capSocket = null
-        incomingMessages.close()
-    }
-
-    private var _l2capPsm: Int? = null
-
-    override val l2capPsm: Int?
-        get() = _l2capPsm
-
-    override val usingL2cap: Boolean
-        get() = (l2capSocket != null)
-
-    private var l2capSocket: BluetoothSocket? = null
-
-    override suspend fun connectL2cap(psm: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            connectL2capQ(psm)
-        } else {
-            throw IllegalStateException("L2CAP only support on API 29 or later")
-        }
-    }
-
-
-    private suspend fun callWithRetry(
-        maxRetries: Int = 10,
-        initialDelay: Duration = 500.milliseconds,
-        maxDelay: Duration = 4.seconds,
-        action: suspend () -> Unit,
-        cleanupOnFailure: suspend () -> Unit
-    ) {
-        var currentDelay = initialDelay
-        var numTries = 0
-        while (true) {
-            try {
-                numTries++
-                action()
-                return
-            } catch (e: Exception) {
-                cleanupOnFailure()
-
-                // Re-throw CancellationException immediately so coroutine cancellation works
-                if (e is CancellationException) throw e
-
-                if (numTries >= maxRetries) {
-                    throw IllegalStateException("Failed after $maxRetries attempts", e)
-                }
-
-                Logger.i(TAG, "Failed (Attempt $numTries), trying again in $currentDelay. Error: ${e.message}")
-                delay(currentDelay)
-                currentDelay = (currentDelay.inWholeMilliseconds * 2).milliseconds
-                if (currentDelay > maxDelay) {
-                    currentDelay = maxDelay
-                }
-            }
-        }
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.Q)
-    private suspend fun connectL2capQ(psm: Int) {
-        callWithRetry(
-            action = {
-                l2capSocket = device!!.createInsecureL2capChannel(psm)
-                val result = withTimeoutOrNull(3.seconds) {
-                    suspendCancellableCoroutine<Unit> { cont ->
-                        val connectJob = CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                l2capSocket!!.connect()
-                                if (cont.isActive) cont.resume(Unit)
-                            } catch (e: Exception) {
-                                if (cont.isActive) cont.resumeWithException(e)
-                            }
-                        }
-                        cont.invokeOnCancellation {
-                            Logger.w(TAG, "Connection timeout triggered, aggressively closing socket")
-                            try {
-                                l2capSocket?.close()
-                            } catch (_: Exception) {
-                            }
-                            connectJob.cancel()
-                        }
-                    }
-                }
-                if (result == null) {
-                    throw ConnectionFailedException("L2CAP connection timed out after 3 seconds")
-                }
-            },
-            cleanupOnFailure = {
-                try {
-                    l2capSocket?.close()
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Error during cleanup close", e)
-                }
-                l2capSocket = null
-            }
-        )
-
-        // Start reading in a coroutine
-        CoroutineScope(Dispatchers.IO).launch {
-            l2capReadSocket(l2capSocket!!.inputStream)
-        }
-    }
-
-    private suspend fun l2capReadSocket(inputStream: InputStream) {
-        try {
-            while (true) {
-                val encodedLength = inputStream.readNOctets(4U)
-                val length = encodedLength.getUInt32(0)
-                val message = inputStream.readNOctets(length)
-                incomingMessages.send(message)
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            onError(IllegalStateException("Reading from L2CAP socket failed", e))
-        }
-    }
-
-    private suspend fun l2capSendMessage(message: ByteArray) {
-        Logger.i(TAG, "l2capSendMessage ${message.size} length")
-        withContext(Dispatchers.IO) {
-            l2capSocket?.outputStream?.write(
-                buildByteString {
-                    appendUInt32(message.size)
-                    appendByteArray(message) }.toByteArray()
-            )
-            l2capSocket?.outputStream?.flush()
-        }
     }
 }
-
-// Cannot call it readNBytes() b/c that's taken on API >= 33
-//
-internal fun InputStream.readNOctets(len: UInt): ByteArray {
-    val bsb = ByteStringBuilder()
-    var remaining = len.toInt()
-    while (remaining > 0) {
-        val buf = ByteArray(remaining)
-        val numBytesRead = this.read(buf, 0, remaining)
-        if (numBytesRead == -1) {
-            throw IllegalStateException("Failed reading from input stream")
-        }
-        bsb.append(buf, 0, numBytesRead)
-        remaining -= numBytesRead
-    }
-    return bsb.toByteString().toByteArray()
-}
-

@@ -23,7 +23,7 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                         BleTransportCentralMdoc(
                             role,
                             options,
-                            BleCentralManagerIos(),
+                            createBleCentralManagerIos(),
                             connectionMethod.centralClientModeUuid!!,
                             connectionMethod.peripheralServerModePsm
                         )
@@ -32,7 +32,7 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                         BleTransportCentralMdocReader(
                             role,
                             options,
-                            BlePeripheralManagerIos(),
+                            createBlePeripheralManagerIos(),
                             connectionMethod.centralClientModeUuid!!
                         )
                     }
@@ -43,7 +43,7 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                         BleTransportPeripheralMdoc(
                             role,
                             options,
-                            BlePeripheralManagerIos(),
+                            createBlePeripheralManagerIos(),
                             connectionMethod.peripheralServerModeUuid!!
                         )
                     }
@@ -51,7 +51,7 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                         BleTransportPeripheralMdocReader(
                             role,
                             options,
-                            BleCentralManagerIos(),
+                            createBleCentralManagerIos(),
                             connectionMethod.peripheralServerModeUuid!!,
                             connectionMethod.peripheralServerModePsm,
                         )

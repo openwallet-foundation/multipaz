@@ -25,12 +25,44 @@ import kotlin.test.assertNotNull
 import kotlin.test.fail
 
 /**
- * This test is mainly for verifying the correct functionality of MdocNfcEngagementHelper (the wallet side)
- * but it also exercises and verifies mdocReaderNfcHandover() and other things on the reader side.
+ * Unit tests for [MdocNfcEngagementHelper] (wallet-side NDEF engagement) and [mdocReaderNfcHandover]
+ * (reader-side NDEF handover) according to ISO/IEC 18013-5:2021.
+ *
+ * ### How ISO 18013-5 NDEF Engagement is structured and tested here
+ * In ISO/IEC 18013-5:2021, NFC engagement emulates an NFC Forum Type 4 Tag (AID `D2760000850101`)
+ * exposing a Capability Container (`E103`) and an NDEF file (`E104`):
+ * 1. **Static Handover**:
+ *    - The Capability Container marks the NDEF file as read-only (`0xFF`).
+ *    - When the reader reads `E104`, [MdocNfcEngagementHelper] returns a `Handover Select` (`Hs`)
+ *      NDEF message containing the `mdoc` `DeviceEngagement` record and carrier configuration records
+ *      (BLE OOB and/or NFC data transfer) for all `staticHandoverMethods`.
+ *    - The reader parses the `Hs` message and selects one of the offered connection methods.
+ * 2. **Negotiated Handover**:
+ *    - The Capability Container marks the NDEF file as read/write (`0x00`), and the initial NDEF file
+ *      contains a Tag NDEF Exchange Protocol (TNEP) `Service Parameter` (`Tp`) record for
+ *      `urn:nfc:sn:handover`.
+ *    - The reader writes a TNEP `Service Select` (`Ts`) record via `UPDATE BINARY` and reads back a
+ *      `TNEP Status` (`Te`) record (`status = 0x00`).
+ *    - The reader writes a `Handover Request` (`Hr`) NDEF message containing its `ReaderEngagement`
+ *      and offered connection methods (e.g. BLE Central Client Mode with optional L2CAP PSM, BLE
+ *      Peripheral Server Mode, NFC data transfer).
+ *    - [MdocNfcEngagementHelper] invokes `negotiatedHandoverPicker` to pick a single connection method,
+ *      builds `DeviceEngagement` (omitting the BLE UUID in the NDEF record since it was already
+ *      provided by the reader's `Hr` message, while [mdocReaderNfcHandover] supplements the reader's
+ *      UUID back onto the returned [MdocConnectionMethodBle]), and returns the `Handover Select` (`Hs`)
+ *      message for the reader to read via `READ BINARY`.
+ *
+ * ### Test doubles used in this file
+ * - [LoopbackIsoTag]: In-memory [NfcIsoTag] that routes every [CommandApdu] from [mdocReaderNfcHandover]
+ *   directly into [MdocNfcEngagementHelper.processApdu] and records the full command/response APDU
+ *   transcript for byte-for-byte verification against expected ISO 7816-4 / Type 4 Tag flows.
  */
 class MdocNfcEngagementHelperTest {
 
-    // Provides access to MdocNfcEngagementHelper via NfcIsoTag abstraction
+    /**
+     * In-memory [NfcIsoTag] that forwards [transceive] calls to [MdocNfcEngagementHelper.processApdu]
+     * and records a complete APDU transcript.
+     */
     class LoopbackIsoTag(val engagementHelper: MdocNfcEngagementHelper): NfcIsoTag() {
         val transcript = StringBuilder()
 
@@ -84,6 +116,12 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies end-to-end NFC Static Handover between [mdocReaderNfcHandover] and
+     * [MdocNfcEngagementHelper] offering BLE Central Client Mode, BLE Peripheral Server Mode, and NFC
+     * data transfer, checking both the disambiguated connection methods and the exact Type 4 Tag APDU
+     * transcript (`SELECT AID` -> `SELECT CC` -> `READ BINARY CC` -> `SELECT NDEF` -> `READ BINARY NDEF`).
+     */
     @Test
     fun testStaticHandover() = runTest {
         val staticHandoverConnectionMethods = getConnectionMethods()
@@ -127,6 +165,11 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies end-to-end NFC Negotiated Handover between [mdocReaderNfcHandover] and
+     * [MdocNfcEngagementHelper], checking the full TNEP service selection (`Tp` -> `Ts` -> `Te`) and
+     * handover (`Hr` -> `Hs`) APDU transcript as well as BLE UUID supplementation on the reader side.
+     */
     @Test
     fun testNegotiatedHandover() = runTest {
         val negotiatedHandoverConnectionMethods = getConnectionMethods()
@@ -186,6 +229,12 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies that when [MdocConnectionMethodBle] entries for BLE Central Client Mode and BLE
+     * Peripheral Server Mode have different UUIDs (which cannot be combined into a single BLE OOB NDEF
+     * carrier configuration record), [MdocNfcEngagementHelper] reports the error via `onError` and
+     * responds with `6F00` during Static Handover.
+     */
     @Test
     fun testStaticBleDifferentUUIDs() = runTest {
         val bleUuid1 = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
@@ -231,6 +280,11 @@ class MdocNfcEngagementHelperTest {
         assertEquals("Error processing APDU: UUIDs for both BLE modes are not the same", errorFromEngagementHelper.message)
     }
 
+    /**
+     * Verifies that [mdocReaderNfcHandover] throws [IllegalArgumentException] when asked to combine
+     * Negotiated Handover BLE connection methods whose Central Client Mode and Peripheral Server Mode
+     * UUIDs do not match.
+     */
     @Test
     fun testNegotiatedBleDifferentUUIDs() = runTest {
         val bleUuid1 = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
@@ -273,9 +327,10 @@ class MdocNfcEngagementHelperTest {
         assertEquals("UUIDs for both BLE modes are not the same", e.message)
     }
 
-    // Checks that PSM is correctly conveyed when using Static Handover
-    // and the mdoc is offering mdoc BLE Peripheral Server Mode with a PSM
-    // that it's listening on.
+    /**
+     * Verifies that an L2CAP PSM (`peripheralServerModePsm`) advertised by the mdoc in BLE Peripheral
+     * Server Mode is preserved across NFC Static Handover.
+     */
     @Test
     fun testStaticHandoverBlePsm() = runTest {
         val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
@@ -315,9 +370,11 @@ class MdocNfcEngagementHelperTest {
         assertEquals(listOf(bleCc, blePs), handoverResult.connectionMethods)
     }
 
-    // Checks that PSM is correctly conveyed when using Negotiated Handover
-    // and the reader is offering mdoc BLE Central Client Mode with a PSM
-    // that it's listening on.
+    /**
+     * Verifies that an L2CAP PSM (`peripheralServerModePsm`) offered by the reader in BLE Central
+     * Client Mode during NFC Negotiated Handover is conveyed to the mdoc and preserved on the selected
+     * connection method (and omitted when BLE Peripheral Server Mode is selected instead).
+     */
     @Test
     fun testNegotiatedHandoverBlePsm() = runTest {
         val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
@@ -400,6 +457,10 @@ class MdocNfcEngagementHelperTest {
         return Pair(handoverSuccess, handoverError)
     }
 
+    /**
+     * Verifies that selecting an application ID other than [Nfc.NDEF_APPLICATION_ID] fails with
+     * [NfcCommandFailedException] (`6A82`) and invokes `onError` on [MdocNfcEngagementHelper].
+     */
     @Test
     fun testWrongApplicationIdSelected() = runTest {
         var (handoverSuccess, handoverError) = testNfcEngagementHelper { tag ->
@@ -416,6 +477,10 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies that attempting to `SELECT FILE` before `SELECT APPLICATION` (`D2760000850101`) fails
+     * and invokes `onError` on [MdocNfcEngagementHelper].
+     */
     @Test
     fun testFiledIdBeforeApplicationSelectSelected() = runTest {
         var (handoverSuccess, handoverError) = testNfcEngagementHelper { tag ->
@@ -432,6 +497,10 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies that selecting an unknown file ID (neither Capability Container `E103` nor NDEF file
+     * `E104`) fails with `6A82` and invokes `onError` on [MdocNfcEngagementHelper].
+     */
     @Test
     fun testUnexpectedFileIdSelected() = runTest {
         var (handoverSuccess, handoverError) = testNfcEngagementHelper { tag ->
@@ -451,6 +520,11 @@ class MdocNfcEngagementHelperTest {
 
     // TODO: add more tests to exercise implementation of READ_BINARY and UPDATE_BINARY
 
+    /**
+     * Verifies constructor precondition checks on [MdocNfcEngagementHelper] (requiring either
+     * `staticHandoverMethods` or `negotiatedHandoverPicker`, prohibiting both simultaneously, and
+     * requiring `staticHandoverMethods` to be non-empty when specified).
+     */
     @Test
     fun testConstructor() = runTest {
         assertFailsWith(
@@ -505,6 +579,11 @@ class MdocNfcEngagementHelperTest {
         )
     }
 
+    /**
+     * Verifies that if a reader re-selects the NDEF file (`E104`) after already reading it during Static
+     * Handover, [MdocNfcEngagementHelper] serves the cached NDEF payload without firing a duplicate
+     * `onHandoverComplete` callback or raising an error.
+     */
     @Test
     fun testStaticHandoverReselectNdefFile() = runTest {
         val staticHandoverConnectionMethods = getConnectionMethods()
