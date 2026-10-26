@@ -475,4 +475,154 @@ class MdocCredentialValidationTest {
             assertFalse(result.hasWarnings, "Unexpected warnings for $curve: ${result.warnings}")
         }
     }
+
+    @Test
+    fun testDsCertBasicConstraintsCaFalseAndNonMdlNoEkuWarning() = runTest {
+        val dsKeyPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = X509Cert.Builder(
+            publicKey = dsKeyPriv.publicKey,
+            signingKey = harness.iacaKey,
+            serialNumber = ASN1Integer(12345L),
+            subject = X500Name.fromName("CN=PID DS"),
+            issuer = harness.iacaCert.subject,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        )
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .setBasicConstraints(ca = false, pathLenConstraint = null)
+            .build()
+
+        val dsKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(dsCert, harness.iacaCert)),
+            privateKey = dsKeyPriv
+        )
+
+        val pidDocType = "eu.europa.ec.eudi.pid.1"
+        val document = documentStore.createDocument()
+        val credential = MdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "mdoc",
+            secureArea = secureArea,
+            docType = pidDocType,
+            createKeySettings = SoftwareCreateKeySettings.Builder().build()
+        )
+        val namespaces = buildIssuerNamespaces {
+            addNamespace(pidDocType) {
+                addDataElement("family_name", "Mustermann".toDataItem())
+            }
+        }
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = pidDocType,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = namespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = credential.getAttestation().ecPublicKey
+        )
+        val taggedMso = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(mso.toDataItem()))))
+        val issuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                signingKey = dsKey,
+                message = taggedMso,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to dsKey.certChain.toDataItem()
+                )
+            ).toDataItem()
+        )
+        val issuerProvidedData = ByteString(
+            Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", namespaces.toDataItem())
+                    put("issuerAuth", RawCbor(issuerAuth))
+                }
+            )
+        )
+
+        val result = credential.validate(issuerProvidedData, now = harness.validFrom + 1.days)
+        assertFalse(result.hasErrors, "Unexpected errors: ${result.errors}")
+        assertFalse(result.hasWarnings, "Unexpected warnings: ${result.warnings}")
+    }
+
+    @Test
+    fun testDsCertMalformedExtensionReportsErrorInsteadOfThrowing() = runTest {
+        val dsKeyPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        // Add a malformed BasicConstraints extension (truncated/invalid ASN.1 bytes instead of a SEQUENCE)
+        val dsCert = X509Cert.Builder(
+            publicKey = dsKeyPriv.publicKey,
+            signingKey = harness.iacaKey,
+            serialNumber = ASN1Integer(12345L),
+            subject = X500Name.fromName("CN=Malformed DS"),
+            issuer = harness.iacaCert.subject,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        )
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .addExtension(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid, true, byteArrayOf(0x01, 0x01, 0x00))
+            .build()
+
+        val dsKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(dsCert, harness.iacaCert)),
+            privateKey = dsKeyPriv
+        )
+
+        val document = documentStore.createDocument()
+        val credential = MdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "mdoc",
+            secureArea = secureArea,
+            docType = "org.iso.18013.5.1.mDL",
+            createKeySettings = SoftwareCreateKeySettings.Builder().build()
+        )
+        val namespaces = buildIssuerNamespaces {
+            addNamespace("org.iso.18013.5.1") {
+                addDataElement("given_name", "John".toDataItem())
+            }
+        }
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = "org.iso.18013.5.1.mDL",
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = namespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = credential.getAttestation().ecPublicKey
+        )
+        val taggedMso = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(mso.toDataItem()))))
+        val issuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                signingKey = dsKey,
+                message = taggedMso,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to dsKey.certChain.toDataItem()
+                )
+            ).toDataItem()
+        )
+        val issuerProvidedData = ByteString(
+            Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", namespaces.toDataItem())
+                    put("issuerAuth", RawCbor(issuerAuth))
+                }
+            )
+        )
+
+        val result = credential.validate(issuerProvidedData, now = harness.validFrom + 1.days)
+        assertTrue(result.hasErrors)
+        assertTrue(result.errors.any { it.message.contains("Failed to parse DS certificate") })
+    }
 }

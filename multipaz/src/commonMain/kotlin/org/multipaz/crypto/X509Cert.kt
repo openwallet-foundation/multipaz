@@ -205,14 +205,12 @@ data class X509Cert(
             val extVal = getExtensionValue(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid)
                 ?: return null
             val seq = ASN1.decode(extVal) as ASN1Sequence
-            return Pair(
-                (seq.elements.first() as ASN1Boolean).value,
-                if (seq.elements.size == 1) {
-                    null
-                } else {
-                    (seq.elements[1] as ASN1Integer).toLong()
-                }
-            )
+            // BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
+            // In DER, a component with a DEFAULT value is omitted when equal to its default, so CA:FALSE
+            // without pathLenConstraint is encoded as an empty SEQUENCE.
+            val ca = (seq.elements.firstOrNull() as? ASN1Boolean)?.value ?: false
+            val pathLen = seq.elements.filterIsInstance<ASN1Integer>().firstOrNull()?.toLong()
+            return Pair(ca, pathLen)
         }
 
     companion object {
@@ -348,9 +346,10 @@ data class X509Cert(
             ca: Boolean,
             pathLenConstraint: Int?,
         ): Builder {
-            val seq = mutableListOf<ASN1Object>(
-                ASN1Boolean(ca)
-            )
+            val seq = mutableListOf<ASN1Object>()
+            if (ca) {
+                seq.add(ASN1Boolean(true))
+            }
             if (pathLenConstraint != null) {
                 seq.add(ASN1Integer(pathLenConstraint.toLong()))
             }

@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.credential
 
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.io.bytestring.ByteString
 import kotlin.time.Instant
 import org.multipaz.asn1.OID
@@ -382,45 +383,52 @@ class MdocCredential : SecureAreaBoundCredential {
                 if (certChain != null && certChain.certificates.isNotEmpty()) {
                     val dsCert = certChain.certificates[0]
 
-                    if (dsCert.keyUsage.isEmpty()) {
-                        addWarning("DS certificate in x5chain does not have Key Usage extension")
-                    } else {
-                        if (!dsCert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
-                            addError("DS certificate in x5chain does not have DIGITAL_SIGNATURE key usage")
+                    try {
+                        if (dsCert.keyUsage.isEmpty()) {
+                            addWarning("DS certificate in x5chain does not have Key Usage extension")
+                        } else {
+                            if (!dsCert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+                                addError("DS certificate in x5chain does not have DIGITAL_SIGNATURE key usage")
+                            }
+                            if (dsCert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
+                                addWarning("DS certificate in x5chain has KEY_CERT_SIGN key usage (DS certificate should not be a CA)")
+                            }
                         }
-                        if (dsCert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
-                            addWarning("DS certificate in x5chain has KEY_CERT_SIGN key usage (DS certificate should not be a CA)")
-                        }
-                    }
 
-                    if (dsCert.basicConstraints?.first == true) {
-                        addWarning("DS certificate in x5chain has Basic Constraints CA=true (DS certificate should not be a CA)")
-                    }
+                        if (dsCert.basicConstraints?.first == true) {
+                            addWarning("DS certificate in x5chain has Basic Constraints CA=true (DS certificate should not be a CA)")
+                        }
 
-                    val ekuExt = dsCert.getExtensionValue(OID.X509_EXTENSION_EXTENDED_KEY_USAGE.oid)
-                    if (ekuExt == null) {
-                        addWarning("DS certificate in x5chain does not have Extended Key Usage extension (expected mDL DS OID 1.0.18013.5.1.2)")
-                    }
+                        if (docType == "org.iso.18013.5.1.mDL") {
+                            val ekuExt = dsCert.getExtensionValue(OID.X509_EXTENSION_EXTENDED_KEY_USAGE.oid)
+                            if (ekuExt == null) {
+                                addWarning("DS certificate in x5chain does not have Extended Key Usage extension (expected mDL DS OID 1.0.18013.5.1.2)")
+                            }
+                        }
 
-                    if (parsedMso != null) {
-                        if (parsedMso.signedAt < dsCert.validityNotBefore) {
-                            addError("MSO signed timestamp (${parsedMso.signedAt}) is before DS certificate validity period (notBefore: ${dsCert.validityNotBefore})")
+                        if (parsedMso != null) {
+                            if (parsedMso.signedAt < dsCert.validityNotBefore) {
+                                addError("MSO signed timestamp (${parsedMso.signedAt}) is before DS certificate validity period (notBefore: ${dsCert.validityNotBefore})")
+                            }
+                            if (parsedMso.signedAt > dsCert.validityNotAfter) {
+                                addError("MSO signed timestamp (${parsedMso.signedAt}) is after DS certificate validity period (notAfter: ${dsCert.validityNotAfter})")
+                            }
+                            if (parsedMso.validUntil > dsCert.validityNotAfter) {
+                                addWarning("MSO validUntil (${parsedMso.validUntil}) is after DS certificate validity period (notAfter: ${dsCert.validityNotAfter})")
+                            }
                         }
-                        if (parsedMso.signedAt > dsCert.validityNotAfter) {
-                            addError("MSO signed timestamp (${parsedMso.signedAt}) is after DS certificate validity period (notAfter: ${dsCert.validityNotAfter})")
-                        }
-                        if (parsedMso.validUntil > dsCert.validityNotAfter) {
-                            addWarning("MSO validUntil (${parsedMso.validUntil}) is after DS certificate validity period (notAfter: ${dsCert.validityNotAfter})")
-                        }
-                    }
 
-                    if (now != null) {
-                        if (now < dsCert.validityNotBefore) {
-                            addWarning("DS certificate is not yet valid (notBefore: ${dsCert.validityNotBefore}, current time: $now)")
+                        if (now != null) {
+                            if (now < dsCert.validityNotBefore) {
+                                addWarning("DS certificate is not yet valid (notBefore: ${dsCert.validityNotBefore}, current time: $now)")
+                            }
+                            if (now > dsCert.validityNotAfter) {
+                                addWarning("DS certificate is expired (notAfter: ${dsCert.validityNotAfter}, current time: $now)")
+                            }
                         }
-                        if (now > dsCert.validityNotAfter) {
-                            addWarning("DS certificate is expired (notAfter: ${dsCert.validityNotAfter}, current time: $now)")
-                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        addError("Failed to parse DS certificate: ${e.message}")
                     }
 
                     if (signatureAlgorithm != null) {

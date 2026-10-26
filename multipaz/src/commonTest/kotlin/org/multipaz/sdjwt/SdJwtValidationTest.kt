@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.OID
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -360,5 +361,45 @@ class SdJwtValidationTest {
         val invalidStatusResult = sdJwtWithInvalidStatus.validateVc(now = now + 1.hours)
         assertTrue(invalidStatusResult.hasErrors)
         assertTrue(invalidStatusResult.errors.any { it.message.contains("'status' claim is not a JSON object") })
+    }
+
+    @Test
+    fun testSdJwtIssuerCertMalformedExtensionReportsErrorInsteadOfThrowing() = runTest {
+        val now = Instant.fromEpochSeconds(1700000000)
+        val ecKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        // Add a malformed BasicConstraints extension (ASN1Boolean instead of ASN1Sequence)
+        val cert = X509Cert.Builder(
+            publicKey = ecKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(ecKey, Algorithm.ES256),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Malformed Issuer"),
+            issuer = X500Name.fromName("CN=Malformed Issuer"),
+            validFrom = now - 1.days,
+            validUntil = now + 30.days
+        )
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .addExtension(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid, true, byteArrayOf(0x01, 0x01, 0x00))
+            .build()
+        val issuerKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(cert)),
+            privateKey = ecKey
+        )
+
+        val sdJwt = SdJwt.create(
+            issuerKey = issuerKey,
+            kbKey = null,
+            claims = buildJsonObject {
+                put("given_name", "Alice")
+            },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.com")
+                put("iat", now.epochSeconds)
+                put("exp", (now + 1.days).epochSeconds)
+            }
+        )
+
+        val result = sdJwt.validate(now = now + 1.hours)
+        assertTrue(result.hasErrors)
+        assertTrue(result.errors.any { it.message.contains("Failed to parse issuer certificate in 'x5c'") })
     }
 }

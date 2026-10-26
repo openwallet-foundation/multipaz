@@ -213,24 +213,29 @@ class SdJwt private constructor(
                 addError("SD-JWT 'x5c' certificate chain is empty")
             } else {
                 val leafCert = certChain.certificates.first()
-                if (leafCert.keyUsage.isNotEmpty()) {
-                    if (!leafCert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
-                        addError("Issuer certificate in 'x5c' does not have DIGITAL_SIGNATURE key usage")
+                try {
+                    if (leafCert.keyUsage.isNotEmpty()) {
+                        if (!leafCert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+                            addError("Issuer certificate in 'x5c' does not have DIGITAL_SIGNATURE key usage")
+                        }
+                        if (leafCert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
+                            addWarning("Issuer certificate in 'x5c' has KEY_CERT_SIGN key usage (issuer certificate should not be a CA)")
+                        }
                     }
-                    if (leafCert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
-                        addWarning("Issuer certificate in 'x5c' has KEY_CERT_SIGN key usage (issuer certificate should not be a CA)")
+                    if (leafCert.basicConstraints?.first == true) {
+                        addWarning("Issuer certificate in 'x5c' has Basic Constraints CA=true (issuer certificate should not be a CA)")
                     }
-                }
-                if (leafCert.basicConstraints?.first == true) {
-                    addWarning("Issuer certificate in 'x5c' has Basic Constraints CA=true (issuer certificate should not be a CA)")
-                }
-                if (now != null) {
-                    if (now < leafCert.validityNotBefore) {
-                        addWarning("Issuer certificate is not yet valid (notBefore: ${leafCert.validityNotBefore}, current time: $now)")
+                    if (now != null) {
+                        if (now < leafCert.validityNotBefore) {
+                            addWarning("Issuer certificate is not yet valid (notBefore: ${leafCert.validityNotBefore}, current time: $now)")
+                        }
+                        if (now > leafCert.validityNotAfter) {
+                            addWarning("Issuer certificate is expired (notAfter: ${leafCert.validityNotAfter}, current time: $now)")
+                        }
                     }
-                    if (now > leafCert.validityNotAfter) {
-                        addWarning("Issuer certificate is expired (notAfter: ${leafCert.validityNotAfter}, current time: $now)")
-                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    addError("Failed to parse issuer certificate in 'x5c': ${e.message}")
                 }
                 try {
                     JsonWebSignature.verify("$header.$body.$signature", leafCert.publicKey)

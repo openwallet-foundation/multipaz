@@ -3,7 +3,9 @@ package org.multipaz.crypto
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonArray
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.OID
 import org.multipaz.testUtilSetupCryptoProvider
+import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -761,5 +763,64 @@ class X509CertChainTests {
         assertFailsWith<X509CertChainValidationException.Expired> {
             chain.validate(validateAt = now, validateCaValidity = false)
         }
+    }
+
+    @Test
+    fun testBasicConstraintsCaFalse() = runTest {
+        initKeys()
+
+        // EU reference PID issuer document signer certificate from
+        // https://github.com/openwallet-foundation/multipaz/issues/2108
+        // with BasicConstraints critical, CA:FALSE encoded as an empty SEQUENCE (30 00)
+        // per DER rules for DEFAULT FALSE.
+        val euPidDsCert = X509Cert.fromPem(
+            """
+            -----BEGIN CERTIFICATE-----
+            MIIDbDCCAxKgAwIBAgIUe4Kzlw4Ssz8pooCGrSEpkjacV/EwCgYIKoZIzj0EAwIw
+            VzEZMBcGA1UEAwwQUElEIElzc3VlciBDQSAwMjEtMCsGA1UECgwkRVVESSBXYWxs
+            ZXQgUmVmZXJlbmNlIEltcGxlbWVudGF0aW9uMQswCQYDVQQGEwJMVTAeFw0yNjA5
+            MjkxMjAxMjFaFw0yNzEyMjMxMjAxMjBaMHExGTAXBgNVBAMMEFBJRCBEUyAtIDAw
+            MyBERVYxGDAWBgNVBGEMD0xFSUVVLTEyMzQ1Njc4OTEtMCsGA1UECgwkRVVESSBX
+            YWxsZXQgUmVmZXJlbmNlIEltcGxlbWVudGF0aW9uMQswCQYDVQQGEwJMVTBZMBMG
+            ByqGSM49AgEGCCqGSM49AwEHA0IABORnbm/HI77Uib1+xkP6lJ68zsrLv0G8DcTY
+            AomX/wF48wOCIps9L6I2DuxE+8L5TQiloXIuOGP1A5wAqfbq33GjggGgMIIBnDAM
+            BgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFFxi+9GmJnpnPzVXFDj4B1jgh7PwMFkG
+            CCsGAQUFBwEBBE0wSzBJBggrBgEFBQcwAoY9aHR0cHM6Ly9wcmVwcm9kLnBraS5l
+            dWRpdy5kZXYvYWlhL1BJRElzc3VlckNBMDItTFUuY2FjZXJ0LnBlbTAqBgNVHREE
+            IzAhhh9odHRwczovL2VjLmRldi5pc3N1ZXIuZXVkaXcuZGV2MC4GA1UdIAQnMCUw
+            IwYDKgMEMBwwGgYIKwYBBQUHAgEWDmV4YW1wbGUucG9saWN5MBsGA1UdJQQUMBIG
+            ByiBjF0FAQIGByiBtTQEAQIwQwYDVR0fBDwwOjA4oDagNIYyaHR0cHM6Ly9wcmVw
+            cm9kLnBraS5ldWRpdy5kZXYvY3JsL3BpZF9DQV9MVV8wMi5jcmwwHQYDVR0OBBYE
+            FLoPAUp/N1j54IHVy0T9SpX+8Wk5MA4GA1UdDwEB/wQEAwIHgDAjBggrBgEFBQcB
+            AwQXMBUwEwYGBACORgEGMAkGBwQAi+xOAQEwCgYIKoZIzj0EAwIDSAAwRQIhAIg5
+            MqvG9q06gf782ys0IKPbPQNawEkIzV+0Z8JmwIl/AiAGCdqzEgH2pFxxsYJ+vEil
+            J3QV72xOsSKnPdfWrMsqAQ==
+            -----END CERTIFICATE-----
+            """.trimIndent()
+        )
+        assertEquals(
+            "3000",
+            euPidDsCert.getExtensionValue(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid)?.toHex()
+        )
+        assertEquals(Pair(false, null), euPidDsCert.basicConstraints)
+
+        // Verify Builder.setBasicConstraints(false, null) also encodes an empty SEQUENCE (30 00)
+        // and round-trips to Pair(false, null).
+        val builtCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            setBasicConstraints(ca = false, pathLenConstraint = null)
+        }
+        assertEquals(
+            "3000",
+            builtCert.getExtensionValue(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid)?.toHex()
+        )
+        assertEquals(Pair(false, null), builtCert.basicConstraints)
     }
 }
