@@ -198,6 +198,8 @@
     <string name="presentment_activity_something_went_wrong">משהו השתבש</string>
     <string name="presentment_activity_canceled">בוטל</string>
     <string name="presentment_activity_cannot_satisfy_request">לא ניתן למלא את הבקשה</string>
+    <string name="presentment_activity_authentication_failed">האימות נכשל</string>
+    <string name="presentment_activity_face_match_failed">התאמת הפנים נכשלה</string>
     <string name="presentment_activity_open_wallet">לפתוח את %1$s</string>
     <string name="presentment_activity_app_name_default">ארנק</string>
     <string name="presentment_activity_no_documents_available">אין מסמכים זמינים</string>

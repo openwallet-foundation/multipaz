@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Terjadi kesalahan</string>
     <string name="presentment_activity_canceled">Dibatalkan</string>
     <string name="presentment_activity_cannot_satisfy_request">Tidak dapat memenuhi permintaan</string>
+    <string name="presentment_activity_authentication_failed">Autentikasi gagal</string>
+    <string name="presentment_activity_face_match_failed">Pencocokan wajah gagal</string>
     <string name="presentment_activity_open_wallet">Buka %1$s</string>
     <string name="presentment_activity_app_name_default">Dompet</string>
     <string name="presentment_activity_no_documents_available">Tidak ada dokumen yang tersedia</string>

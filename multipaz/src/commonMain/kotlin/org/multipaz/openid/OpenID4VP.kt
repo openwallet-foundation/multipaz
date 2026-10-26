@@ -44,6 +44,7 @@ import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlCredentialQueryException
 import kotlinx.coroutines.withContext
 import org.multipaz.openid.dcql.DcqlQuery
+import org.multipaz.presentment.AuthenticationFailedException
 import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.FaceNotMatchedException
@@ -58,6 +59,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
+import org.multipaz.securearea.KeyLockedException
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.TransactionData
@@ -328,11 +330,13 @@ object OpenID4VP {
      * @param requesterIdentities verifier identities that were used to sign the request (there
      *  may be multiple for multisigned requests, or none for unsigned requests).
      * @return the generated response according to OpenID4VP Section 8 Response.
+     * @throws AuthenticationFailedException if user authentication failed or was canceled.
      * @throws FaceNotMatchedException if face matching failed or was canceled.
      * @throws PresentmentCanceledException if the user canceled in a consent prompt.
      * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
      */
     @Throws(
+        AuthenticationFailedException::class,
         CancellationException::class,
         IllegalStateException::class,
         PresentmentCanceledException::class,
@@ -512,41 +516,45 @@ object OpenID4VP {
 
         var usingZk = false
         val credentialsPresented = mutableSetOf<Credential>()
-        withContext(keyUnlockDataProvider) {
-            selection.matches.forEach { match ->
-                match.source as CredentialMatchSourceOpenID4VP
-                val requestIsForZk = match.source.credentialQuery.format == "mso_mdoc_zk"
-                if (requestIsForZk) {
-                    usingZk = true
+        try {
+            withContext(keyUnlockDataProvider) {
+                selection.matches.forEach { match ->
+                    match.source as CredentialMatchSourceOpenID4VP
+                    val requestIsForZk = match.source.credentialQuery.format == "mso_mdoc_zk"
+                    if (requestIsForZk) {
+                        usingZk = true
+                    }
+                    val credentialResponse = if (match.source.credentialQuery.mdocDocType != null) {
+                        openID4VPMsoMdoc(
+                            version = version,
+                            match = match,
+                            source = source,
+                            origin = origin,
+                            clientId = clientId,
+                            nonce = nonce,
+                            reReaderPublicKey = reReaderPublicKey,
+                            responseUri = responseUri,
+                            requestIsForZk = requestIsForZk,
+                            faceMatchedCredentials = faceMatchedCredentials,
+                        )
+                    } else if (match.source.credentialQuery.vctValues != null) {
+                        openID4VPSdJwt(
+                            version = version,
+                            match = match,
+                            origin = origin,
+                            clientId = clientId,
+                            nonce = nonce,
+                            responseMode = responseMode
+                        )
+                    } else {
+                        throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
+                    }
+                    vpTokens[match.source.credentialQuery.id] = credentialResponse
+                    credentialsPresented.add(match.credential)
                 }
-                val credentialResponse = if (match.source.credentialQuery.mdocDocType != null) {
-                    openID4VPMsoMdoc(
-                        version = version,
-                        match = match,
-                        source = source,
-                        origin = origin,
-                        clientId = clientId,
-                        nonce = nonce,
-                        reReaderPublicKey = reReaderPublicKey,
-                        responseUri = responseUri,
-                        requestIsForZk = requestIsForZk,
-                        faceMatchedCredentials = faceMatchedCredentials,
-                    )
-                } else if (match.source.credentialQuery.vctValues != null) {
-                    openID4VPSdJwt(
-                        version = version,
-                        match = match,
-                        origin = origin,
-                        clientId = clientId,
-                        nonce = nonce,
-                        responseMode = responseMode
-                    )
-                } else {
-                    throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
-                }
-                vpTokens[match.source.credentialQuery.id] = credentialResponse
-                credentialsPresented.add(match.credential)
             }
+        } catch (e: KeyLockedException) {
+            throw AuthenticationFailedException("User authentication failed", e)
         }
 
         val vpToken = when (version) {

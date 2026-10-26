@@ -13,29 +13,55 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.document.Document
+import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.EReaderKey
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
+import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
+import org.multipaz.mdoc.transport.TransportWarning
+import org.multipaz.mdoc.transport.TransportWarningCode
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 private const val TAG = "Iso180135Presentment"
+
+private data class CompletedProximityExchange(
+    val presentmentData: EventPresentmentData,
+    val request: DataItem,
+    val response: DataItem,
+    val sessionTranscript: DataItem,
+)
+
+private fun inferEngagementType(
+    transport: MdocTransport,
+    handover: DataItem,
+): EngagementType = when {
+    transport is NfcHybridTransportMdoc -> EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT
+    handover == Simple.NULL -> EngagementType.QR_CODE
+    handover is CborArray && handover.items.getOrNull(1) == Simple.NULL -> EngagementType.NFC_STATIC_HANDOVER
+    else -> EngagementType.NFC_NEGOTIATED_HANDOVER
+}
 
 /**
  * Performs proximity presentment according to ISO/IEC 18013-5:2021.
@@ -53,11 +79,16 @@ private const val TAG = "Iso180135Presentment"
  * @param onWaitingForUserInput callback when waiting for user input.
  * @param onDocumentsInFocus callback with selected documents.
  * @param onSendingResponse callback when sending response.
+ * @param onDeviceRequest callback when a [DeviceRequest] is received.
+ * @param onTelemetry callback invoked with the final [PresentmentTelemetry]. This is guaranteed to
+ *   be called both before returning normally and before an exception is thrown.
+ * @throws AuthenticationFailedException if user authentication failed or was canceled.
  * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
+    AuthenticationFailedException::class,
     CancellationException::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
@@ -80,10 +111,57 @@ suspend fun Iso18013Presentment(
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     onSendingResponse: () -> Unit = {},
     onDeviceRequest: (deviceRequest: DeviceRequest) -> Unit = {},
+    onTelemetry: (telemetry: PresentmentTelemetry) -> Unit = {},
 ) {
+    val startTime = Clock.System.now()
+    var connectedTime: Instant? = null
+    var durationEngagementToConnected: Duration? = null
+    var durationConnectedToRequestReceived: Duration? = null
+    var durationUserConsentAndAuth: Duration? = null
+    var durationResponseGeneration: Duration? = null
+    var durationResponseTransmission: Duration? = null
     var numRequestsServed = 0
+    var numDocumentsPresented = 0
+    var numNfcReTaps = 0
+    var lastRequestSizeBytes: Int? = null
+    var lastResponseSizeBytes: Int? = null
+    var lastRequesterInTrustList: Boolean? = null
+    var lastSessionTranscript: DataItem? = null
+    var lastDeviceRequest: DeviceRequest? = null
+    val presentmentWarnings = mutableListOf<TransportWarning>()
+    val completedExchanges = mutableListOf<CompletedProximityExchange>()
+    var finalOutcome = PresentmentOutcome.SUCCESS
     var sendSessionTermination = false
     var sessionEncryption: SessionEncryption? = null
+
+    fun buildTelemetry(
+        outcome: PresentmentOutcome,
+    ): PresentmentTelemetry {
+        val currentStats = transport.stats
+        val engagementType = inferEngagementType(transport, engagementParams.value.handover)
+        val mergedWarnings = (presentmentWarnings + currentStats.warnings).distinct()
+        val effectiveNfcReTaps = maxOf(numNfcReTaps, (transport as? NfcHybridTransportMdoc)?.numNfcReTaps ?: 0)
+        return PresentmentTelemetry(
+            protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+            engagementType = engagementType,
+            outcome = outcome,
+            warnings = mergedWarnings,
+            requesterInTrustList = lastRequesterInTrustList,
+            requestSizeBytes = lastRequestSizeBytes,
+            responseSizeBytes = lastResponseSizeBytes,
+            numRequestsServed = numRequestsServed,
+            numDocumentsPresented = numDocumentsPresented,
+            numNfcReTaps = effectiveNfcReTaps,
+            durationEngagementToConnected = durationEngagementToConnected,
+            durationConnectedToRequestReceived = durationConnectedToRequestReceived,
+            durationUserConsentAndAuth = durationUserConsentAndAuth,
+            durationResponseGeneration = durationResponseGeneration,
+            durationResponseTransmission = durationResponseTransmission,
+            durationTotal = Clock.System.now() - startTime,
+            transportStats = currentStats,
+        )
+    }
+
     try {
         // Wait until state changes to CONNECTED, FAILED, or CLOSED
         transport.state.first {
@@ -91,8 +169,11 @@ suspend fun Iso18013Presentment(
                     it == MdocTransport.State.FAILED ||
                     it == MdocTransport.State.CLOSED
         }
+        val nowConnected = Clock.System.now()
+        connectedTime = nowConnected
+        durationEngagementToConnected = nowConnected - startTime
         if (transport.state.value != MdocTransport.State.CONNECTED) {
-            throw IllegalStateException("Expected state CONNECTED but found ${transport.state.value}")
+            throw MdocTransportException("Expected state CONNECTED but found ${transport.state.value}")
         }
         sendSessionTermination = true
         val initialParams = engagementParams.value
@@ -114,7 +195,9 @@ suspend fun Iso18013Presentment(
                     throw Iso18013PresentmentNfcDisconnectedException()
                 }
                 Logger.i(TAG, "NFC disconnected while waiting for reader message. Waiting for re-tap...")
+                presentmentWarnings.add(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
                 transport.isNfcConnected.first { it }
+                numNfcReTaps += 1
                 Logger.i(TAG, "Re-tapped! Continuing presentment session...")
             }
             val timeoutToUse = if (numRequestsServed == 0) timeout else timeoutSubsequentRequests
@@ -157,6 +240,10 @@ suspend fun Iso18013Presentment(
                 break
             }
 
+            if (durationConnectedToRequestReceived == null) {
+                durationConnectedToRequestReceived = Clock.System.now() - connectedTime
+            }
+
             val currentParams = engagementParams.value
             val eDeviceKeyToUse = currentParams.eDeviceKey
             val deviceEngagementToUse = currentParams.deviceEngagement
@@ -173,6 +260,7 @@ suspend fun Iso18013Presentment(
                     add(Tagged(Tagged.ENCODED_CBOR, Bstr(currentEReaderKey.encodedCoseKey)))
                     add(handoverToUse)
                 }
+                lastSessionTranscript = sessionTranscript
                 Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
                 encodedSessionTranscript = Cbor.encode(sessionTranscript)
                 sessionEncryption?.close()
@@ -196,9 +284,11 @@ suspend fun Iso18013Presentment(
                 throw IllegalStateException("No data in message from reader")
             }
 
+            lastRequestSizeBytes = encodedDeviceRequest.size
             Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
             val deviceRequestCbor = Cbor.decode(encodedDeviceRequest)
             val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
+            lastDeviceRequest = deviceRequest
             deviceRequest.verifyReaderAuthentication(sessionTranscript)
             onDeviceRequest(deviceRequest)
             if (transport is NfcHybridTransportMdoc && transport.isNfcOnly) {
@@ -209,6 +299,7 @@ suspend fun Iso18013Presentment(
             val keyUnlockDataProvider: KeyUnlockDataProvider
             val faceMatchedCredentials: List<Credential>
 
+            val consentStartTime = Clock.System.now()
             val currentActiveRequest = activeDeviceRequest
             if (currentActiveRequest != null &&
                 deviceRequest.isStructurallyEquivalent(currentActiveRequest) &&
@@ -242,6 +333,7 @@ suspend fun Iso18013Presentment(
                 cachedKeyUnlockDataProvider = keyUnlockDataProvider
                 cachedFaceMatchedCredentials = faceMatchedCredentials
             }
+            durationUserConsentAndAuth = (durationUserConsentAndAuth ?: Duration.ZERO) + (Clock.System.now() - consentStartTime)
 
             onSendingResponse()
 
@@ -249,7 +341,9 @@ suspend fun Iso18013Presentment(
                 transport.markResponsePending()
                 if (!transport.isNfcConnected.value) {
                     Logger.i(TAG, "NFC disconnected after user consent/auth. Waiting for re-tap before generating response...")
+                    presentmentWarnings.add(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
                     transport.isNfcConnected.first { it }
+                    numNfcReTaps += 1
                     Logger.i(TAG, "Re-tapped! Proceeding with response generation using latest engagement parameters.")
                 }
             }
@@ -273,6 +367,7 @@ suspend fun Iso18013Presentment(
                     add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCoseKeyToUse)))
                     add(latestHandover)
                 }
+                lastSessionTranscript = sessionTranscript
                 sessionEncryption?.close()
                 sessionEncryption = SessionEncryption(
                     role = MdocRole.MDOC,
@@ -285,6 +380,7 @@ suspend fun Iso18013Presentment(
             val sessionTranscriptToUse = sessionTranscript
             val sessionEncryptionToUse = sessionEncryption!!
 
+            val genStartTime = Clock.System.now()
             val responseObject = withContext(keyUnlockDataProvider) {
                 mdocPresentmentGenerateResponse(
                     selection = selection,
@@ -297,16 +393,22 @@ suspend fun Iso18013Presentment(
                     faceMatchedCredentials = faceMatchedCredentials,
                 )
             }
-            transport.sendMessage(
-                sessionEncryptionToUse.encryptMessage(
-                    messagePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
-                    statusCode = null
-                )
+            val encodedResponsePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem())
+            val encryptedResponse = sessionEncryptionToUse.encryptMessage(
+                messagePlaintext = encodedResponsePlaintext,
+                statusCode = null
             )
-            numRequestsServed += 1
+            durationResponseGeneration = (durationResponseGeneration ?: Duration.ZERO) + (Clock.System.now() - genStartTime)
+            lastResponseSizeBytes = encodedResponsePlaintext.size
+            lastRequesterInTrustList = responseObject.eventData.trustMetadata != null
 
-            source.eventLogger?.addEventAsync(
-                EventPresentmentIso18013Proximity(
+            val txStartTime = Clock.System.now()
+            transport.sendMessage(encryptedResponse)
+            durationResponseTransmission = (durationResponseTransmission ?: Duration.ZERO) + (Clock.System.now() - txStartTime)
+            numRequestsServed += 1
+            numDocumentsPresented += responseObject.eventData.requestedDocuments.size
+            completedExchanges.add(
+                CompletedProximityExchange(
                     presentmentData = responseObject.eventData,
                     request = deviceRequest.toDataItem(),
                     response = responseObject.deviceResponse.toDataItem(),
@@ -316,6 +418,9 @@ suspend fun Iso18013Presentment(
 
             Logger.i(TAG, "Response sent, keeping connection open")
         }
+    } catch (error: Throwable) {
+        finalOutcome = classifyPresentmentException(error)
+        throw error
     } finally {
         try {
             if (sendSessionTermination &&
@@ -337,9 +442,37 @@ suspend fun Iso18013Presentment(
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Logger.w(TAG, "Caught error while sending session-termination", e)
+                    presentmentWarnings.add(TransportWarning(TransportWarningCode.SESSION_TERMINATION_SEND_FAILED))
                 }
             }
         } finally {
+            val resolvedTelemetry = buildTelemetry(
+                outcome = finalOutcome,
+            )
+            if (completedExchanges.isNotEmpty()) {
+                for (exchange in completedExchanges) {
+                    source.eventLogger?.addEventAsync(
+                        EventPresentmentIso18013Proximity(
+                            presentmentData = exchange.presentmentData,
+                            request = exchange.request,
+                            response = exchange.response,
+                            sessionTranscript = exchange.sessionTranscript,
+                            telemetry = resolvedTelemetry,
+                        )
+                    )
+                }
+            } else if (finalOutcome != PresentmentOutcome.SUCCESS) {
+                source.eventLogger?.addEventAsync(
+                    EventPresentmentIso18013Proximity(
+                        presentmentData = null,
+                        request = lastDeviceRequest?.toDataItem(),
+                        response = null,
+                        sessionTranscript = lastSessionTranscript,
+                        telemetry = resolvedTelemetry,
+                    )
+                )
+            }
+            onTelemetry(resolvedTelemetry)
             withContext(NonCancellable) {
                 sessionEncryption?.close()
                 engagementParams.value.eDeviceKey.close()
@@ -368,11 +501,15 @@ suspend fun Iso18013Presentment(
  * @param onWaitingForUserInput callback when waiting for user input.
  * @param onDocumentsInFocus callback with selected documents.
  * @param onSendingResponse callback when sending response.
+ * @param onTelemetry callback invoked with the final [PresentmentTelemetry]. This is guaranteed to
+ *   be called both before returning normally and before an exception is thrown.
+ * @throws AuthenticationFailedException if user authentication failed or was canceled.
  * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
+    AuthenticationFailedException::class,
     CancellationException::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
@@ -396,6 +533,7 @@ suspend fun Iso18013Presentment(
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     onSendingResponse: () -> Unit = {},
+    onTelemetry: (telemetry: PresentmentTelemetry) -> Unit = {},
 ) = Iso18013Presentment(
     transport = transport,
     engagementParams = MutableStateFlow(
@@ -415,4 +553,5 @@ suspend fun Iso18013Presentment(
     onWaitingForUserInput = onWaitingForUserInput,
     onDocumentsInFocus = onDocumentsInFocus,
     onSendingResponse = onSendingResponse,
+    onTelemetry = onTelemetry,
 )

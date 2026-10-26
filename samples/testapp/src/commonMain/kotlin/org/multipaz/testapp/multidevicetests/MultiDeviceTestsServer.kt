@@ -7,9 +7,13 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.mdoc.transport.MdocTransportStats
+import org.multipaz.mdoc.transport.fromDataItem
+import org.multipaz.presentment.PresentmentOutcome
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
+import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.openReadChannel
@@ -24,6 +28,9 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import kotlin.math.sqrt
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
@@ -31,7 +38,8 @@ class MultiDeviceTestsServer(
     val job: Job,
     val socket: Socket,
     val plan: Plan,
-    val multiDeviceTestsResults: MutableState<Results>
+    val multiDeviceTestsResults: MutableState<Results>,
+    val stopOnFailure: Boolean = false,
 ) {
     companion object {
         private const val TAG = "MultiDeviceTestsServer"
@@ -51,6 +59,8 @@ class MultiDeviceTestsServer(
     private var numReaderErrors = 0
     private var recordedTimeEngagementToResponseMsec = mutableListOf<Double>()
     private var recordedScanningTimeMsec = mutableListOf<Double>()
+    private val holderAggregator = PresentmentTelemetryAggregator()
+    private val readerAggregator = PresentmentTelemetryAggregator()
 
     suspend fun run() {
         numIterationsTotal = plan.tests.sumOf { it.second }
@@ -58,9 +68,13 @@ class MultiDeviceTestsServer(
             plan = plan,
             numIterationsTotal = numIterationsTotal,
         )
-        for ((test, numIterationsForTest) in plan.tests) {
+        planLoop@ for ((test, numIterationsForTest) in plan.tests) {
             for (n in IntRange(1, numIterationsForTest)) {
                 testPresentation(test)
+                if (stopOnFailure && failedTransactions.isNotEmpty()) {
+                    Logger.w(TAG, "Stopping test plan early on failure at iteration $numIterations")
+                    break@planLoop
+                }
             }
         }
 
@@ -139,6 +153,9 @@ class MultiDeviceTestsServer(
         var readerSuccess = false
         var holderScanningTimeMsec = 0
         var readerScanningTimeMsec = 0
+        var holderOutcome = PresentmentOutcome.TRANSPORT_ERROR
+        var holderDuration: Duration? = null
+        var holderStats: MdocTransportStats? = null
 
         val iterationNumber = numIterations + 1
         Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
@@ -181,6 +198,7 @@ class MultiDeviceTestsServer(
             }
             delay(prewarmDuration)
             Logger.i(TAG, "Done waiting")
+            val holderTimeStart = Clock.System.now()
             withTimeout(45.seconds) {
                 sendChannel.writeStringUtf8("TestPresentationStart\n")
                 transport.open(eDeviceKey.publicKey)
@@ -269,18 +287,30 @@ class MultiDeviceTestsServer(
                     }
                 }
 
+                holderDuration = Clock.System.now() - holderTimeStart
                 holderSuccess = true
+                holderOutcome = PresentmentOutcome.SUCCESS
                 holderScanningTimeMsec = transport.scanningTime?.toInt(DurationUnit.MILLISECONDS) ?: 0
             }
         } catch (e: TimeoutCancellationException) {
             Logger.w(TAG, "Iteration timeout")
+            holderOutcome = PresentmentOutcome.CONNECTION_TIMEOUT
             numHolderTimeouts += 1
         } catch (e: Exception) {
             Logger.w(TAG, "Iteration failed", e)
             e.printStackTrace()
+            holderOutcome = PresentmentOutcome.TRANSPORT_ERROR
             numHolderErrors += 1
         } finally {
+            holderStats = transport.stats
             transport.close()
+        }
+        holderStats?.let {
+            holderAggregator.addTransportStats(
+                stats = it,
+                transactionTime = holderDuration,
+                outcome = holderOutcome
+            )
         }
 
         val response = receiveChannel.readUTF8Line(LINE_LIMIT)
@@ -291,10 +321,36 @@ class MultiDeviceTestsServer(
             val timeEngagementToResponseMsec = parts[1].toInt()
             recordedTimeEngagementToResponseMsec.add(timeEngagementToResponseMsec.toDouble())
             readerScanningTimeMsec = parts[2].toInt()
-        } else if (response == "TestPresentationTimeout") {
+            if (parts.size >= 4 && parts[3].isNotEmpty()) {
+                val readerStats = MdocTransportStats.fromDataItem(Cbor.decode(parts[3].fromBase64Url()))
+                readerAggregator.addTransportStats(
+                    stats = readerStats,
+                    transactionTime = timeEngagementToResponseMsec.milliseconds,
+                    outcome = PresentmentOutcome.SUCCESS
+                )
+            }
+        } else if (response?.startsWith("TestPresentationTimeout") == true) {
             numReaderTimeouts += 1
-        } else if (response == "TestPresentationFailed") {
+            val parts = response.split(" ")
+            if (parts.size >= 2 && parts[1].isNotEmpty()) {
+                val readerStats = MdocTransportStats.fromDataItem(Cbor.decode(parts[1].fromBase64Url()))
+                readerAggregator.addTransportStats(
+                    stats = readerStats,
+                    transactionTime = null,
+                    outcome = PresentmentOutcome.CONNECTION_TIMEOUT
+                )
+            }
+        } else if (response?.startsWith("TestPresentationFailed") == true) {
             numReaderErrors += 1
+            val parts = response.split(" ")
+            if (parts.size >= 2 && parts[1].isNotEmpty()) {
+                val readerStats = MdocTransportStats.fromDataItem(Cbor.decode(parts[1].fromBase64Url()))
+                readerAggregator.addTransportStats(
+                    stats = readerStats,
+                    transactionTime = null,
+                    outcome = PresentmentOutcome.TRANSPORT_ERROR
+                )
+            }
         } else {
             throw IllegalStateException("Unexpected TestPresentation response '$response'")
         }
@@ -350,6 +406,8 @@ class MultiDeviceTestsServer(
                 avg = recordedScanningTimeMsec.averageOrZero().toInt(),
                 stdDev = recordedScanningTimeMsec.stdDevOrZero().toInt(),
             ),
+            holderTelemetry = holderAggregator.aggregate(),
+            readerTelemetry = readerAggregator.aggregate(),
         )
     }
 }

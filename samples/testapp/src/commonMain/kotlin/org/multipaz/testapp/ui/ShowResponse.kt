@@ -45,6 +45,7 @@ import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.transport.MdocTransportType
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
@@ -245,17 +246,37 @@ private suspend fun parseResponse(
         lines.add(Line("Transfer Protocol", ValueText(metadata.transferProtocol)))
         lines.add(Line("Request size", ValueSize(metadata.requestSize)))
         lines.add(Line("Response size", ValueSize(metadata.responseSize)))
-        metadata.nfcHybridTransportStats?.let { stats ->
-            lines.add(Line("Number of messages sent",
-                ValueText("${stats.numSent} (${stats.numSentViaNfc} on NFC, ${stats.numSentViaTransport} on Transport)")
-            ))
-            lines.add(Line("Number of messages received",
-                ValueText("${stats.numReceived} (${stats.numReceivedFirstOnNfc} first on NFC, " +
-                        "${stats.numReceivedFirstOnTransport} first on Transport)")
-            ))
-            lines.add(Line("NFC disconnected during transaction",
-                ValueText("${stats.nfcDisconnectedDuringTransaction}")
-            ))
+        metadata.transportStats?.let { stats ->
+            if (stats.transportType == MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE ||
+                stats.transportType == MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
+            ) {
+                lines.add(Line("Number of messages sent",
+                    ValueText("${stats.numMessagesSent} (${stats.nfcHybridNumSentViaNfc} on NFC, ${stats.nfcHybridNumSentViaTransport} on Transport)")
+                ))
+                lines.add(Line("Number of messages received",
+                    ValueText("${stats.numMessagesReceived} (${stats.nfcHybridNumReceivedFirstOnNfc} first on NFC, " +
+                            "${stats.nfcHybridNumReceivedFirstOnTransport} first on Transport)")
+                ))
+                lines.add(Line("NFC disconnected during transaction",
+                    ValueText("${stats.nfcDisconnectedDuringTransaction}")
+                ))
+            }
+            if (stats.bleNegotiatedMtu != null) {
+                lines.add(Line("BLE negotiated MTU", ValueText("${stats.bleNegotiatedMtu}")))
+            }
+            val totalRetries = stats.bleNumScanRestarts + stats.bleNumGattConnectRetries +
+                stats.bleNumServiceDiscoveryRetries + stats.bleNumL2capConnectRetries
+            if (totalRetries > 0) {
+                lines.add(Line("BLE retries",
+                    ValueText("scan=${stats.bleNumScanRestarts}, gatt=${stats.bleNumGattConnectRetries}, " +
+                        "svc=${stats.bleNumServiceDiscoveryRetries}, l2cap=${stats.bleNumL2capConnectRetries}")
+                ))
+            }
+            if (stats.warnings.isNotEmpty()) {
+                lines.add(Line("Transport warnings",
+                    ValueText(stats.warnings.joinToString(", ") { it.code.name })
+                ))
+            }
         }
         lines.add(Line("Tap to engagement received", ValueDuration(
             metadata.durationMsecNfcTapToEngagement?.toDuration(DurationUnit.MILLISECONDS)

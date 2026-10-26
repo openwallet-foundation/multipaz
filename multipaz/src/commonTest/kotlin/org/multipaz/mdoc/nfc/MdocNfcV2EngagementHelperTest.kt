@@ -269,7 +269,7 @@ class MdocNfcV2EngagementHelperTest {
         override val state = mutableState.asStateFlow()
 
         override val scanningTime: Duration?
-            get() = TODO("Not yet implemented")
+            get() = null
 
         override suspend fun advertise() {}
 

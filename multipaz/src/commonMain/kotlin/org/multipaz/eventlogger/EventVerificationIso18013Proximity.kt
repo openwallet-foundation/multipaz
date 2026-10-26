@@ -1,12 +1,12 @@
 package org.multipaz.eventlogger
 
+import kotlin.time.Duration
+import kotlin.time.Instant
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.mdoc.engagement.EngagementType
-import org.multipaz.mdoc.transport.NfcHybridTransportStats
+import org.multipaz.mdoc.transport.MdocTransportStats
 import org.multipaz.verification.PresentmentRecord
-import kotlin.time.Duration
-import kotlin.time.Instant
 
 /**
  * An event representing credential verification via ISO/IEC 18013-5 proximity presentment.
@@ -20,7 +20,7 @@ import kotlin.time.Instant
  * @property durationEngagementReceivedToRequestSent time elapsed from receiving device engagement until the request was sent, if available.
  * @property durationRequestSentToResponseReceived time elapsed from sending the device request until receiving the response, if available.
  * @property durationScanningTime time spent scanning for holder transport connections, if applicable.
- * @property nfcHybridTransportStats statistics and diagnostics for NFC hybrid transport, if used.
+ * @property transportStats statistics and diagnostics for the underlying [org.multipaz.mdoc.transport.MdocTransport], if available.
  */
 @CborSerializable
 data class EventVerificationIso18013Proximity(
@@ -33,7 +33,7 @@ data class EventVerificationIso18013Proximity(
     val durationEngagementReceivedToRequestSent: Duration? = null,
     override val durationRequestSentToResponseReceived: Duration? = null,
     val durationScanningTime: Duration? = null,
-    val nfcHybridTransportStats: NfcHybridTransportStats? = null,
+    val transportStats: MdocTransportStats? = null,
 ): EventVerification(identifier, timestamp, appData, presentmentRecord, durationRequestSentToResponseReceived) {
     override fun copy(identifier: String, timestamp: Instant, appData: Map<String, DataItem>): Event = copy(
         identifier = identifier,
@@ -45,6 +45,6 @@ data class EventVerificationIso18013Proximity(
         durationEngagementReceivedToRequestSent = this.durationEngagementReceivedToRequestSent,
         durationRequestSentToResponseReceived = this.durationRequestSentToResponseReceived,
         durationScanningTime = this.durationScanningTime,
-        nfcHybridTransportStats = this.nfcHybridTransportStats,
+        transportStats = this.transportStats,
     )
 }

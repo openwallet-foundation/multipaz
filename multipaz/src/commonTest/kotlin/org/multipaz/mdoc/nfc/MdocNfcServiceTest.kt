@@ -11,6 +11,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -58,6 +59,7 @@ import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
+import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
@@ -77,6 +79,7 @@ import org.multipaz.presentment.Iso18013PresentmentNfcDisconnectedException
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentOutcome
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.prompt.PassphrasePromptDialogModel
@@ -3029,6 +3032,252 @@ class MdocNfcServiceTest {
             } finally {
                 tag.deactivate(NfcDeactivationReason.LINK_LOSS)
                 router.stop()
+                fixture.close()
+            }
+        }
+    }
+
+    /**
+     * Verifies that when NFC engagement fails in [MdocNdefService] and [MdocNfcV2Service],
+     * [PresentmentModel.State.Completed] is populated with [MdocNfcEngagementException] and
+     * telemetry recording [PresentmentOutcome.NFC_ENGAGEMENT_FAILED].
+     */
+    @Test
+    fun nfcServicesEngagementFailureReportsNfcEngagementFailedOutcome() = runTest {
+        withContext(Dispatchers.Default) {
+            val source = createPresentmentSource()
+            val promptModel = createTestPromptModel()
+
+            // 1. MdocNdefService: link loss before handover completes (after selecting Capability Container E103)
+            val ndefPresentmentModel = PresentmentModel()
+            val ndefTag = ServiceLoopbackIsoTag()
+            val ndefService = createNdefService(ndefTag) {
+                MdocNdefService.Settings(
+                    source = source,
+                    promptModel = promptModel,
+                    presentmentModel = ndefPresentmentModel,
+                    launchUi = null,
+                    sessionEncryptionCurve = EcCurve.P256,
+                    useNegotiatedHandover = false,
+                    negotiatedHandoverPreferredOrder = emptyList(),
+                    staticHandoverBleCentralClientModeEnabled = true,
+                    staticHandoverBlePeripheralServerModeEnabled = false,
+                    staticHandoverNfcDataTransferEnabled = false,
+                    transportOptions = MdocTransportOptions(),
+                )
+            }
+            ndefTag.service = ndefService
+            ndefService.start()
+            try {
+                ndefTag.selectApplication(Nfc.NDEF_APPLICATION_ID)
+                ndefTag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)
+                ndefTag.deactivate(NfcDeactivationReason.LINK_LOSS)
+
+                val completedNdef = withTimeout(5.seconds) {
+                    ndefPresentmentModel.state.first { it is PresentmentModel.State.Completed }
+                } as PresentmentModel.State.Completed
+                assertIs<MdocNfcEngagementException>(completedNdef.error)
+                assertNotNull(completedNdef.telemetry)
+                assertEquals(PresentmentOutcome.NFC_ENGAGEMENT_FAILED, completedNdef.telemetry.outcome)
+            } finally {
+                ndefService.stop()
+            }
+
+            // 2. MdocNfcV2Service: invalid APDU instruction during engagement
+            val nfcV2PresentmentModel = PresentmentModel()
+            val nfcV2Tag = ServiceLoopbackIsoTag()
+            val nfcV2Service = createNfcV2Service(nfcV2Tag) {
+                MdocNfcV2Service.Settings(
+                    source = source,
+                    promptModel = promptModel,
+                    presentmentModel = nfcV2PresentmentModel,
+                    launchUi = null,
+                    sessionEncryptionCurve = EcCurve.P256,
+                    onlyAllowNfc = true,
+                    handoverPreferredOrder = emptyList(),
+                    transportOptions = MdocTransportOptions(),
+                )
+            }
+            nfcV2Tag.service = nfcV2Service
+            nfcV2Service.start()
+            try {
+                nfcV2Tag.selectApplication(Nfc.MDOC_NFC_ENGAGEMENT_V2_AID)
+                val badResponse = nfcV2Tag.transceive(
+                    CommandApdu(
+                        cla = 0x00,
+                        ins = Nfc.INS_READ_BINARY,
+                        p1 = 0x00,
+                        p2 = 0x00,
+                        payload = ByteString(),
+                        le = 16,
+                    )
+                )
+                assertEquals(
+                    Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID,
+                    badResponse.status
+                )
+
+                val completedNfcV2 = withTimeout(5.seconds) {
+                    nfcV2PresentmentModel.state.first { it is PresentmentModel.State.Completed }
+                } as PresentmentModel.State.Completed
+                assertIs<MdocNfcEngagementException>(completedNfcV2.error)
+                assertNotNull(completedNfcV2.telemetry)
+                assertEquals(PresentmentOutcome.NFC_ENGAGEMENT_FAILED, completedNfcV2.telemetry.outcome)
+            } finally {
+                nfcV2Service.stop()
+                promptModel.cancel()
+            }
+        }
+    }
+
+    /**
+     * Verifies that in [MdocNdefService]:
+     * 1. A failure during `waitForConnection()` before [Iso18013Presentment] starts still populates
+     *    non-null telemetry with [PresentmentOutcome.TRANSPORT_ERROR].
+     * 2. If the transport transitions to [MdocTransport.State.FAILED] while [Iso18013Presentment]
+     *    is suspended waiting on user consent (outside `waitForMessage()`), `monitorJob`'s
+     *    cancellation is classified as [PresentmentOutcome.TRANSPORT_ERROR] rather than
+     *    [PresentmentOutcome.CANCELED_BY_USER].
+     */
+    @Test
+    fun ndefServicePrePresentmentAndMidConsentTransportFailureOutcomes() = runTest {
+        withContext(Dispatchers.Default) {
+            val fixture = createDoubleTapFixture(this)
+            try {
+                // 1. Pre-Iso18013Presentment failure: transport fails during open() inside waitForConnection()
+                val prePresentmentModel = PresentmentModel()
+                val tag1 = ServiceLoopbackIsoTag()
+                val ndefService1 = createNdefService(tag1) {
+                    MdocNdefService.Settings(
+                        source = fixture.source,
+                        promptModel = fixture.promptModel,
+                        presentmentModel = prePresentmentModel,
+                        launchUi = null,
+                        sessionEncryptionCurve = EcCurve.P256,
+                        useNegotiatedHandover = false,
+                        negotiatedHandoverPreferredOrder = emptyList(),
+                        staticHandoverBleCentralClientModeEnabled = true,
+                        staticHandoverBlePeripheralServerModeEnabled = false,
+                        staticHandoverNfcDataTransferEnabled = false,
+                        transportOptions = MdocTransportOptions(),
+                        transportFactory = object : MdocTransportFactory {
+                            override fun createTransport(
+                                connectionMethod: MdocConnectionMethod,
+                                role: MdocRole,
+                                options: MdocTransportOptions
+                            ): MdocTransport = object : MdocTransport() {
+                                private val _state = MutableStateFlow(State.IDLE)
+                                override val state: StateFlow<State> = _state
+                                override val role: MdocRole = role
+                                override val connectionMethod: MdocConnectionMethod = connectionMethod
+                                override val scanningTime: Duration? = null
+                                override suspend fun advertise() {
+                                    _state.value = State.ADVERTISING
+                                }
+                                override suspend fun open(eSenderKey: EcPublicKey) {
+                                    _state.value = State.FAILED
+                                    throw MdocTransportException("BLE open failed")
+                                }
+                                override suspend fun sendMessage(message: ByteArray) {}
+                                override suspend fun waitForMessage(): ByteArray = byteArrayOf()
+                                override suspend fun close() {
+                                    _state.value = State.CLOSED
+                                }
+                            }
+                        },
+                    )
+                }
+                tag1.service = ndefService1
+                ndefService1.start()
+                try {
+                    val handover1 = mdocReaderNfcHandover(
+                        tag = tag1,
+                        negotiatedHandoverConnectionMethods = emptyList(),
+                    )
+                    assertNotNull(handover1)
+                    val completed1 = withTimeout(5.seconds) {
+                        prePresentmentModel.state.first { it is PresentmentModel.State.Completed }
+                    } as PresentmentModel.State.Completed
+                    assertNotNull(completed1.telemetry)
+                    assertEquals(PresentmentOutcome.TRANSPORT_ERROR, completed1.telemetry.outcome)
+                } finally {
+                    ndefService1.stop()
+                }
+
+                // 2. Mid-consent transport failure: transport transitions to State.FAILED while waiting on consent
+                val midConsentModel = PresentmentModel()
+                val transportStateFlow = MutableStateFlow(MdocTransport.State.IDLE)
+                val incomingRequest = CompletableDeferred<ByteArray>()
+                val tag2 = ServiceLoopbackIsoTag()
+                val ndefService2 = createNdefService(tag2) {
+                    MdocNdefService.Settings(
+                        source = fixture.source,
+                        promptModel = fixture.promptModel,
+                        presentmentModel = midConsentModel,
+                        launchUi = null,
+                        sessionEncryptionCurve = EcCurve.P256,
+                        useNegotiatedHandover = false,
+                        negotiatedHandoverPreferredOrder = emptyList(),
+                        staticHandoverBleCentralClientModeEnabled = true,
+                        staticHandoverBlePeripheralServerModeEnabled = false,
+                        staticHandoverNfcDataTransferEnabled = false,
+                        transportOptions = MdocTransportOptions(),
+                        transportFactory = object : MdocTransportFactory {
+                            override fun createTransport(
+                                connectionMethod: MdocConnectionMethod,
+                                role: MdocRole,
+                                options: MdocTransportOptions
+                            ): MdocTransport = object : MdocTransport() {
+                                override val state: StateFlow<State> = transportStateFlow
+                                override val role: MdocRole = role
+                                override val connectionMethod: MdocConnectionMethod = connectionMethod
+                                override val scanningTime: Duration? = null
+                                override suspend fun advertise() {
+                                    transportStateFlow.value = State.ADVERTISING
+                                }
+                                override suspend fun open(eSenderKey: EcPublicKey) {
+                                    transportStateFlow.value = State.CONNECTED
+                                }
+                                override suspend fun sendMessage(message: ByteArray) {}
+                                override suspend fun waitForMessage(): ByteArray = incomingRequest.await()
+                                override suspend fun close() {
+                                    if (transportStateFlow.value != State.FAILED) {
+                                        transportStateFlow.value = State.CLOSED
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+                tag2.service = ndefService2
+                ndefService2.start()
+                try {
+                    val handover2 = mdocReaderNfcHandover(
+                        tag = tag2,
+                        negotiatedHandoverConnectionMethods = emptyList(),
+                    )
+                    assertNotNull(handover2)
+                    val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
+                    incomingRequest.complete(readerSession2.encryptedDeviceRequest)
+
+                    withTimeout(5.seconds) { fixture.consentPromptShown.await() }
+                    assertEquals(PresentmentModel.State.WaitingForUserInput, midConsentModel.state.value)
+
+                    // Simulate transport failing while suspended in showConsentPromptFn
+                    transportStateFlow.value = MdocTransport.State.FAILED
+
+                    val completed2 = withTimeout(5.seconds) {
+                        midConsentModel.state.first { it is PresentmentModel.State.Completed }
+                    } as PresentmentModel.State.Completed
+                    assertIs<MdocTransportException>(completed2.error)
+                    assertNotNull(completed2.telemetry)
+                    assertEquals(PresentmentOutcome.TRANSPORT_ERROR, completed2.telemetry.outcome)
+                    readerSession2.sessionEncryption.close()
+                    readerSession2.eReaderKey.close()
+                } finally {
+                    ndefService2.stop()
+                }
+            } finally {
                 fixture.close()
             }
         }

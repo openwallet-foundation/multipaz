@@ -8,17 +8,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
-import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcDeactivationReason
-import org.multipaz.nfc.ResponseApdu
 import org.multipaz.util.Logger
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 
@@ -46,6 +47,7 @@ class NfcHybridTransportMdoc(
     val isNfcConnected: StateFlow<Boolean> = _isNfcConnected.asStateFlow()
 
     private var expectTransport: Boolean = false
+    private var expectedConnectionMethod: MdocConnectionMethod? = null
 
     override val role: MdocRole
         get() = MdocRole.MDOC
@@ -68,18 +70,29 @@ class NfcHybridTransportMdoc(
      * Sets whether a [setTransport] is expected to be called.
      *
      * @param expectTransport `true` if it's expected that [setTransport] will be called, `false` if not.
+     * @param connectionMethod optional expected [MdocConnectionMethod] for the secondary transport.
      */
-    fun setExpectTransport(expectTransport: Boolean) {
+    fun setExpectTransport(
+        expectTransport: Boolean,
+        connectionMethod: MdocConnectionMethod? = null,
+    ) {
         this.expectTransport = expectTransport
+        if (connectionMethod != null) {
+            this.expectedConnectionMethod = connectionMethod
+        }
     }
 
     /**
      * Whether this hybrid transport is operating in NFC-only mode without alternative transports.
      */
     val isNfcOnly: Boolean
-        get() = !expectTransport && transport == null
+        get() = !expectTransport && transport == null && closedSecondaryStats == null
 
     private var responsePending = false
+
+    @Volatile
+    internal var numNfcReTaps: Int = 0
+        private set
 
     /**
      * Marks that a response is pending transmission for the current request.
@@ -95,6 +108,10 @@ class NfcHybridTransportMdoc(
      */
     suspend fun onMessageReceivedViaNfc(message: ByteString) {
         Logger.i(TAG, "Received message over NFC of length ${message.size}")
+        if (!_isNfcConnected.value) {
+            numNfcReTaps += 1
+            addWarning(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
+        }
         _isNfcConnected.value = true
         if (responsePending) {
             Logger.i(TAG, "Ignoring reader message of ${message.size} bytes received on re-tap while response is pending")
@@ -179,25 +196,82 @@ class NfcHybridTransportMdoc(
     private var incomingMessagesNumViaNfc = 0
     private var incomingMessagesNumViaTransport = 0
     private var incomingMessagesNumConveyed = 0
+    private var incomingMessagesNumConveyedWasViaNfc = 0
+    private var incomingMessagesNumConveyedWasViaTransport = 0
 
     private var numSent = 0
     private var numSentViaNfc = 0
     private var numSentViaTransport = 0
+    private var bytesSent = 0L
+    private var bytesReceived = 0L
+    @Volatile
     private var nfcDisconnected = false
+    private val _warnings = MutableStateFlow<List<TransportWarning>>(emptyList())
+    @Volatile
+    private var closedSecondaryStats: MdocTransportStats? = null
+    @Volatile
+    private var closedSecondaryConnectionMethod: MdocConnectionMethod? = null
+
+    internal fun addWarning(warning: TransportWarning) {
+        _warnings.update { it + warning }
+    }
+
+    private fun resolveTransportType(secondaryStats: MdocTransportStats?): MdocTransportType {
+        if (isNfcOnly) {
+            return MdocTransportType.NFC_CCE_NFC_ONLY
+        }
+        when (secondaryStats?.transportType) {
+            MdocTransportType.MDOC_CENTRAL_CLIENT_MODE -> return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
+            MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE -> return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
+            else -> {}
+        }
+        val cm = transport?.let { runCatching { it.connectionMethod }.getOrNull() }
+            ?: closedSecondaryConnectionMethod
+            ?: expectedConnectionMethod
+        if (cm is MdocConnectionMethodBle) {
+            if (cm.supportsCentralClientMode) {
+                return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
+            }
+            if (cm.supportsPeripheralServerMode) {
+                return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
+            }
+        }
+        return MdocTransportType.OTHER
+    }
 
     /**
      * Statistics about the [NfcHybridTransportMdoc].
      */
-    val stats: NfcHybridTransportStats
-        get() = NfcHybridTransportStats(
-            numSent = numSent,
-            numSentViaNfc = numSentViaNfc,
-            numSentViaTransport = numSentViaTransport,
-            numReceived = incomingMessagesNumConveyed,
-            numReceivedFirstOnNfc = incomingMessagesNumViaNfc,
-            numReceivedFirstOnTransport = incomingMessagesNumViaTransport,
-            nfcDisconnectedDuringTransaction = nfcDisconnected
-        )
+    override val stats: MdocTransportStats
+        get() {
+            val secondaryStats = transport?.stats ?: closedSecondaryStats
+            return MdocTransportStats(
+                transportType = resolveTransportType(secondaryStats),
+                role = role,
+                scanningTime = secondaryStats?.scanningTime,
+                connectingTime = secondaryStats?.connectingTime,
+                bytesSent = bytesSent,
+                bytesReceived = bytesReceived,
+                numMessagesSent = numSent,
+                numMessagesReceived = incomingMessagesNumConveyed,
+                warnings = (_warnings.value + (secondaryStats?.warnings ?: emptyList())).distinct(),
+                bleUsingL2cap = secondaryStats?.bleUsingL2cap ?: false,
+                bleL2capPsmInEngagement = secondaryStats?.bleL2capPsmInEngagement ?: false,
+                bleNegotiatedMtu = secondaryStats?.bleNegotiatedMtu,
+                bleMtuInferredFromWrite = secondaryStats?.bleMtuInferredFromWrite ?: false,
+                bleNumScanRestarts = secondaryStats?.bleNumScanRestarts ?: 0,
+                bleNumGattConnectRetries = secondaryStats?.bleNumGattConnectRetries ?: 0,
+                bleNumServiceDiscoveryRetries = secondaryStats?.bleNumServiceDiscoveryRetries ?: 0,
+                bleNumL2capConnectRetries = secondaryStats?.bleNumL2capConnectRetries ?: 0,
+                bleNumChunksSent = secondaryStats?.bleNumChunksSent ?: 0,
+                bleNumChunksReceived = secondaryStats?.bleNumChunksReceived ?: 0,
+                nfcHybridNumSentViaNfc = numSentViaNfc,
+                nfcHybridNumSentViaTransport = numSentViaTransport,
+                nfcHybridNumReceivedFirstOnNfc = incomingMessagesNumConveyedWasViaNfc,
+                nfcHybridNumReceivedFirstOnTransport = incomingMessagesNumConveyedWasViaTransport,
+                nfcDisconnectedDuringTransaction = nfcDisconnected,
+            )
+        }
 
     private suspend fun conveyMessage(message: ByteString, fromNfc: Boolean) {
         val shouldConveyMessage = mutex.withLock {
@@ -208,6 +282,14 @@ class NfcHybridTransportMdoc(
             }
             if (shouldConvey) {
                 incomingMessagesNumConveyed += 1
+                if (fromNfc) {
+                    incomingMessagesNumConveyedWasViaNfc += 1
+                } else {
+                    incomingMessagesNumConveyedWasViaTransport += 1
+                }
+                if (message.size > 0) {
+                    bytesReceived += message.size
+                }
             }
             shouldConvey
         }
@@ -228,6 +310,10 @@ class NfcHybridTransportMdoc(
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         val messageBs = ByteString(message)
+        if (message.isNotEmpty()) {
+            numSent += 1
+            bytesSent += message.size
+        }
         writingQueue.send(messageBs)
         if (sendMessageViaNfc(messageBs)) {
             Logger.i(TAG, "Sending message over NFC of length ${messageBs.size}")
@@ -239,6 +325,7 @@ class NfcHybridTransportMdoc(
                 nfcDisconnected = true
             } else {
                 Logger.i(TAG, "NFC disconnected while sending message. Waiting for re-tap...")
+                addWarning(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
                 _isNfcConnected.value = false
                 _isNfcConnected.first { it }
                 if (sendMessageViaNfc(messageBs)) {
@@ -305,7 +392,11 @@ class NfcHybridTransportMdoc(
             writingQueue.close()
             transportListenMessageJob?.cancel()
             transportListenMessageJob = null
-            transport?.close()
+            transport?.let {
+                closedSecondaryStats = it.stats
+                closedSecondaryConnectionMethod = runCatching { it.connectionMethod }.getOrNull()
+                it.close()
+            }
             transport = null
             if (_state.value != State.FAILED) {
                 _state.value = State.CLOSED

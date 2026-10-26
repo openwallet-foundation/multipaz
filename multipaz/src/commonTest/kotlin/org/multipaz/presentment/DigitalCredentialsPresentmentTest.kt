@@ -1,7 +1,14 @@
 package org.multipaz.presentment
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -54,6 +61,13 @@ import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
+import org.multipaz.eventlogger.Event
+import org.multipaz.eventlogger.EventLogger
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
+import org.multipaz.facematch.CameraFrame
+import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
@@ -63,12 +77,23 @@ import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.prompt.FaceMatcherPromptDialogModel
+import org.multipaz.prompt.PromptDialogModel
+import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.Reason
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.securearea.KeyLockedException
+import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.PassphraseConstraints
+import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
+import org.multipaz.securearea.software.SoftwareKeyUnlockData
+import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -81,6 +106,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -455,6 +481,7 @@ class DigitalCredentialsPresentmentTest {
         }
 
         val shownConsentPrompts = mutableListOf<ShownConsentPrompt>()
+        var telemetry: PresentmentTelemetry? = null
 
         val dcResponseObject = digitalCredentialsPresentment(
             protocol = protocol,
@@ -463,7 +490,10 @@ class DigitalCredentialsPresentmentTest {
             origin = ORIGIN,
             preselectedDocuments = emptyList(),
             source = presentmentSource,
+            onTelemetry = { telemetry = it },
         )
+        assertEquals(PresentmentOutcome.SUCCESS, telemetry?.outcome)
+        assertEquals(PresentmentProtocol.W3C_DC_OPENID4VP, telemetry?.protocol)
         val decryptedDcResponse = if (encryptionKey != null) {
             val jweCompactSerialization = dcResponseObject["data"]!!.jsonObject["response"]!!.jsonPrimitive.content
             if (version == OpenID4VP.Version.DRAFT_29) {
@@ -2260,6 +2290,346 @@ class DigitalCredentialsPresentmentTest {
             "\"random\": h'...',",
             normalizeMdocResponseCdn("\"random\": << 10(h'2ba86224fbb8692180862f0b7d75') >>,")
         )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun test_digitalCredentialsPresentmentOutcomes() = runTestWithSetup {
+        val validDcql = Json.decodeFromString(
+            JsonObject.serializer(),
+            """
+                {
+                  "credentials": [{
+                      "id": "mDL",
+                      "format": "mso_mdoc",
+                      "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                      "claims": [
+                        { "path": ["org.iso.18013.5.1", "age_over_21"] }
+                      ]
+                  }]
+                }
+            """.trimIndent()
+        )
+        val validRequest = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = "test-nonce",
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = validDcql,
+            jsonTransactionData = emptyList()
+        )
+
+        fun createEventLogger(events: MutableList<Event>) = object : EventLogger {
+            override suspend fun addEvent(event: Event): Event {
+                events.add(event)
+                return event
+            }
+
+            override fun addEventAsync(event: Event) {
+                events.add(event)
+            }
+        }
+
+        // 1. CANCELED_BY_USER when user declines consent
+        val events1 = mutableListOf<Event>()
+        var telemetry1: PresentmentTelemetry? = null
+        assertFailsWith<PresentmentCanceledException> {
+            digitalCredentialsPresentment(
+                protocol = "openid4vp-v1-unsigned",
+                data = validRequest,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = SimplePresentmentSource(
+                    documentStore = documentStoreTestHarness.documentStore,
+                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+                    showConsentPromptFn = { _, _, _, _, _ -> null },
+                    preferSignatureToKeyAgreement = true,
+                    domainsMdocSignature = listOf("mdoc"),
+                    domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    eventLogger = createEventLogger(events1)
+                ),
+                onTelemetry = { telemetry1 = it }
+            )
+        }
+        assertEquals(PresentmentOutcome.CANCELED_BY_USER, telemetry1?.outcome)
+        val event1 = assertIs<EventPresentmentDigitalCredentialsOpenID4VP>(events1.single())
+        assertEquals(PresentmentOutcome.CANCELED_BY_USER, event1.telemetry?.outcome)
+
+        // 2. CANNOT_SATISFY_REQUEST when no document matches the DCQL query
+        val unsatisfiableDcql = Json.decodeFromString(
+            JsonObject.serializer(),
+            """
+                {
+                  "credentials": [{
+                      "id": "unknown",
+                      "format": "mso_mdoc",
+                      "meta": { "doctype_value": "org.example.nonexistent.1" },
+                      "claims": [
+                        { "path": ["org.example.nonexistent.1", "claim"] }
+                      ]
+                  }]
+                }
+            """.trimIndent()
+        )
+        val unsatisfiableRequest = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = "test-nonce",
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = unsatisfiableDcql,
+            jsonTransactionData = emptyList()
+        )
+        val events2 = mutableListOf<Event>()
+        var telemetry2: PresentmentTelemetry? = null
+        assertFailsWith<PresentmentCannotSatisfyRequestException> {
+            digitalCredentialsPresentment(
+                protocol = "openid4vp-v1-unsigned",
+                data = unsatisfiableRequest,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = SimplePresentmentSource(
+                    documentStore = documentStoreTestHarness.documentStore,
+                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+                    showConsentPromptFn = ::promptModelSilentConsent,
+                    preferSignatureToKeyAgreement = true,
+                    domainsMdocSignature = listOf("mdoc"),
+                    domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    eventLogger = createEventLogger(events2)
+                ),
+                onTelemetry = { telemetry2 = it }
+            )
+        }
+        assertEquals(PresentmentOutcome.CANNOT_SATISFY_REQUEST, telemetry2?.outcome)
+        val event2 = assertIs<EventPresentmentDigitalCredentialsOpenID4VP>(events2.single())
+        assertEquals(PresentmentOutcome.CANNOT_SATISFY_REQUEST, event2.telemetry?.outcome)
+
+        // 3. FACE_NOT_MATCHED when face matching fails
+        val fakeFaceMatcher = object : FaceMatcher {
+            override val name = "test"
+            override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
+                object : FaceMatcherSession(referencePortrait) {
+                    override suspend fun feedFrame(frame: CameraFrame) {}
+                }
+        }
+        val promptModel = object : PromptModel(
+            object : PromptModel.Builder(toHumanReadable = { _, _ -> throw IllegalStateException() }) {
+                init { addCommonDialogs() }
+                override fun build(): PromptModel = throw IllegalStateException()
+            }
+        ) {
+            override val promptModelScope = CoroutineScope(Dispatchers.Default + SupervisorJob() + this)
+        }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            val dialogModel = promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType)
+            dialogModel.dialogState.collect { state ->
+                if (state is PromptDialogModel.DialogShownState) {
+                    state.resultChannel.send(false)
+                }
+            }
+        }
+        val events3 = mutableListOf<Event>()
+        var telemetry3: PresentmentTelemetry? = null
+        assertFailsWith<FaceNotMatchedException> {
+            withContext(promptModel) {
+                digitalCredentialsPresentment(
+                    protocol = "openid4vp-v1-unsigned",
+                    data = validRequest,
+                    appId = APP_ID,
+                    origin = ORIGIN,
+                    preselectedDocuments = emptyList(),
+                    source = SimplePresentmentSource(
+                        documentStore = documentStoreTestHarness.documentStore,
+                        documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+                        showConsentPromptFn = ::promptModelSilentConsent,
+                        getFaceMatcherFn = { fakeFaceMatcher },
+                        getFaceMatchingModeFn = { _, _ -> FaceMatchingMode.ALWAYS },
+                        preferSignatureToKeyAgreement = true,
+                        domainsMdocSignature = listOf("mdoc"),
+                        domainsKeyBoundSdJwt = listOf("sdjwt"),
+                        eventLogger = createEventLogger(events3)
+                    ),
+                    onTelemetry = { telemetry3 = it }
+                )
+            }
+        }
+        assertEquals(PresentmentOutcome.FACE_NOT_MATCHED, telemetry3?.outcome)
+        val event3 = assertIs<EventPresentmentDigitalCredentialsOpenID4VP>(events3.single())
+        assertEquals(PresentmentOutcome.FACE_NOT_MATCHED, event3.telemetry?.outcome)
+
+        // 4. OTHER_ERROR when request payload is malformed
+        val events4 = mutableListOf<Event>()
+        var telemetry4: PresentmentTelemetry? = null
+        assertFailsWith<Exception> {
+            digitalCredentialsPresentment(
+                protocol = "openid4vp-v1-unsigned",
+                data = buildJsonObject { put("invalid", "payload") },
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = SimplePresentmentSource(
+                    documentStore = documentStoreTestHarness.documentStore,
+                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+                    showConsentPromptFn = ::promptModelSilentConsent,
+                    preferSignatureToKeyAgreement = true,
+                    domainsMdocSignature = listOf("mdoc"),
+                    domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    eventLogger = createEventLogger(events4)
+                ),
+                onTelemetry = { telemetry4 = it }
+            )
+        }
+        assertEquals(PresentmentOutcome.OTHER_ERROR, telemetry4?.outcome)
+        val event4 = assertIs<EventPresentmentDigitalCredentialsOpenID4VP>(events4.single())
+        assertEquals(PresentmentOutcome.OTHER_ERROR, event4.telemetry?.outcome)
+
+        // 5. AUTHENTICATION_FAILED when key unlocking fails (OpenID4VP and Annex C org-iso-mdoc)
+        val lockedHarness = DocumentStoreTestHarness()
+        lockedHarness.initialize()
+        lockedHarness.provisionMdoc(
+            displayName = "mDL",
+            docType = "org.iso.18013.5.1.mDL",
+            data = mapOf(
+                "org.iso.18013.5.1" to listOf(
+                    "family_name" to Tstr("Mustermann"),
+                    "age_over_21" to Simple.TRUE,
+                    "portrait" to Bstr(byteArrayOf(1, 2, 3)),
+                )
+            ),
+            createKeySettings = SoftwareCreateKeySettings.Builder()
+                .setPassphraseRequired(true, "1234", PassphraseConstraints.PIN_FOUR_DIGITS)
+                .build(),
+        )
+        val events5 = mutableListOf<Event>()
+        var telemetry5: PresentmentTelemetry? = null
+        val authError5 = assertFailsWith<AuthenticationFailedException> {
+            digitalCredentialsPresentment(
+                protocol = "openid4vp-v1-unsigned",
+                data = validRequest,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = SimplePresentmentSource(
+                    documentStore = lockedHarness.documentStore,
+                    documentTypeRepository = lockedHarness.documentTypeRepository,
+                    showConsentPromptFn = ::promptModelSilentConsent,
+                    preferSignatureToKeyAgreement = true,
+                    domainsMdocSignature = listOf("mdoc"),
+                    domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    eventLogger = createEventLogger(events5)
+                ),
+                onTelemetry = { telemetry5 = it }
+            )
+        }
+        assertTrue(generateSequence<Throwable>(authError5) { it.cause }.any { it is KeyLockedException })
+        assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, telemetry5?.outcome)
+        val event5 = assertIs<EventPresentmentDigitalCredentialsOpenID4VP>(events5.single())
+        assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, event5.telemetry?.outcome)
+
+        // Also verify deferred KeyLockedException during OpenID4VP.generateResponse() signing
+        val preUnlockedThenFailProvider = object : KeyUnlockDataProvider {
+            override suspend fun getKeyUnlockData(
+                secureArea: SecureArea,
+                alias: String,
+                algorithm: Algorithm,
+                unlockReason: Reason,
+            ): KeyUnlockData {
+                return SoftwareKeyUnlockData(
+                    secureArea = secureArea as SoftwareSecureArea,
+                    alias = alias,
+                    passphrase = "wrong",
+                )
+            }
+        }
+        assertFailsWith<AuthenticationFailedException> {
+            withContext(preUnlockedThenFailProvider) {
+                OpenID4VP.generateResponse(
+                    version = OpenID4VP.Version.DRAFT_29,
+                    preselectedDocuments = emptyList(),
+                    source = SimplePresentmentSource(
+                        documentStore = lockedHarness.documentStore,
+                        documentTypeRepository = lockedHarness.documentTypeRepository,
+                        showConsentPromptFn = ::promptModelSilentConsent,
+                        preferSignatureToKeyAgreement = true,
+                        domainsMdocSignature = listOf("mdoc"),
+                        domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    ),
+                    appId = APP_ID,
+                    origin = ORIGIN,
+                    request = validRequest,
+                    requesterIdentities = emptyList(),
+                )
+            }
+        }
+
+        // Annex C (org-iso-mdoc) AUTHENTICATION_FAILED
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionInfo = Cbor.encode(
+            buildCborArray {
+                add("dcapi")
+                add(
+                    buildCborMap {
+                        put("nonce", ByteArray(16))
+                        put("recipientPublicKey", encryptionKey.publicKey.toCoseKey().toDataItem())
+                    }
+                )
+            }
+        ).toBase64Url()
+        val dcapiInfoDigest = Crypto.digest(
+            Algorithm.SHA256,
+            Cbor.encode(buildCborArray { add(encryptionInfo); add(ORIGIN) })
+        )
+        val annexCSessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            addCborArray { add("dcapi"); add(dcapiInfoDigest) }
+        }
+        val annexCDeviceRequest = Cbor.encode(
+            buildDeviceRequest(sessionTranscript = annexCSessionTranscript) {
+                addDocRequest(
+                    docType = "org.iso.18013.5.1.mDL",
+                    nameSpaces = mapOf(
+                        "org.iso.18013.5.1" to mapOf("family_name" to false)
+                    )
+                )
+            }.toDataItem()
+        ).toBase64Url()
+        val annexCRequestData = buildJsonObject {
+            put("deviceRequest", annexCDeviceRequest)
+            put("encryptionInfo", encryptionInfo)
+        }
+        val events6 = mutableListOf<Event>()
+        var telemetry6: PresentmentTelemetry? = null
+        val authError6 = assertFailsWith<AuthenticationFailedException> {
+            digitalCredentialsPresentment(
+                protocol = "org-iso-mdoc",
+                data = annexCRequestData,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = SimplePresentmentSource(
+                    documentStore = lockedHarness.documentStore,
+                    documentTypeRepository = lockedHarness.documentTypeRepository,
+                    showConsentPromptFn = ::promptModelSilentConsent,
+                    preferSignatureToKeyAgreement = true,
+                    domainsMdocSignature = listOf("mdoc"),
+                    domainsKeyBoundSdJwt = listOf("sdjwt"),
+                    eventLogger = createEventLogger(events6)
+                ),
+                onTelemetry = { telemetry6 = it }
+            )
+        }
+        assertTrue(generateSequence<Throwable>(authError6) { it.cause }.any { it is KeyLockedException })
+        assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, telemetry6?.outcome)
+        val event6 = assertIs<EventPresentmentDigitalCredentialsMdocApi>(events6.single())
+        assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, event6.telemetry?.outcome)
     }
 }
 

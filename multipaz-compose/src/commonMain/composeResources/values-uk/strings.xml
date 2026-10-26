@@ -202,6 +202,8 @@
     <string name="presentment_activity_something_went_wrong">Щось пішло не так</string>
     <string name="presentment_activity_canceled">Скасовано</string>
     <string name="presentment_activity_cannot_satisfy_request">Не вдається виконати запит</string>
+    <string name="presentment_activity_authentication_failed">Помилка автентифікації</string>
+    <string name="presentment_activity_face_match_failed">Зіставлення обличчя не вдалося</string>
     <string name="presentment_activity_open_wallet">Відкрити %1$s</string>
     <string name="presentment_activity_app_name_default">Гаманець</string>
     <string name="presentment_activity_no_documents_available">Немає доступних документів</string>

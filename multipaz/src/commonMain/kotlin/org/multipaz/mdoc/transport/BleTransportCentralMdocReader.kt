@@ -17,13 +17,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Instant
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
-import kotlin.time.Duration
 
 internal class BleTransportCentralMdocReader(
     override val role: MdocRole,
@@ -121,7 +123,33 @@ internal class BleTransportCentralMdocReader(
     override val scanningTime: Duration?
         get() = null
 
+    private var _connectingTime: Duration? = null
+    private var _bytesSent: Long = 0
+    private var _bytesReceived: Long = 0
+    private var _numMessagesSent: Int = 0
+    private var _numMessagesReceived: Int = 0
+
+    override val stats: MdocTransportStats
+        get() = MdocTransportStats(
+            transportType = MdocTransportType.MDOC_CENTRAL_CLIENT_MODE,
+            role = role,
+            scanningTime = null,
+            connectingTime = _connectingTime,
+            bytesSent = _bytesSent,
+            bytesReceived = _bytesReceived,
+            numMessagesSent = _numMessagesSent,
+            numMessagesReceived = _numMessagesReceived,
+            warnings = peripheralManager.warnings,
+            bleUsingL2cap = peripheralManager.usingL2cap,
+            bleL2capPsmInEngagement = options.bleUseL2CAPInEngagement && peripheralManager.l2capPsm != null,
+            bleNegotiatedMtu = peripheralManager.negotiatedMtu,
+            bleMtuInferredFromWrite = peripheralManager.mtuInferredFromWrite,
+            bleNumChunksSent = peripheralManager.numChunksSent,
+            bleNumChunksReceived = peripheralManager.numChunksReceived,
+        )
+
     override suspend fun open(eSenderKey: EcPublicKey) {
+        var timeConnectingStarted: Instant? = null
         try {
             coroutineScope {
                 val wasAdvertising = mutex.withLock {
@@ -139,13 +167,16 @@ internal class BleTransportCentralMdocReader(
                     peripheralManager.advertiseService(uuid)
                 }
                 peripheralManager.setESenderKey(eSenderKey)
+                timeConnectingStarted = Clock.System.now()
                 // Note: It's not really possible to know someone is connecting to use until they're _actually_
                 // connected. I mean, for all we know, someone could be BLE scanning us. So not really possible
                 // to go into State.CONNECTING...
                 peripheralManager.waitForStateCharacteristicWriteOrL2CAPClient()
+                _connectingTime = Clock.System.now() - timeConnectingStarted!!
                 mutex.withLock { _state.value = State.CONNECTED }
             }
         } catch (error: Exception) {
+            timeConnectingStarted?.let { _connectingTime = Clock.System.now() - it }
             val unwrapped = error.unwrapCancellationException()
             if (unwrapped is CancellationException) {
                 withContext(NonCancellable) {
@@ -170,7 +201,12 @@ internal class BleTransportCentralMdocReader(
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         try {
-            return peripheralManager.incomingMessages.receive()
+            val msg = peripheralManager.incomingMessages.receive()
+            if (msg.isNotEmpty()) {
+                _bytesReceived += msg.size
+                _numMessagesReceived += 1
+            }
+            return msg
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -199,6 +235,8 @@ internal class BleTransportCentralMdocReader(
                     peripheralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_END)
                 } else {
                     peripheralManager.sendMessage(message)
+                    _bytesSent += message.size
+                    _numMessagesSent += 1
                 }
             }
         } catch (error: Exception) {

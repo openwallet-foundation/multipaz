@@ -86,7 +86,7 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies message deduplication and [NfcHybridTransportStats] tracking on [NfcHybridTransportMdoc]
+     * Verifies message deduplication and [MdocTransportStats] tracking on [NfcHybridTransportMdoc]
      * when both NFC and a secondary transport are active:
      * - Message 1 arrives on NFC first and is conveyed; its later arrival on the secondary transport is dropped.
      * - Message 2 arrives on the secondary transport first and is conveyed; its later arrival on NFC is dropped.
@@ -138,9 +138,9 @@ class NfcHybridTransportTest {
             assertContentEquals(outgoing, secondary.sentMessages[0])
 
             val stats = mdoc.stats
-            assertEquals(1, stats.numSentViaNfc)
-            assertEquals(1, stats.numSentViaTransport)
-            assertEquals(2, stats.numReceived)
+            assertEquals(1, stats.nfcHybridNumSentViaNfc)
+            assertEquals(1, stats.nfcHybridNumSentViaTransport)
+            assertEquals(2, stats.numMessagesReceived)
             assertFalse(stats.nfcDisconnectedDuringTransaction)
 
             mdoc.close()
@@ -191,7 +191,7 @@ class NfcHybridTransportTest {
         assertEquals(2, secondary.sentMessages.size)
         assertContentEquals(msg1, secondary.sentMessages[0])
         assertContentEquals(msg2, secondary.sentMessages[1])
-        assertEquals(2, mdoc.stats.numSentViaTransport)
+        assertEquals(2, mdoc.stats.nfcHybridNumSentViaTransport)
 
         mdoc.close()
 
@@ -348,8 +348,8 @@ class NfcHybridTransportTest {
             assertContentEquals(response2, got2)
 
             val stats = reader.stats
-            assertEquals(2, stats.numSent)
-            assertEquals(2, stats.numReceived)
+            assertEquals(2, stats.numMessagesSent)
+            assertEquals(2, stats.numMessagesReceived)
 
             reader.close()
             assertEquals(MdocTransport.State.CLOSED, reader.state.value)

@@ -410,5 +410,30 @@ internal actual fun FullScreenDialogEffect() {
     }
 }
 
+@Composable
+actual fun KeepScreenOnEffect() {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val activityWindow = remember(context) { context.findActivityWindow() }
+
+    DisposableEffect(activityWindow, view) {
+        val hadWindowFlag = activityWindow?.let {
+            (it.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        } ?: false
+        val hadViewKeepScreenOn = view.keepScreenOn
+
+        activityWindow?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        view.keepScreenOn = true
+
+        onDispose {
+            if (!hadWindowFlag) {
+                activityWindow?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            view.keepScreenOn = hadViewKeepScreenOn
+        }
+    }
+}
+
+
 
 

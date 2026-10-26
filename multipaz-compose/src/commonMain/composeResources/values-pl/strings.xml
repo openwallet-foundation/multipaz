@@ -202,6 +202,8 @@
     <string name="presentment_activity_something_went_wrong">Coś poszło nie tak</string>
     <string name="presentment_activity_canceled">Anulowano</string>
     <string name="presentment_activity_cannot_satisfy_request">Nie można zrealizować żądania</string>
+    <string name="presentment_activity_authentication_failed">Uwierzytelnianie nie powiodło się</string>
+    <string name="presentment_activity_face_match_failed">Dopasowanie twarzy nie powiodło się</string>
     <string name="presentment_activity_open_wallet">Otwórz %1$s</string>
     <string name="presentment_activity_app_name_default">Portfel</string>
     <string name="presentment_activity_no_documents_available">Brak dostępnych dokumentów</string>

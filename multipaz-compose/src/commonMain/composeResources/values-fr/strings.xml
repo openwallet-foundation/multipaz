@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Une erreur est survenue</string>
     <string name="presentment_activity_canceled">Annulé</string>
     <string name="presentment_activity_cannot_satisfy_request">Impossible de satisfaire la demande</string>
+    <string name="presentment_activity_authentication_failed">Échec de l&apos;authentification</string>
+    <string name="presentment_activity_face_match_failed">Échec de la reconnaissance faciale</string>
     <string name="presentment_activity_open_wallet">Ouvrir %1$s</string>
     <string name="presentment_activity_app_name_default">Portefeuille</string>
     <string name="presentment_activity_no_documents_available">Aucun document disponible</string>

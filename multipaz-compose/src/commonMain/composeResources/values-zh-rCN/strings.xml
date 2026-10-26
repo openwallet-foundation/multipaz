@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">出错了</string>
     <string name="presentment_activity_canceled">已取消</string>
     <string name="presentment_activity_cannot_satisfy_request">无法满足请求</string>
+    <string name="presentment_activity_authentication_failed">身份验证失败</string>
+    <string name="presentment_activity_face_match_failed">人脸比对失败</string>
     <string name="presentment_activity_open_wallet">打开%1$s</string>
     <string name="presentment_activity_app_name_default">钱包</string>
     <string name="presentment_activity_no_documents_available">无可用文件</string>

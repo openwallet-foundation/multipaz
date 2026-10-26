@@ -290,7 +290,7 @@ private fun EventItemPresentment(
         is EventPresentmentUriSchemeOpenID4VP ->getSharingType(event.origin)
     }
 
-    val firstDoc = event.presentmentData.requestedDocuments.firstOrNull()
+    val firstDoc = event.presentmentData?.requestedDocuments?.firstOrNull()
     val firstDocInfo = firstDoc?.let { requestedDocument ->
         documentModel.documentInfos.collectAsState().value.find {
             it.document.identifier == requestedDocument.documentId
@@ -298,7 +298,10 @@ private fun EventItemPresentment(
     }
 
     val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
-    val text = "$eventDateTimeString • $sharingType"
+    val outcomeSuffix = event.telemetry?.let {
+        if (it.outcome.name != "SUCCESS") " • ${it.outcome.name}" else ""
+    } ?: ""
+    val text = "$eventDateTimeString • $sharingType$outcomeSuffix"
     FloatingItemText(
         modifier = modifier,
         image = {
@@ -310,7 +313,9 @@ private fun EventItemPresentment(
                 )
             } ?: Spacer(modifier = Modifier.size(imageSize))
         },
-        text = firstDocInfo?.document?.displayName ?: firstDoc?.documentName ?: "Unknown document",
+        text = firstDocInfo?.document?.displayName
+            ?: firstDoc?.documentName
+            ?: if (event.presentmentData == null) "Presentment (${event.telemetry?.outcome?.name ?: "Incomplete"})" else "Unknown document",
         secondary = text,
     )
 }

@@ -44,6 +44,7 @@ import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.securearea.buildPreloadedKeyUnlockDataProvider
 import org.multipaz.util.Logger
@@ -128,8 +129,10 @@ suspend fun mdocPresentmentObtainConsent(
  *
  * @param selection The [CredentialSelection] obtained from consent.
  * @return A [KeyUnlockDataProvider] containing preloaded unlock data for the credentials in [selection].
+ * @throws AuthenticationFailedException if user authentication failed or was canceled.
  */
 @Throws(
+    AuthenticationFailedException::class,
     CancellationException::class,
     IllegalStateException::class
 )
@@ -140,10 +143,14 @@ suspend fun mdocPresentmentAuthenticateUser(
         for (match in selection.matches) {
             if (match.credential is SecureAreaBoundCredential) {
                 val credential = match.credential
-                val keyUnlockDataList = credential.secureArea.unlockKey(
-                    alias = credential.alias,
-                    unlockReason = PresentmentUnlockReason(credential)
-                )
+                val keyUnlockDataList = try {
+                    credential.secureArea.unlockKey(
+                        alias = credential.alias,
+                        unlockReason = PresentmentUnlockReason(credential)
+                    )
+                } catch (e: KeyLockedException) {
+                    throw AuthenticationFailedException("User authentication failed", e)
+                }
                 add(keyUnlockDataList)
             }
         }
@@ -240,8 +247,10 @@ suspend fun mdocPerformFaceMatching(
  * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
  * @param faceMatchedCredentials the list of credentials for which face matching was performed and succeeded.
  * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
+ * @throws AuthenticationFailedException if user authentication failed or was canceled.
  */
 @Throws(
+    AuthenticationFailedException::class,
     CancellationException::class,
     IllegalStateException::class
 )
@@ -256,6 +265,7 @@ suspend fun mdocPresentmentGenerateResponse(
     creationTime: Instant = Clock.System.now(),
     faceMatchedCredentials: List<Credential> = emptyList(),
 ): Iso18013Response {
+    val genStartTime = Clock.System.now()
     val requester = Requester(
         requesterIdentities = deviceRequest.getRequesterIdentities(),
         appId = requesterAppId,
@@ -266,11 +276,12 @@ suspend fun mdocPresentmentGenerateResponse(
     val credentialsPresented = mutableSetOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
 
-    val deviceResponse = buildDeviceResponse(
-        sessionTranscript = sessionTranscript,
-        status = DeviceResponse.STATUS_OK,
-        eReaderKey = eReaderKey,
-    ) {
+    val deviceResponse = try {
+        buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+            eReaderKey = eReaderKey,
+        ) {
         for (match in selection.matches) {
             match.source as CredentialMatchSourceIso18013
             val zkRequested = match.source.docRequest.docRequestInfo?.zkRequest != null
@@ -450,13 +461,17 @@ suspend fun mdocPresentmentGenerateResponse(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
         )
+        }
+    } catch (e: KeyLockedException) {
+        throw AuthenticationFailedException("User authentication failed", e)
     }
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
     }
     return Iso18013Response(
         deviceResponse = deviceResponse,
-        eventData = eventData
+        eventData = eventData,
+        durationResponseGeneration = Clock.System.now() - genStartTime,
     )
 }
 
@@ -507,11 +522,13 @@ suspend fun mdocPresentmentGenerateResponse(
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
+ * @throws AuthenticationFailedException if user authentication failed or was canceled.
  * @throws FaceNotMatchedException if face matching failed or was canceled.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
+    AuthenticationFailedException::class,
     CancellationException::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
@@ -533,6 +550,7 @@ suspend fun mdocPresentment(
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): Iso18013Response {
+    val consentStartTime = Clock.System.now()
     val selection = mdocPresentmentObtainConsent(
         deviceRequest = deviceRequest,
         source = source,
@@ -549,7 +567,9 @@ suspend fun mdocPresentment(
         source = source,
         onWaitingForUserInput = onWaitingForUserInput,
     )
-    return withContext(keyUnlockDataProvider) {
+    val durationUserConsentAndAuth = Clock.System.now() - consentStartTime
+    val genStartTime = Clock.System.now()
+    val response = withContext(keyUnlockDataProvider) {
         mdocPresentmentGenerateResponse(
             selection = selection,
             deviceRequest = deviceRequest,
@@ -562,6 +582,10 @@ suspend fun mdocPresentment(
             faceMatchedCredentials = faceMatchedCredentials,
         )
     }
+    return response.copy(
+        durationUserConsentAndAuth = durationUserConsentAndAuth,
+        durationResponseGeneration = Clock.System.now() - genStartTime,
+    )
 }
 
 internal suspend fun computeDeviceNamespaces(

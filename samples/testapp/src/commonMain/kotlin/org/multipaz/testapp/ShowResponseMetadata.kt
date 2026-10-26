@@ -1,7 +1,7 @@
 package org.multipaz.testapp
 
 import org.multipaz.cbor.annotation.CborSerializable
-import org.multipaz.mdoc.transport.NfcHybridTransportStats
+import org.multipaz.mdoc.transport.MdocTransportStats
 
 @CborSerializable
 data class ShowResponseMetadata(
@@ -12,7 +12,7 @@ data class ShowResponseMetadata(
     val durationMsecNfcTapToEngagement: Long?,
     val durationMsecEngagementReceivedToRequestSent: Long?,
     val durationMsecRequestSentToResponseReceived: Long,
-    val nfcHybridTransportStats: NfcHybridTransportStats?
+    val transportStats: MdocTransportStats? = null
 ) {
     companion object
 }

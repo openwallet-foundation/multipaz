@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Κάτι πήγε στραβά</string>
     <string name="presentment_activity_canceled">Ακυρώθηκε</string>
     <string name="presentment_activity_cannot_satisfy_request">Δεν είναι δυνατή η ικανοποίηση του αιτήματος</string>
+    <string name="presentment_activity_authentication_failed">Ο έλεγχος ταυτότητας απέτυχε</string>
+    <string name="presentment_activity_face_match_failed">Η αντιστοίχιση προσώπου απέτυχε</string>
     <string name="presentment_activity_open_wallet">Άνοιγμα %1$s</string>
     <string name="presentment_activity_app_name_default">Πορτοφόλι</string>
     <string name="presentment_activity_no_documents_available">Δεν υπάρχουν διαθέσιμα έγγραφα</string>

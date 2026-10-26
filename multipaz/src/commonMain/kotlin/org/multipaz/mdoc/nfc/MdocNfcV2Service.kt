@@ -25,13 +25,17 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
+import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
+import org.multipaz.mdoc.transport.TransportWarning
+import org.multipaz.mdoc.transport.TransportWarningCode
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcApduRouter
@@ -41,7 +45,11 @@ import org.multipaz.presentment.EngagementParams
 import org.multipaz.presentment.Iso18013Presentment
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentOutcome
+import org.multipaz.presentment.PresentmentProtocol
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentTelemetry
+import org.multipaz.presentment.classifyPresentmentException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -251,7 +259,7 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                     }
                 )
                 if (!isNfcOnly) {
-                    newTransport.setExpectTransport(true)
+                    newTransport.setExpectTransport(true, connectionMethod)
                 }
                 hybridTransport = newTransport
                 onHybridTransportCreated?.invoke(newTransport)
@@ -333,7 +341,13 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                     pendingEngagementDeviceKey = null
                 }
                 if (transactionJob?.isActive != true) {
-                    settings.presentmentModel?.setCompleted(error)
+                    val failureTelemetry = PresentmentTelemetry(
+                        protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+                        engagementType = EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT,
+                        outcome = PresentmentOutcome.NFC_ENGAGEMENT_FAILED,
+                        durationTotal = Clock.System.now() - timeStarted,
+                    )
+                    settings.presentmentModel?.setCompleted(error, failureTelemetry)
                 }
                 Logger.w(TAG, "Engagement failed. Maybe this wasn't an ISO mdoc reader.", error)
             },
@@ -370,6 +384,7 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
         var waitForTransportJob: Job? = null
         var uiCancelJob: Job? = null
         var nfcConnectedJob: Job? = null
+        var lastTelemetry: PresentmentTelemetry? = null
 
         try {
             previousTransactionJob?.let { prevJob ->
@@ -411,7 +426,7 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
             if (isNfcOnly) {
                 transport.setExpectTransport(false)
             } else {
-                transport.setExpectTransport(true)
+                transport.setExpectTransport(true, connectionMethod)
                 // Wait for the non-NFC transport in a coroutine so we are not blocking
                 // initiating presentment....
                 waitForTransportJob = CoroutineScope(transactionJobContext).launch(Dispatchers.Default) {
@@ -431,12 +446,18 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                         // Monitor the secondary transport
                         createdTransport.state.collect { state ->
                             if (state == MdocTransport.State.FAILED || state == MdocTransport.State.CLOSED) {
-                                transactionJobContext.cancel(CancellationException("Secondary transport $state"))
+                                transactionJobContext.cancel(
+                                    CancellationException(
+                                        "Secondary transport $state",
+                                        MdocTransportException("Secondary transport $state")
+                                    )
+                                )
                             }
                         }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         Logger.w(TAG, "Error opening non-NFC transport", e)
+                        transport.addWarning(TransportWarning(TransportWarningCode.NFC_SECONDARY_TRANSPORT_FAILED))
                     } finally {
                         if (!handedOffToHybrid) {
                             withContext(NonCancellable) {
@@ -468,19 +489,30 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                 onSendingResponse = { settings.presentmentModel?.setSending() },
                 onDeviceRequest = { deviceRequest ->
                     activeDeviceRequest = deviceRequest
-                }
+                },
+                onTelemetry = { lastTelemetry = it },
             )
-            settings.presentmentModel?.setCompleted(null)
+            settings.presentmentModel?.setCompleted(null, lastTelemetry)
         } catch (e: Exception) {
             if (e is TransactionSupersededException) {
                 Logger.i(TAG, "Transaction was superseded by a new NFC tap")
             } else {
                 Logger.w(TAG, "Caught error while performing 18013-5 transaction", e)
-                if (e is CancellationException) {
-                    settings.presentmentModel?.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
+                val resolvedTelemetry = lastTelemetry ?: PresentmentTelemetry(
+                    protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+                    engagementType = EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT,
+                    outcome = classifyPresentmentException(e, waitingForConnection = !enteredPresentment),
+                    durationTotal = Clock.System.now() - timeStarted,
+                    transportStats = transport.stats,
+                )
+                val reportedError = if (e is CancellationException) {
+                    generateSequence(e.cause) { it.cause }
+                        .firstOrNull { it !is CancellationException }
+                        ?: PresentmentCanceledException("Presentment was cancelled")
                 } else {
-                    settings.presentmentModel?.setCompleted(e)
+                    e
                 }
+                settings.presentmentModel?.setCompleted(reportedError, resolvedTelemetry)
             }
         } finally {
             withContext(NonCancellable) {

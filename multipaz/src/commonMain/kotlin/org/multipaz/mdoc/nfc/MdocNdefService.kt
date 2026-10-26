@@ -20,8 +20,10 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
+import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.advertise
@@ -34,7 +36,11 @@ import org.multipaz.nfc.ResponseApdu
 import org.multipaz.presentment.Iso18013Presentment
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentOutcome
+import org.multipaz.presentment.PresentmentProtocol
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentTelemetry
+import org.multipaz.presentment.classifyPresentmentException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -273,7 +279,17 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                     pendingEngagementDeviceKey = null
                 }
                 if (transactionJob?.isActive != true) {
-                    settings.presentmentModel?.setCompleted(error)
+                    val failureTelemetry = PresentmentTelemetry(
+                        protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+                        engagementType = if (settings.useNegotiatedHandover) {
+                            EngagementType.NFC_NEGOTIATED_HANDOVER
+                        } else {
+                            EngagementType.NFC_STATIC_HANDOVER
+                        },
+                        outcome = PresentmentOutcome.NFC_ENGAGEMENT_FAILED,
+                        durationTotal = Clock.System.now() - timeStarted,
+                    )
+                    settings.presentmentModel?.setCompleted(error, failureTelemetry)
                 }
                 Logger.w(TAG, "Engagement failed. Maybe this wasn't an ISO mdoc reader.", error)
             },
@@ -298,6 +314,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         var enteredPresentment = false
         var monitorJob: Job? = null
         var uiCancelJob: Job? = null
+        var lastTelemetry: PresentmentTelemetry? = null
 
         try {
             previousTransactionJob?.let { prevJob ->
@@ -335,7 +352,12 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             monitorJob = CoroutineScope(context).launch {
                 transport.state.collect { state ->
                     if (state == MdocTransport.State.FAILED || state == MdocTransport.State.CLOSED) {
-                        context.cancel(CancellationException("Transport $state"))
+                        context.cancel(
+                            CancellationException(
+                                "Transport $state",
+                                MdocTransportException("Transport $state")
+                            )
+                        )
                     }
                 }
             }
@@ -354,19 +376,34 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 onDocumentsInFocus = { documents ->
                     settings.presentmentModel?.setDocumentsSelected(selectedDocuments = documents)
                 },
-                onSendingResponse = { settings.presentmentModel?.setSending() }
+                onSendingResponse = { settings.presentmentModel?.setSending() },
+                onTelemetry = { lastTelemetry = it },
             )
-            settings.presentmentModel?.setCompleted(null)
+            settings.presentmentModel?.setCompleted(null, lastTelemetry)
         } catch (e: Exception) {
             if (e is TransactionSupersededException) {
                 Logger.i(TAG, "Transaction was superseded by a new NFC tap")
             } else {
                 Logger.w(TAG, "Caught error while performing 18013-5 transaction", e)
-                if (e is CancellationException) {
-                    settings.presentmentModel?.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
+                val resolvedTelemetry = lastTelemetry ?: PresentmentTelemetry(
+                    protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+                    engagementType = if (settings.useNegotiatedHandover) {
+                        EngagementType.NFC_NEGOTIATED_HANDOVER
+                    } else {
+                        EngagementType.NFC_STATIC_HANDOVER
+                    },
+                    outcome = classifyPresentmentException(e, waitingForConnection = !enteredPresentment),
+                    durationTotal = Clock.System.now() - timeStarted,
+                    transportStats = (connectedTransport ?: advertisedTransports?.firstOrNull())?.stats,
+                )
+                val reportedError = if (e is CancellationException) {
+                    generateSequence(e.cause) { it.cause }
+                        .firstOrNull { it !is CancellationException }
+                        ?: PresentmentCanceledException("Presentment was cancelled")
                 } else {
-                    settings.presentmentModel?.setCompleted(e)
+                    e
                 }
+                settings.presentmentModel?.setCompleted(reportedError, resolvedTelemetry)
             }
         } finally {
             withContext(NonCancellable) {

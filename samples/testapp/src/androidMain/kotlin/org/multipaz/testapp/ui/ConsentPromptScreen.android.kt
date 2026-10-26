@@ -9,7 +9,9 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.presentment.AuthenticationFailedException
 import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.FaceNotMatchedException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
@@ -78,7 +80,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                     ),
                     requireConfirmation = paData.authRequireConfirmation
                 )) {
-                    throw PresentmentCanceledException("Presentment cancelled because user dismissed biometric prompt")
+                    throw AuthenticationFailedException("Presentment cancelled because user dismissed biometric prompt")
                 }
             }
             if (paData.requireFaceMatch) {
@@ -90,7 +92,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                     matcher = faceMatcher,
                     referencePortrait = portrait
                 )) {
-                    throw PresentmentCanceledException("Presentment cancelled because user dismissed face matcher prompt")
+                    throw FaceNotMatchedException("Presentment cancelled because user dismissed face matcher prompt")
                 }
             }
 

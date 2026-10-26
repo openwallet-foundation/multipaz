@@ -25,6 +25,7 @@ import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentTelemetry
 import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.util.Logger
@@ -157,6 +158,7 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
             val url = URL(it)
             "${url.protocol}://${url.host}${if (url.port != -1) ":${url.port}" else ""}"
         }
+        var lastTelemetry: PresentmentTelemetry? = null
         try {
             presentmentModel.setWaitingForUserInput()
             openRedirectUri = uriSchemePresentment(
@@ -167,13 +169,14 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
                 httpClientEngineFactory = settings.httpClientEngineFactory,
                 onDocumentsInFocus = { documents ->
                     presentmentModel.setDocumentsSelected(documents)
-                }
+                },
+                onTelemetry = { lastTelemetry = it }
             )
-            presentmentModel.setCompleted(error = null)
+            presentmentModel.setCompleted(error = null, telemetry = lastTelemetry)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Logger.i(TAG, "Error processing request", e)
-            presentmentModel.setCompleted(error = e)
+            presentmentModel.setCompleted(error = e, telemetry = lastTelemetry)
         }
     }
 

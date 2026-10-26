@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Đã xảy ra lỗi</string>
     <string name="presentment_activity_canceled">Đã hủy</string>
     <string name="presentment_activity_cannot_satisfy_request">Không thể xử lý yêu cầu</string>
+    <string name="presentment_activity_authentication_failed">Xác thực không thành công</string>
+    <string name="presentment_activity_face_match_failed">So khớp khuôn mặt không thành công</string>
     <string name="presentment_activity_open_wallet">Mở %1$s</string>
     <string name="presentment_activity_app_name_default">Ví</string>
     <string name="presentment_activity_no_documents_available">Không có tài liệu nào</string>

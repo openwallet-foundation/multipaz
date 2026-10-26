@@ -1,11 +1,13 @@
 package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -25,6 +27,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Unit tests for the four ISO 18013-5 BLE transport implementations:

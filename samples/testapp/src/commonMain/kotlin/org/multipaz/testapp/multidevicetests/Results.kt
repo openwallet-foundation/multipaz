@@ -9,4 +9,6 @@ data class Results(
     val failedIterations: List<Int> = listOf(),
     val transactionTime: Timing = Timing(),
     val scanningTime: Timing = Timing(),
+    val holderTelemetry: AggregatedPresentmentTelemetry? = null,
+    val readerTelemetry: AggregatedPresentmentTelemetry? = null,
 )

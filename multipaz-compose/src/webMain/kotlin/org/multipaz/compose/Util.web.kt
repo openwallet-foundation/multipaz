@@ -79,5 +79,10 @@ internal actual fun fullScreenDialogProperties(): androidx.compose.ui.window.Dia
 internal actual fun FullScreenDialogEffect() {
 }
 
+@Composable
+actual fun KeepScreenOnEffect() {
+}
+
+
 
 

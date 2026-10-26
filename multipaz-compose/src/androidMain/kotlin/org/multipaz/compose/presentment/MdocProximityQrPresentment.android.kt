@@ -27,17 +27,23 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.advertise
 import org.multipaz.mdoc.transport.waitForConnection
 import org.multipaz.presentment.Iso18013Presentment
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentProtocol
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentTelemetry
+import org.multipaz.presentment.classifyPresentmentException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.toBase64Url
+import kotlin.time.Clock
 
 @Composable
 actual fun MdocProximityQrPresentment(
@@ -125,16 +131,22 @@ private fun MdocProximityQrPresentmentAndroid(
                     transactionJob = coroutineScope.launch {
 
                         transactionError = null
+                        val timeStarted = Clock.System.now()
+                        var advertisedTransports: List<MdocTransport>? = null
+                        var connectedTransport: MdocTransport? = null
+                        var enteredPresentment = false
+                        var lastTelemetry: PresentmentTelemetry? = null
 
                         try {
                             val eDeviceKey = Crypto.createEcPrivateKey(eDeviceKeyCurve)
-                            val advertisedTransports = qrSettings.availableConnectionMethods.advertise(
+                            val transports = qrSettings.availableConnectionMethods.advertise(
                                 role = MdocRole.MDOC,
                                 transportFactory = transportFactory,
                                 options = qrSettings.createTransportOptions,
                             )
+                            advertisedTransports = transports
                             val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                                advertisedTransports.forEach { addConnectionMethod(it.connectionMethod) }
+                                transports.forEach { addConnectionMethod(it.connectionMethod) }
                                 capabilities.forEach { (capability, value) -> addCapability(capability, value) }
                             }.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))
@@ -142,9 +154,11 @@ private fun MdocProximityQrPresentmentAndroid(
 
                             state = StateAndroid.SHOW_QR_CODE
 
-                            val transport = advertisedTransports.waitForConnection(
+                            val transport = transports.waitForConnection(
                                 eSenderKey = eDeviceKey.publicKey,
                             )
+                            connectedTransport = transport
+                            advertisedTransports = null
 
                             PresentmentActivity.presentmentModel.reset(
                                 source = source,
@@ -171,6 +185,7 @@ private fun MdocProximityQrPresentmentAndroid(
                                 }
                             }
 
+                            enteredPresentment = true
                             Iso18013Presentment(
                                 transport = transport,
                                 eDeviceKey = eDeviceKey,
@@ -183,16 +198,25 @@ private fun MdocProximityQrPresentmentAndroid(
                                 onDocumentsInFocus = { documents ->
                                     PresentmentActivity.presentmentModel.setDocumentsSelected(selectedDocuments = documents)
                                 },
-                                onSendingResponse = { PresentmentActivity.presentmentModel.setSending() }
+                                onSendingResponse = { PresentmentActivity.presentmentModel.setSending() },
+                                onTelemetry = { lastTelemetry = it }
                             )
-                            PresentmentActivity.presentmentModel.setCompleted(null)
+                            PresentmentActivity.presentmentModel.setCompleted(null, lastTelemetry)
                         } catch (e: Exception) {
+                            val resolvedTelemetry = lastTelemetry ?: PresentmentTelemetry(
+                                protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+                                engagementType = EngagementType.QR_CODE,
+                                outcome = classifyPresentmentException(e, waitingForConnection = !enteredPresentment),
+                                durationTotal = Clock.System.now() - timeStarted,
+                                transportStats = (connectedTransport ?: advertisedTransports?.firstOrNull())?.stats,
+                            )
                             if (e is CancellationException) {
                                 PresentmentActivity.presentmentModel.setCompleted(
-                                    PresentmentCanceledException("Presentment was cancelled")
+                                    PresentmentCanceledException("Presentment was cancelled"),
+                                    resolvedTelemetry
                                 )
                             } else {
-                                PresentmentActivity.presentmentModel.setCompleted(e)
+                                PresentmentActivity.presentmentModel.setCompleted(e, resolvedTelemetry)
                             }
                             transactionError = e
                         } finally {

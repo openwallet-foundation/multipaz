@@ -443,7 +443,7 @@ private suspend fun doDcRequestFlow(
         durationMsecNfcTapToEngagement = null,
         durationMsecEngagementReceivedToRequestSent = null,
         durationMsecRequestSentToResponseReceived = (Clock.System.now() - t0).inWholeMilliseconds,
-        nfcHybridTransportStats = null
+        transportStats = null
     )
 
     showResponse(

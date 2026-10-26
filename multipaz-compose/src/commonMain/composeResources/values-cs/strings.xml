@@ -190,6 +190,8 @@
     <string name="presentment_activity_something_went_wrong">Něco se pokazilo</string>
     <string name="presentment_activity_canceled">Zrušeno</string>
     <string name="presentment_activity_cannot_satisfy_request">Nelze vyhovět požadavku</string>
+    <string name="presentment_activity_authentication_failed">Ověření se nezdařilo</string>
+    <string name="presentment_activity_face_match_failed">Ověření obličeje se nezdařilo</string>
     <string name="presentment_activity_open_wallet">Otevřít %1$s</string>
     <string name="presentment_activity_app_name_default">Peněženka</string>
     <string name="presentment_activity_no_documents_available">Žádné dokumenty nejsou k dispozici</string>

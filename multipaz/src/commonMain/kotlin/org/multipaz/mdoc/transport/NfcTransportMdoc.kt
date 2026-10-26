@@ -92,6 +92,21 @@ class NfcTransportMdoc(
     override val scanningTime: Duration?
         get() = null
 
+    private var _bytesSent: Long = 0
+    private var _bytesReceived: Long = 0
+    private var _numMessagesSent: Int = 0
+    private var _numMessagesReceived: Int = 0
+
+    override val stats: MdocTransportStats
+        get() = MdocTransportStats(
+            transportType = MdocTransportType.NFC_DATA_TRANSFER_MODE,
+            role = role,
+            bytesSent = _bytesSent,
+            bytesReceived = _bytesReceived,
+            numMessagesSent = _numMessagesSent,
+            numMessagesReceived = _numMessagesReceived,
+        )
+
     override suspend fun advertise() {
     }
 
@@ -167,6 +182,11 @@ class NfcTransportMdoc(
                 throw e
             }
 
+            if (message.isNotEmpty()) {
+                _bytesSent += message.size
+                _numMessagesSent += 1
+            }
+
             val encapsulatedMessage = encapsulateInDo53(ByteString(message))
             val maxChunkSize = leReceived
             val offsets = 0 until encapsulatedMessage.size step maxChunkSize
@@ -190,7 +210,12 @@ class NfcTransportMdoc(
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
             Logger.i(TAG, "waitForMessage")
         }
-        return incomingMessages.receive().toByteArray()
+        val msg = incomingMessages.receive().toByteArray()
+        if (msg.isNotEmpty()) {
+            _bytesReceived += msg.size
+            _numMessagesReceived += 1
+        }
+        return msg
     }
 
     override suspend fun close() {

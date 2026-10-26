@@ -6,9 +6,11 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.mdoc.transport.toDataItem
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.toBase64Url
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.openReadChannel
 import io.ktor.network.sockets.openWriteChannel
@@ -170,16 +172,19 @@ class MultiDeviceTestsClient(
                         val timeEnd = Clock.System.now()
                         val timeEngagementToResponseMsec = (timeEnd - timeStart).toInt(DurationUnit.MILLISECONDS)
                         val scanningTimeMsec = transport.scanningTime?.toInt(DurationUnit.MILLISECONDS) ?: 0
+                        val encodedStats = Cbor.encode(transport.stats.toDataItem()).toBase64Url()
                         sendChannel.writeStringUtf8("TestPresentationSuccess $timeEngagementToResponseMsec " +
-                                "$scanningTimeMsec\n")
+                                "$scanningTimeMsec $encodedStats\n")
                     }
                 } catch (e: TimeoutCancellationException) {
-                    sendChannel.writeStringUtf8("TestPresentationTimeout\n")
+                    val encodedStats = Cbor.encode(transport.stats.toDataItem()).toBase64Url()
+                    sendChannel.writeStringUtf8("TestPresentationTimeout $encodedStats\n")
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Logger.w(TAG, "Iteration failed", e)
                     e.printStackTrace()
-                    sendChannel.writeStringUtf8("TestPresentationFailed\n")
+                    val encodedStats = Cbor.encode(transport.stats.toDataItem()).toBase64Url()
+                    sendChannel.writeStringUtf8("TestPresentationFailed $encodedStats\n")
                 } finally {
                     transport.close()
                 }

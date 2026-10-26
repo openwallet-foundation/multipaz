@@ -98,9 +98,11 @@ import org.multipaz.context.initializeApplication
 import org.multipaz.document.Document
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_app_name_default
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_authentication_failed
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_canceled
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_cannot_satisfy_request
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_connecting_to_reader
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_face_match_failed
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_hold_to_reader
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_info_was_shared
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_no_documents_available
@@ -108,7 +110,9 @@ import org.multipaz.multipaz_compose.generated.resources.presentment_activity_nf
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_open_wallet
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_removed_too_fast
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_something_went_wrong
+import org.multipaz.presentment.AuthenticationFailedException
 import org.multipaz.presentment.DocumentChooserData
+import org.multipaz.presentment.FaceNotMatchedException
 import org.multipaz.presentment.Iso18013PresentmentNfcDisconnectedException
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
@@ -549,6 +553,16 @@ fun PresentmentActivityContent(
                                                     is PresentmentCannotSatisfyRequestException -> {
                                                         ShowFailure(stringResource(
                                                             Res.string.presentment_activity_cannot_satisfy_request
+                                                        ))
+                                                    }
+                                                    is AuthenticationFailedException -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_authentication_failed
+                                                        ))
+                                                    }
+                                                    is FaceNotMatchedException -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_face_match_failed
                                                         ))
                                                     }
                                                     is Iso18013PresentmentNfcDisconnectedException -> {

@@ -15,7 +15,12 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.engagement.EngagementType
-import org.multipaz.mdoc.transport.NfcHybridTransportStats
+import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.transport.MdocTransportStats
+import org.multipaz.mdoc.transport.MdocTransportType
+import org.multipaz.presentment.PresentmentOutcome
+import org.multipaz.presentment.PresentmentProtocol
+import org.multipaz.presentment.PresentmentTelemetry
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.verification.Iso18013PresentmentRecord
@@ -631,13 +636,15 @@ class SimpleEventLoggerTests {
             encryptionInfo = null,
             origin = null
         )
-        val stats = NfcHybridTransportStats(
-            numSent = 10,
-            numSentViaNfc = 8,
-            numSentViaTransport = 2,
-            numReceived = 12,
-            numReceivedFirstOnNfc = 9,
-            numReceivedFirstOnTransport = 3,
+        val stats = MdocTransportStats(
+            transportType = MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE,
+            role = MdocRole.MDOC_READER,
+            numMessagesSent = 10,
+            nfcHybridNumSentViaNfc = 8,
+            nfcHybridNumSentViaTransport = 2,
+            numMessagesReceived = 12,
+            nfcHybridNumReceivedFirstOnNfc = 9,
+            nfcHybridNumReceivedFirstOnTransport = 3,
             nfcDisconnectedDuringTransaction = false
         )
 
@@ -650,7 +657,7 @@ class SimpleEventLoggerTests {
             durationEngagementReceivedToRequestSent = 50.milliseconds,
             durationRequestSentToResponseReceived = 400.milliseconds,
             durationScanningTime = 300.milliseconds,
-            nfcHybridTransportStats = stats
+            transportStats = stats
         )
 
         val savedEvent = logger.addEvent(event)
@@ -661,7 +668,7 @@ class SimpleEventLoggerTests {
         assertEquals(50.milliseconds, savedEvent.durationEngagementReceivedToRequestSent)
         assertEquals(400.milliseconds, savedEvent.durationRequestSentToResponseReceived)
         assertEquals(300.milliseconds, savedEvent.durationScanningTime)
-        assertEquals(stats, savedEvent.nfcHybridTransportStats)
+        assertEquals(stats, savedEvent.transportStats)
 
         val eventsFromDb = logger.getEvents()
         assertEquals(1, eventsFromDb.size)
@@ -673,7 +680,7 @@ class SimpleEventLoggerTests {
         assertEquals(50.milliseconds, retrieved.durationEngagementReceivedToRequestSent)
         assertEquals(400.milliseconds, retrieved.durationRequestSentToResponseReceived)
         assertEquals(300.milliseconds, retrieved.durationScanningTime)
-        assertEquals(stats, retrieved.nfcHybridTransportStats)
+        assertEquals(stats, retrieved.transportStats)
     }
 
     @Test
@@ -705,7 +712,7 @@ class SimpleEventLoggerTests {
             durationEngagementReceivedToRequestSent = 50.milliseconds,
             durationRequestSentToResponseReceived = 400.milliseconds,
             durationScanningTime = null,
-            nfcHybridTransportStats = null
+            transportStats = null
         )
 
         val savedEvent = logger.addEvent(event)
@@ -760,6 +767,47 @@ class SimpleEventLoggerTests {
         // Verify serializing EventVerificationDefault encodes with type "Verification"
         val reEncoded = event.toDataItem()
         assertEquals(Tstr("Verification"), reEncoded["type"])
+    }
+
+    @Test
+    fun testFailedPresentmentEventAndTelemetryRoundTrip() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(4000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+
+        val telemetry = PresentmentTelemetry(
+            protocol = PresentmentProtocol.ISO_18013_5_PROXIMITY,
+            engagementType = EngagementType.NFC_STATIC_HANDOVER,
+            outcome = PresentmentOutcome.TRANSPORT_ERROR,
+            numRequestsServed = 0,
+            numDocumentsPresented = 0,
+            numNfcReTaps = 1,
+            durationTotal = 250.milliseconds
+        )
+
+        val failedEvent = EventPresentmentIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentData = null,
+            request = null,
+            response = null,
+            sessionTranscript = null,
+            telemetry = telemetry
+        )
+
+        val savedEvent = logger.addEvent(failedEvent)
+        assertNotNull(savedEvent)
+        assertTrue(savedEvent is EventPresentmentIso18013Proximity)
+        assertNull(savedEvent.presentmentData)
+        assertNull(savedEvent.request)
+        assertNull(savedEvent.response)
+        assertNull(savedEvent.sessionTranscript)
+        assertEquals(telemetry, savedEvent.telemetry)
+
+        val retrieved = logger.getEvents().single()
+        assertTrue(retrieved is EventPresentmentIso18013Proximity)
+        assertNull(retrieved.presentmentData)
+        assertEquals(telemetry, retrieved.telemetry)
     }
 
     // --- Fakes ---

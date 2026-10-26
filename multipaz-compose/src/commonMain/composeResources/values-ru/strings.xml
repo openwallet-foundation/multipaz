@@ -202,6 +202,8 @@
     <string name="presentment_activity_something_went_wrong">Что-то пошло не так</string>
     <string name="presentment_activity_canceled">Отменено</string>
     <string name="presentment_activity_cannot_satisfy_request">Не удалось выполнить запрос</string>
+    <string name="presentment_activity_authentication_failed">Ошибка аутентификации</string>
+    <string name="presentment_activity_face_match_failed">Сравнение лица не удалось</string>
     <string name="presentment_activity_open_wallet">Открыть %1$s</string>
     <string name="presentment_activity_app_name_default">Кошелек</string>
     <string name="presentment_activity_no_documents_available">Документы недоступны</string>

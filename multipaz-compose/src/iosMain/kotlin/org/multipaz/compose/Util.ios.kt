@@ -30,6 +30,7 @@ import platform.CoreGraphics.CGContextTranslateCTM
 import platform.CoreGraphics.CGImageAlphaInfo
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
+import platform.UIKit.UIApplication
 import platform.UIKit.UIGraphicsImageRenderer
 import platform.UIKit.UIGraphicsImageRendererFormat
 import platform.UIKit.UIImage
@@ -203,6 +204,19 @@ internal actual fun fullScreenDialogProperties(): androidx.compose.ui.window.Dia
 @Composable
 internal actual fun FullScreenDialogEffect() {
 }
+
+@Composable
+actual fun KeepScreenOnEffect() {
+    DisposableEffect(Unit) {
+        val app = UIApplication.sharedApplication
+        val wasDisabled = app.idleTimerDisabled
+        app.idleTimerDisabled = true
+        onDispose {
+            app.idleTimerDisabled = wasDisabled
+        }
+    }
+}
+
 
 
 

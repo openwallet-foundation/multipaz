@@ -53,7 +53,6 @@ import kotlinx.datetime.format.byUnicodePattern
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
 import org.multipaz.claim.Claim
 import org.multipaz.compose.decodeImage
@@ -68,6 +67,7 @@ import org.multipaz.compose.sharemanager.ShareManager
 import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
+import org.multipaz.mdoc.transport.MdocTransportType
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
@@ -95,7 +95,6 @@ import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.VerifiedPresentation
 import org.multipaz.verification.Iso18013PresentmentRecord
 import org.multipaz.verification.OpenID4VPPresentmentRecord
-import org.multipaz.compose.getOutlinedImageVector
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CancellationException
@@ -419,14 +418,15 @@ private fun EventViewerPresentment(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val imageSize = 80.dp
-        event.presentmentData.trustMetadata?.displayIcon?.let {
+        val presentmentData = event.presentmentData
+        presentmentData?.trustMetadata?.displayIcon?.let {
             val bitmap = remember { decodeImage(it.toByteArray()) }
             Image(
                 modifier = Modifier.size(imageSize),
                 bitmap = bitmap,
                 contentDescription = null
             )
-        } ?: event.presentmentData.trustMetadata?.displayIconUrl?.let {
+        } ?: presentmentData?.trustMetadata?.displayIconUrl?.let {
             AsyncImage(
                 modifier = Modifier.size(imageSize),
                 model = it,
@@ -437,7 +437,7 @@ private fun EventViewerPresentment(
         }
 
         Text(
-            text = event.presentmentData.requesterName ?: "Unknown requester",
+            text = presentmentData?.requesterName ?: "Unknown requester",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -465,16 +465,21 @@ private fun EventViewerPresentment(
                     OriginAndAppIdItem(event.origin, event.appId)
                 }
                 is EventPresentmentIso18013Proximity -> {
-                    val handover = event.sessionTranscript.asArray[2]
+                    val handover = event.sessionTranscript?.asArray?.getOrNull(2)
                     if (handover == Simple.NULL) {
                         FloatingItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using QR code"
                         )
-                    } else {
+                    } else if (handover != null) {
                         FloatingItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using NFC"
+                        )
+                    } else {
+                        FloatingItemHeadingAndText(
+                            heading = "Shared in-person",
+                            text = event.telemetry?.engagementType?.name ?: "Proximity"
                         )
                     }
                 }
@@ -485,12 +490,31 @@ private fun EventViewerPresentment(
                 text =  protocol
             )
 
-            if (event.presentmentData.trustMetadata != null) {
+            event.telemetry?.let { telemetry ->
+                FloatingItemHeadingAndText(
+                    heading = "Outcome",
+                    text = telemetry.outcome.name
+                )
+                telemetry.durationTotal?.let {
+                    FloatingItemHeadingAndText(
+                        heading = "Total duration",
+                        text = "${it.inWholeMilliseconds} ms"
+                    )
+                }
+                if (telemetry.warnings.isNotEmpty()) {
+                    FloatingItemHeadingAndText(
+                        heading = "Warnings",
+                        text = telemetry.warnings.joinToString(", ") { it.code.name }
+                    )
+                }
+            }
+
+            if (presentmentData?.trustMetadata != null) {
                 FloatingItemHeadingAndText(
                     heading = "Requester trusted",
                     text =  "Yes, in trust list"
                 )
-            } else {
+            } else if (presentmentData != null) {
                 FloatingItemHeadingAndText(
                     heading = "Requester trusted",
                     text = buildAnnotatedString {
@@ -501,7 +525,7 @@ private fun EventViewerPresentment(
                 )
             }
 
-            event.presentmentData.requesterCertChain?.let {
+            presentmentData?.requesterCertChain?.let {
                 FloatingItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Click to view",
@@ -509,14 +533,14 @@ private fun EventViewerPresentment(
                         onViewCertificateChain(it)
                     }
                 )
-            } ?: run {
+            } ?: if (presentmentData != null) {
                 FloatingItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Not available",
                 )
-            }
+            } else Unit
 
-            event.presentmentData.trustMetadata?.privacyPolicyUrl?.let {
+            presentmentData?.trustMetadata?.privacyPolicyUrl?.let {
                 FloatingItemHeadingAndText(
                     heading = "Requester privacy policy",
                     text = AnnotatedString.fromMarkdown(
@@ -526,7 +550,7 @@ private fun EventViewerPresentment(
             }
         }
 
-        event.presentmentData.requestedDocuments.forEach { requestedDocument ->
+        presentmentData?.requestedDocuments?.forEach { requestedDocument ->
             val info = documentModel.documentInfos.collectAsState().value.find {
                 it.document.identifier == requestedDocument.documentId
             }
@@ -795,10 +819,25 @@ private fun EventViewerVerification(
                             text = "${it.inWholeMilliseconds} ms"
                         )
                     }
-                    event.nfcHybridTransportStats?.let { stats ->
+                    event.transportStats?.let { stats ->
+                        val isNfcHybrid =
+                            stats.transportType == MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE ||
+                                stats.transportType == MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
                         FloatingItemHeadingAndText(
-                            heading = "NFC hybrid transport stats",
-                            text = "Sent: ${stats.numSent} (${stats.numSentViaNfc} NFC, ${stats.numSentViaTransport} transport)\nReceived: ${stats.numReceived} (${stats.numReceivedFirstOnNfc} NFC, ${stats.numReceivedFirstOnTransport} transport)"
+                            heading = "Transport stats (${stats.transportType.name})",
+                            text = buildString {
+                                append("Sent: ${stats.numMessagesSent} msgs (${stats.bytesSent} B)")
+                                if (isNfcHybrid) {
+                                    append(" (${stats.nfcHybridNumSentViaNfc} NFC, ${stats.nfcHybridNumSentViaTransport} transport)")
+                                }
+                                append("\nReceived: ${stats.numMessagesReceived} msgs (${stats.bytesReceived} B)")
+                                if (isNfcHybrid) {
+                                    append(" (${stats.nfcHybridNumReceivedFirstOnNfc} NFC, ${stats.nfcHybridNumReceivedFirstOnTransport} transport)")
+                                }
+                                if (stats.warnings.isNotEmpty()) {
+                                    append("\nWarnings: ${stats.warnings.joinToString(", ") { it.code.name }}")
+                                }
+                            }
                         )
                     }
                 }

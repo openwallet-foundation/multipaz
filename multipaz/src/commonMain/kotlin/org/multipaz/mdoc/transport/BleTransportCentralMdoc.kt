@@ -93,8 +93,38 @@ internal class BleTransportCentralMdoc(
     override val scanningTime: Duration?
         get() = _scanningTime
 
+    private var _connectingTime: Duration? = null
+    private var _bytesSent: Long = 0
+    private var _bytesReceived: Long = 0
+    private var _numMessagesSent: Int = 0
+    private var _numMessagesReceived: Int = 0
+
+    override val stats: MdocTransportStats
+        get() = MdocTransportStats(
+            transportType = MdocTransportType.MDOC_CENTRAL_CLIENT_MODE,
+            role = role,
+            scanningTime = _scanningTime,
+            connectingTime = _connectingTime,
+            bytesSent = _bytesSent,
+            bytesReceived = _bytesReceived,
+            numMessagesSent = _numMessagesSent,
+            numMessagesReceived = _numMessagesReceived,
+            warnings = centralManager.warnings,
+            bleUsingL2cap = centralManager.usingL2cap,
+            bleL2capPsmInEngagement = psm != null,
+            bleNegotiatedMtu = centralManager.negotiatedMtu,
+            bleMtuInferredFromWrite = false,
+            bleNumScanRestarts = centralManager.numScanRestarts,
+            bleNumGattConnectRetries = centralManager.numGattConnectRetries,
+            bleNumServiceDiscoveryRetries = centralManager.numServiceDiscoveryRetries,
+            bleNumL2capConnectRetries = centralManager.numL2capConnectRetries,
+            bleNumChunksSent = centralManager.numChunksSent,
+            bleNumChunksReceived = centralManager.numChunksReceived,
+        )
+
     override suspend fun open(eSenderKey: EcPublicKey) {
         var timeScanningStarted: Instant
+        var timeConnectingStarted: Instant? = null
         try {
             coroutineScope {
                 mutex.withLock {
@@ -105,7 +135,9 @@ internal class BleTransportCentralMdoc(
                 centralManager.waitForPowerOn()
                 timeScanningStarted = Clock.System.now()
                 centralManager.waitForPeripheralWithUuid(uuid)
-                _scanningTime = Clock.System.now() - timeScanningStarted
+                val nowAfterScan = Clock.System.now()
+                _scanningTime = nowAfterScan - timeScanningStarted
+                timeConnectingStarted = nowAfterScan
                 mutex.withLock { _state.value = State.CONNECTING }
                 if (psm != null) {
                     // If the PSM is known at engagement-time we can bypass the entire GATT server
@@ -125,9 +157,11 @@ internal class BleTransportCentralMdoc(
                         centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
                     }
                 }
+                _connectingTime = Clock.System.now() - timeConnectingStarted!!
                 mutex.withLock { _state.value = State.CONNECTED }
             }
         } catch (error: Exception) {
+            timeConnectingStarted?.let { _connectingTime = Clock.System.now() - it }
             val unwrapped = error.unwrapCancellationException()
             if (unwrapped is CancellationException) {
                 withContext(NonCancellable) {
@@ -152,7 +186,12 @@ internal class BleTransportCentralMdoc(
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         try {
-            return centralManager.incomingMessages.receive()
+            val msg = centralManager.incomingMessages.receive()
+            if (msg.isNotEmpty()) {
+                _bytesReceived += msg.size
+                _numMessagesReceived += 1
+            }
+            return msg
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -181,6 +220,8 @@ internal class BleTransportCentralMdoc(
                     centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_END)
                 } else {
                     centralManager.sendMessage(message)
+                    _bytesSent += message.size
+                    _numMessagesSent += 1
                 }
             }
         } catch (error: Exception) {

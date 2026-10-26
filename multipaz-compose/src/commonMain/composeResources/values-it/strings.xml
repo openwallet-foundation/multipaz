@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Qualcosa è andato storto</string>
     <string name="presentment_activity_canceled">Annullato</string>
     <string name="presentment_activity_cannot_satisfy_request">Impossibile soddisfare la richiesta</string>
+    <string name="presentment_activity_authentication_failed">Autenticazione non riuscita</string>
+    <string name="presentment_activity_face_match_failed">Corrispondenza del volto non riuscita</string>
     <string name="presentment_activity_open_wallet">Apri %1$s</string>
     <string name="presentment_activity_app_name_default">Wallet</string>
     <string name="presentment_activity_no_documents_available">Nessun documento disponibile</string>

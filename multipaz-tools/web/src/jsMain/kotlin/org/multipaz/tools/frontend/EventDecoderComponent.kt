@@ -14,7 +14,6 @@ import org.multipaz.cbor.Cdn
 import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.eventlogger.Event
 import org.multipaz.eventlogger.EventPresentment
 import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
@@ -31,6 +30,7 @@ import org.multipaz.eventlogger.EventVerificationDigitalCredentials
 import org.multipaz.eventlogger.EventVerificationIso18013Proximity
 import org.multipaz.eventlogger.fromDataItem
 import org.multipaz.eventlogger.toDataItem
+import org.multipaz.mdoc.transport.MdocTransportType
 import org.multipaz.provisioning.Display as ProvisioningDisplay
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.trustmanagement.TrustMetadata
@@ -794,21 +794,47 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
                 span { css { color = Color("#f1f5f9"); fontWeight = FontWeight.bold }; +protocolName }
             }
 
-            if (presentmentData.requesterName != null) {
+            if (presentmentData?.requesterName != null) {
                 div {
                     span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Requester Name: " }
                     span { css { color = Color("#f1f5f9") }; +presentmentData.requesterName!! }
                 }
             }
+
+            if (ev.telemetry != null) {
+                val t = ev.telemetry!!
+                div {
+                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Outcome: " }
+                    span {
+                        css {
+                            color = if (t.outcome.name == "SUCCESS") Color("#4ade80") else Color("#f87171")
+                            fontWeight = FontWeight.bold
+                        }
+                        +t.outcome.name
+                    }
+                }
+                if (t.durationTotal != null) {
+                    div {
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Total Duration: " }
+                        span { css { color = Color("#f1f5f9") }; +"${t.durationTotal}" }
+                    }
+                }
+                if (t.warnings.isNotEmpty()) {
+                    div {
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Warnings: " }
+                        span { css { color = Color("#fbbf24") }; +t.warnings.joinToString(", ") { it.code.name } }
+                    }
+                }
+            }
         }
 
         // Render TrustMetadata if present
-        if (presentmentData.trustMetadata != null) {
+        if (presentmentData?.trustMetadata != null) {
             renderTrustMetadataCard(presentmentData.trustMetadata!!)
         }
 
         // Render Requester Certificate Chain with Copy PEM buttons
-        if (presentmentData.requesterCertChain != null) {
+        if (presentmentData?.requesterCertChain != null) {
             val certs = presentmentData.requesterCertChain!!.certificates
             h3 {
                 css { color = Color("#e2e8f0"); fontSize = 1.0.rem; marginTop = 20.px; marginBottom = 12.px }
@@ -824,7 +850,7 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
         }
 
         // Render Requested Documents
-        if (presentmentData.requestedDocuments.isNotEmpty()) {
+        if (presentmentData != null && presentmentData.requestedDocuments.isNotEmpty()) {
             h3 {
                 css { color = Color("#e2e8f0"); fontSize = 1.0.rem; marginTop = 20.px; marginBottom = 12.px }
                 +"Requested Documents (${presentmentData.requestedDocuments.size})"
@@ -900,21 +926,27 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
                     div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Protocol: " }; span { css { color = Color("#f1f5f9") }; +ev.protocol } }
                 }
 
-                TextDataBlock {
-                    title = "Request JSON"
-                    content = ev.requestJson
-                    copyLabel = "📋 Copy Request JSON"
+                if (ev.requestJson != null) {
+                    TextDataBlock {
+                        title = "Request JSON"
+                        content = ev.requestJson!!
+                        copyLabel = "📋 Copy Request JSON"
+                    }
                 }
 
-                TextDataBlock {
-                    title = "Response JSON"
-                    content = ev.responseJson
-                    copyLabel = "📋 Copy Response JSON"
+                if (ev.responseJson != null) {
+                    TextDataBlock {
+                        title = "Response JSON"
+                        content = ev.responseJson!!
+                        copyLabel = "📋 Copy Response JSON"
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Device Response (CBOR)"
-                    dataItem = ev.deviceResponse
+                if (ev.deviceResponse != null) {
+                    CborDataBlock {
+                        title = "Device Response (CBOR)"
+                        dataItem = ev.deviceResponse!!
+                    }
                 }
             }
 
@@ -931,22 +963,28 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
                     }
                 }
 
-                TextDataBlock {
-                    title = "Request JSON"
-                    content = ev.requestJson
-                    copyLabel = "📋 Copy Request JSON"
+                if (ev.requestJson != null) {
+                    TextDataBlock {
+                        title = "Request JSON"
+                        content = ev.requestJson!!
+                        copyLabel = "📋 Copy Request JSON"
+                    }
                 }
 
-                TextDataBlock {
-                    title = "Response JSON"
-                    content = ev.responseJson
-                    copyLabel = "📋 Copy Response JSON"
+                if (ev.responseJson != null) {
+                    TextDataBlock {
+                        title = "Response JSON"
+                        content = ev.responseJson!!
+                        copyLabel = "📋 Copy Response JSON"
+                    }
                 }
 
-                TextDataBlock {
-                    title = "VP Token"
-                    content = ev.vpToken
-                    copyLabel = "📋 Copy VP Token"
+                if (ev.vpToken != null) {
+                    TextDataBlock {
+                        title = "VP Token"
+                        content = ev.vpToken!!
+                        copyLabel = "📋 Copy VP Token"
+                    }
                 }
             }
 
@@ -973,16 +1011,20 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
                     copyLabel = "📋 Copy URI"
                 }
 
-                TextDataBlock {
-                    title = "Request JWT"
-                    content = ev.requestJwt
-                    copyLabel = "📋 Copy Request JWT"
+                if (ev.requestJwt != null) {
+                    TextDataBlock {
+                        title = "Request JWT"
+                        content = ev.requestJwt!!
+                        copyLabel = "📋 Copy Request JWT"
+                    }
                 }
 
-                TextDataBlock {
-                    title = "VP Token"
-                    content = ev.vpToken
-                    copyLabel = "📋 Copy VP Token"
+                if (ev.vpToken != null) {
+                    TextDataBlock {
+                        title = "VP Token"
+                        content = ev.vpToken!!
+                        copyLabel = "📋 Copy VP Token"
+                    }
                 }
             }
 
@@ -1003,41 +1045,55 @@ private fun react.ChildrenBuilder.renderEventPresentmentSection(ev: EventPresent
                     copyLabel = "📋 Copy URI"
                 }
 
-                CborDataBlock {
-                    title = "Request (CBOR)"
-                    dataItem = ev.request
+                if (ev.request != null) {
+                    CborDataBlock {
+                        title = "Request (CBOR)"
+                        dataItem = ev.request!!
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Response (CBOR)"
-                    dataItem = ev.response
+                if (ev.response != null) {
+                    CborDataBlock {
+                        title = "Response (CBOR)"
+                        dataItem = ev.response!!
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Session Transcript (CBOR)"
-                    dataItem = ev.sessionTranscript
+                if (ev.sessionTranscript != null) {
+                    CborDataBlock {
+                        title = "Session Transcript (CBOR)"
+                        dataItem = ev.sessionTranscript!!
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Reader Engagement (CBOR)"
-                    dataItem = ev.readerEngagement
+                if (ev.readerEngagement != null) {
+                    CborDataBlock {
+                        title = "Reader Engagement (CBOR)"
+                        dataItem = ev.readerEngagement!!
+                    }
                 }
             }
 
             is EventPresentmentIso18013Proximity -> {
-                CborDataBlock {
-                    title = "Request (CBOR)"
-                    dataItem = ev.request
+                if (ev.request != null) {
+                    CborDataBlock {
+                        title = "Request (CBOR)"
+                        dataItem = ev.request!!
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Response (CBOR)"
-                    dataItem = ev.response
+                if (ev.response != null) {
+                    CborDataBlock {
+                        title = "Response (CBOR)"
+                        dataItem = ev.response!!
+                    }
                 }
 
-                CborDataBlock {
-                    title = "Session Transcript (CBOR)"
-                    dataItem = ev.sessionTranscript
+                if (ev.sessionTranscript != null) {
+                    CborDataBlock {
+                        title = "Session Transcript (CBOR)"
+                        dataItem = ev.sessionTranscript!!
+                    }
                 }
             }
         }
@@ -1451,11 +1507,26 @@ private val EventVerificationBlock: FC<EventVerificationBlockProps> = FC { props
                     if (ev.durationScanningTime != null) {
                         div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Transport Scanning Time: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationScanningTime}" } }
                     }
-                    if (ev.nfcHybridTransportStats != null) {
-                        val stats = ev.nfcHybridTransportStats!!
+                    if (ev.transportStats != null) {
+                        val stats = ev.transportStats!!
+                        val isNfcHybrid =
+                            stats.transportType == MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE ||
+                                stats.transportType == MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
                         div {
-                            span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"NFC Hybrid Stats: " }
-                            span { css { color = Color("#f1f5f9") }; +"Sent: ${stats.numSent} (${stats.numSentViaNfc} NFC, ${stats.numSentViaTransport} transport), Received: ${stats.numReceived} (${stats.numReceivedFirstOnNfc} NFC, ${stats.numReceivedFirstOnTransport} transport)" }
+                            span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Transport Stats (${stats.transportType.name}): " }
+                            span {
+                                css { color = Color("#f1f5f9") }
+                                +buildString {
+                                    append("Sent: ${stats.numMessagesSent} (${stats.bytesSent} B)")
+                                    if (isNfcHybrid) {
+                                        append(" (${stats.nfcHybridNumSentViaNfc} NFC, ${stats.nfcHybridNumSentViaTransport} transport)")
+                                    }
+                                    append(", Received: ${stats.numMessagesReceived} (${stats.bytesReceived} B)")
+                                    if (isNfcHybrid) {
+                                        append(" (${stats.nfcHybridNumReceivedFirstOnNfc} NFC, ${stats.nfcHybridNumReceivedFirstOnTransport} transport)")
+                                    }
+                                }
+                            }
                         }
                     }
                 }

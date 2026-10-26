@@ -52,6 +52,7 @@ import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.mdoc.transport.MdocTransportStats
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
@@ -76,7 +77,6 @@ import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcScanOptions
 import org.multipaz.nfc.NfcTagReader
-import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.util.fromHex
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
@@ -194,6 +194,7 @@ fun IsoMdocProximityReadingScreen(
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
     val readerShowQrScanner = remember { mutableStateOf(false) }
     val readerTransport = remember { mutableStateOf<MdocTransport?>(null) }
+    val readerMostRecentTransportStats = remember { mutableStateOf<MdocTransportStats?>(null) }
     val readerSessionEncryption = remember { mutableStateOf<SessionEncryption?>(null) }
     val readerSession = remember { mutableStateOf<VerificationSession?>(null) }
     val readerMostRecentDeviceRequest = remember { mutableStateOf<ByteArray?>(null) }
@@ -316,6 +317,7 @@ fun IsoMdocProximityReadingScreen(
                                 bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                 showToast = showToast,
                                 readerTransport = readerTransport,
+                                readerMostRecentTransportStats = readerMostRecentTransportStats,
                                 readerSessionEncryption = readerSessionEncryption,
                                 readerSession = readerSession,
                                 readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
@@ -352,7 +354,8 @@ fun IsoMdocProximityReadingScreen(
                                         engagementType = EngagementType.QR_CODE,
                                         durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value,
                                         durationRequestSentToResponseReceived = durationRequestSentToResponseReceived.value,
-                                        durationScanningTime = readerTransport.value?.scanningTime,
+                                        durationScanningTime = readerMostRecentTransportStats.value?.scanningTime,
+                                        transportStats = readerMostRecentTransportStats.value,
                                     )
                                 )
                                 showResponse(
@@ -368,7 +371,7 @@ fun IsoMdocProximityReadingScreen(
                                         durationMsecNfcTapToEngagement = null,
                                         durationMsecEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value?.inWholeMilliseconds ?: 0,
                                         durationMsecRequestSentToResponseReceived = durationRequestSentToResponseReceived.value?.inWholeMilliseconds ?: 0,
-                                        nfcHybridTransportStats = null
+                                        transportStats = readerMostRecentTransportStats.value
                                     )
                                 )
                             }
@@ -696,6 +699,7 @@ fun IsoMdocProximityReadingScreen(
                                         bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                         showToast = showToast,
                                         readerTransport = readerTransport,
+                                        readerMostRecentTransportStats = readerMostRecentTransportStats,
                                         readerSessionEncryption = readerSessionEncryption,
                                         readerSession = readerSession,
                                         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
@@ -744,7 +748,7 @@ fun IsoMdocProximityReadingScreen(
                                             durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value,
                                             durationRequestSentToResponseReceived = durationRequestSentToResponseReceived.value,
                                             durationScanningTime = scanResult.transport.scanningTime,
-                                            nfcHybridTransportStats = (scanResult.transport as? NfcHybridTransportMdocReader)?.stats,
+                                            transportStats = scanResult.transport.stats,
                                         )
                                     )
                                     showResponse(
@@ -760,7 +764,7 @@ fun IsoMdocProximityReadingScreen(
                                             durationMsecNfcTapToEngagement = scanResult.processingDuration.inWholeMilliseconds,
                                             durationMsecEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value?.inWholeMilliseconds ?: 0,
                                             durationMsecRequestSentToResponseReceived = durationRequestSentToResponseReceived.value?.inWholeMilliseconds ?: 0,
-                                            nfcHybridTransportStats = (scanResult.transport as? NfcHybridTransportMdocReader)?.stats
+                                            transportStats = scanResult.transport.stats
                                         )
                                     )
                                 }
@@ -872,6 +876,7 @@ private suspend fun doReaderFlow(
     bleUseL2CAPInEngagement: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
+    readerMostRecentTransportStats: MutableState<MdocTransportStats?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
     readerSession: MutableState<VerificationSession?>,
     readerMostRecentDeviceRequest: MutableState<ByteArray?>,
@@ -932,6 +937,7 @@ private suspend fun doReaderFlow(
                         insertSequenceNumbers = insertSequenceNumbers,
                         showToast = showToast,
                         readerTransport = readerTransport,
+                        readerMostRecentTransportStats = readerMostRecentTransportStats,
                         readerSessionEncryption = readerSessionEncryption,
                         readerSession = readerSession,
                         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
@@ -959,6 +965,7 @@ private suspend fun doReaderFlow(
         insertSequenceNumbers = insertSequenceNumbers,
         showToast = showToast,
         readerTransport = readerTransport,
+        readerMostRecentTransportStats = readerMostRecentTransportStats,
         readerSessionEncryption = readerSessionEncryption,
         readerSession = readerSession,
         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
@@ -982,6 +989,7 @@ private suspend fun doReaderFlowWithTransport(
     insertSequenceNumbers: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
+    readerMostRecentTransportStats: MutableState<MdocTransportStats?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
     readerSession: MutableState<VerificationSession?>,
     readerMostRecentDeviceRequest: MutableState<ByteArray?>,
@@ -1070,6 +1078,7 @@ private suspend fun doReaderFlowWithTransport(
         // is, the onClick handlers for the close buttons.
         Logger.i(TAG, "Ending reader flow due to MdocTransportClosedException")
     } finally {
+        readerMostRecentTransportStats.value = transport.stats
         transport.close()
         readerTransport.value = null
     }

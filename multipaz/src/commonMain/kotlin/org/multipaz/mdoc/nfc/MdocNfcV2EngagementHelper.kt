@@ -80,7 +80,7 @@ class MdocNfcV2EngagementHelper(
 
     private fun raiseError(errorMessage: String, cause: Exception? = null) {
         inError = true
-        onError(IllegalStateException(errorMessage, cause))
+        onError(MdocNfcEngagementException(errorMessage, cause))
     }
 
     private suspend fun processSelectApplication(command: CommandApdu): ResponseApdu {

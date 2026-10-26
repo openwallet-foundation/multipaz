@@ -264,6 +264,7 @@ class DocumentStoreTestHarness {
         keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
         dsKey: AsymmetricKey.X509Certified? = null,
         readerIdentifiers: List<ByteString> = emptyList(),
+        createKeySettings: CreateKeySettings? = null,
     ): Document {
         initialize()
         val effectiveDsKey = dsKey ?: this.dsKey
@@ -290,6 +291,7 @@ class DocumentStoreTestHarness {
             dsKey = effectiveDsKey,
             keyAuthorizedNamespaces = keyAuthorizedNamespaces,
             keyAuthorizedDataElements = keyAuthorizedDataElements,
+            createKeySettings = createKeySettings,
         )
         return document
     }
@@ -511,6 +513,7 @@ class DocumentStoreTestHarness {
         dsKey: AsymmetricKey.X509Certified,
         keyAuthorizedNamespaces: List<String>,
         keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
+        createKeySettings: CreateKeySettings? = null,
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -519,7 +522,7 @@ class DocumentStoreTestHarness {
             domain = "mdoc",
             secureArea = softwareSecureArea,
             docType = docType,
-            createKeySettings = SoftwareCreateKeySettings.Builder().build()
+            createKeySettings = createKeySettings ?: SoftwareCreateKeySettings.Builder().build()
         )
 
         // Generate an MSO and issuer-signed data for this authentication key.

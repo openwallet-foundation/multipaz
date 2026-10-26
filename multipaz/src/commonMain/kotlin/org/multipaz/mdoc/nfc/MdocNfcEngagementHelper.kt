@@ -101,7 +101,7 @@ class MdocNfcEngagementHelper(
     private fun raiseError(errorMessage: String, cause: Throwable? = null) {
         check(!raisedError && !raisedHandoverComplete)
         raisedError = true
-        onError(IllegalStateException(errorMessage, cause))
+        onError(MdocNfcEngagementException(errorMessage, cause))
     }
 
     private fun raiseHandoverComplete(

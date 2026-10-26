@@ -1,13 +1,19 @@
 package org.multipaz.testapp.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.multipaz.presentment.PresentmentOutcome
 import org.multipaz.testapp.multidevicetests.MultiDeviceTestsClient
 import org.multipaz.testapp.multidevicetests.MultiDeviceTestsServer
 import org.multipaz.testapp.multidevicetests.Plan
@@ -34,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.multipaz.compose.KeepScreenOnEffect
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.testapp.TestAppConfiguration
@@ -59,6 +67,7 @@ fun IsoMdocMultiDeviceTestingScreen(
     val multiDeviceTestClient = remember { mutableStateOf<MultiDeviceTestsClient?>(null) }
     val multiDeviceTestServer = remember { mutableStateOf<MultiDeviceTestsServer?>(null) }
     val multiDeviceTestResults = remember { mutableStateOf<Results>(Results()) }
+    val stopOnFailure = remember { mutableStateOf(false) }
 
     if (multiDeviceTestsServerShowButton.value != null) {
         val url = multiDeviceTestsServerShowButton.value!!
@@ -133,6 +142,7 @@ fun IsoMdocMultiDeviceTestingScreen(
                     runMultiDeviceTestsServer(
                         socket,
                         plan,
+                        stopOnFailure.value,
                         multiDeviceTestServer,
                         multiDeviceTestResults,
                         showToast
@@ -181,8 +191,18 @@ fun IsoMdocMultiDeviceTestingScreen(
     } else {
         if (multiDeviceTestServer.value != null) {
             val r = multiDeviceTestResults.value
+            val isFinished = r.numIterationsTotal > 0 &&
+                (r.numIterationsCompleted == r.numIterationsTotal ||
+                    (r.currentTest == null && r.numIterationsCompleted > 0))
+            if (!isFinished) {
+                KeepScreenOnEffect()
+            }
+            val scrollState = rememberScrollState()
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -215,6 +235,67 @@ fun IsoMdocMultiDeviceTestingScreen(
                 )
                 Text("min/max/σ: ${r.scanningTime.min}/${r.scanningTime.max}/${r.scanningTime.stdDev}")
 
+                val ht = r.holderTelemetry
+                val rt = r.readerTelemetry
+                if (ht != null || rt != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Aggregated Telemetry",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    ht?.connectingTimeMsec?.let { ct ->
+                        if (ct.count > 0) {
+                            Text("Holder Connect Time (avg/min/max): ${ct.avg.toInt()}/${ct.min.toInt()}/${ct.max.toInt()} msec")
+                        }
+                    }
+                    rt?.connectingTimeMsec?.let { ct ->
+                        if (ct.count > 0) {
+                            Text("Reader Connect Time (avg/min/max): ${ct.avg.toInt()}/${ct.min.toInt()}/${ct.max.toInt()} msec")
+                        }
+                    }
+                    if ((ht?.bytesSent?.count ?: 0) > 0 || (ht?.bytesReceived?.count ?: 0) > 0) {
+                        Text("Holder Avg Bytes Sent/Recv: ${ht?.bytesSent?.avg?.toInt() ?: 0} / ${ht?.bytesReceived?.avg?.toInt() ?: 0}")
+                    }
+                    if ((rt?.bytesSent?.count ?: 0) > 0 || (rt?.bytesReceived?.count ?: 0) > 0) {
+                        Text("Reader Avg Bytes Sent/Recv: ${rt?.bytesSent?.avg?.toInt() ?: 0} / ${rt?.bytesReceived?.avg?.toInt() ?: 0}")
+                    }
+
+                    val scanRetries = (ht?.bleScanRestarts?.totalRetries ?: 0) + (rt?.bleScanRestarts?.totalRetries ?: 0)
+                    val gattRetries = (ht?.bleGattConnectRetries?.totalRetries ?: 0) + (rt?.bleGattConnectRetries?.totalRetries ?: 0)
+                    val svcRetries = (ht?.bleServiceDiscoveryRetries?.totalRetries ?: 0) + (rt?.bleServiceDiscoveryRetries?.totalRetries ?: 0)
+                    val l2capRetries = (ht?.bleL2capConnectRetries?.totalRetries ?: 0) + (rt?.bleL2capConnectRetries?.totalRetries ?: 0)
+                    Text(
+                        "BLE Retries (Scan/GATT/Svc/L2CAP): $scanRetries / $gattRetries / $svcRetries / $l2capRetries"
+                    )
+
+                    val mergedWarnings = mutableMapOf<String, Int>()
+                    ht?.warningCounts?.forEach { (code, count) ->
+                        mergedWarnings[code.name] = (mergedWarnings[code.name] ?: 0) + count
+                    }
+                    rt?.warningCounts?.forEach { (code, count) ->
+                        mergedWarnings[code.name] = (mergedWarnings[code.name] ?: 0) + count
+                    }
+                    if (mergedWarnings.isNotEmpty()) {
+                        Text("Warnings: ${mergedWarnings.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
+                    }
+
+                    val mergedErrors = mutableMapOf<String, Int>()
+                    ht?.outcomeCounts?.forEach { (outcome, count) ->
+                        if (outcome != PresentmentOutcome.SUCCESS) {
+                            mergedErrors["H:${outcome.name}"] = count
+                        }
+                    }
+                    rt?.outcomeCounts?.forEach { (outcome, count) ->
+                        if (outcome != PresentmentOutcome.SUCCESS) {
+                            mergedErrors["R:${outcome.name}"] = count
+                        }
+                    }
+                    if (mergedErrors.isNotEmpty()) {
+                        Text("Errors: ${mergedErrors.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Button(
@@ -223,7 +304,7 @@ fun IsoMdocMultiDeviceTestingScreen(
                         multiDeviceTestServer.value = null
                     }
                 ) {
-                    if (r.numIterationsTotal > 0 && r.numIterationsCompleted == r.numIterationsTotal) {
+                    if (isFinished) {
                         Text("Close")
                     } else {
                         Text("Cancel")
@@ -231,6 +312,7 @@ fun IsoMdocMultiDeviceTestingScreen(
                 }
             }
         } else if (multiDeviceTestClient.value != null) {
+            KeepScreenOnEffect()
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
@@ -264,6 +346,22 @@ fun IsoMdocMultiDeviceTestingScreen(
                     )
                 }
 
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { stopOnFailure.value = !stopOnFailure.value }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = stopOnFailure.value,
+                            onCheckedChange = { stopOnFailure.value = it }
+                        )
+                        Text("Stop test plan if a test fails")
+                    }
+                }
+
                 for (plan in Plan.entries) {
                     val numIt = plan.tests.sumOf { it.second }
                     item {
@@ -283,6 +381,7 @@ fun IsoMdocMultiDeviceTestingScreen(
 private suspend fun runMultiDeviceTestsServer(
     socket: Socket,
     plan: Plan,
+    stopOnFailure: Boolean,
     multiDeviceTestsServer: MutableState<MultiDeviceTestsServer?>,
     multiDeviceTestsResults: MutableState<Results>,
     showToast: (message: String) -> Unit
@@ -291,7 +390,8 @@ private suspend fun runMultiDeviceTestsServer(
         coroutineContext.job,
         socket,
         plan,
-        multiDeviceTestsResults
+        multiDeviceTestsResults,
+        stopOnFailure
     )
     multiDeviceTestsServer.value = server
     try {

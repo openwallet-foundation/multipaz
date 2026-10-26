@@ -176,9 +176,13 @@ class PresentmentModel {
      * This moves the model into the [State.Completed] state.
      *
      * @param error if the transaction fails, this should be set to a non-`null` value.
+     * @param telemetry optional telemetry collected during the presentment session.
      */
-    fun setCompleted(error: Throwable?) {
-        mutableState.value = State.Completed(error)
+    fun setCompleted(
+        error: Throwable?,
+        telemetry: PresentmentTelemetry? = null,
+    ) {
+        mutableState.value = State.Completed(error, telemetry)
     }
 
     /**
@@ -215,9 +219,11 @@ class PresentmentModel {
         /** The presentment has completed.
          *
          * @param error if `null` the transaction succeeded, otherwise a [Throwable] conveying what went wrong.
+         * @param telemetry optional telemetry collected during the presentment session.
          */
         data class Completed(
-            val error: Throwable?
+            val error: Throwable?,
+            val telemetry: PresentmentTelemetry? = null,
         ): State()
 
         /** The user canceled the transaction from the UI. */

@@ -189,6 +189,12 @@ kotlin {
                 implementation(libs.haze.materials)
             }
         }
+
+        val commonTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
+        }
     }
 }
 

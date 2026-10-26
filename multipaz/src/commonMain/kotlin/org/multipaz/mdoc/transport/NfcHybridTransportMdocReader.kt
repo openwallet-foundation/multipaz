@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.nfc.nfcV2Transact
 import org.multipaz.mdoc.role.MdocRole
@@ -45,20 +46,61 @@ class NfcHybridTransportMdocReader(
     private var numSent = 0
     private var numSentViaNfc = 0
     private var numSentViaTransport = 0
+    private var bytesSent = 0L
+    private var bytesReceived = 0L
+
+    private fun resolveTransportType(secondaryStats: MdocTransportStats?): MdocTransportType {
+        val transport = negotiatedTransport ?: return MdocTransportType.NFC_CCE_NFC_ONLY
+        when (secondaryStats?.transportType) {
+            MdocTransportType.MDOC_CENTRAL_CLIENT_MODE -> return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
+            MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE -> return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
+            else -> {}
+        }
+        val cm = runCatching { transport.connectionMethod }.getOrNull()
+        if (cm is MdocConnectionMethodBle) {
+            if (cm.supportsCentralClientMode) {
+                return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
+            }
+            if (cm.supportsPeripheralServerMode) {
+                return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
+            }
+        }
+        return MdocTransportType.OTHER
+    }
 
     /**
      * Statistics about the [NfcHybridTransportMdocReader].
      */
-    val stats: NfcHybridTransportStats
-        get() = NfcHybridTransportStats(
-            numSent = numSent,
-            numSentViaNfc = numSentViaNfc,
-            numSentViaTransport = numSentViaTransport,
-            numReceived = incomingMessagesNumConveyed,
-            numReceivedFirstOnNfc = incomingMessagesNumViaNfc,
-            numReceivedFirstOnTransport = incomingMessagesNumViaTransport,
-            nfcDisconnectedDuringTransaction = nfcNotAvailable
-        )
+    override val stats: MdocTransportStats
+        get() {
+            val secondaryStats = negotiatedTransport?.stats
+            return MdocTransportStats(
+                transportType = resolveTransportType(secondaryStats),
+                role = role,
+                scanningTime = secondaryStats?.scanningTime,
+                connectingTime = secondaryStats?.connectingTime,
+                bytesSent = bytesSent,
+                bytesReceived = bytesReceived,
+                numMessagesSent = numSent,
+                numMessagesReceived = incomingMessagesNumConveyed,
+                warnings = secondaryStats?.warnings ?: emptyList(),
+                bleUsingL2cap = secondaryStats?.bleUsingL2cap ?: false,
+                bleL2capPsmInEngagement = secondaryStats?.bleL2capPsmInEngagement ?: false,
+                bleNegotiatedMtu = secondaryStats?.bleNegotiatedMtu,
+                bleMtuInferredFromWrite = secondaryStats?.bleMtuInferredFromWrite ?: false,
+                bleNumScanRestarts = secondaryStats?.bleNumScanRestarts ?: 0,
+                bleNumGattConnectRetries = secondaryStats?.bleNumGattConnectRetries ?: 0,
+                bleNumServiceDiscoveryRetries = secondaryStats?.bleNumServiceDiscoveryRetries ?: 0,
+                bleNumL2capConnectRetries = secondaryStats?.bleNumL2capConnectRetries ?: 0,
+                bleNumChunksSent = secondaryStats?.bleNumChunksSent ?: 0,
+                bleNumChunksReceived = secondaryStats?.bleNumChunksReceived ?: 0,
+                nfcHybridNumSentViaNfc = numSentViaNfc,
+                nfcHybridNumSentViaTransport = numSentViaTransport,
+                nfcHybridNumReceivedFirstOnNfc = incomingMessagesNumConveyedWasViaNfc,
+                nfcHybridNumReceivedFirstOnTransport = incomingMessagesNumConveyedWasViaTransport,
+                nfcDisconnectedDuringTransaction = nfcNotAvailable,
+            )
+        }
 
     private val _state = MutableStateFlow<State>(State.IDLE)
     override val state: StateFlow<State> = _state.asStateFlow()
@@ -71,7 +113,7 @@ class NfcHybridTransportMdocReader(
             ?: MdocConnectionMethodNfcV2()
 
     override val scanningTime: Duration?
-        get() = null
+        get() = negotiatedTransport?.scanningTime
 
     override suspend fun advertise() {
     }
@@ -126,6 +168,14 @@ class NfcHybridTransportMdocReader(
             }
             if (shouldConvey) {
                 incomingMessagesNumConveyed += 1
+                if (fromNfc) {
+                    incomingMessagesNumConveyedWasViaNfc += 1
+                } else {
+                    incomingMessagesNumConveyedWasViaTransport += 1
+                }
+                if (message.size > 0) {
+                    bytesReceived += message.size
+                }
             }
             shouldConvey
         }
@@ -133,9 +183,6 @@ class NfcHybridTransportMdocReader(
         if (shouldConveyMessage) {
             Logger.i(TAG, "Conveying message of ${message.size} bytes received via " +
                     "$conveyanceName (not yet received via $otherName)")
-            if (fromNfc) {
-                incomingMessagesNumConveyedWasViaNfc += 1
-            }
             incomingMessages.send(message)
         } else {
             Logger.i(TAG, "Not conveying message of ${message.size} bytes received via " +
@@ -237,6 +284,9 @@ class NfcHybridTransportMdocReader(
             } else {
                 negotiatedTransportPendingOutgoingMessages.add(ByteString(message))
             }
+        }
+        if (message.isNotEmpty()) {
+            bytesSent += message.size
         }
         numSent += 1
     }

@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">問題が発生しました</string>
     <string name="presentment_activity_canceled">キャンセルされました</string>
     <string name="presentment_activity_cannot_satisfy_request">リクエストに応じられません</string>
+    <string name="presentment_activity_authentication_failed">認証に失敗しました</string>
+    <string name="presentment_activity_face_match_failed">顔照合に失敗しました</string>
     <string name="presentment_activity_open_wallet">%1$sを開く</string>
     <string name="presentment_activity_app_name_default">ウォレット</string>
     <string name="presentment_activity_no_documents_available">利用可能な書類はありません</string>

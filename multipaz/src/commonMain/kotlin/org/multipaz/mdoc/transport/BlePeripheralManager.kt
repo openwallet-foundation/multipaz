@@ -1,8 +1,8 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.channels.Channel
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.UUID
-import kotlinx.coroutines.channels.Channel
 
 internal interface BlePeripheralManager {
     val incomingMessages: Channel<ByteArray>
@@ -54,4 +54,19 @@ internal interface BlePeripheralManager {
 
     // True if connected via L2CAP
     val usingL2cap: Boolean
+
+    val negotiatedMtu: Int?
+        get() = null
+
+    val mtuInferredFromWrite: Boolean
+        get() = false
+
+    val numChunksSent: Int
+        get() = 0
+
+    val numChunksReceived: Int
+        get() = 0
+
+    val warnings: List<TransportWarning>
+        get() = emptyList()
 }

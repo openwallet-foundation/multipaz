@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -24,6 +26,7 @@ import org.multipaz.util.appendByteArray
 import org.multipaz.util.appendUInt32
 import org.multipaz.util.getUInt32
 import org.multipaz.util.toHex
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
@@ -183,6 +186,49 @@ internal class BleCentralManagerImpl(
     override val usingL2cap: Boolean
         get() = l2capChannel != null
 
+    @Volatile
+    private var _negotiatedMtu: Int? = null
+    override val negotiatedMtu: Int?
+        get() = _negotiatedMtu
+
+    @Volatile
+    private var _numScanRestarts: Int = 0
+    override val numScanRestarts: Int
+        get() = _numScanRestarts
+
+    @Volatile
+    private var _numGattConnectRetries: Int = 0
+    override val numGattConnectRetries: Int
+        get() = _numGattConnectRetries
+
+    @Volatile
+    private var _numServiceDiscoveryRetries: Int = 0
+    override val numServiceDiscoveryRetries: Int
+        get() = _numServiceDiscoveryRetries
+
+    @Volatile
+    private var _numL2capConnectRetries: Int = 0
+    override val numL2capConnectRetries: Int
+        get() = _numL2capConnectRetries
+
+    @Volatile
+    private var _numChunksSent: Int = 0
+    override val numChunksSent: Int
+        get() = _numChunksSent
+
+    @Volatile
+    private var _numChunksReceived: Int = 0
+    override val numChunksReceived: Int
+        get() = _numChunksReceived
+
+    private val _warnings = MutableStateFlow<List<TransportWarning>>(emptyList())
+    override val warnings: List<TransportWarning>
+        get() = _warnings.value
+
+    private fun addWarning(warning: TransportWarning) {
+        _warnings.update { it + warning }
+    }
+
     private class ConnectionFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
     private class ServiceDiscoveryFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -269,12 +315,17 @@ internal class BleCentralManagerImpl(
                     } else if (mtu < MIN_ACCEPTABLE_MTU) {
                         resumeWaitWithException(IllegalStateException("Unexpected MTU size $mtu"))
                     } else {
+                        _negotiatedMtu = mtu
+                        if (mtu <= 23) {
+                            addWarning(TransportWarning(TransportWarningCode.BLE_MTU_NOT_NEGOTIATED))
+                        }
                         maxCharacteristicSize = min(mtu - 3, MAX_CHARACTERISTIC_SIZE_CAP)
                         Logger.i(TAG, "MTU is $mtu, using $maxCharacteristicSize as maximum data size for characteristics")
                         resumeWait()
                     }
                 } else {
                     Logger.w(TAG, "onMtuChanged but not waiting")
+                    addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -294,6 +345,7 @@ internal class BleCentralManagerImpl(
                     }
                 } else {
                     Logger.w(TAG, "onServicesDiscovered but not waiting")
+                    addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -312,12 +364,16 @@ internal class BleCentralManagerImpl(
                 } else {
                     if (maxWriteSize != null) {
                         maxCharacteristicSize = min(maxWriteSize, MAX_CHARACTERISTIC_SIZE_CAP)
+                        if (_negotiatedMtu == null) {
+                            _negotiatedMtu = maxWriteSize + 3
+                        }
                     }
                     this@BleCentralManagerImpl.hasL2capCharacteristic = hasL2capCharacteristic
                     resumeWait()
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicsDiscovered but not waiting")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -338,6 +394,7 @@ internal class BleCentralManagerImpl(
                         }
                     } else {
                         Logger.w(TAG, "onCharacteristicRead for L2CAP PSM but not waiting")
+                        addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                     }
                 } else if (uuid == identCharacteristicUuid) {
                     if (waitFor?.state == WaitState.GET_READER_IDENT) {
@@ -355,6 +412,7 @@ internal class BleCentralManagerImpl(
                         }
                     } else {
                         Logger.w(TAG, "onCharacteristicRead for ident but not waiting")
+                        addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                     }
                 }
             } catch (e: Exception) {
@@ -372,6 +430,7 @@ internal class BleCentralManagerImpl(
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicWrite for characteristic $uuid but not waiting")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -384,6 +443,7 @@ internal class BleCentralManagerImpl(
                 }
             } else {
                 Logger.w(TAG, "onDescriptorWrite but not waiting")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -397,6 +457,7 @@ internal class BleCentralManagerImpl(
                         incomingMessages.trySend(byteArrayOf())
                     } else {
                         Logger.w(TAG, "Ignoring unexpected write to state characteristic")
+                        addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                     }
                 }
             } catch (e: Exception) {
@@ -415,6 +476,7 @@ internal class BleCentralManagerImpl(
                 }
             } else {
                 Logger.w(TAG, "onL2capConnected but not waiting")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -431,6 +493,7 @@ internal class BleCentralManagerImpl(
         if (chunk.isEmpty()) {
             throw IllegalStateException("Invalid data length ${chunk.size} for Server2Client characteristic")
         }
+        _numChunksReceived += 1
         incomingMessage.append(chunk, 1, chunk.size)
         when (chunk[0].toInt()) {
             0x00 -> {
@@ -445,6 +508,7 @@ internal class BleCentralManagerImpl(
                         "Server2Client received ${chunk.size} bytes which is not the " +
                                 "expected $maxCharacteristicSize bytes"
                     )
+                    addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CHUNK_SIZE))
                 }
             }
             else -> {
@@ -498,6 +562,7 @@ internal class BleCentralManagerImpl(
             }
             clearWaitCondition()
             retryCount++
+            _numScanRestarts = retryCount
             // Note: we never give up because it's possible this is used by a wallet app which is
             // simply sitting at the "Show QR code" dialog.
             Logger.i(TAG, "Failed to find peripheral after $retryCount attempt(s). Restarting scan.")
@@ -523,6 +588,7 @@ internal class BleCentralManagerImpl(
                 } catch (error: ConnectionFailedException) {
                     if (retryCount < maxConnectRetries) {
                         retryCount++
+                        _numGattConnectRetries = retryCount
                         Logger.w(TAG, "Failed connecting to peripheral after $retryCount attempt(s), retrying in $connectRetryDelay")
                         if (connectRetryDelay > Duration.ZERO) {
                             delay(connectRetryDelay)
@@ -557,6 +623,7 @@ internal class BleCentralManagerImpl(
             } catch (error: ServiceDiscoveryFailedException) {
                 if (retryCount < maxDiscoverServicesRetries) {
                     retryCount++
+                    _numServiceDiscoveryRetries = retryCount
                     Logger.w(
                         TAG,
                         "Failed discovering service with UUID $uuid after $retryCount attempt(s), " +
@@ -645,6 +712,7 @@ internal class BleCentralManagerImpl(
             builder.append(message, offset, offset + size)
             val chunk = builder.toByteString().toByteArray()
             writeToCharacteristic(client2ServerCharacteristicUuid, chunk)
+            _numChunksSent += 1
         }
         Logger.i(TAG, "sendMessage completed")
     }
@@ -685,6 +753,7 @@ internal class BleCentralManagerImpl(
                 if (numTries >= maxL2capConnectRetries) {
                     throw IllegalStateException("Failed L2CAP connection after $maxL2capConnectRetries attempts", e)
                 }
+                _numL2capConnectRetries += 1
                 Logger.i(TAG, "Failed L2CAP connection (Attempt $numTries), trying again in $currentDelay: ${e.message}")
                 if (currentDelay > Duration.ZERO) {
                     delay(currentDelay)

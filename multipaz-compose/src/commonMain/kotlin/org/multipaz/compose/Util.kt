@@ -195,4 +195,12 @@ internal expect fun fullScreenDialogProperties(): androidx.compose.ui.window.Dia
 @Composable
 internal expect fun FullScreenDialogEffect()
 
+/**
+ * Side-effect composable that keeps the device screen on while in composition, restoring
+ * the previous setting when leaving composition.
+ */
+@Composable
+expect fun KeepScreenOnEffect()
+
+
 

@@ -31,7 +31,9 @@ import org.multipaz.util.appendByteString
 import org.multipaz.util.appendUInt16
 import org.multipaz.util.appendUInt8
 import kotlin.math.min
+import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 class NfcTransportMdocReader(
     override val role: MdocRole,
@@ -61,6 +63,23 @@ class NfcTransportMdocReader(
 
     override val scanningTime: Duration?
         get() = null
+
+    private var _connectingTime: Duration? = null
+    private var _bytesSent: Long = 0
+    private var _bytesReceived: Long = 0
+    private var _numMessagesSent: Int = 0
+    private var _numMessagesReceived: Int = 0
+
+    override val stats: MdocTransportStats
+        get() = MdocTransportStats(
+            transportType = MdocTransportType.NFC_DATA_TRANSFER_MODE,
+            role = role,
+            connectingTime = _connectingTime,
+            bytesSent = _bytesSent,
+            bytesReceived = _bytesReceived,
+            numMessagesSent = _numMessagesSent,
+            numMessagesReceived = _numMessagesReceived,
+        )
 
     override suspend fun advertise() {
     }
@@ -100,11 +119,15 @@ class NfcTransportMdocReader(
     override suspend fun open(eSenderKey: EcPublicKey) {
         mutex.withLock {
             check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
+            var timeConnectingStarted: Instant? = null
             try {
                 _state.value = State.CONNECTING
+                timeConnectingStarted = Clock.System.now()
                 tag.selectApplication(Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID)
+                _connectingTime = Clock.System.now() - timeConnectingStarted
                 _state.value = State.CONNECTED
             } catch (error: Exception) {
+                timeConnectingStarted?.let { _connectingTime = Clock.System.now() - it }
                 failTransport(error)
                 throw error.wrapUnlessCancellationException("Failed while opening transport")
             }
@@ -134,6 +157,10 @@ class NfcTransportMdocReader(
         mutex.withLock {
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
             Logger.i(TAG, "sendMessage")
+            if (message.isNotEmpty()) {
+                _bytesSent += message.size
+                _numMessagesSent += 1
+            }
         }
         writingQueue.send(ByteString(message))
     }
@@ -240,7 +267,12 @@ class NfcTransportMdocReader(
             Logger.i(TAG, "waitForMessage")
         }
         try {
-            return incomingMessages.receive().toByteArray()
+            val msg = incomingMessages.receive().toByteArray()
+            if (msg.isNotEmpty()) {
+                _bytesReceived += msg.size
+                _numMessagesReceived += 1
+            }
+            return msg
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

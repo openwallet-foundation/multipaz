@@ -38,6 +38,7 @@ import org.multipaz.digitalcredentials.getAppOrigin
 import org.multipaz.digitalcredentials.lookupForCredmanId
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentTelemetry
 import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.util.Logger
@@ -132,6 +133,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
 
     @OptIn(ExperimentalDigitalCredentialApi::class)
     private suspend fun startPresentment(settings: Settings) {
+        var lastTelemetry: PresentmentTelemetry? = null
         try {
             val credentialRequest = PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)!!
 
@@ -165,7 +167,8 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
                 source = settings.source,
                 onDocumentsInFocus = { documents ->
                     presentmentModel.setDocumentsSelected(documents)
-                }
+                },
+                onTelemetry = { lastTelemetry = it }
             )
             val jsonString = Json.encodeToString(response)
             Logger.i(TAG, "Size of JSON response: ${jsonString.length} bytes")
@@ -173,7 +176,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             val credentialManagerResponse = GetCredentialResponse(DigitalCredential(jsonString))
             PendingIntentHandler.setGetCredentialResponse(resultData, credentialManagerResponse)
             setResult(RESULT_OK, resultData)
-            presentmentModel.setCompleted(error = null)
+            presentmentModel.setCompleted(error = null, telemetry = lastTelemetry)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Logger.i(TAG, "Error processing request", e)
@@ -184,7 +187,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             )
             PendingIntentHandler.setGetCredentialException(resultData, credentialManagerException)
             setResult(RESULT_OK, resultData)
-            presentmentModel.setCompleted(error = e)
+            presentmentModel.setCompleted(error = e, telemetry = lastTelemetry)
         }
     }
 

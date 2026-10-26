@@ -182,6 +182,8 @@
     <string name="presentment_activity_something_went_wrong">Bir şeyler yanlış gitti</string>
     <string name="presentment_activity_canceled">İptal Edildi</string>
     <string name="presentment_activity_cannot_satisfy_request">İstek karşılanamıyor</string>
+    <string name="presentment_activity_authentication_failed">Kimlik doğrulama başarısız oldu</string>
+    <string name="presentment_activity_face_match_failed">Yüz eşleştirme başarısız oldu</string>
     <string name="presentment_activity_open_wallet">%1$s'i Aç</string>
     <string name="presentment_activity_app_name_default">Cüzdan</string>
     <string name="presentment_activity_no_documents_available">Belge yok</string>

@@ -91,6 +91,16 @@ abstract class MdocTransport {
     abstract val scanningTime: Duration?
 
     /**
+     * Diagnostic and performance statistics for this transport instance.
+     */
+    open val stats: MdocTransportStats
+        get() = MdocTransportStats(
+            transportType = MdocTransportType.OTHER,
+            role = role,
+            scanningTime = runCatching { scanningTime }.getOrNull(),
+        )
+
+    /**
      * Starts advertising the connection.
      *
      * This is optional for transports to implement.

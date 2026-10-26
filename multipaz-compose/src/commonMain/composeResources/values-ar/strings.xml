@@ -222,6 +222,8 @@
     <string name="presentment_activity_something_went_wrong">حدث خطأ ما</string>
     <string name="presentment_activity_canceled">تم الإلغاء</string>
     <string name="presentment_activity_cannot_satisfy_request">تعذر تلبية الطلب</string>
+    <string name="presentment_activity_authentication_failed">فشلت المصادقة</string>
+    <string name="presentment_activity_face_match_failed">فشل تطابق الوجه</string>
     <string name="presentment_activity_open_wallet">فتح %1$s</string>
     <string name="presentment_activity_app_name_default">المحفظة</string>
     <string name="presentment_activity_no_documents_available">لا توجد مستندات متاحة</string>

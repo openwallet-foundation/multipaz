@@ -180,6 +180,8 @@
     <string name="presentment_activity_something_went_wrong">Noget gik galt</string>
     <string name="presentment_activity_canceled">Annulleret</string>
     <string name="presentment_activity_cannot_satisfy_request">Kan ikke imødekomme anmodning</string>
+    <string name="presentment_activity_authentication_failed">Godkendelse mislykkedes</string>
+    <string name="presentment_activity_face_match_failed">Ansigtsmatch mislykkedes</string>
     <string name="presentment_activity_open_wallet">Åbn %1$s</string>
     <string name="presentment_activity_app_name_default">Pung</string>
     <string name="presentment_activity_no_documents_available">Ingen dokumenter tilgængelige</string>

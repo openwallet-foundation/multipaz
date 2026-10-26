@@ -78,7 +78,8 @@ final class MdocPresentmentViewModel: ObservableObject {
                     onWaitingForRequest: onWaitingForRequest,
                     onWaitingForUserInput: onWaitingForUserInput,
                     onDocumentsInFocus: onDocumenstInFocus,
-                    onSendingResponse: onSendingResponse
+                    onSendingResponse: onSendingResponse,
+                    onTelemetry: { _ in }
                 )
                 
             } catch {

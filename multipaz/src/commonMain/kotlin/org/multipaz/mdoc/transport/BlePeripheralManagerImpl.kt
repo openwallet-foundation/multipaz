@@ -5,6 +5,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.bytestring.ByteStringBuilder
@@ -12,6 +14,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.toHex
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
@@ -37,17 +40,44 @@ internal class BlePeripheralManagerImpl(
     private var l2capCharacteristicUuid: UUID? = null
     private var startL2capServer = false
 
-    private var negotiatedMtu = -1
-    private var mtuInferredFromWrite = false
+    @Volatile
+    private var _negotiatedMtu = -1
+    override val negotiatedMtu: Int?
+        get() = if (_negotiatedMtu != -1) _negotiatedMtu else null
+
+    @Volatile
+    private var _mtuInferredFromWrite = false
+    override val mtuInferredFromWrite: Boolean
+        get() = _mtuInferredFromWrite
+
+    @Volatile
+    private var _numChunksSent = 0
+    override val numChunksSent: Int
+        get() = _numChunksSent
+
+    @Volatile
+    private var _numChunksReceived = 0
+    override val numChunksReceived: Int
+        get() = _numChunksReceived
+
+    private val _warnings = MutableStateFlow<List<TransportWarning>>(emptyList())
+    override val warnings: List<TransportWarning>
+        get() = _warnings.value
+
+    private fun addWarning(warning: TransportWarning) {
+        _warnings.update { it + warning }
+    }
+
     private var maxCharacteristicSizeMemoized = 0
     internal val maxCharacteristicSize: Int
         get() {
             if (maxCharacteristicSizeMemoized > 0) {
                 return maxCharacteristicSizeMemoized
             }
-            var mtuSize = negotiatedMtu
+            var mtuSize = _negotiatedMtu
             if (mtuSize == -1) {
                 Logger.w(TAG, "MTU not negotiated, defaulting to $DEFAULT_MTU. Performance will suffer.")
+                addWarning(TransportWarning(TransportWarningCode.BLE_MTU_NOT_NEGOTIATED))
                 mtuSize = DEFAULT_MTU
             }
             maxCharacteristicSizeMemoized = min(MAX_CHARACTERISTIC_SIZE_CAP, mtuSize - 3)
@@ -188,8 +218,8 @@ internal class BlePeripheralManagerImpl(
         }
 
         override fun onMtuChanged(mtu: Int) {
-            negotiatedMtu = mtu
-            mtuInferredFromWrite = false
+            _negotiatedMtu = mtu
+            _mtuInferredFromWrite = false
             maxCharacteristicSizeMemoized = 0
             Logger.d(TAG, "Negotiated MTU $mtu")
         }
@@ -208,6 +238,7 @@ internal class BlePeripheralManagerImpl(
                 hal.sendReadResponse(requestId, statusSuccess = true, value = encodedPsm)
             } else {
                 Logger.w(TAG, "Read on unexpected characteristic with UUID $uuid")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -221,6 +252,9 @@ internal class BlePeripheralManagerImpl(
                     if (waitFor?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
                         if (maxWriteSizeForCentral != null) {
                             maxCharacteristicSizeMemoized = min(maxWriteSizeForCentral, MAX_CHARACTERISTIC_SIZE_CAP)
+                            if (_negotiatedMtu == -1) {
+                                _negotiatedMtu = maxWriteSizeForCentral + 3
+                            }
                         }
                         clientConnected = true
                         hal.stopAdvertising()
@@ -229,6 +263,9 @@ internal class BlePeripheralManagerImpl(
                     } else if (!clientConnected) {
                         if (maxWriteSizeForCentral != null) {
                             maxCharacteristicSizeMemoized = min(maxWriteSizeForCentral, MAX_CHARACTERISTIC_SIZE_CAP)
+                            if (_negotiatedMtu == -1) {
+                                _negotiatedMtu = maxWriteSizeForCentral + 3
+                            }
                         }
                         clientConnected = true
                         hal.stopAdvertising()
@@ -243,6 +280,7 @@ internal class BlePeripheralManagerImpl(
                     } else {
                         Logger.w(TAG, "Ignoring unexpected write to state characteristic")
                     }
+                    addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                 }
             } else if (uuid == client2ServerCharacteristicUuid) {
                 try {
@@ -253,6 +291,7 @@ internal class BlePeripheralManagerImpl(
                 }
             } else {
                 Logger.w(TAG, "Unexpected write to characteristic with UUID $uuid")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -265,6 +304,7 @@ internal class BlePeripheralManagerImpl(
                 }
             } else {
                 Logger.w(TAG, "onNotificationSent but not waiting")
+                addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
         }
 
@@ -299,6 +339,7 @@ internal class BlePeripheralManagerImpl(
         if (chunk.isEmpty()) {
             throw IllegalStateException("Invalid data length ${chunk.size} for Client2Server characteristic")
         }
+        _numChunksReceived += 1
         // In Android's Bluetooth stack (com.android.bluetooth), ATT MTU is shared per LE ACL link,
         // and BluetoothGattServerCallback.onMtuChanged() is only invoked when the remote peer's
         // GATT client initiates the ATT_EXCHANGE_MTU_REQ against the local GATT server. If the
@@ -311,16 +352,17 @@ internal class BlePeripheralManagerImpl(
         // the link's ATT MTU is at least chunk.size + 3, so we infer the negotiated MTU here to
         // avoid false chunk-size warnings and to allow subsequent Server2Client notifications
         // (such as DeviceResponse in peripheral server mode) to use full-sized chunks.
-        if ((negotiatedMtu == -1 || mtuInferredFromWrite) &&
+        if ((_negotiatedMtu == -1 || _mtuInferredFromWrite) &&
             chunk.size > DEFAULT_MTU - 3 &&
-            chunk.size + 3 > negotiatedMtu
+            chunk.size + 3 > _negotiatedMtu
         ) {
-            negotiatedMtu = chunk.size + 3
-            mtuInferredFromWrite = true
+            _negotiatedMtu = chunk.size + 3
+            _mtuInferredFromWrite = true
             maxCharacteristicSizeMemoized = 0
+            addWarning(TransportWarning(TransportWarningCode.BLE_MTU_INFERRED_FROM_WRITE))
             Logger.i(
                 TAG,
-                "Inferred negotiated MTU of at least $negotiatedMtu from ${chunk.size}-byte Client2Server write"
+                "Inferred negotiated MTU of at least $_negotiatedMtu from ${chunk.size}-byte Client2Server write"
             )
         }
         incomingMessage.append(chunk, 1, chunk.size)
@@ -337,6 +379,7 @@ internal class BlePeripheralManagerImpl(
                         "Client2Server received ${chunk.size} bytes which is not the " +
                                 "expected $maxCharacteristicSize bytes"
                     )
+                    addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CHUNK_SIZE))
                 }
             }
             else -> {
@@ -423,6 +466,7 @@ internal class BlePeripheralManagerImpl(
             builder.append(message, offset, offset + size)
             val chunk = builder.toByteString().toByteArray()
             writeToCharacteristic(server2ClientCharacteristicUuid, chunk)
+            _numChunksSent += 1
         }
         Logger.i(TAG, "sendMessage completed")
     }
