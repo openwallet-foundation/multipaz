@@ -1,9 +1,9 @@
 package org.multipaz.nfc
 
-import android.nfc.TagLostException
 import android.nfc.tech.IsoDep
 import kotlinx.coroutines.withContext
 import org.multipaz.util.Logger
+import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 
@@ -40,7 +40,18 @@ class NfcIsoTagAndroid(
         val responseApduData = withContext(context) {
             try {
                 tag.transceive(encodedCommand)
-            } catch (e: TagLostException) {
+            } catch (e: IOException) {
+                // In Android's BasicTagTechnology.transceive() / TransceiveResult.getResponseOrThrow(),
+                // the possible IOException cases are:
+                // - TagLostException (when mResult == RESULT_TAGLOST)
+                // - IOException("Transceive length exceeds supported maximum") (when mResult ==
+                //   RESULT_EXCEEDED_LENGTH, which we already rule out above via maxTransceiveLength)
+                // - IOException("Transceive failed") (when mResult == RESULT_FAILURE, which the Android
+                //   NFC stack frequently reports instead of RESULT_TAGLOST when a tag or HCE device
+                //   leaves the RF field while an APDU is in flight, e.g., while showing an AID
+                //   disambiguation dialog)
+                // - IOException("transceive failed") or IOException("NFC service died")
+                // Therefore, any IOException thrown here is effectively a lost tag connection.
                 throw NfcTagLostException("Tag was lost", e)
             }
         }

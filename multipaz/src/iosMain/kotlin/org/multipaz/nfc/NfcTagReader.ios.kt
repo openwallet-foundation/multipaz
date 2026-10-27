@@ -58,6 +58,7 @@ private class IosTagReader<T>(
             session.connectToTag(tag) { error ->
                 if (error != null) {
                     Logger.e(TAG, "Connection failed", error.toKotlinError())
+                    session.restartPolling()
                 } else {
                     val isoTag = NfcIsoTagIos(
                         tag = tag as NFCISO7816TagProtocol,
@@ -70,8 +71,15 @@ private class IosTagReader<T>(
                                 continuation?.resume(Pair(ret, isoTag), null)
                                 continuation = null
                             } else {
+                                session.setAlertMessage(initialAlertMessage)
                                 session.restartPolling()
                             }
+                        } catch (e: NfcTagLostException) {
+                            // This is to properly handle emulated tags - such as on Android - which may be showing
+                            // disambiguation UI if multiple applications have registered for the same AID.
+                            Logger.w(TAG, "Tag lost", e)
+                            session.setAlertMessage(initialAlertMessage)
+                            session.restartPolling()
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             continuation?.resumeWithException(e)
@@ -93,6 +101,7 @@ private class IosTagReader<T>(
 
     private var continuation: CancellableContinuation<Pair<T, NfcIsoTagIos>>? = null
 
+    private lateinit var initialAlertMessage: String
     private lateinit var tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?
 
     suspend fun beginSession(
@@ -103,6 +112,7 @@ private class IosTagReader<T>(
         try {
             val (ret, tag) = suspendCancellableCoroutine { continuation ->
                 this.continuation = continuation
+                this.initialAlertMessage = alertMessage
                 this.tagInteractionFunc = tagInteractionFunc
                 session.setAlertMessage(alertMessage)
                 session.beginSession()
