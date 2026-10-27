@@ -440,6 +440,41 @@ class MdocNfcEngagementHelperTest {
             blePs,
             handoverResult2.connectionMethods.first()
         )
+
+        // Also check that if the holder (e.g., multipaz-android-legacy or any standard ISO 18013-5
+        // holder that does not support L2CAP in engagement) returns a BLE Central Client Mode
+        // Handover Select record with peripheralServerModePsm = null, mdocReaderNfcHandover still
+        // supplements the reader's peripheralServerModePsm so the pre-warmed reader transport matches.
+        val engagementHelper3 = MdocNfcEngagementHelper(
+            eDeviceKey = eDeviceKeyPub,
+            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+                assertEquals(1, connectionMethods.size)
+            },
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            negotiatedHandoverPicker = { _ ->
+                MdocConnectionMethodBle(
+                    supportsPeripheralServerMode = false,
+                    supportsCentralClientMode = true,
+                    peripheralServerModeUuid = null,
+                    centralClientModeUuid = bleUuid,
+                    peripheralServerModePsm = null,
+                )
+            }
+        )
+
+        val tag3 = LoopbackIsoTag(engagementHelper3)
+        val handoverResult3 = mdocReaderNfcHandover(
+            tag = tag3,
+            negotiatedHandoverConnectionMethods = listOf(bleCc, blePs),
+        )
+        assertNotNull(handoverResult3)
+        assertEquals(1, handoverResult3.connectionMethods.size)
+        assertEquals(
+            bleCc,
+            handoverResult3.connectionMethods.first()
+        )
     }
 
     private suspend fun testNfcEngagementHelper(

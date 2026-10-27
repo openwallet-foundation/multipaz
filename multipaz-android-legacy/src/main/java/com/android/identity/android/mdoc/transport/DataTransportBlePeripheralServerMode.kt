@@ -27,9 +27,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.Build
 import android.os.ParcelUuid
-import androidx.annotation.RequiresApi
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.util.Logger
 import org.multipaz.util.toJavaUuid
@@ -92,16 +90,17 @@ class DataTransportBlePeripheralServerMode(
             scanningTimeMillis = System.currentTimeMillis() - timeScanningStartedMillis
             Logger.i(TAG, "Scanned for $scanningTimeMillis" + " milliseconds. "
                         + "Connecting to device with address ${result.device.address}")
-            connectToDevice(result.device)
             if (scanner != null) {
                 Logger.d(TAG, "Stopped scanning for UUID $serviceUuid")
                 try {
                     scanner!!.stopScan(this)
                 } catch (e: SecurityException) {
                     reportError(e)
+                    return
                 }
                 scanner = null
             }
+            connectToDevice(result.device)
             // TODO: Investigate. When testing with Reader C (which is on iOS) we get two callbacks
             //  and thus a NullPointerException when calling stopScan().
         }
@@ -116,44 +115,10 @@ class DataTransportBlePeripheralServerMode(
     }
     
     private var gattServer: GattServer? = null
-    private var l2capClient: L2CAPClient? = null
     
     private fun connectToDevice(device: BluetoothDevice) {
         reportConnecting()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            options.bleUseL2CAP &&
-            connectionMethod.peripheralServerModePsm != null
-        ) {
-            Logger.i(
-                TAG, "Have L2CAP PSM from engagement, connecting directly " +
-                        "(psm = ${connectionMethod.peripheralServerModePsm})"
-            )
-            connectL2CAP(device, connectionMethod.peripheralServerModePsm!!)
-        } else {
-            connectGatt(device)
-        }
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.Q)
-    private fun connectL2CAP(device: BluetoothDevice, psm: Int) {
-        l2capClient = L2CAPClient(context, object : L2CAPClient.Listener {
-            override fun onPeerConnected() {
-                reportConnected()
-            }
-
-            override fun onPeerDisconnected() {
-                reportDisconnected()
-            }
-
-            override fun onMessageReceived(data: ByteArray) {
-                reportMessageReceived(data)
-            }
-
-            override fun onError(error: Throwable) {
-                reportError(error)
-            }
-        })
-        l2capClient!!.connect(device, psm)
+        connectGatt(device)
     }
 
     private fun connectGatt(device: BluetoothDevice) {
@@ -268,15 +233,6 @@ class DataTransportBlePeripheralServerMode(
             gattServer = null
             return
         }
-        connectionMethodToReturn =
-            MdocConnectionMethodBle(
-                supportsPeripheralServerMode = connectionMethodToReturn.supportsPeripheralServerMode,
-                supportsCentralClientMode = connectionMethodToReturn.supportsCentralClientMode,
-                peripheralServerModeUuid = connectionMethodToReturn.peripheralServerModeUuid,
-                centralClientModeUuid = connectionMethodToReturn.centralClientModeUuid,
-                peripheralServerModePsm = gattServer!!.psm,
-                peripheralServerModeMacAddress = null
-            )
         bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
         if (bluetoothLeAdvertiser == null) {
             reportError(Error("Failed to create BLE advertiser"))
@@ -370,17 +326,11 @@ class DataTransportBlePeripheralServerMode(
             gattClient!!.disconnect()
             gattClient = null
         }
-        if (l2capClient != null) {
-            l2capClient!!.disconnect()
-            l2capClient = null
-        }
     }
 
     override fun sendMessage(data: ByteArray) {
         require(data.size != 0) { "Data to send cannot be empty" }
-        if (l2capClient != null) {
-            l2capClient!!.sendMessage(data)
-        } else if (gattServer != null) {
+        if (gattServer != null) {
             gattServer!!.sendMessage(data)
         } else if (gattClient != null) {
             gattClient!!.sendMessage(data)

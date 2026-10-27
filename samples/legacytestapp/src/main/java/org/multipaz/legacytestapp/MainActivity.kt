@@ -168,7 +168,6 @@ private fun LegacyMainScreen(
     val blePeripheralServerMode by LegacyPresentmentManager.blePeripheralServerMode.collectAsState()
     val nfcDataTransfer by LegacyPresentmentManager.nfcDataTransfer.collectAsState()
     val bleUseL2Cap by LegacyPresentmentManager.bleUseL2Cap.collectAsState()
-    val bleExperimentalPsm by LegacyPresentmentManager.bleExperimentalL2CapPsmInEngagement.collectAsState()
     val requireAuth by LegacyPresentmentManager.requireAuthentication.collectAsState()
     val showConsent by LegacyPresentmentManager.showConsentPrompt.collectAsState()
     val preferSignature by LegacyPresentmentManager.preferSignatureToKeyAgreement.collectAsState()
@@ -281,13 +280,6 @@ private fun LegacyMainScreen(
                     title = "BLE Use L2CAP",
                     checked = bleUseL2Cap,
                     onCheckedChange = { LegacyPresentmentManager.bleUseL2Cap.value = it }
-                )
-                SettingSwitchRow(
-                    title = "BLE L2CAP PSM in Engagement",
-                    checked = bleExperimentalPsm,
-                    onCheckedChange = {
-                        LegacyPresentmentManager.bleExperimentalL2CapPsmInEngagement.value = it
-                    }
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Text(

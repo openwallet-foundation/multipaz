@@ -27,9 +27,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.Build
 import android.os.ParcelUuid
-import androidx.annotation.RequiresApi
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.util.Logger
 import org.multipaz.util.toJavaUuid
@@ -83,7 +81,6 @@ class DataTransportBleCentralClientMode(
             scanningTimeMillis = System.currentTimeMillis() - timeScanningStartedMillis
             Logger.i(TAG, "Scanned for $scanningTimeMillis milliseconds. "
                         + "Connecting to device with address ${device.address}")
-            connectToDevice(device)
             if (scanner != null) {
                 Logger.d(TAG, "Stopped scanning for UUID $serviceUuid")
                 try {
@@ -94,6 +91,7 @@ class DataTransportBleCentralClientMode(
                 }
                 scanner = null
             }
+            connectToDevice(device)
         }
 
         override fun onBatchScanResults(results: List<ScanResult>) {
@@ -116,19 +114,10 @@ class DataTransportBleCentralClientMode(
     }
 
     private var gattServer: GattServer? = null
-    private var l2capClient: L2CAPClient? = null
 
     private fun connectToDevice(device: BluetoothDevice) {
         reportConnecting()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            options.bleUseL2CAP &&
-            connectionMethod.peripheralServerModePsm != null
-        ) {
-            Logger.i(TAG, "Have L2CAP PSM from engagement, connecting directly and skipping GATT")
-            connectL2CAP(device, connectionMethod.peripheralServerModePsm!!)
-        } else {
-            connectGatt(device)
-        }
+        connectGatt(device)
     }
 
     private fun connectGatt(device: BluetoothDevice) {
@@ -172,28 +161,6 @@ class DataTransportBleCentralClientMode(
         }
         gattClient!!.clearCache = options.bleClearCache
         gattClient!!.connect(device)
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.Q)
-    private fun connectL2CAP(device: BluetoothDevice, psm: Int) {
-        l2capClient = L2CAPClient(context, object : L2CAPClient.Listener {
-            override fun onPeerConnected() {
-                reportConnected()
-            }
-
-            override fun onPeerDisconnected() {
-                reportDisconnected()
-            }
-
-            override fun onMessageReceived(data: ByteArray) {
-                reportMessageReceived(data)
-            }
-
-            override fun onError(error: Throwable) {
-                reportError(error)
-            }
-        })
-        l2capClient!!.connect(device, psm)
     }
 
     override fun setEDeviceKeyBytes(encodedEDeviceKeyBytes: ByteArray) {
@@ -288,17 +255,6 @@ class DataTransportBleCentralClientMode(
             gattServer = null
             return
         }
-        if (options.experimentalBleL2CAPPsmInEngagement) {
-            connectionMethodToReturn =
-                MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = connectionMethodToReturn.supportsPeripheralServerMode,
-                    supportsCentralClientMode = connectionMethodToReturn.supportsCentralClientMode,
-                    peripheralServerModeUuid = connectionMethodToReturn.peripheralServerModeUuid,
-                    centralClientModeUuid = connectionMethodToReturn.centralClientModeUuid,
-                    peripheralServerModePsm = gattServer!!.psm,
-                    peripheralServerModeMacAddress = null
-                )
-        }
         val bluetoothAdapter = bluetoothManager.adapter
         bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
         if (bluetoothLeAdvertiser == null) {
@@ -366,17 +322,11 @@ class DataTransportBleCentralClientMode(
             gattClient!!.disconnect()
             gattClient = null
         }
-        if (l2capClient != null) {
-            l2capClient!!.disconnect()
-            l2capClient = null
-        }
     }
 
     override fun sendMessage(data: ByteArray) {
         require(data.size != 0) { "Data to send cannot be empty" }
-        if (l2capClient != null) {
-            l2capClient!!.sendMessage(data)
-        } else if (gattServer != null) {
+        if (gattServer != null) {
             gattServer!!.sendMessage(data)
         } else if (gattClient != null) {
             gattClient!!.sendMessage(data)
@@ -384,9 +334,7 @@ class DataTransportBleCentralClientMode(
     }
 
     override fun sendTransportSpecificTerminationMessage() {
-        if (l2capClient != null) {
-            reportError(Error("Transport-specific termination not available"))
-        } else if (gattServer == null) {
+        if (gattServer == null) {
             if (gattClient == null) {
                 reportError(Error("Transport-specific termination not available"))
                 return
@@ -398,9 +346,7 @@ class DataTransportBleCentralClientMode(
     }
 
     override fun supportsTransportSpecificTerminationMessage(): Boolean {
-        if (l2capClient != null) {
-            return false
-        } else if (gattServer != null) {
+        if (gattServer != null) {
             return gattServer!!.supportsTransportSpecificTerminationMessage()
         } else if (gattClient != null) {
             return gattClient!!.supportsTransportSpecificTerminationMessage()

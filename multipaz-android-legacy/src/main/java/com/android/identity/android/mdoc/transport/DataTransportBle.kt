@@ -50,13 +50,12 @@ abstract class DataTransportBle(
         protected set
 
     init {
-        // May be modified in subclasses to e.g. add the PSM...
         connectionMethodToReturn = MdocConnectionMethodBle(
             supportsPeripheralServerMode = connectionMethod.supportsPeripheralServerMode,
             supportsCentralClientMode = connectionMethod.supportsCentralClientMode,
             peripheralServerModeUuid = connectionMethod.peripheralServerModeUuid,
             centralClientModeUuid = connectionMethod.centralClientModeUuid,
-            peripheralServerModePsm = connectionMethod.peripheralServerModePsm,
+            peripheralServerModePsm = null,
             peripheralServerModeMacAddress = connectionMethod.peripheralServerModeMacAddress
         )
     }
@@ -80,7 +79,6 @@ abstract class DataTransportBle(
             var uuid: UUID? = null
             var gotLeRole = false
             var gotUuid = false
-            var psm : Int? = null
             var macAddress: ByteArray? = null
 
             // See createNdefRecords() method for how this data is encoded.
@@ -130,9 +128,6 @@ abstract class DataTransportBle(
                     // MAC address
                     macAddress = ByteArray(6)
                     payload[macAddress]
-                } else if (type == 0x77 && len == 0x05) {
-                    // PSM
-                    psm = payload.getInt()
                 } else {
                     Logger.d(TAG, String.format("Skipping unknown type %d of length %d", type, len))
                     payload.position(payload.position() + len - 1)
@@ -152,7 +147,7 @@ abstract class DataTransportBle(
                 supportsCentralClientMode = centralClient,
                 peripheralServerModeUuid = if (peripheral) uuid else null,
                 centralClientModeUuid = if (centralClient) uuid else null,
-                peripheralServerModePsm = psm,
+                peripheralServerModePsm = null,
                 peripheralServerModeMacAddress = macAddress?.let { ByteString(it) }
             )
             return cm
@@ -260,20 +255,6 @@ abstract class DataTransportBle(
                 baos.write(0x1b) // MAC address
                 try {
                     baos.write(macAddress.toByteArray())
-                } catch (e: IOException) {
-                    throw IllegalStateException(e)
-                }
-            }
-            val psm = cm.peripheralServerModePsm
-            if (psm != null) {
-                // TODO: need to actually allocate this number (0x77)
-                baos.write(0x05) // PSM: 4 bytes
-                baos.write(0x77)
-                val psmValue = ByteBuffer.allocate(4)
-                    .order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(psm)
-                try {
-                    baos.write(psmValue.array())
                 } catch (e: IOException) {
                     throw IllegalStateException(e)
                 }

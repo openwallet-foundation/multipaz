@@ -73,7 +73,6 @@ object LegacyPresentmentManager {
     val blePeripheralServerMode = MutableStateFlow(false)
     val nfcDataTransfer = MutableStateFlow(false)
     val bleUseL2Cap = MutableStateFlow(false)
-    val bleExperimentalL2CapPsmInEngagement = MutableStateFlow(false)
 
     // Presentment settings
     val requireAuthentication = MutableStateFlow(true)
@@ -82,7 +81,9 @@ object LegacyPresentmentManager {
     val keepConnectionOpen = MutableStateFlow(false)
 
     private var qrEngagementHelper: QrEngagementHelper? = null
+    @Suppress("StaticFieldLeak")
     private var nfcEngagementHelper: NfcEngagementHelper? = null
+    @Suppress("StaticFieldLeak")
     private var deviceRetrievalHelper: DeviceRetrievalHelper? = null
     private var nfcEngagementTimeoutJob: Job? = null
 
@@ -122,7 +123,6 @@ object LegacyPresentmentManager {
     private fun buildDataTransportOptions(): DataTransportOptions {
         return DataTransportOptions.Builder()
             .setBleUseL2CAP(bleUseL2Cap.value)
-            .setExperimentalBleL2CAPPsmInEngagement(bleExperimentalL2CapPsmInEngagement.value)
             .build()
     }
 

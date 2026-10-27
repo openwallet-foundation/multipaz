@@ -16,13 +16,6 @@ class DataTransportOptions internal constructor(
      * acting as a GATT Client.
      */
     val bleClearCache: Boolean,
-
-    /**
-     * Whether BLE L2CAP PSM is conveyed in engagement.
-     *
-     * See [Builder.setExperimentalBleL2CAPPsmInEngagement] for details on this option.
-     */
-    val experimentalBleL2CAPPsmInEngagement: Boolean,
 ) {
     /**
      * A builder for [DataTransportOptions].
@@ -30,7 +23,6 @@ class DataTransportOptions internal constructor(
     class Builder {
         private var bleUseL2CAP = false
         private var bleClearCache = false
-        private var experimentalBleL2CAPPsmInEngagement = false
 
         /**
          * Sets the preference for use BLE L2CAP transmission profile.
@@ -60,21 +52,6 @@ class DataTransportOptions internal constructor(
         }
 
         /**
-         * Sets whether the BLE L2CAP PSM is conveyed in the engagement.
-         *
-         * This uses a non-standardized mechanisms for conveying the BLE L2CAP PSM
-         * in NFC and QR engagement.
-         *
-         * The default value for this is *false*.
-         *
-         * @param value
-         * @return the builder.
-         */
-        fun setExperimentalBleL2CAPPsmInEngagement(value: Boolean) = apply {
-            experimentalBleL2CAPPsmInEngagement = value
-        }
-
-        /**
          * Builds the [DataTransportOptions].
          *
          * @return the built [DataTransportOptions] instance.
@@ -83,7 +60,6 @@ class DataTransportOptions internal constructor(
             return DataTransportOptions(
                 bleUseL2CAP,
                 bleClearCache,
-                experimentalBleL2CAPPsmInEngagement
             )
         }
     }
