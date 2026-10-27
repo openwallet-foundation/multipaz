@@ -734,6 +734,33 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
             assertTrue(sawNoPrependedZero, "Expected to encounter cases without prepended 0x00 for numBits=$numBits")
         }
     }
+
+    @Test
+    fun testPrintPrimitiveTaggedObjectDoesNotDecodeContentAsAsn1() {
+        // A 20-byte SHA-1 digest whose second byte happens to be 0x12 (18, matching the remaining
+        // 18 bytes) would look like a valid ASN.1 TLV ([APPLICATION 14] of length 18) if decoded.
+        // An IMPLICIT primitive [0] tag (such as keyIdentifier in AuthorityKeyIdentifier) must
+        // print its raw octets rather than attempting to decode them as nested ASN.1.
+        val keyIdBytes = "4e12cf67d07c206a79c1ffa418abd3c5715270d8".fromHex()
+        val authorityKeyIdentifier = ASN1Sequence(
+            listOf(
+                ASN1TaggedObject(
+                    ASN1TagClass.CONTEXT_SPECIFIC,
+                    ASN1Encoding.PRIMITIVE,
+                    0,
+                    keyIdBytes
+                )
+            )
+        )
+        assertEquals(
+            """
+                SEQUENCE (1 elem)
+                  [0] (1 elem)
+                    ${keyIdBytes.toHex(byteDivider = " ", decodeAsString = true)}
+            """.trimIndent().trim(),
+            ASN1.print(authorityKeyIdentifier).trim()
+        )
+    }
 }
 
 private fun ByteArray.prependPrimitiveTLV(tagNum: Int): ByteArray {

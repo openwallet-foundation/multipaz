@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -95,7 +96,7 @@ class BleManagerImplTest {
 
         // Open both sides concurrently; central will scan, connect, negotiate MTU 103, discover service/chars,
         // verify reader BLEIdent (using eReaderKey), subscribe, and write 0x01 to state characteristic.
-        val readerOpenJob = async { reader.open(eReaderKey) }
+        val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eReaderKey) }
         val mdocOpenJob = async { mdoc.open(eReaderKey) }
         readerOpenJob.await()
         mdocOpenJob.await()
@@ -168,7 +169,7 @@ class BleManagerImplTest {
             mdoc.advertise()
             assertEquals(192, peripheralManager.l2capPsm)
 
-            val mdocOpenJob = async { mdoc.open(eDeviceKey) }
+            val mdocOpenJob = async(start = CoroutineStart.UNDISPATCHED) { mdoc.open(eDeviceKey) }
             val readerOpenJob = async { reader.open(eDeviceKey) }
             mdocOpenJob.await()
             readerOpenJob.await()
@@ -223,7 +224,7 @@ class BleManagerImplTest {
                 psm = psm
             )
 
-            val mdocOpenJob = async { mdoc.open(eDeviceKey) }
+            val mdocOpenJob = async(start = CoroutineStart.UNDISPATCHED) { mdoc.open(eDeviceKey) }
             val readerOpenJob = async { reader.open(eDeviceKey) }
             mdocOpenJob.await()
             readerOpenJob.await()
@@ -623,7 +624,7 @@ class BleManagerImplTest {
             )
 
             mdoc.advertise()
-            val mdocOpenJob = async { mdoc.open(eDeviceKey) }
+            val mdocOpenJob = async(start = CoroutineStart.UNDISPATCHED) { mdoc.open(eDeviceKey) }
             val readerOpenJob = async { reader.open(eDeviceKey) }
             mdocOpenJob.await()
             readerOpenJob.await()
@@ -634,13 +635,18 @@ class BleManagerImplTest {
 
             // Simulate remote L2CAP socket closing while mdoc is waiting for the next message
             supervisorScope {
-                val waitJob = async { mdoc.waitForMessage() }
+                val waitJob = async(start = CoroutineStart.UNDISPATCHED) { mdoc.waitForMessage() }
                 bridge.lastCentralL2capChannel?.close()
                 assertFailsWith<MdocTransportException> {
                     withTimeout(5.seconds) { waitJob.await() }
                 }
             }
             assertEquals(MdocTransport.State.FAILED, mdoc.state.value)
+
+            // Calling waitForMessage() when already in State.FAILED also throws MdocTransportException
+            assertFailsWith<MdocTransportException> {
+                mdoc.waitForMessage()
+            }
 
             mdoc.close()
             reader.close()

@@ -207,15 +207,31 @@ class NfcTransportMdoc(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
+            if (_state.value == State.FAILED) {
+                throw MdocTransportException("Transport already failed")
+            }
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
             Logger.i(TAG, "waitForMessage")
         }
-        val msg = incomingMessages.receive().toByteArray()
-        if (msg.isNotEmpty()) {
-            _bytesReceived += msg.size
-            _numMessagesReceived += 1
+        try {
+            val msg = incomingMessages.receive().toByteArray()
+            if (msg.isNotEmpty()) {
+                _bytesReceived += msg.size
+                _numMessagesReceived += 1
+            }
+            return msg
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (_state.value == State.CLOSED) {
+                throw MdocTransportClosedException("Transport was closed while waiting for message")
+            } else {
+                mutex.withLock {
+                    failTransport(error)
+                }
+                throw MdocTransportException("Failed while waiting for message", error)
+            }
         }
-        return msg
     }
 
     override suspend fun close() {

@@ -84,3 +84,68 @@ Do not automatically create a commit when implementing the code, only create one
 *   **Run Android Test App Unit Tests:** `./gradlew :samples:testapp:testDebugUnitTest`
 *   **Build iOS Test App:** Open Xcode workspace or project and build: `xcodebuild -project samples/testapp/iosApp/TestApp.xcodeproj -scheme TestApp -sdk iphonesimulator build`
 *   **Build Swift Test App:** `xcodebuild -project samples/SwiftTestApp/SwiftTestApp.xcodeproj -scheme SwiftTestApp -sdk iphonesimulator build`
+
+### Stress Testing & Flaky Test Diagnosis (Host & Android Emulator)
+CI runs `connectedCheck` on a 2-vCPU Android emulator (`.github/workflows/unit-test.yml`), where `Dispatchers.Default` only has 2 worker threads. Race conditions and probabilistic test bugs (e.g., assuming a coroutine launched on `Dispatchers.Default` runs before the calling thread continues, or edge cases in random cryptographic key/hash generation) often only surface under constrained CPU concurrency or across many iterations.
+
+Whenever you write or modify concurrent/asynchronous code (such as transports, BLE/NFC state machines, `StateFlow`/`Channel` coordination, or mutex-guarded state) or tests involving randomized cryptographic inputs, proactively run targeted stress loops to verify there are no race conditions or probabilistic flakes before considering the task complete:
+
+1.  **Host (JVM) Stress Loop with Constrained CPU Cores & Threads:**
+    *   Configure `-XX:ActiveProcessorCount=2` and `-Dkotlinx.coroutines.scheduler.core.pool.size=2 -Dkotlinx.coroutines.scheduler.max.pool.size=2` on the test JVM (optionally prefixed with `taskset -c 0,1` on Linux) so `Dispatchers.Default` and the JVM match the 2-core CI emulator environment.
+    *   Pass `--rerun-tasks -Pdisable.web.targets=true` and filter with `--tests` for fast iteration (~1–2s per run), breaking immediately on the first failure:
+        ```bash
+        cat << 'EOF' > /tmp/stress-test.init.gradle.kts
+        allprojects {
+            tasks.withType<Test>().configureEach {
+                val cores = System.getProperty("stress.cores", "2")
+                jvmArgs(
+                    "-XX:ActiveProcessorCount=$cores",
+                    "-Dkotlinx.coroutines.scheduler.core.pool.size=$cores",
+                    "-Dkotlinx.coroutines.scheduler.max.pool.size=$cores"
+                )
+            }
+        }
+        EOF
+
+        for i in $(seq 1 10); do
+          echo "=== JVM Stress Iteration $i ==="
+          ./gradlew :multipaz:jvmTest \
+            --init-script /tmp/stress-test.init.gradle.kts \
+            -Dstress.cores=2 \
+            --tests "org.multipaz.mdoc.transport.BleManagerImplTest" \
+            --rerun-tasks -Pdisable.web.targets=true > /tmp/stress.log 2>&1 || {
+              echo "FAILED ON ITERATION $i!"
+              tail -n 100 /tmp/stress.log
+              break
+            }
+        done
+        ```
+    *   Vary `-Dstress.cores` across `1`, `2`, and `4` (and on Linux, optionally pair with `taskset -c 0`, `0,1`, and `0-3`) to expose different thread interleavings.
+
+2.  **Android Emulator Stress Loop (Matching CI API 35 2-Core Environment):**
+    *   Boot a headless API 35 emulator matching the host architecture (`arm64-v8a` on Apple Silicon macOS or `x86_64` on Linux/Intel) constrained to 2 cores matching `.github/workflows/unit-test.yml`:
+        ```bash
+        $ANDROID_HOME/emulator/emulator -avd test_api35 -cores 2 -memory 4096 \
+          -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim &
+        adb wait-for-device
+        ```
+    *   **Install Once, Loop via `adb shell am instrument`:** Instead of invoking `./gradlew connectedCheck` on every iteration (which incurs Gradle configuration and APK installation overhead each time), install the test APK once with `./gradlew :multipaz:installDebugAndroidTest -Pdisable.web.targets=true` and run `am instrument` directly in a loop:
+        ```bash
+        # Full suite loop (~45s per iteration for all ~1,500 tests)
+        for i in $(seq 1 10); do
+          echo "=== Emulator Iteration $i ==="
+          OUT=$(adb shell am instrument -w -r org.multipaz.test/androidx.test.runner.AndroidJUnitRunner)
+          echo "$OUT" | grep -E "OK \(|FAILURES!!!"
+          echo "$OUT" | grep -q "OK (" || { echo "$OUT" | tail -n 80; break; }
+        done
+
+        # Targeted class/package loop (~1-2s per iteration)
+        for i in $(seq 1 10); do
+          echo "=== Targeted Emulator Iteration $i ==="
+          OUT=$(adb shell am instrument -w -r \
+            -e class "org.multipaz.mdoc.transport.BleManagerImplTest,org.multipaz.mdoc.nfc.MdocNfcServiceTest" \
+            org.multipaz.test/androidx.test.runner.AndroidJUnitRunner)
+          echo "$OUT" | grep -q "OK (" || { echo "$OUT"; break; }
+        done
+        ```
+

@@ -293,9 +293,10 @@ class NfcHybridTransportMdocReader(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
-            check(_state.value == State.CONNECTED || _state.value == State.FAILED) {
-                "Expected state CONNECTED or FAILED, got ${_state.value}"
+            if (_state.value == State.FAILED) {
+                throw MdocTransportException("Transport already failed")
             }
+            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         try {
             return incomingMessages.receive().toByteArray()

@@ -315,6 +315,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         var monitorJob: Job? = null
         var uiCancelJob: Job? = null
         var lastTelemetry: PresentmentTelemetry? = null
+        var reportCompletion = false
+        var completionError: Throwable? = null
+        var completionTelemetry: PresentmentTelemetry? = null
 
         try {
             previousTransactionJob?.let { prevJob ->
@@ -325,6 +328,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             settings.launchUi?.invoke()
 
             val engagementDuration = Clock.System.now() - timeStarted
+            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
+            settings.presentmentModel?.setConnecting()
+
             uiCancelJob = CoroutineScope(context).launch {
                 settings.presentmentModel?.state?.collect { state ->
                     if (state == PresentmentModel.State.CanceledByUser) {
@@ -332,9 +338,6 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                     }
                 }
             }
-
-            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
-            settings.presentmentModel?.setConnecting()
 
             Logger.i(TAG, "startEngagement - advertising and waiting for connection")
             val transports = connectionMethods.advertise(
@@ -379,7 +382,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 onSendingResponse = { settings.presentmentModel?.setSending() },
                 onTelemetry = { lastTelemetry = it },
             )
-            settings.presentmentModel?.setCompleted(null, lastTelemetry)
+            reportCompletion = true
+            completionError = null
+            completionTelemetry = lastTelemetry
         } catch (e: Exception) {
             if (e is TransactionSupersededException) {
                 Logger.i(TAG, "Transaction was superseded by a new NFC tap")
@@ -403,7 +408,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 } else {
                     e
                 }
-                settings.presentmentModel?.setCompleted(reportedError, resolvedTelemetry)
+                reportCompletion = true
+                completionError = reportedError
+                completionTelemetry = resolvedTelemetry
             }
         } finally {
             withContext(NonCancellable) {
@@ -434,6 +441,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                         if (e is CancellationException) throw e
                         Logger.w(TAG, "Error closing eDeviceKey", e)
                     }
+                }
+                if (reportCompletion) {
+                    settings.presentmentModel?.setCompleted(completionError, completionTelemetry)
                 }
             }
         }

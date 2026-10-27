@@ -1213,6 +1213,8 @@ class MdocNfcServiceTest {
         }
 
         fun close() {
+            approveConsent.cancel()
+            approveBiometric.cancel()
             biometricCollectorJob.cancel()
             promptModel.cancel()
         }

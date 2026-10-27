@@ -126,39 +126,55 @@ internal class BlePeripheralManagerImpl(
         val continuation: CancellableContinuation<Boolean>,
     )
 
-    private var waitFor: WaitFor? = null
+    private val waitFor = MutableStateFlow<WaitFor?>(null)
 
     private fun setWaitCondition(
         state: WaitState,
         continuation: CancellableContinuation<Boolean>,
     ) {
-        check(waitFor == null) { "waitFor is already set to ${waitFor?.state}" }
-        waitFor = WaitFor(state, continuation)
+        val entry = WaitFor(state, continuation)
+        check(waitFor.compareAndSet(null, entry)) {
+            "waitFor is already set to ${waitFor.value?.state}"
+        }
         continuation.invokeOnCancellation {
-            if (waitFor?.continuation === continuation) {
-                waitFor = null
+            waitFor.compareAndSet(entry, null)
+        }
+    }
+
+    private fun claimWaitCondition(expectedState: WaitState): CancellableContinuation<Boolean>? {
+        while (true) {
+            val current = waitFor.value
+            if (current == null || current.state != expectedState) {
+                return null
+            }
+            if (waitFor.compareAndSet(current, null)) {
+                return current.continuation
             }
         }
     }
 
-    private fun resumeWait() {
-        val continuation = waitFor!!.continuation
-        waitFor = null
+    private fun resumeWait(expectedState: WaitState): Boolean {
+        val continuation = claimWaitCondition(expectedState) ?: return false
         continuation.resume(true)
+        return true
     }
 
-    private fun resumeWaitWithException(exception: Throwable) {
-        val continuation = waitFor!!.continuation
-        waitFor = null
+    private fun resumeWaitWithException(expectedState: WaitState, exception: Throwable): Boolean {
+        val continuation = claimWaitCondition(expectedState) ?: return false
         continuation.resumeWithException(exception)
+        return true
     }
 
     override val incomingMessages = Channel<ByteArray>(Channel.UNLIMITED)
 
     private var incomingMessage = ByteStringBuilder()
+    @Volatile
     private var identValue: ByteArray? = null
+    @Volatile
     private var _l2capPsm: Int? = null
+    @Volatile
     private var l2capChannel: BleL2capChannel? = null
+    @Volatile
     private var clientConnected = false
 
     override val l2capPsm: Int?
@@ -169,50 +185,47 @@ internal class BlePeripheralManagerImpl(
 
     private val halCallback = object : BlePeripheralHal.Callback {
         override fun onPowerOn(error: Throwable?) {
-            if (waitFor?.state == WaitState.POWER_ON) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.POWER_ON, error)
             } else {
+                resumeWait(WaitState.POWER_ON)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onPowerOn callback but not waiting")
             }
         }
 
         override fun onL2capPublished(psm: Int?, error: Throwable?) {
-            if (waitFor?.state == WaitState.PUBLISH_L2CAP_CHANNEL) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    _l2capPsm = psm
-                    resumeWait()
+            if (error != null) {
+                if (!resumeWaitWithException(WaitState.PUBLISH_L2CAP_CHANNEL, error)) {
+                    Logger.w(TAG, "onL2capPublished but not waiting")
                 }
             } else {
-                Logger.w(TAG, "onL2capPublished but not waiting")
+                _l2capPsm = psm
+                if (!resumeWait(WaitState.PUBLISH_L2CAP_CHANNEL)) {
+                    Logger.w(TAG, "onL2capPublished but not waiting")
+                }
             }
         }
 
         override fun onServiceAdded(error: Throwable?) {
-            if (waitFor?.state == WaitState.SERVICE_ADDED) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.SERVICE_ADDED, error)
             } else {
+                resumeWait(WaitState.SERVICE_ADDED)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onServiceAdded but not waiting")
             }
         }
 
         override fun onAdvertisingStarted(error: Throwable?) {
-            if (waitFor?.state == WaitState.START_ADVERTISING) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.START_ADVERTISING, error)
             } else {
+                resumeWait(WaitState.START_ADVERTISING)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onAdvertisingStarted but not waiting")
             }
         }
@@ -249,7 +262,7 @@ internal class BlePeripheralManagerImpl(
         ) {
             if (uuid == stateCharacteristicUuid) {
                 if (value contentEquals byteArrayOf(BleTransportConstants.STATE_CHARACTERISTIC_START.toByte())) {
-                    if (waitFor?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
+                    if (!clientConnected || waitFor.value?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
                         if (maxWriteSizeForCentral != null) {
                             maxCharacteristicSizeMemoized = min(maxWriteSizeForCentral, MAX_CHARACTERISTIC_SIZE_CAP)
                             if (_negotiatedMtu == -1) {
@@ -259,23 +272,13 @@ internal class BlePeripheralManagerImpl(
                         clientConnected = true
                         hal.stopAdvertising()
                         hal.closeL2capServer()
-                        resumeWait()
-                    } else if (!clientConnected) {
-                        if (maxWriteSizeForCentral != null) {
-                            maxCharacteristicSizeMemoized = min(maxWriteSizeForCentral, MAX_CHARACTERISTIC_SIZE_CAP)
-                            if (_negotiatedMtu == -1) {
-                                _negotiatedMtu = maxWriteSizeForCentral + 3
-                            }
-                        }
-                        clientConnected = true
-                        hal.stopAdvertising()
-                        hal.closeL2capServer()
+                        resumeWait(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT)
                     }
                 } else if (value contentEquals byteArrayOf(BleTransportConstants.STATE_CHARACTERISTIC_END.toByte())) {
                     Logger.i(TAG, "Received transport-specific termination message")
                     incomingMessages.trySend(byteArrayOf())
                 } else {
-                    if (waitFor?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
+                    if (waitFor.value?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
                         Logger.w(TAG, "Ignoring unexpected write ${value.toHex()} to state characteristic")
                     } else {
                         Logger.w(TAG, "Ignoring unexpected write to state characteristic")
@@ -296,13 +299,12 @@ internal class BlePeripheralManagerImpl(
         }
 
         override fun onNotificationSent(uuid: UUID, error: Throwable?) {
-            if (waitFor?.state == WaitState.CHARACTERISTIC_WRITE_COMPLETED) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.CHARACTERISTIC_WRITE_COMPLETED, error)
             } else {
+                resumeWait(WaitState.CHARACTERISTIC_WRITE_COMPLETED)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onNotificationSent but not waiting")
                 addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
@@ -312,9 +314,7 @@ internal class BlePeripheralManagerImpl(
             l2capChannel = channel
             clientConnected = true
             hal.stopAdvertising()
-            if (waitFor?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
-                resumeWait()
-            }
+            resumeWait(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT)
             CoroutineScope(Dispatchers.Default).launch {
                 readFromL2capChannel(channel, incomingMessages) { error ->
                     onError(IllegalStateException("Accepting/reading from L2CAP socket failed", error))
@@ -434,6 +434,9 @@ internal class BlePeripheralManagerImpl(
         }
         suspendCancellableCoroutine { continuation ->
             setWaitCondition(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT, continuation)
+            if (clientConnected) {
+                resumeWait(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT)
+            }
         }
     }
 

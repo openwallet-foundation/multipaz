@@ -385,6 +385,9 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
         var uiCancelJob: Job? = null
         var nfcConnectedJob: Job? = null
         var lastTelemetry: PresentmentTelemetry? = null
+        var reportCompletion = false
+        var completionError: Throwable? = null
+        var completionTelemetry: PresentmentTelemetry? = null
 
         try {
             previousTransactionJob?.let { prevJob ->
@@ -400,6 +403,9 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
             val initialParams = engagementParamsFlow.value
             val eDeviceKey = initialParams.eDeviceKey
 
+            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
+            settings.presentmentModel?.setConnecting()
+
             uiCancelJob = CoroutineScope(transactionJobContext).launch {
                 settings.presentmentModel?.state?.collect { state ->
                     if (state == PresentmentModel.State.CanceledByUser) {
@@ -409,6 +415,7 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
             }
 
             nfcConnectedJob = if (isNfcOnly) {
+                settings.presentmentModel?.setNfcConnected(transport.isNfcConnected.value)
                 CoroutineScope(transactionJobContext).launch {
                     transport.isNfcConnected.collect { connected ->
                         settings.presentmentModel?.setNfcConnected(connected)
@@ -417,9 +424,6 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
             } else {
                 null
             }
-
-            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
-            settings.presentmentModel?.setConnecting()
 
             transport.open(eDeviceKey.publicKey)
 
@@ -492,7 +496,9 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                 },
                 onTelemetry = { lastTelemetry = it },
             )
-            settings.presentmentModel?.setCompleted(null, lastTelemetry)
+            reportCompletion = true
+            completionError = null
+            completionTelemetry = lastTelemetry
         } catch (e: Exception) {
             if (e is TransactionSupersededException) {
                 Logger.i(TAG, "Transaction was superseded by a new NFC tap")
@@ -512,7 +518,9 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                 } else {
                     e
                 }
-                settings.presentmentModel?.setCompleted(reportedError, resolvedTelemetry)
+                reportCompletion = true
+                completionError = reportedError
+                completionTelemetry = resolvedTelemetry
             }
         } finally {
             withContext(NonCancellable) {
@@ -544,6 +552,9 @@ abstract class MdocNfcV2Service : MdocNfcPresentmentService() {
                 }
                 if (hybridTransport === transport) {
                     hybridTransport = null
+                }
+                if (reportCompletion) {
+                    settings.presentmentModel?.setCompleted(completionError, completionTelemetry)
                 }
             }
         }

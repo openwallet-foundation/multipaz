@@ -199,6 +199,9 @@ internal class BleTransportPeripheralMdoc(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
+            if (_state.value == State.FAILED) {
+                throw MdocTransportException("Transport already failed")
+            }
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         try {
