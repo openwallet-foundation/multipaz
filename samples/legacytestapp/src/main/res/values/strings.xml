@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Multipaz Legacy TestApp</string>
+    <string name="nfc_service_description">Multipaz Legacy ISO mdoc NFC Service</string>
+    <string name="nfc_ndef_aid_group_description">NFC Type 4 Tag NDEF Engagement</string>
+    <string name="nfc_data_transfer_aid_group_description">ISO/IEC 18013-5 NFC Data Transfer</string>
+</resources>
