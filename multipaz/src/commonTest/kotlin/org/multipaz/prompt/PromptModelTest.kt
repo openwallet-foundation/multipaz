@@ -36,15 +36,13 @@ class PromptModelTest {
     private lateinit var promptModel: TestPromptModel
     private var mockUiJob: Job? = null
 
-    private class TestFaceMatcherSession(referencePortrait: ByteString) : FaceMatcherSession(referencePortrait) {
-        override suspend fun feedFrame(frame: CameraFrame) {}
-    }
+    private class TestFaceMatcherSession(referencePortrait: ByteString) : FaceMatcherSession(referencePortrait)
 
-    private class TestFaceMatcherLivenessSession(poses: List<FacePose>) : FaceMatcherLivenessSession(poses) {
-        override suspend fun feedFrame(frame: CameraFrame) {}
-    }
+    private class TestFaceMatcherLivenessSession(poses: List<FacePose>) : FaceMatcherLivenessSession(poses)
 
-    private class TestFaceMatcher : FaceMatcher {
+    private class TestFaceMatcher(
+        override val usesCustomUserInterface: Boolean = false
+    ) : FaceMatcher {
         override val name: String = "test"
         override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
             TestFaceMatcherSession(referencePortrait)
@@ -239,11 +237,28 @@ class PromptModelTest {
             assertNotNull(request.faceMatcherSession)
             assertEquals(FaceMatchingReason, request.reason)
             assertFalse(request.requireConfirmation)
+            assertFalse(request.usesCustomUserInterface)
             true
         }
 
         val result = promptModel.showFaceMatcherPrompt(
             matcher = testMatcher,
+            referencePortrait = testPortrait
+        )
+        assertTrue(result)
+    }
+
+    @Test
+    fun faceMatcherPromptCustomUserInterface() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val customUiMatcher = TestFaceMatcher(usesCustomUserInterface = true)
+        collectFaceMatcherDialogState { request ->
+            assertTrue(request.usesCustomUserInterface)
+            true
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            matcher = customUiMatcher,
             referencePortrait = testPortrait
         )
         assertTrue(result)
@@ -305,11 +320,28 @@ class PromptModelTest {
             assertEquals(listOf(FacePose.FRONT), request.faceMatcherLivenessSession.poses)
             assertEquals(FaceLivenessReason, request.reason)
             assertFalse(request.requireConfirmation)
+            assertFalse(request.usesCustomUserInterface)
             expectedMap
         }
 
         val result = promptModel.showFaceMatcherLivenessPrompt(
             matcher = testMatcher
+        )
+        assertEquals(expectedMap, result)
+    }
+
+    @Test
+    fun faceMatcherLivenessPromptCustomUserInterface() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val customUiMatcher = TestFaceMatcher(usesCustomUserInterface = true)
+        val expectedMap = mapOf(FacePose.FRONT to testPortrait)
+        collectFaceMatcherLivenessDialogState { request ->
+            assertTrue(request.usesCustomUserInterface)
+            expectedMap
+        }
+
+        val result = promptModel.showFaceMatcherLivenessPrompt(
+            matcher = customUiMatcher
         )
         assertEquals(expectedMap, result)
     }

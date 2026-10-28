@@ -7,6 +7,7 @@ import multipazproject.samples.testapp.generated.resources.app_icon
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Platform
 
@@ -67,4 +68,6 @@ actual object TestAppConfiguration {
     actual suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean) {
         throw NotImplementedError("Not implemented on this platform")
     }
+
+    actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
 }

@@ -187,6 +187,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".CustomUiFaceMatcherActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
         <service
             android:name=".TestAppNfcApduRouter"
             android:exported="true"

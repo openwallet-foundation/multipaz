@@ -28,9 +28,11 @@ abstract class FaceMatcherLivenessSession(
     /**
      * Feeds a camera frame captured from the front camera into the liveness session.
      *
+     * This is not called if [FaceMatcher.usesCustomUserInterface] is `true`.
+     *
      * @param frame camera frame to process.
      */
-    abstract suspend fun feedFrame(frame: CameraFrame)
+    open suspend fun feedFrame(frame: CameraFrame) {}
 
     /**
      * Pushes a touch or tap event within the camera preview into the session.

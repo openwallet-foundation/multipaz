@@ -118,31 +118,51 @@ fun FaceMatcherPromptDialog(
         val session = dialogParameters.faceMatcherSession
         val promptState by session.state.collectAsState()
 
-        FaceMatcherFullScreenDialog(
-            sessionKey = session,
-            title = humanReadableReason?.title ?: stringResource(Res.string.face_matcher_prompt_default_title),
-            subtitle = humanReadableReason?.subtitle ?: stringResource(Res.string.face_matcher_prompt_default_subtitle),
-            message = promptState.message,
-            isSuccess = promptState.status == FaceMatcherPromptState.Status.SUCCESS,
-            isFailed = promptState.status == FaceMatcherPromptState.Status.FAILED,
-            requireConfirmation = dialogParameters.requireConfirmation || (humanReadableReason?.requireConfirmation == true),
-            overlay = promptState.overlay,
-            backgroundColor = promptState.backgroundColor,
-            onFeedFrame = { frame -> session.feedFrame(frame) },
-            onTouchEvent = { x, y -> session.onTouchEvent(x, y) },
-            onCancelSession = { session.cancel() },
-            onSuccess = {
-                coroutineScope.launch {
-                    dialogStateValue.resultChannel.send(true)
-                }
-            },
-            onDismissed = {
-                coroutineScope.launch {
+        if (dialogParameters.usesCustomUserInterface) {
+            DisposableEffect(session) {
+                onDispose {
                     session.cancel()
-                    dialogStateValue.resultChannel.close(PromptDismissedException())
                 }
             }
-        )
+            LaunchedEffect(session, promptState.status) {
+                when (promptState.status) {
+                    FaceMatcherPromptState.Status.SUCCESS -> {
+                        dialogStateValue.resultChannel.send(true)
+                    }
+                    FaceMatcherPromptState.Status.FAILED -> {
+                        session.cancel()
+                        dialogStateValue.resultChannel.close(PromptDismissedException())
+                    }
+                    FaceMatcherPromptState.Status.IN_PROGRESS -> {}
+                }
+            }
+        } else {
+            FaceMatcherFullScreenDialog(
+                sessionKey = session,
+                title = humanReadableReason?.title ?: stringResource(Res.string.face_matcher_prompt_default_title),
+                subtitle = humanReadableReason?.subtitle ?: stringResource(Res.string.face_matcher_prompt_default_subtitle),
+                message = promptState.message,
+                isSuccess = promptState.status == FaceMatcherPromptState.Status.SUCCESS,
+                isFailed = promptState.status == FaceMatcherPromptState.Status.FAILED,
+                requireConfirmation = dialogParameters.requireConfirmation || (humanReadableReason?.requireConfirmation == true),
+                overlay = promptState.overlay,
+                backgroundColor = promptState.backgroundColor,
+                onFeedFrame = { frame -> session.feedFrame(frame) },
+                onTouchEvent = { x, y -> session.onTouchEvent(x, y) },
+                onCancelSession = { session.cancel() },
+                onSuccess = {
+                    coroutineScope.launch {
+                        dialogStateValue.resultChannel.send(true)
+                    }
+                },
+                onDismissed = {
+                    coroutineScope.launch {
+                        session.cancel()
+                        dialogStateValue.resultChannel.close(PromptDismissedException())
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -176,32 +196,52 @@ fun FaceMatcherLivenessPromptDialog(
         val session = dialogParameters.faceMatcherLivenessSession
         val promptState by session.state.collectAsState()
 
-        FaceMatcherFullScreenDialog(
-            sessionKey = session,
-            title = humanReadableReason?.title ?: stringResource(Res.string.face_matcher_liveness_prompt_default_title),
-            subtitle = humanReadableReason?.subtitle ?: stringResource(Res.string.face_matcher_liveness_prompt_default_subtitle),
-            message = promptState.message,
-            isSuccess = promptState.status == FaceMatcherLivenessPromptState.Status.SUCCESS,
-            isFailed = promptState.status == FaceMatcherLivenessPromptState.Status.FAILED,
-            requireConfirmation = dialogParameters.requireConfirmation || (humanReadableReason?.requireConfirmation == true),
-            overlay = promptState.overlay,
-            backgroundColor = promptState.backgroundColor,
-            onFeedFrame = { frame -> session.feedFrame(frame) },
-            onTouchEvent = { x, y -> session.onTouchEvent(x, y) },
-            onCancelSession = { session.cancel() },
-            onSuccess = {
-                val capturedImages = promptState.capturedImages
-                coroutineScope.launch {
-                    dialogStateValue.resultChannel.send(capturedImages)
-                }
-            },
-            onDismissed = {
-                coroutineScope.launch {
+        if (dialogParameters.usesCustomUserInterface) {
+            DisposableEffect(session) {
+                onDispose {
                     session.cancel()
-                    dialogStateValue.resultChannel.close(PromptDismissedException())
                 }
             }
-        )
+            LaunchedEffect(session, promptState.status) {
+                when (promptState.status) {
+                    FaceMatcherLivenessPromptState.Status.SUCCESS -> {
+                        dialogStateValue.resultChannel.send(promptState.capturedImages)
+                    }
+                    FaceMatcherLivenessPromptState.Status.FAILED -> {
+                        session.cancel()
+                        dialogStateValue.resultChannel.close(PromptDismissedException())
+                    }
+                    FaceMatcherLivenessPromptState.Status.IN_PROGRESS -> {}
+                }
+            }
+        } else {
+            FaceMatcherFullScreenDialog(
+                sessionKey = session,
+                title = humanReadableReason?.title ?: stringResource(Res.string.face_matcher_liveness_prompt_default_title),
+                subtitle = humanReadableReason?.subtitle ?: stringResource(Res.string.face_matcher_liveness_prompt_default_subtitle),
+                message = promptState.message,
+                isSuccess = promptState.status == FaceMatcherLivenessPromptState.Status.SUCCESS,
+                isFailed = promptState.status == FaceMatcherLivenessPromptState.Status.FAILED,
+                requireConfirmation = dialogParameters.requireConfirmation || (humanReadableReason?.requireConfirmation == true),
+                overlay = promptState.overlay,
+                backgroundColor = promptState.backgroundColor,
+                onFeedFrame = { frame -> session.feedFrame(frame) },
+                onTouchEvent = { x, y -> session.onTouchEvent(x, y) },
+                onCancelSession = { session.cancel() },
+                onSuccess = {
+                    val capturedImages = promptState.capturedImages
+                    coroutineScope.launch {
+                        dialogStateValue.resultChannel.send(capturedImages)
+                    }
+                },
+                onDismissed = {
+                    coroutineScope.launch {
+                        session.cancel()
+                        dialogStateValue.resultChannel.close(PromptDismissedException())
+                    }
+                }
+            )
+        }
     }
 }
 

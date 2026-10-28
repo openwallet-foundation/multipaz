@@ -29,6 +29,20 @@ interface FaceMatcher {
         get() = false
 
     /**
+     * Whether this matcher provides its own custom user interface (including operating the camera
+     * and drawing graphics itself).
+     *
+     * If `true`, [FaceMatcherSession] and [FaceMatcherLivenessSession] will not receive any camera
+     * frames ([FaceMatcherSession.feedFrame]) or touch events ([FaceMatcherSession.onTouchEvent]),
+     * and the only [FaceMatcherSession.updateState] / [FaceMatcherLivenessSession.updateState] call
+     * expected is when the session ends and the implementation updates the state to
+     * [FaceMatcherPromptState.Status.SUCCESS] or [FaceMatcherPromptState.Status.FAILED] (or
+     * [FaceMatcherLivenessPromptState.Status.SUCCESS] or [FaceMatcherLivenessPromptState.Status.FAILED]).
+     */
+    val usesCustomUserInterface: Boolean
+        get() = false
+
+    /**
      * Creates a new [FaceMatcherSession] driving an interactive verification session to verify that the
      * user in front of the camera matches the provided [referencePortrait].
      *

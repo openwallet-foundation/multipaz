@@ -48,15 +48,51 @@ struct FaceMatcherPromptDialog: View {
             }
             .task(id: data?.id) {
                 if let data {
-                    humanReadableReason = await toHumanReadable(
-                        data.state.parameters!.reason,
-                        nil
-                    )
+                    let parameters = data.state.parameters!
+                    if parameters.usesCustomUserInterface {
+                        let faceMatcherSession = parameters.faceMatcherSession
+                        for await state in faceMatcherSession.state {
+                            if state.status == FaceMatcherPromptState.Status.success {
+                                faceMatcherSession.cancel()
+                                try? await data.state.resultChannel.send(element: KotlinBoolean(value: true))
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    self.data = nil
+                                }
+                                break
+                            } else if state.status == FaceMatcherPromptState.Status.failed {
+                                faceMatcherSession.cancel()
+                                data.state.resultChannel.close(cause: PromptDismissedException())
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    self.data = nil
+                                }
+                                break
+                            }
+                        }
+                    } else {
+                        humanReadableReason = await toHumanReadable(
+                            parameters.reason,
+                            nil
+                        )
+                    }
                 } else {
                     humanReadableReason = nil
                 }
             }
-            .fullScreenCover(item: $data) { data in
+            .fullScreenCover(
+                item: Binding(
+                    get: {
+                        if let data, !data.state.parameters!.usesCustomUserInterface {
+                            return data
+                        }
+                        return nil
+                    },
+                    set: { data = $0 }
+                )
+            ) { data in
                 let faceMatcherSession = data.state.parameters!.faceMatcherSession
                 let requireConfirmation = data.state.parameters!.requireConfirmation
                     || (humanReadableReason?.requireConfirmation == true)
@@ -137,15 +173,52 @@ struct FaceMatcherLivenessPromptDialog: View {
             }
             .task(id: data?.id) {
                 if let data {
-                    humanReadableReason = await toHumanReadable(
-                        data.state.parameters!.reason,
-                        nil
-                    )
+                    let parameters = data.state.parameters!
+                    if parameters.usesCustomUserInterface {
+                        let faceMatcherLivenessSession = parameters.faceMatcherLivenessSession
+                        for await state in faceMatcherLivenessSession.state {
+                            if state.status == FaceMatcherLivenessPromptState.Status.success {
+                                let capturedImages = state.capturedImages
+                                faceMatcherLivenessSession.cancel()
+                                try? await data.state.resultChannel.send(element: capturedImages)
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    self.data = nil
+                                }
+                                break
+                            } else if state.status == FaceMatcherLivenessPromptState.Status.failed {
+                                faceMatcherLivenessSession.cancel()
+                                data.state.resultChannel.close(cause: PromptDismissedException())
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    self.data = nil
+                                }
+                                break
+                            }
+                        }
+                    } else {
+                        humanReadableReason = await toHumanReadable(
+                            parameters.reason,
+                            nil
+                        )
+                    }
                 } else {
                     humanReadableReason = nil
                 }
             }
-            .fullScreenCover(item: $data) { data in
+            .fullScreenCover(
+                item: Binding(
+                    get: {
+                        if let data, !data.state.parameters!.usesCustomUserInterface {
+                            return data
+                        }
+                        return nil
+                    },
+                    set: { data = $0 }
+                )
+            ) { data in
                 let faceMatcherLivenessSession = data.state.parameters!.faceMatcherLivenessSession
                 let requireConfirmation = data.state.parameters!.requireConfirmation
                     || (humanReadableReason?.requireConfirmation == true)

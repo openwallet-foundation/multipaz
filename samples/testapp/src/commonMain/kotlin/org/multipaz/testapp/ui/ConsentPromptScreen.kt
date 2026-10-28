@@ -185,6 +185,7 @@ data class AndroidPresentmentActivityData(
     val requireFaceMatch: Boolean = false,
     val referencePortrait: ByteString? = null,
     val faceMatcher: FaceMatcher? = null,
+    val faceMatchRequireConfirmation: Boolean = false,
     val authRequireConfirmation: Boolean = false,
     val connectionDuration: Duration = 0.seconds,
     val sendResponseDuration: Duration = 0.seconds,
@@ -229,6 +230,7 @@ fun ConsentPromptScreen(
     var paShowConsent by remember { mutableStateOf(true) }
     var paRequireAuth by remember { mutableStateOf(false) }
     var paRequireFaceMatch by remember { mutableStateOf(false) }
+    var paFaceMatchRequireConfirmation by remember { mutableStateOf(false) }
     var faceMatcherReferencePortrait by remember { mutableStateOf<ByteString?>(null) }
     var selectedFaceMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
     val hasReferencePortrait = faceMatcherReferencePortrait != null
@@ -595,24 +597,33 @@ fun ConsentPromptScreen(
             SettingToggle(
                 title = "Require face matching",
                 subtitleOn = if (!hasReferencePortrait) {
-                    "Requires reference portrait from Face Matcher Prompt"
+                    "Using default portrait (or set one in Face Matcher Prompt)"
                 } else {
                     null
                 },
                 subtitleOff = if (!hasReferencePortrait) {
-                    "Requires reference portrait from Face Matcher Prompt"
+                    "Using default portrait (or set one in Face Matcher Prompt)"
                 } else {
                     null
                 },
-                isChecked = paRequireFaceMatch && hasReferencePortrait,
-                enabled = hasReferencePortrait,
+                isChecked = paRequireFaceMatch,
                 onCheckedChange = { newValue ->
                     paRequireFaceMatch = newValue
                 }
             )
         }
 
-        if (hasReferencePortrait && paRequireFaceMatch && faceMatcherRepository != null && faceMatcherRepository.all.size > 1) {
+        item {
+            SettingToggle(
+                title = "Require confirmation for face match",
+                isChecked = paFaceMatchRequireConfirmation,
+                onCheckedChange = { newValue ->
+                    paFaceMatchRequireConfirmation = newValue
+                }
+            )
+        }
+
+        if (paRequireFaceMatch && faceMatcherRepository != null && faceMatcherRepository.all.size > 1) {
             item {
                 SettingMultipleChoice(
                     title = "Face matcher implementation",
@@ -658,9 +669,10 @@ fun ConsentPromptScreen(
                 paData = AndroidPresentmentActivityData(
                     showConsent = paShowConsent,
                     requireAuth = paRequireAuth,
-                    requireFaceMatch = paRequireFaceMatch && (faceMatcherReferencePortrait != null),
+                    requireFaceMatch = paRequireFaceMatch,
                     referencePortrait = faceMatcherReferencePortrait,
                     faceMatcher = selectedFaceMatcher ?: faceMatcherRepository?.defaultMatcher,
+                    faceMatchRequireConfirmation = paFaceMatchRequireConfirmation,
                     authRequireConfirmation = paAuthRequireConfirmation,
                     connectionDuration = paConnectionDuration.duration,
                     sendResponseDuration = paSendingDuration.duration,

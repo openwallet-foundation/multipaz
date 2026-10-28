@@ -136,7 +136,8 @@ suspend fun PromptModel.showFaceMatcherPrompt(
             FaceMatcherPromptDialogModel.FaceMatcherRequest(
                 faceMatcherSession = faceMatcherSession,
                 reason = reason,
-                requireConfirmation = requireConfirmation
+                requireConfirmation = requireConfirmation,
+                usesCustomUserInterface = matcher.usesCustomUserInterface
             )
         )
     } catch (e: PromptDismissedException) {
@@ -181,7 +182,8 @@ suspend fun PromptModel.showFaceMatcherLivenessPrompt(
             FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest(
                 faceMatcherLivenessSession = faceMatcherLivenessSession,
                 reason = reason,
-                requireConfirmation = requireConfirmation
+                requireConfirmation = requireConfirmation,
+                usesCustomUserInterface = matcher.usesCustomUserInterface
             )
         )
     } catch (e: PromptDismissedException) {

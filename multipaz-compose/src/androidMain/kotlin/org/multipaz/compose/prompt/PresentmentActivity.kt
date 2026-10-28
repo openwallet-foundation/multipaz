@@ -161,7 +161,6 @@ class PresentmentActivity: FragmentActivity() {
             val intent = Intent(applicationContext, PresentmentActivity::class.java)
             intent.addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY or
                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                         Intent.FLAG_ACTIVITY_NO_ANIMATION
             )
@@ -280,9 +279,12 @@ class PresentmentActivity: FragmentActivity() {
         val isNfcOnly = presentmentModel.isNfcOnly.value
         if (isNfcOnly && !isNfcConnected && (state is PresentmentModel.State.WaitingForReader || state is PresentmentModel.State.Sending || state is PresentmentModel.State.WaitingForUserInput)) {
             Logger.i(TAG, "in onStop() but waiting for NFC re-tap, preserving presentment session")
+        } else if (promptModel.numPromptsShowing.value > 0 && state is PresentmentModel.State.WaitingForUserInput) {
+            Logger.i(TAG, "in onStop() while prompt is showing, preserving presentment session")
         } else {
             Logger.i(TAG, "in onStop(), canceling presentment")
             presentmentModel.setCanceledByUser()
+            finish()
         }
         presentmentModel.showDocumentChooser?.onDocumentSelected?.invoke(null)
     }

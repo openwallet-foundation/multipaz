@@ -5,6 +5,7 @@ import org.jetbrains.compose.resources.DrawableResource
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 
@@ -50,4 +51,6 @@ expect object TestAppConfiguration {
     fun getAndroidCredmanOmitClaims(document: Document): Boolean
 
     suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean)
+
+    fun getPlatformFaceMatchers(): List<FaceMatcher>
 }

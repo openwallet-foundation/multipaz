@@ -90,7 +90,8 @@ actual suspend fun launchAndroidPresentmentActivity(
                     ?: throw IllegalStateException("No face matcher configured")
                 if (!(PresentmentActivity.promptModel as AndroidPromptModel).showFaceMatcherPrompt(
                     matcher = faceMatcher,
-                    referencePortrait = portrait
+                    referencePortrait = portrait,
+                    requireConfirmation = paData.faceMatchRequireConfirmation
                 )) {
                     throw FaceNotMatchedException("Presentment cancelled because user dismissed face matcher prompt")
                 }

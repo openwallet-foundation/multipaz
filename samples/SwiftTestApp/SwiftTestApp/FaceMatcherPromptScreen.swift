@@ -490,7 +490,7 @@ struct FaceMatcherPromptScreen: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            let matchers = viewModel.faceMatcherRepository?.all ?? []
+            let matchers = (viewModel.faceMatcherRepository?.all ?? []).filter { $0.supportsLiveness }
             if matchers.count > 1 {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Face matcher implementation")
@@ -771,8 +771,9 @@ struct FaceMatcherPromptScreen: View {
 
     private func verifyLiveness(poses: [FacePose]) {
         isVerifying = true
-        let matcher = viewModel.faceMatcherRepository?.all.first(where: { $0.displayName == selectedLivenessMatcherDisplayName })
-            ?? viewModel.faceMatcherRepository?.defaultMatcher
+        let livenessMatchers = (viewModel.faceMatcherRepository?.all ?? []).filter { $0.supportsLiveness }
+        let matcher = livenessMatchers.first(where: { $0.displayName == selectedLivenessMatcherDisplayName })
+            ?? livenessMatchers.first
         guard let matcher else {
             isVerifying = false
             showToast("No face matcher available")

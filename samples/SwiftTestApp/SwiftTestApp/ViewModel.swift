@@ -62,6 +62,7 @@ class ViewModel {
         faceMatcherRepository = FaceMatcherRepository()
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel, debug: true))
+        faceMatcherRepository.add(faceMatcher: CustomUiFaceMatcher(getStorage: { [weak self] in self?.storage }))
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(

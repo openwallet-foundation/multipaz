@@ -514,6 +514,7 @@ class App private constructor (val promptModel: PromptModel) {
                     debug = true
                 )
             )
+            TestAppConfiguration.getPlatformFaceMatchers().forEach { add(it) }
         }
     }
 

@@ -36,6 +36,7 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanOmitClaims
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import java.net.NetworkInterface
@@ -176,6 +177,10 @@ actual object TestAppConfiguration {
 
     actual suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean) {
         document.setAndroidCredmanOmitClaims(value)
+    }
+
+    actual fun getPlatformFaceMatchers(): List<FaceMatcher> {
+        return listOf(CustomUiFaceMatcher())
     }
 }
 
