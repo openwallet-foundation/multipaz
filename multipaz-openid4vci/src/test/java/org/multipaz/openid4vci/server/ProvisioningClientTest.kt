@@ -1,6 +1,7 @@
 package org.multipaz.openid4vci.server
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
@@ -20,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -115,6 +117,17 @@ class ProvisioningClientTest {
     lateinit var documentStore: DocumentStore
 
     lateinit var documentProvisioningHandler: DocumentProvisioningHandler
+
+    private val credentialRequests = mutableListOf<JsonObject>()
+
+    // Records the body of every request sent to the credential endpoint.
+    private val credentialRequestRecorder = createClientPlugin("CredentialRequestRecorder") {
+        onRequest { request, content ->
+            if (request.url.pathSegments.lastOrNull() == "credential" && content is String) {
+                credentialRequests.add(Json.parseToJsonElement(content).jsonObject)
+            }
+        }
+    }
 
     @Before
     fun setup() = runTest {
@@ -262,6 +275,7 @@ class ProvisioningClientTest {
         }
         val httpClient = createClient {
             followRedirects = false
+            install(credentialRequestRecorder)
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
@@ -342,6 +356,7 @@ class ProvisioningClientTest {
                 ))))
 
             Assert.assertEquals(1, credentialData.certifications.size)
+            assertCredentialRequestsCompliant()
 
             credential.certify(credentialData.certifications.first().issuerData)
             if (credential is MdocCredential) {
@@ -372,6 +387,7 @@ class ProvisioningClientTest {
         }
         val httpClient = createClient {
             followRedirects = false
+            install(credentialRequestRecorder)
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
@@ -436,6 +452,7 @@ class ProvisioningClientTest {
             val refreshed = refreshClient.obtainCredentials(KeyBindingInfo.Attestation(
                 listOf(CredentialKeyAttestation("refresh", refreshKeyInfo.attestation))))
             Assert.assertEquals(1, refreshed.certifications.size)
+            assertCredentialRequestsCompliant()
 
             // Clean up authorization data
             Provisioning.cleanupAuthorizationData(
@@ -454,6 +471,20 @@ class ProvisioningClientTest {
             }
             // Exception is thrown because key could not be found
             assertIs<IllegalArgumentException>(exception)
+        }
+    }
+
+    /**
+     * Checks that credential requests follow OpenID4VCI 1.0, which identifies the credential
+     * only by `credential_configuration_id` and no longer has `format`, `doctype` or `vct`.
+     */
+    private fun assertCredentialRequestsCompliant() {
+        Assert.assertTrue(credentialRequests.isNotEmpty())
+        for (request in credentialRequests) {
+            Assert.assertTrue(request.containsKey("credential_configuration_id"))
+            Assert.assertFalse(request.containsKey("format"))
+            Assert.assertFalse(request.containsKey("doctype"))
+            Assert.assertFalse(request.containsKey("vct"))
         }
     }
 
