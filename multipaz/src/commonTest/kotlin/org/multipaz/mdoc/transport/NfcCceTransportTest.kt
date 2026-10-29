@@ -8,19 +8,19 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -35,49 +35,18 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Unit tests for [NfcHybridTransportMdoc] and [NfcHybridTransportMdocReader], which implement the
- * ISO/IEC 18013-5 Second Edition NFCv2 hybrid transport for the wallet (mdoc) and reader roles.
- *
- * ### How the NFCv2 hybrid transport works
- * During an NFCv2 engagement ([org.multipaz.mdoc.nfc.MdocNfcV2EngagementHelper] /
- * [org.multipaz.mdoc.nfc.mdocReaderNfcHandover]), the reader and mdoc can either:
- * 1. **Negotiate a secondary transport** (such as BLE) alongside the active NFCv2 channel:
- *    - Both sides immediately begin exchanging session messages over NFCv2 (`INS_ENVELOPE` / `INS_GET_RESPONSE`
- *      APDUs encapsulated in BER-TLV `DO'53'`) while the secondary BLE transport connects asynchronously in the
- *      background (`negotiatedTransport.open()` on the reader, [NfcHybridTransportMdoc.setTransport] on the mdoc).
- *    - Every outgoing message is sent over NFC (if still connected) **and** queued/sent on the secondary
- *      transport. Once the secondary transport finishes connecting, any backlog of messages sent prior to
- *      connection is flushed in order.
- *    - Incoming messages from both channels are funneled through `conveyMessage(message, fromNfc)` which uses
- *      per-channel sequence counters (`incomingMessagesNumViaNfc` and `incomingMessagesNumViaTransport` vs
- *      `incomingMessagesNumConveyed`) so the caller receives each logical message exactly once from whichever
- *      channel delivers it first, while duplicates arriving later on the slower channel are dropped.
- *    - If the holder pulls their phone out of the NFC field before the transaction finishes, the NFC channel
- *      fails gracefully (`nfcDisconnectedDuringTransaction = true`) and the session continues uninterrupted over
- *      the secondary BLE transport.
- * 2. **Run in NFC-only mode** ([MdocConnectionMethodNfcV2]):
- *    - No secondary transport is used (`isNfcOnly == true` on the mdoc, `negotiatedTransport == null` on the
- *      reader).
- *    - If the holder removes their phone while user consent or biometric authentication is in progress
- *      ([NfcHybridTransportMdoc.markResponsePending]), [NfcHybridTransportMdoc.sendMessage] suspends until the
- *      phone is re-tapped (`isNfcConnected` transitions back to `true` when the reader resends the request on the
- *      second tap), ignoring the duplicate re-tap request and delivering the pending response.
- *
- * ### Test doubles used in this file
- * - [FakeSecondaryTransport]: Controllable in-memory [MdocTransport] stand-in for the negotiated BLE transport.
- *   Supports pausing `open()` via `openGate` so tests can send messages over NFC while BLE is still connecting
- *   and then verify that the pending outgoing backlog is flushed when `openGate` completes.
- * - [FakeNfcV2Tag]: In-memory [NfcIsoTag] for [NfcHybridTransportMdocReader] that returns queued `DO'53'`
- *   responses or throws [NfcTagLostException] when `failTransceive` is set to simulate the phone leaving the
- *   NFC field mid-transaction.
+ * Unit tests for [NfcCceTransportMdoc] and [NfcCceTransportMdocReader], which implement the
+ * ISO/IEC 18013-5 Second Edition Clause 9.5 NFC Concurrent Channel Engagement (CCE) transport
+ * for the wallet (mdoc) and reader roles.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class NfcHybridTransportTest {
+class NfcCceTransportTest {
     private lateinit var senderKey: EcPublicKey
 
     @BeforeTest
@@ -86,7 +55,7 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies message deduplication and [MdocTransportStats] tracking on [NfcHybridTransportMdoc]
+     * Verifies message deduplication and [MdocTransportStats] tracking on [NfcCceTransportMdoc]
      * when both NFC and a secondary transport are active:
      * - Message 1 arrives on NFC first and is conveyed; its later arrival on the secondary transport is dropped.
      * - Message 2 arrives on the secondary transport first and is conveyed; its later arrival on NFC is dropped.
@@ -96,7 +65,7 @@ class NfcHybridTransportTest {
     fun mdocDeduplicatesMessagesAndTracksStats() = runTest {
         withContext(Dispatchers.Default) {
             val nfcSentMessages = mutableListOf<ByteString>()
-            val mdoc = NfcHybridTransportMdoc(
+            val mdoc = NfcCceTransportMdoc(
                 sendMessageViaNfc = { msg ->
                     nfcSentMessages.add(msg)
                     true
@@ -150,17 +119,17 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies that messages sent by [NfcHybridTransportMdoc] before [NfcHybridTransportMdoc.setTransport]
+     * Verifies that messages sent by [NfcCceTransportMdoc] before [NfcCceTransportMdoc.setTransport]
      * is called are buffered and flushed in order as soon as the secondary transport is attached, even if
      * the NFC link dropped (`sendMessageViaNfc` returned `false`) before the second message was sent.
-     * Also verifies that calling [NfcHybridTransportMdoc.setTransport] after `close()` immediately closes
+     * Also verifies that calling [NfcCceTransportMdoc.setTransport] after `close()` immediately closes
      * the late transport rather than leaking it.
      */
     @Test
     fun mdocFlushesBacklogWhenSecondaryTransportConnectsLate() = runTest {
         val nfcSentMessages = mutableListOf<ByteString>()
         var nfcUp = true
-        val mdoc = NfcHybridTransportMdoc(
+        val mdoc = NfcCceTransportMdoc(
             sendMessageViaNfc = { msg ->
                 if (nfcUp) {
                     nfcSentMessages.add(msg)
@@ -202,9 +171,9 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies the NFC-only multi-tap flow on [NfcHybridTransportMdoc]:
+     * Verifies the NFC-only multi-tap flow on [NfcCceTransportMdoc]:
      * 1. Tap 1 delivers the initial request over NFC (`onMessageReceivedViaNfc`).
-     * 2. The mdoc calls [NfcHybridTransportMdoc.markResponsePending] (e.g. while showing a consent/biometric
+     * 2. The mdoc calls [NfcCceTransportMdoc.markResponsePending] (e.g. while showing a consent/biometric
      *    prompt) and the user removes the phone from the RF field (`onNfcDeactivated(LINK_LOSS)`).
      * 3. When the mdoc calls `sendMessage(response)` while NFC is disconnected, `sendMessage()` suspends
      *    waiting for `isNfcConnected` to become `true`.
@@ -216,7 +185,7 @@ class NfcHybridTransportTest {
     fun mdocNfcOnlyMultiTapIgnoresReTapMessageWhileResponsePendingAndWaitsForReTap() = runTest {
         var nfcConnected = false
         val nfcSent = mutableListOf<ByteString>()
-        val mdoc = NfcHybridTransportMdoc(
+        val mdoc = NfcCceTransportMdoc(
             sendMessageViaNfc = { msg ->
                 if (nfcConnected) {
                     nfcSent.add(msg)
@@ -262,12 +231,12 @@ class NfcHybridTransportTest {
 
     /**
      * Verifies that in NFC-only mode, if `sendMessage()` suspends waiting for a re-tap and `sendMessageViaNfc`
-     * still returns `false` after the re-tap occurs, [NfcHybridTransportMdoc] transitions to
+     * still returns `false` after the re-tap occurs, [NfcCceTransportMdoc] transitions to
      * [MdocTransport.State.FAILED] and throws [MdocTransportException].
      */
     @Test
     fun mdocNfcOnlyFailsWhenSendAfterReTapStillFails() = runTest {
-        val mdoc = NfcHybridTransportMdoc(
+        val mdoc = NfcCceTransportMdoc(
             sendMessageViaNfc = { false }
         )
         mdoc.open(senderKey)
@@ -288,23 +257,23 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies [NfcHybridTransportMdocReader] when paired with a secondary transport:
+     * Verifies [NfcCceTransportMdocReader] when paired with a secondary transport:
      * 1. While the secondary transport is still opening (`openGate` incomplete), `request1` is sent and
      *    `response1` is received over NFC.
      * 2. When `secondary.open()` completes (`openGate.complete(Unit)`), `request1` is flushed from
      *    `negotiatedTransportPendingOutgoingMessages` onto the secondary transport, and a duplicate
      *    `response1` arriving over the secondary transport is suppressed.
      * 3. When the NFC tag is subsequently lost (`tag.failTransceive = true`), `request2` / `response2`
-     *    seamlessly fail over to the secondary transport without failing the hybrid reader transport.
+     *    seamlessly fail over to the secondary transport without failing the CCE reader transport.
      */
     @Test
-    fun readerHybridTransportDeduplicationBacklogAndFailover() = runTest {
+    fun readerCceTransportDeduplicationBacklogAndFailover() = runTest {
         withContext(Dispatchers.Default) {
-            val tag = FakeNfcV2Tag()
+            val tag = FakeNfcCceTag()
             val secondary = FakeSecondaryTransport(role = MdocRole.MDOC_READER).apply {
                 openGate = CompletableDeferred()
             }
-            val reader = NfcHybridTransportMdocReader(
+            val reader = NfcCceTransportMdocReader(
                 nfcTag = tag,
                 negotiatedTransport = secondary
             )
@@ -358,22 +327,22 @@ class NfcHybridTransportTest {
     }
 
     /**
-     * Verifies that when [NfcHybridTransportMdocReader] is operating in NFC-only mode
-     * (`negotiatedTransport == null`) and the NFC tag is lost during `nfcV2Transact`, there is no secondary
+     * Verifies that when [NfcCceTransportMdocReader] is operating in NFC-only mode
+     * (`negotiatedTransport == null`) and the NFC tag is lost during `nfcCceTransact`, there is no secondary
      * transport to fail over to, so `waitForMessage()` throws [MdocTransportException] and the transport
      * transitions to [MdocTransport.State.FAILED].
      */
     @Test
     fun readerNfcOnlyFailsWhenNfcFails() = runTest {
         withContext(Dispatchers.Default) {
-            val tag = FakeNfcV2Tag().apply {
+            val tag = FakeNfcCceTag().apply {
                 failTransceive = true
             }
-            val reader = NfcHybridTransportMdocReader(
+            val reader = NfcCceTransportMdocReader(
                 nfcTag = tag,
                 negotiatedTransport = null
             )
-            assertTrue(reader.connectionMethod is MdocConnectionMethodNfcV2)
+            assertNull(reader.connectionMethod)
 
             reader.open(senderKey)
             reader.sendMessage(byteArrayOf(1, 2, 3))
@@ -388,11 +357,163 @@ class NfcHybridTransportTest {
     }
 
     /**
+     * Verifies ISO/IEC 18013-5 Second Edition Clause 9.5.5 sequence-number deduplication and
+     * byte-for-byte identity verification:
+     * - Identical messages with the same `"seq"` on both channels are deduplicated.
+     * - Non-identical messages with the same `"seq"` cause the transport to fail with
+     *   [MdocTransportException].
+     */
+    @Test
+    fun sequenceNumberDeduplicationAndMismatchFailure() = runTest {
+        withContext(Dispatchers.Default) {
+            val mdoc = NfcCceTransportMdoc(
+                sendMessageViaNfc = { true }
+            )
+            mdoc.setExpectTransport(true)
+            mdoc.open(senderKey)
+
+            val secondary = FakeSecondaryTransport(role = MdocRole.MDOC)
+            secondary.open(senderKey)
+            mdoc.setTransport(secondary)
+
+            val msgSeq1 = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(1, 2, 3))
+                put("seq", 1L)
+            })
+            mdoc.onMessageReceivedViaNfc(ByteString(msgSeq1))
+            assertContentEquals(msgSeq1, mdoc.waitForMessage())
+
+            // Identical msgSeq1 on secondary transport is deduplicated without error
+            secondary.incomingChannel.send(msgSeq1)
+
+            // Now send msgSeq3 on NFC, then a DIFFERENT payload with seq = 3 on secondary transport
+            val msgSeq3Nfc = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(4, 5, 6))
+                put("seq", 3L)
+            })
+            val msgSeq3BleTampered = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(4, 5, 99))
+                put("seq", 3L)
+            })
+            mdoc.onMessageReceivedViaNfc(ByteString(msgSeq3Nfc))
+            assertContentEquals(msgSeq3Nfc, mdoc.waitForMessage())
+
+            secondary.incomingChannel.send(msgSeq3BleTampered)
+            assertFailsWith<MdocTransportException> {
+                withTimeout(5.seconds) {
+                    mdoc.waitForMessage()
+                }
+            }
+            assertEquals(MdocTransport.State.FAILED, mdoc.state.value)
+            mdoc.close()
+        }
+    }
+
+    /**
+     * Verifies ISO/IEC 18013-5 Second Edition Clause 9.5.5 Note 1 backlog pruning:
+     * When a message with `"seq": 1` is sent over NFC before the secondary transport connects, and
+     * a response with `"seq": 2` arrives over NFC confirming receipt of `"seq": 1`, `"seq": 1` is
+     * pruned from the pending secondary transport backlog so it is not re-sent when BLE connects.
+     */
+    @Test
+    fun backlogPrunedWhenConfirmedByHigherSequenceNumberOverNfc() = runTest {
+        withContext(Dispatchers.Default) {
+            val tag = FakeNfcCceTag()
+            val secondary = FakeSecondaryTransport(role = MdocRole.MDOC_READER).apply {
+                openGate = CompletableDeferred()
+            }
+            val reader = NfcCceTransportMdocReader(
+                nfcTag = tag,
+                negotiatedTransport = secondary
+            )
+            reader.open(senderKey)
+
+            val reqSeq1 = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(1, 2, 3))
+                put("seq", 1L)
+            })
+            val respSeq2 = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(4, 5, 6))
+                put("seq", 2L)
+            })
+            tag.responses.send(ByteString(respSeq2))
+
+            // Send reqSeq1 while BLE is still connecting; response respSeq2 arrives over NFC
+            reader.sendMessage(reqSeq1)
+            val gotResp = withTimeout(5.seconds) { reader.waitForMessage() }
+            assertContentEquals(respSeq2, gotResp)
+
+            // Now send reqSeq3 when NFC fails so reqSeq3 remains in the BLE backlog
+            tag.failTransceive = true
+            val reqSeq3 = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(7, 8, 9))
+                put("seq", 3L)
+            })
+            reader.sendMessage(reqSeq3)
+
+            // Complete BLE open(): reqSeq1 was confirmed by respSeq2 so only reqSeq3 should be flushed!
+            secondary.openGate!!.complete(Unit)
+            withTimeout(5.seconds) {
+                secondary.firstMessageSent.await()
+            }
+            assertEquals(1, secondary.sentMessages.size)
+            assertContentEquals(reqSeq3, secondary.sentMessages[0])
+
+            reader.close()
+        }
+    }
+
+    /**
+     * Verifies ISO/IEC 18013-5 Second Edition Clause 9.5.5 `"disconnectNfc": true` handling:
+     * Once a message with `"disconnectNfc": true` is sent (or received), subsequent outgoing
+     * messages are no longer transmitted over NFC and are only sent over the secondary transport.
+     */
+    @Test
+    fun disconnectNfcStopsSendingOverNfc() = runTest {
+        withContext(Dispatchers.Default) {
+            val nfcSentMessages = mutableListOf<ByteString>()
+            val mdoc = NfcCceTransportMdoc(
+                sendMessageViaNfc = { msg ->
+                    nfcSentMessages.add(msg)
+                    true
+                }
+            )
+            mdoc.setExpectTransport(true)
+            mdoc.open(senderKey)
+            assertFalse(mdoc.shouldSendDisconnectNfc)
+
+            val secondary = FakeSecondaryTransport(role = MdocRole.MDOC)
+            secondary.open(senderKey)
+            mdoc.setTransport(secondary)
+            assertTrue(mdoc.shouldSendDisconnectNfc)
+
+            // First message has disconnectNfc = true: it IS sent over both NFC and BLE
+            val msgWithDisconnect = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(1, 2, 3))
+                put("seq", 2L)
+                put("disconnectNfc", true)
+            })
+            mdoc.sendMessage(msgWithDisconnect)
+            assertEquals(1, nfcSentMessages.size)
+            assertEquals(1, secondary.sentMessages.size)
+            assertFalse(mdoc.shouldSendDisconnectNfc)
+
+            // Subsequent message must ONLY be sent over secondary transport, NOT over NFC
+            val msgAfterDisconnect = Cbor.encode(buildCborMap {
+                put("data", byteArrayOf(4, 5, 6))
+                put("seq", 4L)
+            })
+            mdoc.sendMessage(msgAfterDisconnect)
+            assertEquals(1, nfcSentMessages.size) // Still 1!
+            assertEquals(2, secondary.sentMessages.size)
+            assertContentEquals(msgAfterDisconnect, secondary.sentMessages[1])
+
+            mdoc.close()
+        }
+    }
+
+    /**
      * Controllable in-memory [MdocTransport] stand-in for a secondary (e.g. BLE) transport.
-     *
-     * If [openGate] is non-null, [open] suspends in [State.CONNECTING] until [openGate] is completed,
-     * allowing tests to exercise the window where NFC is already exchanging messages while BLE is still
-     * establishing a connection.
      */
     private class FakeSecondaryTransport(
         override val role: MdocRole
@@ -443,7 +564,7 @@ class NfcHybridTransportTest {
      * In-memory [NfcIsoTag] that encapsulates queued [responses] in BER-TLV `DO'53'` or throws
      * [NfcTagLostException] when [failTransceive] is `true`.
      */
-    private class FakeNfcV2Tag : NfcIsoTag() {
+    private class FakeNfcCceTag : NfcIsoTag() {
         override val maxTransceiveLength: Int = 65536
         var failTransceive = false
         var closed = false

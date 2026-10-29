@@ -135,14 +135,14 @@ class NfcTransportMdoc(
                 payload = chunk
             )
         } else {
-            if (outgoingChunksRemainingBytesAvailable <= leReceived + 255) {
+            if (outgoingChunksRemainingBytesAvailable <= 255) {
                 /* If Le < the number of available bytes ≤ Le + 255, the mdoc shall
                  * include as many bytes in the response as indicated by Le and shall
                  * set the status words to ’61 XX’, where XX is the number of available
                  * bytes remaining. The mdoc reader shall respond with a GET RESPONSE
                  * command where Le is set to XX.
                  */
-                val numBytesRemaining = outgoingChunksRemainingBytesAvailable - leReceived
+                val numBytesRemaining = outgoingChunksRemainingBytesAvailable
                 return ResponseApdu(
                     status = Nfc.RESPONSE_STATUS_CHAINING_RESPONSE_BYTES_STILL_AVAILABLE + numBytesRemaining.and(0xff),
                     payload = chunk

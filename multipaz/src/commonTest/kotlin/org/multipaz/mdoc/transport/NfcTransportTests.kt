@@ -154,8 +154,8 @@ ResponseApdu(status=24832, payload=ByteString(size=65272 hex=5383032000000000000
 CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
 ResponseApdu(status=24832, payload=ByteString(size=65272 hex=000000000000000000000000000000000000000... (65274 bytes)
 CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
-ResponseApdu(status=24869, payload=ByteString(size=65272 hex=000000000000000000000000000000000000000... (65274 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=37) (5 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=65272 hex=000000000000000000000000000000000000000... (65274 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=8989 hex=0000000000000000000000000000000000000000... (8991 bytes)
 close
             """.trimIndent().trim(),
@@ -218,10 +218,10 @@ ResponseApdu(status=24832, payload=ByteString(size=4089 hex=00000000000000000000
 CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
 ResponseApdu(status=24832, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
 CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
 ResponseApdu(status=24871, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
 CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=39) (5 bytes)
-ResponseApdu(status=24878, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=46) (5 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=39 hex=000000000000000000000000000000000000000000... (41 bytes)
 close
             """.trimIndent().trim(),

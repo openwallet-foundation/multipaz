@@ -42,7 +42,7 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.nfc.MdocHandoverType
-import org.multipaz.mdoc.nfc.MdocNfcV2EngagementHelper
+import org.multipaz.mdoc.nfc.MdocNfcCceEngagementHelper
 import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
 import org.multipaz.mdoc.nfc.mdocReaderNfcHandover
 import org.multipaz.mdoc.request.DeviceRequest
@@ -53,8 +53,8 @@ import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportException
-import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
-import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
+import org.multipaz.mdoc.transport.NfcCceTransportMdoc
+import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcDeactivationReason
 import org.multipaz.nfc.NfcIsoTag
@@ -88,7 +88,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class Iso18013PresentmentTest {
 
-    private class LoopbackIsoTag(var engagementHelper: MdocNfcV2EngagementHelper): NfcIsoTag() {
+    private class LoopbackIsoTag(var engagementHelper: MdocNfcCceEngagementHelper): NfcIsoTag() {
         override val maxTransceiveLength: Int get() = 65536
         override suspend fun close() {}
         override suspend fun updateDialogMessage(message: String) {}
@@ -146,16 +146,17 @@ class Iso18013PresentmentTest {
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
         lateinit var activeEngagementParamsFlow: MutableStateFlow<EngagementParams>
-        lateinit var mdocTransport: NfcHybridTransportMdoc
-        var currentEngagementHelper: MdocNfcV2EngagementHelper? = null
+        lateinit var mdocTransport: NfcCceTransportMdoc
+        var currentEngagementHelper: MdocNfcCceEngagementHelper? = null
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 val params = EngagementParams(
                     eDeviceKey = eDeviceKey,
                     deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
-                    handover = handover
+                    handover = handover,
+                    eReaderKey = receivedEReaderKey
                 )
                 activeEngagementParamsFlow = MutableStateFlow(params)
             },
@@ -165,7 +166,7 @@ class Iso18013PresentmentTest {
             onError = { error ->
                 fail("onError: $error")
             },
-            handoverPicker = { connectionMethods -> connectionMethods.first() }
+            handoverPicker = { null }
         )
         currentEngagementHelper = engagementHelper
 
@@ -173,18 +174,18 @@ class Iso18013PresentmentTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
 
-        val mdocReaderTransport = NfcHybridTransportMdocReader(
+        val mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = null
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 currentEngagementHelper?.sendMessage(message)
                 true
@@ -220,7 +221,9 @@ class Iso18013PresentmentTest {
             remotePublicKey = eDeviceKey.publicKey,
             encodedSessionTranscript = encodedSessionTranscript,
             insertSequenceNumbers = true
-        )
+        ).apply {
+            setSendSessionEstablishment(false)
+        }
 
         val deviceRequest = buildTestDeviceRequest(encodedSessionTranscript)
 
@@ -258,6 +261,120 @@ class Iso18013PresentmentTest {
         assertNotNull(receivedTelemetry!!.transportStats)
     }
 
+    /**
+     * Verifies ISO/IEC 18013-5 Second Edition Clause 12.2.4:
+     * If the curve of `EReaderKey` in `ReaderEngagement` (e.g. P-384) does not match the curve of
+     * `EDeviceKey` in `DeviceEngagement` (P-256), the reader generates a new `EReaderKey` on P-256
+     * and includes it in `SessionEstablishment`, and [Iso18013Presentment] falls back to the
+     * `EReaderKey` from `SessionEstablishment`.
+     */
+    @Test
+    fun testCceEReaderKeyCurveMismatchFallbackToSessionEstablishment() = runTest {
+        val presentmentSource = createTestPresentmentSource()
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKeyEngagement = Crypto.createEcPrivateKey(EcCurve.P384)
+        val eReaderKeySession = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        lateinit var activeEngagementParamsFlow: MutableStateFlow<EngagementParams>
+        lateinit var mdocTransport: NfcCceTransportMdoc
+        var currentEngagementHelper: MdocNfcCceEngagementHelper? = null
+
+        val engagementHelper = MdocNfcCceEngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
+                assertEquals(EcCurve.P384, receivedEReaderKey.curve)
+                val params = EngagementParams(
+                    eDeviceKey = eDeviceKey,
+                    deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
+                    handover = handover,
+                    eReaderKey = receivedEReaderKey
+                )
+                activeEngagementParamsFlow = MutableStateFlow(params)
+            },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error ->
+                fail("onError: $error")
+            },
+            handoverPicker = { null }
+        )
+        currentEngagementHelper = engagementHelper
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = emptyList(),
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKeyEngagement)
+        )
+        assertNotNull(handoverResult)
+
+        val mdocReaderTransport = NfcCceTransportMdocReader(
+            nfcTag = tag,
+            negotiatedTransport = null
+        )
+        mdocReaderTransport.open(eReaderKeySession.publicKey)
+
+        mdocTransport = NfcCceTransportMdoc(
+            sendMessageViaNfc = { message ->
+                currentEngagementHelper?.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(eDeviceKey.publicKey)
+
+        val presentmentJob = launch {
+            Iso18013Presentment(
+                transport = mdocTransport,
+                engagementParams = activeEngagementParamsFlow,
+                source = presentmentSource,
+                keyAgreementPossible = listOf(EcCurve.P256),
+                insertSequenceNumbers = true,
+                timeout = null,
+                timeoutSubsequentRequests = null
+            )
+        }
+
+        val params = activeEngagementParamsFlow.value
+        val encodedCoseKey = Cbor.encode(eReaderKeySession.publicKey.toCoseKey().toDataItem())
+        val sessionTranscript = buildCborArray {
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(params.deviceEngagement))))
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCoseKey)))
+            add(params.handover)
+        }
+        val encodedSessionTranscript = Cbor.encode(sessionTranscript)
+        val readerEncryption = SessionEncryption(
+            role = MdocRole.MDOC_READER,
+            eSelfKey = eReaderKeySession,
+            remotePublicKey = eDeviceKey.publicKey,
+            encodedSessionTranscript = encodedSessionTranscript,
+            insertSequenceNumbers = true
+        )
+
+        val deviceRequest = buildTestDeviceRequest(encodedSessionTranscript)
+        val encryptedRequest = readerEncryption.encryptMessage(
+            messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
+            statusCode = null
+        )
+        mdocReaderTransport.sendMessage(encryptedRequest)
+
+        val encryptedResponse = mdocReaderTransport.waitForMessage()
+        val (responseBytes, _) = readerEncryption.decryptMessage(encryptedResponse)
+        assertNotNull(responseBytes)
+
+        val deviceResponse = DeviceResponse.fromDataItem(Cbor.decode(responseBytes))
+        deviceResponse.verify(sessionTranscript = sessionTranscript)
+        assertEquals(1, deviceResponse.documents.size)
+
+        mdocReaderTransport.sendMessage(
+            SessionEncryption.encodeStatus(
+                statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                sequenceNumber = readerEncryption.nextSequenceNumber
+            )
+        )
+        presentmentJob.join()
+    }
+
     @Test
     fun testTwoTapPresentmentSuccess() = runTest {
         val presentmentSource = createTestPresentmentSource()
@@ -266,16 +383,17 @@ class Iso18013PresentmentTest {
         val eReaderKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
 
         lateinit var activeEngagementParamsFlow: MutableStateFlow<EngagementParams>
-        lateinit var mdocTransport: NfcHybridTransportMdoc
-        var currentEngagementHelper: MdocNfcV2EngagementHelper? = null
+        lateinit var mdocTransport: NfcCceTransportMdoc
+        var currentEngagementHelper: MdocNfcCceEngagementHelper? = null
 
-        val engagementHelper1 = MdocNfcV2EngagementHelper(
+        val engagementHelper1 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 val params = EngagementParams(
                     eDeviceKey = eDeviceKey,
                     deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
-                    handover = handover
+                    handover = handover,
+                    eReaderKey = receivedEReaderKey
                 )
                 activeEngagementParamsFlow = MutableStateFlow(params)
             },
@@ -283,14 +401,14 @@ class Iso18013PresentmentTest {
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error -> fail("Engagement 1 error: $error") },
-            handoverPicker = { connectionMethods -> connectionMethods.first() }
+            handoverPicker = { null }
         )
         currentEngagementHelper = engagementHelper1
 
         val tag1 = LoopbackIsoTag(engagementHelper1)
-        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useNfcV2 = true))
+        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey1))
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 currentEngagementHelper?.sendMessage(message)
                 true
@@ -316,28 +434,28 @@ class Iso18013PresentmentTest {
         mdocTransport.onNfcDeactivated(NfcDeactivationReason.LINK_LOSS)
 
         // Tap 2 re-tap setup
-        val engagementHelper2 = MdocNfcV2EngagementHelper(
+        val engagementHelper2 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 activeEngagementParamsFlow.value = EngagementParams(
                     eDeviceKey = eDeviceKey,
                     deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
                     handover = handover,
-                    eReaderKey = eReaderKey2.publicKey
+                    eReaderKey = receivedEReaderKey
                 )
             },
             onMessageReceived = { message ->
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error -> fail("Engagement 2 error: $error") },
-            handoverPicker = { connectionMethods -> connectionMethods.first() }
+            handoverPicker = { null }
         )
         currentEngagementHelper = engagementHelper2
 
         val tag2 = LoopbackIsoTag(engagementHelper2)
-        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useNfcV2 = true))
+        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
 
-        val mdocReaderTransport2 = NfcHybridTransportMdocReader(tag2, null)
+        val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
         mdocReaderTransport2.open(eReaderKey2.publicKey)
 
         val params2 = activeEngagementParamsFlow.value
@@ -392,16 +510,17 @@ class Iso18013PresentmentTest {
         val eReaderKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
 
         lateinit var activeEngagementParamsFlow: MutableStateFlow<EngagementParams>
-        lateinit var mdocTransport: NfcHybridTransportMdoc
-        var currentEngagementHelper: MdocNfcV2EngagementHelper? = null
+        lateinit var mdocTransport: NfcCceTransportMdoc
+        var currentEngagementHelper: MdocNfcCceEngagementHelper? = null
 
-        val engagementHelper1 = MdocNfcV2EngagementHelper(
+        val engagementHelper1 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 val params = EngagementParams(
                     eDeviceKey = eDeviceKey,
                     deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
-                    handover = handover
+                    handover = handover,
+                    eReaderKey = receivedEReaderKey
                 )
                 activeEngagementParamsFlow = MutableStateFlow(params)
             },
@@ -409,14 +528,14 @@ class Iso18013PresentmentTest {
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error -> fail("Engagement 1 error: $error") },
-            handoverPicker = { connectionMethods -> connectionMethods.first() }
+            handoverPicker = { null }
         )
         currentEngagementHelper = engagementHelper1
 
         val tag1 = LoopbackIsoTag(engagementHelper1)
-        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useNfcV2 = true))
+        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey1))
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 currentEngagementHelper?.sendMessage(message)
                 true
@@ -447,28 +566,28 @@ class Iso18013PresentmentTest {
         mdocTransport.onNfcDeactivated(NfcDeactivationReason.LINK_LOSS)
 
         // Tap 2 re-tap
-        val engagementHelper2 = MdocNfcV2EngagementHelper(
+        val engagementHelper2 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { _, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 activeEngagementParamsFlow.value = EngagementParams(
                     eDeviceKey = eDeviceKey,
                     deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
                     handover = handover,
-                    eReaderKey = eReaderKey2.publicKey
+                    eReaderKey = receivedEReaderKey
                 )
             },
             onMessageReceived = { message ->
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error -> fail("Engagement 2 error: $error") },
-            handoverPicker = { connectionMethods -> connectionMethods.first() }
+            handoverPicker = { null }
         )
         currentEngagementHelper = engagementHelper2
 
         val tag2 = LoopbackIsoTag(engagementHelper2)
-        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useNfcV2 = true))
+        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
 
-        val mdocReaderTransport2 = NfcHybridTransportMdocReader(tag2, null)
+        val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
         mdocReaderTransport2.open(eReaderKey2.publicKey)
 
         val params2 = activeEngagementParamsFlow.value

@@ -146,19 +146,21 @@ class SessionEncryption(
      * The default value for these counters for a fresh [SessionEncryption] object are both 1.
      *
      * @param decryptedCounter the value to use for the decryption counter.
-     * @param encryptedCounter the value to use for the decryption counter.
+     * @param encryptedCounter the value to use for the encryption counter.
+     * @param nextSequenceNumber the value to use for the next sequence number when [insertSequenceNumbers] is `true`.
      */
     fun setEncryptionCounters(
         decryptedCounter: Int,
         encryptedCounter: Int,
+        nextSequenceNumber: Int = this.nextSequenceNumber_,
     ) {
         this.decryptedCounter = decryptedCounter
         this.encryptedCounter = encryptedCounter
+        this.nextSequenceNumber_ = nextSequenceNumber
     }
 
     /**
      * Encrypt a message intended for the remote device.
-     *
      *
      * This method returns `SessionEstablishment` CBOR for the first call and
      * `SessionData` CBOR for subsequent calls. These CBOR data structures are
@@ -167,12 +169,15 @@ class SessionEncryption(
      * @param messagePlaintext if not `null`, the message to encrypt and include
      * in `SessionData`.
      * @param statusCode if set, the status code to include in `SessionData`.
+     * @param disconnectNfc if `true`, includes `"disconnectNfc": true` in the message as per ISO/IEC 18013-5
+     *   Second Edition clause 9.5.5 and 12.2.4.
      * @return the bytes of the `SessionEstablishment` or `SessionData`
      * CBOR as described above.
      */
     suspend fun encryptMessage(
         messagePlaintext: ByteArray?,
-        statusCode: Long?
+        statusCode: Long?,
+        disconnectNfc: Boolean = false
     ): ByteArray {
         ensureInitialized()
         var messageCiphertext: ByteArray? = null
@@ -207,6 +212,9 @@ class SessionEncryption(
             if (insertSequenceNumbers) {
                 put("seq", nextSequenceNumber_)
             }
+            if (disconnectNfc) {
+                put("disconnectNfc", true)
+            }
             nextSequenceNumber_++
         })
         sessionEstablishmentSent = true
@@ -216,9 +224,8 @@ class SessionEncryption(
     /**
      * Decrypts a message received from the remote device.
      *
-     *
      * This method expects the passed-in data to conform to the `SessionData`
-     * DDL as defined in ISO 18013-5 9.1.1 Session encryption.
+     * CDDL as defined in ISO 18013-5 9.1.1 Session encryption.
      *
      * @param messageData the bytes of the `SessionData` CBOR as described above.
      * @return The decrypted message as data and status.
@@ -230,6 +237,19 @@ class SessionEncryption(
     ): Pair<ByteArray?, Long?> {
         ensureInitialized()
         val map = Cbor.decode(messageData)
+        if (insertSequenceNumbers) {
+            val seqDataItem = map.getOrNull("seq")
+                ?: throw IllegalArgumentException("Expected seq in SessionData when insertSequenceNumbers is true")
+            val seq = seqDataItem.asNumber.toInt()
+            require(seq == nextSequenceNumber_) {
+                "Expected sequence number $nextSequenceNumber_, got $seq"
+            }
+            nextSequenceNumber_ += 1
+        } else {
+            require(!map.hasKey("seq")) {
+                "Unexpected seq in SessionData when insertSequenceNumbers is false"
+            }
+        }
         val dataDataItem = map.getOrNull("data")
         var messageCiphertext: ByteArray? = null
         if (dataDataItem != null) {
@@ -274,16 +294,21 @@ class SessionEncryption(
          *
          * @param statusCode the intended status code, with value as defined in ISO/IEC 18013-5 Table 20.
          * @param sequenceNumber optional sequence number or `null`
+         * @param disconnectNfc if `true`, includes `"disconnectNfc": true` in the message.
          * @return a byte array with the encoded CBOR message
          */
         fun encodeStatus(
             statusCode: Long,
             sequenceNumber: Int? = null,
+            disconnectNfc: Boolean = false
         ): ByteArray = Cbor.encode(
             buildCborMap {
                 put("status", statusCode)
                 sequenceNumber?.let {
                     put("seq", it)
+                }
+                if (disconnectNfc) {
+                    put("disconnectNfc", true)
                 }
             }
         )

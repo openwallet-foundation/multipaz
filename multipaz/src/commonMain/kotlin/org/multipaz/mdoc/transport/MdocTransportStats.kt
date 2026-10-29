@@ -49,7 +49,7 @@ enum class TransportWarningCode {
     /** NFC field disconnected and the session waited for the user to re-tap. */
     NFC_DISCONNECTED_WAITING_FOR_RETAP,
 
-    /** Secondary transport in NFCv2 hybrid mode failed to open while NFC continued. */
+    /** Secondary transport in NFC CCE hybrid mode failed to open while NFC continued. */
     NFC_SECONDARY_TRANSPORT_FAILED,
 
     /** Failed to send session termination message during transport cleanup. */
@@ -90,10 +90,10 @@ data class TransportWarning(
  * @property bleNumL2capConnectRetries number of L2CAP socket connection retries after initial failure.
  * @property bleNumChunksSent number of GATT characteristic chunks sent.
  * @property bleNumChunksReceived number of GATT characteristic chunks received.
- * @property nfcHybridNumSentViaNfc number of messages sent via the NFC channel in NFCv2 modes.
- * @property nfcHybridNumSentViaTransport number of messages sent via the secondary transport in NFCv2 hybrid modes.
- * @property nfcHybridNumReceivedFirstOnNfc number of messages received first on NFC in NFCv2 modes.
- * @property nfcHybridNumReceivedFirstOnTransport number of messages received first on the secondary transport in NFCv2 hybrid modes.
+ * @property nfcHybridNumSentViaNfc number of messages sent via the NFC channel in NFC CCE modes.
+ * @property nfcHybridNumSentViaTransport number of messages sent via the secondary transport in NFC CCE hybrid modes.
+ * @property nfcHybridNumReceivedFirstOnNfc number of messages received first on NFC in NFC CCE modes.
+ * @property nfcHybridNumReceivedFirstOnTransport number of messages received first on the secondary transport in NFC CCE hybrid modes.
  * @property nfcDisconnectedDuringTransaction `true` if the NFC field disconnected during the transaction.
  */
 @CborSerializable

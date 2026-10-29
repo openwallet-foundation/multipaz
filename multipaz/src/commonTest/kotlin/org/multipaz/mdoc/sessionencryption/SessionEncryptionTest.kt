@@ -32,7 +32,9 @@ import kotlin.test.assertFalse
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SessionEncryptionTest {
     @BeforeTest
@@ -258,5 +260,83 @@ class SessionEncryptionTest {
     @Test
     fun testX448() = runTest {
         testCurve(EcCurve.X448)
+    }
+
+    @Test
+    fun testCceSharedSequenceNumbersAndDisconnectNfc() = runTest {
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encodedSessionTranscript = byteArrayOf(1, 2, 3)
+
+        val readerEncryption = SessionEncryption(
+            role = MdocRole.MDOC_READER,
+            eSelfKey = eReaderKey,
+            remotePublicKey = eDeviceKey.publicKey,
+            encodedSessionTranscript = encodedSessionTranscript,
+            insertSequenceNumbers = true
+        ).apply {
+            setSendSessionEstablishment(false)
+        }
+        val holderEncryption = SessionEncryption(
+            role = MdocRole.MDOC,
+            eSelfKey = eDeviceKey,
+            remotePublicKey = eReaderKey.publicKey,
+            encodedSessionTranscript = encodedSessionTranscript,
+            insertSequenceNumbers = true
+        )
+
+        assertEquals(0, readerEncryption.nextSequenceNumber)
+        assertEquals(0, holderEncryption.nextSequenceNumber)
+
+        // 1. Reader encrypts request -> seq = 0, reader nextSequenceNumber becomes 1
+        val req1Plain = byteArrayOf(10, 20, 30)
+        val req1Cipher = readerEncryption.encryptMessage(req1Plain, null)
+        assertEquals(1, readerEncryption.nextSequenceNumber)
+        assertEquals(0L, Cbor.decode(req1Cipher)["seq"].asNumber)
+        assertFalse(Cbor.decode(req1Cipher).hasKey("disconnectNfc"))
+
+        // Holder decrypts request -> validates seq = 0, holder nextSequenceNumber becomes 1
+        val (decryptedReq1, status1) = holderEncryption.decryptMessage(req1Cipher)
+        assertContentEquals(req1Plain, decryptedReq1)
+        assertNull(status1)
+        assertEquals(1, holderEncryption.nextSequenceNumber)
+
+        // Replaying req1Cipher (seq = 0 when holder expects 1) must throw IllegalArgumentException
+        assertFailsWith<IllegalArgumentException> {
+            holderEncryption.decryptMessage(req1Cipher)
+        }
+
+        // 2. Holder encrypts response with disconnectNfc = true -> seq = 1, holder nextSequenceNumber becomes 2
+        val resp1Plain = byteArrayOf(40, 50, 60)
+        val resp1Cipher = holderEncryption.encryptMessage(
+            messagePlaintext = resp1Plain,
+            statusCode = null,
+            disconnectNfc = true
+        )
+        assertEquals(2, holderEncryption.nextSequenceNumber)
+        val decodedResp1 = Cbor.decode(resp1Cipher)
+        assertEquals(1L, decodedResp1["seq"].asNumber)
+        assertTrue(decodedResp1["disconnectNfc"].asBoolean)
+
+        // Reader decrypts response -> validates seq = 1, reader nextSequenceNumber becomes 2
+        val (decryptedResp1, status2) = readerEncryption.decryptMessage(resp1Cipher)
+        assertContentEquals(resp1Plain, decryptedResp1)
+        assertNull(status2)
+        assertEquals(2, readerEncryption.nextSequenceNumber)
+
+        // 3. Reader encodes status termination with seq = 2 and disconnectNfc = true
+        val termMsg = SessionEncryption.encodeStatus(
+            statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+            sequenceNumber = readerEncryption.nextSequenceNumber,
+            disconnectNfc = true
+        )
+        val decodedTerm = Cbor.decode(termMsg)
+        assertEquals(2L, decodedTerm["seq"].asNumber)
+        assertTrue(decodedTerm["disconnectNfc"].asBoolean)
+
+        val (decryptedTerm, termStatus) = holderEncryption.decryptMessage(termMsg)
+        assertNull(decryptedTerm)
+        assertEquals(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION, termStatus)
+        assertEquals(3, holderEncryption.nextSequenceNumber)
     }
 }

@@ -7,8 +7,8 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
+import kotlin.math.min
 import kotlin.random.Random
-import kotlin.random.asKotlinRandom
 import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
@@ -130,7 +130,7 @@ actual object Crypto {
             return sb.toString()
         }
 
-    actual val secureRandom: Random = SecureRandom().asKotlinRandom()
+    actual val secureRandom: Random = JvmSecureRandom()
 
     init {
     }
@@ -797,4 +797,68 @@ internal fun generatePrivateKeyInfo(
         ASN1OctetString(derEncodedPrivateKey)
     ))
     return ASN1.encode(seq)
+}
+
+private class JvmSecureRandom : Random() {
+    companion object {
+        // NIST SP 800-90A limits Hash_DRBG/HMAC_DRBG requests to 2^19 bits (32,768 bytes),
+        // which BouncyCastle's SP800SecureRandom enforces per nextBytes() call.
+        private const val MAX_CHUNK_SIZE = 32768
+    }
+
+    private val secureRandom = SecureRandom()
+
+    override fun nextBits(bitCount: Int): Int {
+        require(bitCount in 0..32) { "bitCount must be between 0 and 32" }
+        if (bitCount == 0) return 0
+        val bytes = ByteArray(4)
+        secureRandom.nextBytes(bytes)
+        val intValue = (bytes[0].toInt() and 0xFF shl 24) or
+                (bytes[1].toInt() and 0xFF shl 16) or
+                (bytes[2].toInt() and 0xFF shl 8) or
+                (bytes[3].toInt() and 0xFF)
+        return intValue ushr (32 - bitCount)
+    }
+
+    override fun nextBytes(array: ByteArray, fromIndex: Int, toIndex: Int): ByteArray {
+        require(fromIndex in 0..array.size && toIndex in 0..array.size && fromIndex <= toIndex) {
+            "fromIndex ($fromIndex) or toIndex ($toIndex) out of range [0, ${array.size}]"
+        }
+        if (fromIndex == 0 && toIndex == array.size && array.size <= MAX_CHUNK_SIZE) {
+            if (array.isNotEmpty()) {
+                secureRandom.nextBytes(array)
+            }
+            return array
+        }
+        var offset = fromIndex
+        while (offset < toIndex) {
+            val chunkSize = min(toIndex - offset, MAX_CHUNK_SIZE)
+            val temp = ByteArray(chunkSize)
+            secureRandom.nextBytes(temp)
+            temp.copyInto(array, destinationOffset = offset)
+            offset += chunkSize
+        }
+        return array
+    }
+
+    override fun nextBytes(array: ByteArray): ByteArray =
+        nextBytes(array, 0, array.size)
+
+    override fun nextBytes(size: Int): ByteArray =
+        nextBytes(ByteArray(size))
+
+    override fun nextInt(): Int = secureRandom.nextInt()
+
+    override fun nextInt(until: Int): Int {
+        require(until > 0) { "until must be positive, but was $until" }
+        return secureRandom.nextInt(until)
+    }
+
+    override fun nextLong(): Long = secureRandom.nextLong()
+
+    override fun nextBoolean(): Boolean = secureRandom.nextBoolean()
+
+    override fun nextDouble(): Double = secureRandom.nextDouble()
+
+    override fun nextFloat(): Float = secureRandom.nextFloat()
 }

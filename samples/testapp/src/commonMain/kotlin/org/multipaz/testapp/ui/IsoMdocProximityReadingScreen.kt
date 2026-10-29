@@ -694,7 +694,7 @@ fun IsoMdocProximityReadingScreen(
                                         existingTransport = scanResult.transport,
                                         handover = scanResult.handover,
                                         allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
-                                        insertSequenceNumbers = scanResult.type == MdocHandoverType.V2_HANDOVER,
+                                        insertSequenceNumbers = scanResult.type == MdocHandoverType.CCE_HANDOVER,
                                         bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                         bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                         showToast = showToast,
@@ -705,6 +705,7 @@ fun IsoMdocProximityReadingScreen(
                                         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
                                         readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
                                         eReaderKey = eReaderKey,
+                                        existingEReaderKey = scanResult.eReaderKey,
                                         durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent,
                                         durationRequestSentToResponseReceived = durationRequestSentToResponseReceived,
                                         requestSelected = requestSelected,
@@ -735,7 +736,7 @@ fun IsoMdocProximityReadingScreen(
                                     val nfcEngagementType = when (scanResult.type) {
                                         MdocHandoverType.STATIC_HANDOVER -> "NFC Static Handover"
                                         MdocHandoverType.NEGOTIATED_HANDOVER -> "NFC Negotiated Handover"
-                                        MdocHandoverType.V2_HANDOVER -> "NFC Handover V2"
+                                        MdocHandoverType.CCE_HANDOVER -> "NFC Concurrent Channel Engagement"
                                     }
                                     val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
                                     val session = readerSession.value!!
@@ -758,7 +759,8 @@ fun IsoMdocProximityReadingScreen(
                                         /* eReaderKey */ eReaderKey.value!!,
                                         /* metadata = */ ShowResponseMetadata(
                                             engagementType = nfcEngagementType,
-                                            transferProtocol = scanResult.transport.connectionMethod.toString(),
+                                            transferProtocol = scanResult.transport.connectionMethod?.toString()
+                                                ?: "NFC (CCE)",
                                             requestSize = readerMostRecentDeviceRequest.value?.size?.toLong() ?: 0L,
                                             responseSize = readerMostRecentDeviceResponse.value?.size?.toLong() ?: 0L,
                                             durationMsecNfcTapToEngagement = scanResult.processingDuration.inWholeMilliseconds,
@@ -783,7 +785,7 @@ fun IsoMdocProximityReadingScreen(
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useNfcV2 = false), nfcOnly = false)
+                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = false), nfcOnly = false)
                             readerMostRecentDeviceResponse.value = null
                             eReaderKey.value = null
                         },
@@ -793,21 +795,21 @@ fun IsoMdocProximityReadingScreen(
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useNfcV2 = true), nfcOnly = false)
+                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = true), nfcOnly = false)
                             readerMostRecentDeviceResponse.value = null
                             eReaderKey.value = null
                         },
-                        content = { Text("Request mdoc via NFCv2") }
+                        content = { Text("Request mdoc via NFC CCE") }
                     )
                 }
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useNfcV2 = true), nfcOnly = true)
+                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = true), nfcOnly = true)
                             readerMostRecentDeviceResponse.value = null
                             eReaderKey.value = null
                         },
-                        content = { Text("Request mdoc via NFCv2 (NFC only)") }
+                        content = { Text("Request mdoc via NFC CCE (NFC only)") }
                     )
                 }
 
@@ -882,6 +884,7 @@ private suspend fun doReaderFlow(
     readerMostRecentDeviceRequest: MutableState<ByteArray?>,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
     eReaderKey: MutableState<EcPrivateKey?>,
+    existingEReaderKey: EcPrivateKey? = null,
     durationEngagementReceivedToRequestSent: MutableState<Duration?>,
     durationRequestSentToResponseReceived: MutableState<Duration?>,
     requestSelected: MutableState<RequestPickerEntry>,
@@ -893,7 +896,8 @@ private suspend fun doReaderFlow(
     val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement.toByteArray()))
     val eDeviceKey = deviceEngagement.eDeviceKey
     Logger.i(TAG, "Using curve ${eDeviceKey.curve.name} for session encryption")
-    eReaderKey.value = Crypto.createEcPrivateKey(eDeviceKey.curve)
+    eReaderKey.value = existingEReaderKey?.takeIf { it.curve == eDeviceKey.curve }
+        ?: Crypto.createEcPrivateKey(eDeviceKey.curve)
 
     val transport = if (existingTransport != null) {
         Logger.i(TAG, "existingTransport: $existingTransport")
@@ -1018,9 +1022,10 @@ private suspend fun doReaderFlowWithTransport(
     val deviceRequest = Cbor.encode(proximityRequest.deviceRequest)
     val sessionEncryption = SessionEncryption(
         role = MdocRole.MDOC_READER,
-        eReaderKey,
-        eDeviceKey,
-        Cbor.encode(proximityRequest.sessionTranscript),
+        eSelfKey = eReaderKey,
+        remotePublicKey = eDeviceKey,
+        encodedSessionTranscript = Cbor.encode(proximityRequest.sessionTranscript),
+        insertSequenceNumbers = insertSequenceNumbers,
     )
     readerSessionEncryption.value = sessionEncryption
     Logger.iCbor(TAG, "deviceRequest", deviceRequest)
@@ -1063,7 +1068,12 @@ private suspend fun doReaderFlowWithTransport(
                 Logger.i(TAG, "Holder did not indicate they are closing the connection. " +
                         "Auto-close is enabled, so sending termination message, closing, and " +
                         "ending reader loop")
-                transport.sendMessage(SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION))
+                transport.sendMessage(
+                    SessionEncryption.encodeStatus(
+                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                        sequenceNumber = if (insertSequenceNumbers) sessionEncryption.nextSequenceNumber else null
+                    )
+                )
                 transport.close()
                 break
             }

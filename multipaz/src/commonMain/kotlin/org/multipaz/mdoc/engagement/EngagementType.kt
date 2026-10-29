@@ -15,7 +15,7 @@ enum class EngagementType {
     /** Negotiated NFC handover according to ISO/IEC 18013-5:2021 section 8.3.3.1.2. */
     NFC_NEGOTIATED_HANDOVER,
 
-    /** NFC Concurrent Channel Engagement (CCE), formerly known as NFC handover v2. */
+    /** NFC Concurrent Channel Engagement (CCE) according to ISO/IEC 18013-5 Second Edition section 9.5. */
     NFC_CONCURRENT_CHANNEL_ENGAGEMENT;
 
     companion object
@@ -27,5 +27,5 @@ enum class EngagementType {
 fun MdocHandoverType.toEngagementType(): EngagementType = when (this) {
     MdocHandoverType.STATIC_HANDOVER -> EngagementType.NFC_STATIC_HANDOVER
     MdocHandoverType.NEGOTIATED_HANDOVER -> EngagementType.NFC_NEGOTIATED_HANDOVER
-    MdocHandoverType.V2_HANDOVER -> EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT
+    MdocHandoverType.CCE_HANDOVER -> EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT
 }

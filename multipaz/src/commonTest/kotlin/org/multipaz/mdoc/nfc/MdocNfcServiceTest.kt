@@ -48,7 +48,6 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -62,8 +61,8 @@ import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
-import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
-import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
+import org.multipaz.mdoc.transport.NfcCceTransportMdoc
+import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.mdoc.transport.NfcTransportMdoc
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.mdoc.util.MdocUtil
@@ -112,14 +111,14 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Unit tests for [MdocNdefService] and [MdocNfcV2Service] verifying NFC engagement,
+ * Unit tests for [MdocNdefService] and [MdocNfcCceService] verifying NFC engagement,
  * detached BLE/hybrid transaction lifecycle, error handling, and multi-tap session
  * superseding (GitHub issue #2056).
  *
  * ### How the test harness works
  * - **[ServiceLoopbackIsoTag]:** Implements [NfcIsoTag] on the reader side and forwards each
  *   [CommandApdu] directly to [NfcApduService.processCommandApdu]. Both [MdocNdefService] and
- *   [MdocNfcV2Service] return the initial `SELECT APPLICATION` response synchronously from
+ *   [MdocNfcCceService] return the initial `SELECT APPLICATION` response synchronously from
  *   `processCommandApdu()` and deliver all subsequent responses asynchronously via the
  *   `sendResponse` callback (from an internal coroutine running on [Dispatchers.Default]).
  *   [ServiceLoopbackIsoTag.transceive] handles both paths transparently so
@@ -159,8 +158,8 @@ class MdocNfcServiceTest {
         TestPromptModel.Builder().apply { addCommonDialogs() }.build()
 
     private val allCreatedBleTransports = mutableListOf<FakeBleTransport>()
-    private val allCreatedHybridTransports = mutableListOf<NfcHybridTransportMdoc>()
-    private val allCreatedReaderTransports = mutableListOf<NfcHybridTransportMdocReader>()
+    private val allCreatedHybridTransports = mutableListOf<NfcCceTransportMdoc>()
+    private val allCreatedReaderTransports = mutableListOf<NfcCceTransportMdocReader>()
     private val allCreatedReaderSessions = mutableListOf<ReaderSession>()
 
     @BeforeTest
@@ -170,7 +169,7 @@ class MdocNfcServiceTest {
         allCreatedHybridTransports.clear()
         allCreatedReaderTransports.clear()
         allCreatedReaderSessions.clear()
-        MdocNfcV2Service.onHybridTransportCreated = { transport ->
+        MdocNfcCceService.onCceTransportCreated = { transport ->
             allCreatedHybridTransports.add(transport)
         }
     }
@@ -204,7 +203,7 @@ class MdocNfcServiceTest {
                         assertEquals(
                             MdocTransport.State.CLOSED,
                             transport.state.value,
-                            "Expected NfcHybridTransportMdoc #$index to be CLOSED at end of test"
+                            "Expected NfcCceTransportMdoc #$index to be CLOSED at end of test"
                         )
                     }
                 allCreatedReaderTransports.toList()
@@ -212,24 +211,24 @@ class MdocNfcServiceTest {
                         assertTrue(
                             transport.state.value == MdocTransport.State.CLOSED ||
                                 transport.state.value == MdocTransport.State.FAILED,
-                            "Expected NfcHybridTransportMdocReader #$index to be CLOSED or FAILED at end of test, got ${transport.state.value}"
+                            "Expected NfcCceTransportMdocReader #$index to be CLOSED or FAILED at end of test, got ${transport.state.value}"
                         )
                     }
                 assertNull(
-                    MdocNfcV2Service.hybridTransport,
-                    "Expected MdocNfcV2Service.hybridTransport to be null at end of test"
+                    MdocNfcCceService.cceTransport,
+                    "Expected MdocNfcCceService.cceTransport to be null at end of test"
                 )
                 assertNull(
-                    MdocNfcV2Service.activeEngagementParamsFlow,
-                    "Expected MdocNfcV2Service.activeEngagementParamsFlow to be null at end of test"
+                    MdocNfcCceService.activeEngagementParamsFlow,
+                    "Expected MdocNfcCceService.activeEngagementParamsFlow to be null at end of test"
                 )
                 assertNull(
-                    MdocNfcV2Service.activeDeviceRequest,
-                    "Expected MdocNfcV2Service.activeDeviceRequest to be null at end of test"
+                    MdocNfcCceService.activeDeviceRequest,
+                    "Expected MdocNfcCceService.activeDeviceRequest to be null at end of test"
                 )
                 assertNull(
-                    MdocNfcV2Service.activeEngagement,
-                    "Expected MdocNfcV2Service.activeEngagement to be null at end of test"
+                    MdocNfcCceService.activeEngagement,
+                    "Expected MdocNfcCceService.activeEngagement to be null at end of test"
                 )
             } finally {
                 allCreatedReaderTransports.toList().forEach { transport ->
@@ -242,11 +241,11 @@ class MdocNfcServiceTest {
                     session.sessionEncryption.close()
                     session.eReaderKey.close()
                 }
-                MdocNfcV2Service.onHybridTransportCreated = null
-                MdocNfcV2Service.hybridTransport = null
-                MdocNfcV2Service.activeEngagementParamsFlow = null
-                MdocNfcV2Service.activeDeviceRequest = null
-                MdocNfcV2Service.activeEngagement = null
+                MdocNfcCceService.onCceTransportCreated = null
+                MdocNfcCceService.cceTransport = null
+                MdocNfcCceService.activeEngagementParamsFlow = null
+                MdocNfcCceService.activeDeviceRequest = null
+                MdocNfcCceService.activeEngagement = null
                 MdocNfcPresentmentService.transactionJob?.cancel()
                 MdocNfcPresentmentService.transactionJob = null
                 Dispatchers.resetMain()
@@ -319,7 +318,7 @@ class MdocNfcServiceTest {
 
     /**
      * Controllable [MdocTransport] stand-in for BLE transports created by [MdocNdefService]
-     * and [MdocNfcV2Service].
+     * and [MdocNfcCceService].
      *
      * By default, [open] suspends on [finishOpen] (simulating a BLE transport advertising/scanning
      * while waiting for the reader to connect over BLE). Tests can either:
@@ -418,9 +417,9 @@ class MdocNfcServiceTest {
 
     private fun createNfcV2Service(
         tag: ServiceLoopbackIsoTag,
-        settingsProvider: suspend () -> MdocNfcV2Service.Settings,
-    ): MdocNfcV2Service {
-        return object : MdocNfcV2Service() {
+        settingsProvider: suspend () -> MdocNfcCceService.Settings,
+    ): MdocNfcCceService {
+        return object : MdocNfcCceService() {
             override suspend fun getSettings(): Settings = settingsProvider()
         }.apply {
             sendResponseCallback = { responseApdu -> tag.responseChannel.trySend(responseApdu) }
@@ -742,11 +741,11 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies [MdocNfcV2Service] negotiated BLE handover session superseding across both
+     * Verifies [MdocNfcCceService] negotiated BLE handover session superseding across both
      * recreated service instances and mid-hold re-selection:
      * 1. Tap 1 negotiates BLE over NFCv2 on `service1`, launching `waitForTransportJob` in the
      *    background (`transport1` suspended in `open()` before being handed off to
-     *    `NfcHybridTransportMdoc`).
+     *    `NfcCceTransportMdoc`).
      * 2. `service1` is deactivated and destroyed, and Tap 2 occurs on a newly created `service2`.
      * 3. Verifies that `waitForTransportJob` from Tap 1 is cancelled and joined, and its
      *    unattached `transport1` is explicitly closed in `waitForTransportJob`'s `finally` block
@@ -783,7 +782,7 @@ class MdocNfcServiceTest {
                 centralClientModeUuid = UUID.randomUUID(),
             )
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = source,
                 promptModel = promptModel,
                 presentmentModel = presentmentModel,
@@ -804,7 +803,7 @@ class MdocNfcServiceTest {
             val handover1 = mdocReaderNfcHandover(
                 tag = tag1,
                 negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                options = MdocReaderNfcHandoverOptions(useCce = true),
             )
             assertNotNull(handover1)
             val transport1 = withTimeout(5.seconds) {
@@ -828,7 +827,7 @@ class MdocNfcServiceTest {
                 val handover2 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover2)
                 val transport2 = withTimeout(5.seconds) {
@@ -851,7 +850,7 @@ class MdocNfcServiceTest {
                 val handover3 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover3)
                 val transport3 = withTimeout(5.seconds) {
@@ -1072,7 +1071,7 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies that in [MdocNfcV2Service], when Tap 1 is an NFC-only session
+     * Verifies that in [MdocNfcCceService], when Tap 1 is an NFC-only session
      * ([MdocConnectionMethodNfcV2]) and Tap 2 negotiates a BLE handover
      * ([MdocConnectionMethodBle]) on a recreated service instance:
      * 1. Tap 2 is not mistaken for an NFC-only multi-tap re-engagement (which only applies when
@@ -1102,14 +1101,14 @@ class MdocNfcServiceTest {
                 }
             }
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = source,
                 promptModel = promptModel,
                 presentmentModel = presentmentModel,
                 launchUi = null,
                 sessionEncryptionCurve = EcCurve.P256,
                 onlyAllowNfc = false,
-                handoverPreferredOrder = listOf("ble:", "nfcv2"),
+                handoverPreferredOrder = listOf("ble:"),
                 transportOptions = MdocTransportOptions(),
                 transportFactory = transportFactory,
             )
@@ -1119,12 +1118,11 @@ class MdocNfcServiceTest {
             tag1.service = service1
             service1.start()
 
-            // Tap 1: Reader only offers NFCv2 data transfer -> starts NFC-only session
-            val nfcV2Method = MdocConnectionMethodNfcV2()
+            // Tap 1: Reader only offers NFC CCE data transfer -> starts NFC-only session
             val handover1 = mdocReaderNfcHandover(
                 tag = tag1,
-                negotiatedHandoverConnectionMethods = listOf(nfcV2Method),
-                options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(useCce = true),
             )
             assertNotNull(handover1)
             withTimeout(5.seconds) {
@@ -1153,7 +1151,7 @@ class MdocNfcServiceTest {
                 val handover2 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover2)
                 val bleTransport = withTimeout(5.seconds) {
@@ -1373,8 +1371,8 @@ class MdocNfcServiceTest {
         val encryptedDeviceRequest: ByteArray,
     )
 
-    private fun createReaderTransport(tag: NfcIsoTag): NfcHybridTransportMdocReader {
-        return NfcHybridTransportMdocReader(tag, null).also {
+    private fun createReaderTransport(tag: NfcIsoTag): NfcCceTransportMdocReader {
+        return NfcCceTransportMdocReader(tag, null).also {
             allCreatedReaderTransports.add(it)
         }
     }
@@ -1383,7 +1381,7 @@ class MdocNfcServiceTest {
         handoverResult: MdocReaderNfcHandoverResult,
         dataElements: List<String>,
     ): ReaderSession {
-        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = handoverResult.eReaderKey ?: Crypto.createEcPrivateKey(EcCurve.P256)
         val deviceEngagementItem = Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
         val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementItem)
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
@@ -1397,7 +1395,7 @@ class MdocNfcServiceTest {
             eSelfKey = eReaderKey,
             remotePublicKey = deviceEngagement.eDeviceKey,
             encodedSessionTranscript = Cbor.encode(sessionTranscript),
-            insertSequenceNumbers = true,
+            insertSequenceNumbers = handoverResult.type == MdocHandoverType.CCE_HANDOVER,
         )
         val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
             addDocRequest(
@@ -1423,7 +1421,7 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies the end-to-end NFCv2 double-tap flow in [MdocNfcV2Service] and
+     * Verifies the end-to-end NFCv2 double-tap flow in [MdocNfcCceService] and
      * [org.multipaz.presentment.Iso18013Presentment] when the second tap sends a structurally
      * equivalent [DeviceRequest] (`DeviceRequest.isStructurallyEquivalent() == true`):
      * 1. **Tap 1:** Reader performs NFCv2 handover and sends a [DeviceRequest] for `given_name`.
@@ -1438,7 +1436,7 @@ class MdocNfcServiceTest {
      * 4. **Tap 2 (same request):** On a newly created `service2` instance, the reader performs a
      *    fresh NFCv2 handover (with new ephemeral keys and `SessionTranscript`) and sends a new
      *    [DeviceRequest] for `given_name`.
-     * 5. **Response delivery:** [MdocNfcV2Service] verifies `isStructurallyEquivalent() == true`,
+     * 5. **Response delivery:** [MdocNfcCceService] verifies `isStructurallyEquivalent() == true`,
      *    re-uses the cached consent and unlocked key without re-prompting (`consentPromptCalls == 1`,
      *    `biometricPromptCalls == 1`), signs and encrypts the [DeviceResponse] using Tap 2's
      *    `SessionTranscript`, delivers it over NFC, and completes with `error == null`.
@@ -1449,7 +1447,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -1470,7 +1468,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1515,7 +1513,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -1577,7 +1575,7 @@ class MdocNfcServiceTest {
      *    the user approves consent and authentication for `given_name`.
      * 2. **Tap 2 (different request):** On the second tap, the reader instead requests
      *    `family_name` (`isStructurallyEquivalent() == false`).
-     * 3. **Session termination:** [MdocNfcV2Service] detects the mismatch, cancels the active
+     * 3. **Session termination:** [MdocNfcCceService] detects the mismatch, cancels the active
      *    transaction without waking up response generation, sends a session-termination status
      *    (`Constants.SESSION_DATA_STATUS_SESSION_TERMINATION`) over NFC with no credential data,
      *    and transitions [PresentmentModel.state] to [PresentmentModel.State.Completed] with a
@@ -1589,7 +1587,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -1610,7 +1608,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1647,7 +1645,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("family_name"))
@@ -1677,7 +1675,7 @@ class MdocNfcServiceTest {
                     }
                     val killedHybridTransport = allCreatedHybridTransports.single()
                     assertEquals(MdocTransport.State.CLOSED, killedHybridTransport.state.value)
-                    assertNull(MdocNfcV2Service.hybridTransport)
+                    assertNull(MdocNfcCceService.cceTransport)
 
                     assertEquals(1, fixture.consentPromptCalls)
                     assertEquals(1, fixture.biometricPromptCalls)
@@ -1699,11 +1697,11 @@ class MdocNfcServiceTest {
      * 1. **Tap 1 (abandoned):** Reader 1 performs NFCv2 handover and requests `given_name`. The
      *    phone is pulled away (`tag1.deactivate()`) while the consent prompt is showing.
      * 2. **User cancels:** The user cancels the first presentment (`presentmentModel.setCanceledByUser()`).
-     *    [MdocNfcV2Service] cancels `transactionJob`, clears `activeDeviceRequest` and
+     *    [MdocNfcCceService] cancels `transactionJob`, clears `activeDeviceRequest` and
      *    `activeEngagementParamsFlow`, and marks [PresentmentModel.state] as `Completed` with a
      *    [PresentmentCanceledException].
      * 3. **Tap 2 (fresh single-tap transaction):** The user taps against a second reader that
-     *    requests `family_name` and keeps the phone on the reader. [MdocNfcV2Service] starts a
+     *    requests `family_name` and keeps the phone on the reader. [MdocNfcCceService] starts a
      *    new transaction, prompts for consent and authentication for `family_name`,
      *    and immediately delivers the [DeviceResponse] over NFC during that same tap.
      */
@@ -1713,7 +1711,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -1734,7 +1732,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1774,7 +1772,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("family_name"))
@@ -1842,15 +1840,15 @@ class MdocNfcServiceTest {
 
     /**
      * Verifies [NfcApduRouter] AID routing and cross-protocol session superseding between
-     * [MdocNdefService] (NFCv1 `D2760000850101`) and [MdocNfcV2Service] (NFCv2 `A0000002480401`):
+     * [MdocNdefService] (NFCv1 `D2760000850101`) and [MdocNfcCceService] (NFCv2 `A0000002480401`):
      * 1. Selecting an unknown AID returns `6a82` (`RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND`).
      * 2. **Tap 1 (NFCv1 NDEF):** Reader selects `NDEF_APPLICATION_ID` and performs static handover,
      *    starting a BLE session (`cross1`) in [MdocNdefService].
      * 3. **Tap 2 (NFCv2):** After `onDeactivated()`, reader selects `ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID`
-     *    and performs NFCv2 BLE handover, starting `cross2` in [MdocNfcV2Service]. Verifies that
+     *    and performs NFCv2 BLE handover, starting `cross2` in [MdocNfcCceService]. Verifies that
      *    `cross1` from [MdocNdefService] was cancelled and closed before `cross2` opened.
      * 4. **Tap 3 (NFCv1 NDEF):** After `onDeactivated()`, reader taps again with NFCv1 NDEF,
-     *    starting `cross3` in [MdocNdefService]. Verifies that `cross2` from [MdocNfcV2Service]
+     *    starting `cross3` in [MdocNdefService]. Verifies that `cross2` from [MdocNfcCceService]
      *    was cancelled and closed before `cross3` advertised.
      */
     @Test
@@ -1898,8 +1896,8 @@ class MdocNfcServiceTest {
                             transportFactory = transportFactory,
                         )
                     }
-                    val nfcV2Service = object : MdocNfcV2Service() {
-                        override suspend fun getSettings() = MdocNfcV2Service.Settings(
+                    val nfcV2Service = object : MdocNfcCceService() {
+                        override suspend fun getSettings() = MdocNfcCceService.Settings(
                             source = source,
                             promptModel = promptModel,
                             presentmentModel = presentmentModel,
@@ -1913,7 +1911,7 @@ class MdocNfcServiceTest {
                     }
                     return mapOf(
                         Nfc.NDEF_APPLICATION_ID to ndefService,
-                        Nfc.MDOC_NFC_ENGAGEMENT_V2_AID to nfcV2Service,
+                        Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID to nfcV2Service,
                     )
                 }
             }
@@ -1959,7 +1957,7 @@ class MdocNfcServiceTest {
                 withTimeout(5.seconds) { transport1.openStarted.await() }
                 combinedService.deactivate(NfcDeactivationReason.LINK_LOSS)
 
-                // 3. Tap 2 (NFCv2 BLE handover) -> supersedes cross1 and opens cross2 in MdocNfcV2Service
+                // 3. Tap 2 (NFCv2 BLE handover) -> supersedes cross1 and opens cross2 in MdocNfcCceService
                 val bleMethod = MdocConnectionMethodBle(
                     supportsPeripheralServerMode = false,
                     supportsCentralClientMode = true,
@@ -1970,7 +1968,7 @@ class MdocNfcServiceTest {
                     mdocReaderNfcHandover(
                         tag = tag,
                         negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                 )
                 val transport2 = withTimeout(5.seconds) {
@@ -2023,7 +2021,7 @@ class MdocNfcServiceTest {
      *    [DeviceRequest] is sent, so [org.multipaz.presentment.Iso18013Presentment] suspends at
      *    `transport.isNfcConnected.first { it }`.
      * 2. **Tap 2 (handover + request + response):** On `service2`, the reader performs a fresh
-     *    NFCv2 handover and sends the [DeviceRequest] for `given_name`. [MdocNfcV2Service] updates
+     *    NFCv2 handover and sends the [DeviceRequest] for `given_name`. [MdocNfcCceService] updates
      *    `activeEngagementParamsFlow` with Tap 2's parameters, wakes up the waiting presentment
      *    session, prompts the user for consent and auth, and delivers the verified
      *    [DeviceResponse] over `tag2`.
@@ -2034,7 +2032,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -2055,7 +2053,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 withTimeout(5.seconds) {
@@ -2078,7 +2076,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -2124,8 +2122,8 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies [MdocNfcV2Service]'s hybrid NFCv2 + BLE transport flow
-     * ([org.multipaz.mdoc.transport.NfcHybridTransportMdoc]) when the [DeviceRequest] arrives over
+     * Verifies [MdocNfcCceService]'s hybrid NFCv2 + BLE transport flow
+     * ([org.multipaz.mdoc.transport.NfcCceTransportMdoc]) when the [DeviceRequest] arrives over
      * NFC while BLE is still connecting, and the [DeviceResponse] is delivered over BLE after the
      * phone leaves the NFC field:
      * 1. Reader negotiates [MdocConnectionMethodBle] during NFCv2 handover.
@@ -2134,10 +2132,10 @@ class MdocNfcServiceTest {
      * 3. The mdoc receives the request via NFC and enters the consent prompt. The user pulls the
      *    phone away from the NFC reader (`tag1.deactivate()`, `service1.stop()`) and approves
      *    the consent and auth prompts.
-     * 4. Because NFC is now disconnected, [org.multipaz.mdoc.transport.NfcHybridTransportMdoc]
+     * 4. Because NFC is now disconnected, [org.multipaz.mdoc.transport.NfcCceTransportMdoc]
      *    queues the encrypted [DeviceResponse] in its transport backlog.
      * 5. Once `hybridBle.finishOpen` completes, the reader's hybrid transport also flushes its
-     *    initial [DeviceRequest] over BLE (which [org.multipaz.mdoc.transport.NfcHybridTransportMdoc]
+     *    initial [DeviceRequest] over BLE (which [org.multipaz.mdoc.transport.NfcCceTransportMdoc]
      *    deduplicates as already received via NFC), the mdoc's queued [DeviceResponse] is
      *    transmitted over BLE (`hybridBle.sentMessages`), verified by the reader, and completed
      *    when the reader sends session termination over BLE.
@@ -2164,7 +2162,7 @@ class MdocNfcServiceTest {
 
             val tag1 = ServiceLoopbackIsoTag()
             val service1 = createNfcV2Service(tag1) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = fixture.source,
                     promptModel = fixture.promptModel,
                     presentmentModel = presentmentModel,
@@ -2189,7 +2187,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
                 val bleTransport = withTimeout(5.seconds) {
@@ -2219,14 +2217,14 @@ class MdocNfcServiceTest {
                 withTimeout(5.seconds) { fixture.biometricPromptShown.await() }
                 fixture.approveBiometric.complete(Unit)
 
-                // Wait until presentment has queued the response into NfcHybridTransportMdoc's backlog
+                // Wait until presentment has queued the response into NfcCceTransportMdoc's backlog
                 // and looped back to WaitingForReader (waiting for session termination)
                 withTimeout(5.seconds) {
                     presentmentModel.state.first { it == PresentmentModel.State.WaitingForReader }
                 }
 
                 // Now BLE finishes connecting: reader hybrid transport flushes its DeviceRequest backlog
-                // (deduplicated by NfcHybridTransportMdoc) and NfcHybridTransportMdoc flushes DeviceResponse over BLE
+                // (deduplicated by NfcCceTransportMdoc) and NfcCceTransportMdoc flushes DeviceResponse over BLE
                 bleTransport.incomingMessages.trySend(readerSession.encryptedDeviceRequest)
                 bleTransport.finishOpen.complete(Unit)
                 val encryptedResponse = withTimeout(5.seconds) {
@@ -2265,7 +2263,7 @@ class MdocNfcServiceTest {
      * Verifies that in an NFCv2 NFC-only session, if the phone is removed from the NFC field
      * *after* the [DeviceResponse] has been sent (`numRequestsServed > 0`) but *before* the
      * reader sends session termination (`status = 20`), [org.multipaz.presentment.Iso18013Presentment]
-     * aborts with [Iso18013PresentmentNfcDisconnectedException] and [MdocNfcV2Service] sets
+     * aborts with [Iso18013PresentmentNfcDisconnectedException] and [MdocNfcCceService] sets
      * [PresentmentModel.state] to [PresentmentModel.State.Completed] with that exception.
      */
     @Test
@@ -2276,7 +2274,7 @@ class MdocNfcServiceTest {
 
             val tag1 = ServiceLoopbackIsoTag()
             val service1 = createNfcV2Service(tag1) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = fixture.source,
                     promptModel = fixture.promptModel,
                     presentmentModel = presentmentModel,
@@ -2294,7 +2292,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
@@ -2341,7 +2339,7 @@ class MdocNfcServiceTest {
      *    is placed back on the reader (`service2` on `tag2`). The reader performs a fresh NFCv2
      *    handover and sends a structurally equivalent [DeviceRequest] for `given_name`.
      *    Because `markResponsePending()` was set when the first request was received,
-     *    [org.multipaz.mdoc.transport.NfcHybridTransportMdoc] sets `isNfcConnected = true` and
+     *    [org.multipaz.mdoc.transport.NfcCceTransportMdoc] sets `isNfcConnected = true` and
      *    discards the duplicate [DeviceRequest] payload instead of queueing it as a second
      *    request in the session.
      * 4. **User approves prompt:** The user approves consent and auth. The service
@@ -2354,7 +2352,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -2375,7 +2373,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -2404,7 +2402,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -2477,7 +2475,7 @@ class MdocNfcServiceTest {
 
             val tag1 = ServiceLoopbackIsoTag()
             val service1 = createNfcV2Service(tag1) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = fixture.source,
                     promptModel = fixture.promptModel,
                     presentmentModel = presentmentModel,
@@ -2495,7 +2493,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
 
@@ -2586,8 +2584,8 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies end-to-end NFCv2 command and response APDU chaining in [MdocNfcV2Service] and
-     * [org.multipaz.mdoc.nfc.MdocNfcV2EngagementHelper] when the underlying [NfcIsoTag] has a
+     * Verifies end-to-end NFCv2 command and response APDU chaining in [MdocNfcCceService] and
+     * [org.multipaz.mdoc.nfc.MdocNfcCceEngagementHelper] when the underlying [NfcIsoTag] has a
      * small `maxTransceiveLength` (128 bytes):
      * 1. The reader splits the encrypted [DeviceRequest] across multiple `ENVELOPE` APDUs with
      *    `CLA_CHAIN_NOT_LAST` (`0x10`) followed by `CLA_CHAIN_LAST` (`0x00`).
@@ -2604,7 +2602,7 @@ class MdocNfcServiceTest {
 
             val tag1 = ServiceLoopbackIsoTag(maxTransceiveLength = 128)
             val service1 = createNfcV2Service(tag1) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = fixture.source,
                     promptModel = fixture.promptModel,
                     presentmentModel = presentmentModel,
@@ -2622,7 +2620,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name", "family_name"))
@@ -2671,12 +2669,12 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies that if a stray or non-mdoc NFC reader polls [MdocNfcV2Service] with an invalid
+     * Verifies that if a stray or non-mdoc NFC reader polls [MdocNfcCceService] with an invalid
      * APDU while a presentment transaction is already active (such as between Tap 1 and Tap 2 of
      * an NFCv2 double-tap flow):
-     * 1. [org.multipaz.mdoc.nfc.MdocNfcV2EngagementHelper] returns `6d00`
+     * 1. [org.multipaz.mdoc.nfc.MdocNfcCceEngagementHelper] returns `6d00`
      *    (`RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID`) and invokes `onError`.
-     * 2. Because `transactionJob?.isActive == true`, [MdocNfcV2Service]'s `onError` callback
+     * 2. Because `transactionJob?.isActive == true`, [MdocNfcCceService]'s `onError` callback
      *    does **not** set [PresentmentModel.state] to [PresentmentModel.State.Completed] with an
      *    error, and the active double-tap transaction remains alive.
      * 3. When the real mdoc reader subsequently performs Tap 2, the double-tap presentment
@@ -2688,7 +2686,7 @@ class MdocNfcServiceTest {
             val fixture = createDoubleTapFixture(this)
             val presentmentModel = PresentmentModel()
 
-            fun buildSettings() = MdocNfcV2Service.Settings(
+            fun buildSettings() = MdocNfcCceService.Settings(
                 source = fixture.source,
                 promptModel = fixture.promptModel,
                 presentmentModel = presentmentModel,
@@ -2709,7 +2707,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -2741,7 +2739,7 @@ class MdocNfcServiceTest {
                             ins = Nfc.INS_SELECT,
                             p1 = Nfc.INS_SELECT_P1_APPLICATION,
                             p2 = 0x00,
-                            payload = Nfc.MDOC_NFC_ENGAGEMENT_V2_AID,
+                            payload = Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID,
                             le = 0,
                         )
                     )
@@ -2776,7 +2774,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -2826,7 +2824,7 @@ class MdocNfcServiceTest {
      *    session-termination status message (`Constants.SESSION_DATA_STATUS_SESSION_TERMINATION`)
      *    over NFC so the reader's `waitForMessage()` unblocks immediately with `status = 20` and
      *    no credential data.
-     * 3. [MdocNfcV2Service] transitions [PresentmentModel.state] to
+     * 3. [MdocNfcCceService] transitions [PresentmentModel.state] to
      *    [PresentmentModel.State.Completed] with [PresentmentCannotSatisfyRequestException].
      */
     @Test
@@ -2838,7 +2836,7 @@ class MdocNfcServiceTest {
 
             val tag1 = ServiceLoopbackIsoTag()
             val service1 = createNfcV2Service(tag1) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = emptySource,
                     promptModel = promptModel,
                     presentmentModel = presentmentModel,
@@ -2856,7 +2854,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
@@ -3040,7 +3038,7 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies that when NFC engagement fails in [MdocNdefService] and [MdocNfcV2Service],
+     * Verifies that when NFC engagement fails in [MdocNdefService] and [MdocNfcCceService],
      * [PresentmentModel.State.Completed] is populated with [MdocNfcEngagementException] and
      * telemetry recording [PresentmentOutcome.NFC_ENGAGEMENT_FAILED].
      */
@@ -3085,11 +3083,11 @@ class MdocNfcServiceTest {
                 ndefService.stop()
             }
 
-            // 2. MdocNfcV2Service: invalid APDU instruction during engagement
+            // 2. MdocNfcCceService: invalid APDU instruction during engagement
             val nfcV2PresentmentModel = PresentmentModel()
             val nfcV2Tag = ServiceLoopbackIsoTag()
             val nfcV2Service = createNfcV2Service(nfcV2Tag) {
-                MdocNfcV2Service.Settings(
+                MdocNfcCceService.Settings(
                     source = source,
                     promptModel = promptModel,
                     presentmentModel = nfcV2PresentmentModel,
@@ -3103,7 +3101,7 @@ class MdocNfcServiceTest {
             nfcV2Tag.service = nfcV2Service
             nfcV2Service.start()
             try {
-                nfcV2Tag.selectApplication(Nfc.MDOC_NFC_ENGAGEMENT_V2_AID)
+                nfcV2Tag.selectApplication(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID)
                 val badResponse = nfcV2Tag.transceive(
                     CommandApdu(
                         cla = 0x00,

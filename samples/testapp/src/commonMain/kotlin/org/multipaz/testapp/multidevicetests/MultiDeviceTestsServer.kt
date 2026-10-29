@@ -171,7 +171,7 @@ class MultiDeviceTestsServer(
             }
             val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
             val encodedDeviceEngagement = Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                addConnectionMethod(transport.connectionMethod)
+                addConnectionMethod(transport.connectionMethod!!)
             }.toDataItem())
             val getPsmFromReader = (test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT)
             sendChannel.writeStringUtf8("TestPresentationPrepare ${iterationNumber} ${numIterationsTotal} " +

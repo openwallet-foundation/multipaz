@@ -25,7 +25,7 @@ private const val TAG = "NfcApduRouter"
  *     override fun buildServices(): Map<ByteString, NfcApduService> {
  *         return mapOf(
  *             Nfc.NDEF_APPLICATION_ID to TestAppMdocNdefService(),
- *             Nfc.MDOC_NFC_ENGAGEMENT_V2_AID to TestAppMdocNfcV2Service(),
+ *             Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID to TestAppMdocNfcCceService(),
  *             Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID to MdocNfcDataTransferService()
  *         )
  *     }

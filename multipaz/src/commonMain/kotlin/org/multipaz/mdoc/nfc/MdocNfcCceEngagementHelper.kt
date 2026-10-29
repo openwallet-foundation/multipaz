@@ -5,15 +5,17 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.encapsulateInDo53
@@ -27,45 +29,56 @@ import org.multipaz.util.toHex
 import kotlin.math.min
 
 /**
- * Helper used for NFC engagement on the mdoc side.
+ * Helper used for NFC Concurrent Channel Engagement (CCE) on the mdoc side.
  *
- * This implements NFC engagement v2 according to ISO/IEC 18013 Second Edition
+ * This implements NFC Concurrent Channel Engagement according to ISO/IEC 18013-5 Second Edition clause 9.5.
  *
  * APDUs received from the NFC tag reader should be passed to the [processApdu] method.
  *
  * The [apduCommandMaxSize] parameter is used to tell the mdoc reader that it needs to send its commands in APDUs no
- * larger than this size and this value must be smaller or equal to 65536, the maximum size of an Extended APDU.
- * Since this class is usually not used in an environment where a 64 KiB buffer is a showstopper we default to the
- * maximum size.
+ * larger than this size and this value must be in `1..65535`. The [apduResponseMaxSize] parameter is used to tell
+ * the mdoc reader the maximum response APDU payload size in `1..65536`.
  *
- * @param eDeviceKey EDeviceKey as per ISO/IEC 18013-5:2021.
- * @param onHandoverComplete the function to call when handover is complete.
+ * @param eDeviceKey EDeviceKey as per ISO/IEC 18013-5.
+ * @param onHandoverComplete the function to call when handover is complete. `connectionMethod` is the selected
+ *   secondary channel [MdocConnectionMethod], or `null` if no secondary channel was selected (NFC-only).
  * @param onMessageReceived the function to call when a data message has been received over NFC.
  * @param onError the function to call if an error occurs.
- * @param handoverPicker a function to choose one of the connection methods from the mdoc reader. This
- * always contain a [MdocConnectionMethodNfcV2] instance and contains others if the mdoc reader is capable of data
- * transfer over e.g. BLE or Wifi Aware. If the mdoc only supports data transfer over NFC, it should return the element
- * for [MdocConnectionMethodNfcV2].
+ * @param handoverPicker a function to choose one of the secondary connection methods offered by the mdoc reader,
+ *   or return `null` to use NFC only without a secondary channel.
  * @property capabilities the capabilities to convey to the mdoc reader.
- * @param apduCommandMaxSize the maximum length of the command data field.
+ * @param apduCommandMaxSize the maximum length of the command data field (`1..65535`).
+ * @param apduResponseMaxSize the maximum length of the response data field (`1..65536`).
  */
-class MdocNfcV2EngagementHelper(
+class MdocNfcCceEngagementHelper(
     val eDeviceKey: EcPublicKey,
     val onHandoverComplete: (
-        connectionMethod: MdocConnectionMethod,
+        connectionMethod: MdocConnectionMethod?,
         encodedDeviceEngagement: ByteString,
-        handover: DataItem) -> Unit,
+        handover: DataItem,
+        eReaderKey: EcPublicKey
+    ) -> Unit,
     val onMessageReceived: suspend (ByteString) -> Unit,
     val onError: (error: Exception) -> Unit,
-    val handoverPicker: (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod,
+    val handoverPicker: ((connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?)? = null,
     val capabilities: Map<Capability, DataItem> = mapOf(
         Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
         Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
     ),
-    val apduCommandMaxSize: Long = 65536L,
+    val apduCommandMaxSize: Long = 65535L,
+    val apduResponseMaxSize: Long = 65536L,
 ) {
     companion object {
-        private const val TAG = "MdocNfcV2EngagementHelper"
+        private const val TAG = "MdocNfcCceEngagementHelper"
+    }
+
+    init {
+        require(apduCommandMaxSize in 1L..65535L) {
+            "apduCommandMaxSize must be in 1..65535, got $apduCommandMaxSize"
+        }
+        require(apduResponseMaxSize in 1L..65536L) {
+            "apduResponseMaxSize must be in 1..65536, got $apduResponseMaxSize"
+        }
     }
 
     private enum class HandoverState {
@@ -83,72 +96,67 @@ class MdocNfcV2EngagementHelper(
         onError(MdocNfcEngagementException(errorMessage, cause))
     }
 
-    private suspend fun processSelectApplication(command: CommandApdu): ResponseApdu {
+    private fun processSelectApplication(command: CommandApdu): ResponseApdu {
         val requestedApplicationId = command.payload
-        if (requestedApplicationId != Nfc.MDOC_NFC_ENGAGEMENT_V2_AID) {
+        if (requestedApplicationId != Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID) {
             raiseError(
-                "SelectApplication: Expected Engagement v2 AID but got " +
+                "SelectApplication: Expected CCE AID but got " +
                         requestedApplicationId.toByteArray().toHex()
             )
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
         }
         handoverState = HandoverState.EXPECT_HANDOVER_REQUEST_MESSAGE
 
-        val nfcV2SelectApplicationPayload = buildCborMap {
+        val cceSelectResponse = buildCborMap {
             put(0, apduCommandMaxSize)
+            put(1, apduResponseMaxSize)
         }
         return ResponseApdu(
             status = Nfc.RESPONSE_STATUS_SUCCESS,
-            payload = ByteString(Cbor.encode(nfcV2SelectApplicationPayload))
+            payload = ByteString(Cbor.encode(cceSelectResponse))
         )
     }
 
-    private suspend fun nfcV2TransactHandleHandoverRequest(message: ByteString): ByteString {
-        val nfcV2HandoverRequest = Cbor.decode(message.toByteArray())
-        Logger.dCbor(TAG, "Received nfcV2HandoverRequest", nfcV2HandoverRequest)
+    private fun nfcCceTransactHandleHandoverRequest(message: ByteString): ByteString {
+        val cceHandoverRequest = Cbor.decode(message.toByteArray())
+        Logger.dCbor(TAG, "Received cceHandoverRequest", cceHandoverRequest)
 
         // ReaderEngagement is at key 0
-        val readerEngagementDataItem = nfcV2HandoverRequest.get(0)
-
-        // DeviceRetrievalMethods is at key 2
-        val availableConnectionMethods = readerEngagementDataItem.get(2).asArray.mapNotNull {
-            val cm = MdocConnectionMethod.fromDeviceEngagement(Cbor.encode(it))
-            if (cm == null) {
-                Logger.dCbor(TAG, "Unknown data retrieval method", it)
-            }
-            cm
-        }
-
-        // The reader *MUST* always include MdocConnectionMethodNfcV2, check this
-        if (availableConnectionMethods.find { it is MdocConnectionMethodNfcV2 } == null) {
-            throw IllegalStateException(
-                "No DeviceRetrievalMethodNfcV2DataTransfer element in DeviceRetrievalMethods in ReaderEngagement"
-            )
+        val readerEngagementDataItem = cceHandoverRequest[0]
+        val readerEngagement = ReaderEngagement.fromDataItem(readerEngagementDataItem)
+        val eReaderKey = requireNotNull(readerEngagement.eReaderKey) {
+            "No EReaderKey in Security element of ReaderEngagement in CCEHandoverRequest"
         }
 
         val disambiguatedConnectionMethods = MdocConnectionMethod.disambiguate(
-            availableConnectionMethods,
+            readerEngagement.connectionMethods,
             MdocRole.MDOC
         )
 
-        val selectedMethod = handoverPicker(disambiguatedConnectionMethods)
+        val selectedMethod = if (disambiguatedConnectionMethods.isEmpty() || handoverPicker == null) {
+            null
+        } else {
+            handoverPicker.invoke(disambiguatedConnectionMethods)
+        }
 
         val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey) {
-            addConnectionMethod(selectedMethod)
+            if (selectedMethod != null) {
+                addConnectionMethod(selectedMethod)
+            }
             capabilities.forEach { (capability, value) ->
                 addCapability(capability, value)
             }
         }.toDataItem()
         val encodedDeviceEngagement = Cbor.encode(deviceEngagement)
 
-        val nfcV2HandoverSelect = buildCborMap {
+        val cceHandoverSelect = buildCborMap {
             put(0, deviceEngagement)
         }
-        val encodedNfcV2HandoverSelect = Cbor.encode(nfcV2HandoverSelect)
+        val encodedCceHandoverSelect = Cbor.encode(cceHandoverSelect)
 
         val handover = buildCborArray {
-            add(encodedNfcV2HandoverSelect)    // Handover Select message
-            add(message.toByteArray())           // Handover Request message
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCceHandoverSelect))) // CCEHandoverSelectBytes
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(message.toByteArray())))    // CCEHandoverRequestBytes
         }
 
         handoverState = HandoverState.EXPECT_PAYLOAD_MESSAGES
@@ -156,10 +164,11 @@ class MdocNfcV2EngagementHelper(
         onHandoverComplete(
             selectedMethod,
             ByteString(encodedDeviceEngagement),
-            handover
+            handover,
+            eReaderKey
         )
 
-        return ByteString(encodedNfcV2HandoverSelect)
+        return ByteString(encodedCceHandoverSelect)
     }
 
     private val queueForPayloadReply = Channel<ByteString>(Channel.UNLIMITED)
@@ -179,17 +188,17 @@ class MdocNfcV2EngagementHelper(
         }
     }
 
-    private suspend fun nfcV2TransactHandlePayloadMessages(message: ByteString): ByteString {
+    private suspend fun nfcCceTransactHandlePayloadMessages(message: ByteString): ByteString {
         onMessageReceived(message)
         val responsePayloadMessage = queueForPayloadReply.receive()
         return responsePayloadMessage
     }
 
-    private suspend fun nfcV2Transact(message: ByteString): ByteString {
+    private suspend fun nfcCceTransact(message: ByteString): ByteString {
         return when (handoverState) {
             HandoverState.NOT_STARTED -> throw IllegalStateException("Unexpected message - Handover not started")
-            HandoverState.EXPECT_HANDOVER_REQUEST_MESSAGE -> nfcV2TransactHandleHandoverRequest(message)
-            HandoverState.EXPECT_PAYLOAD_MESSAGES -> nfcV2TransactHandlePayloadMessages(message)
+            HandoverState.EXPECT_HANDOVER_REQUEST_MESSAGE -> nfcCceTransactHandleHandoverRequest(message)
+            HandoverState.EXPECT_PAYLOAD_MESSAGES -> nfcCceTransactHandlePayloadMessages(message)
         }
     }
 
@@ -216,14 +225,14 @@ class MdocNfcV2EngagementHelper(
                 payload = chunk
             )
         } else {
-            if (outgoingChunksRemainingBytesAvailable <= leReceived + 255) {
+            if (outgoingChunksRemainingBytesAvailable <= 255) {
                 /* If Le < the number of available bytes ≤ Le + 255, the mdoc shall
                  * include as many bytes in the response as indicated by Le and shall
                  * set the status words to ’61 XX’, where XX is the number of available
                  * bytes remaining. The mdoc reader shall respond with a GET RESPONSE
                  * command where Le is set to XX.
                  */
-                val numBytesRemaining = outgoingChunksRemainingBytesAvailable - leReceived
+                val numBytesRemaining = outgoingChunksRemainingBytesAvailable
                 return ResponseApdu(
                     status = Nfc.RESPONSE_STATUS_CHAINING_RESPONSE_BYTES_STILL_AVAILABLE + numBytesRemaining.and(0xff),
                     payload = chunk
@@ -254,7 +263,7 @@ class MdocNfcV2EngagementHelper(
             //
             // We'll need this for later.
             if (leReceived == 0) {
-                leReceived = command.le
+                leReceived = min(command.le, apduResponseMaxSize.toInt())
                 Logger.i(TAG, "LE in last ENVELOPE is $leReceived")
             }
 
@@ -262,7 +271,7 @@ class MdocNfcV2EngagementHelper(
             val message = extractFromDo53(currentIncomingEncapsulatedMessage.toByteString())
             currentIncomingEncapsulatedMessage = ByteStringBuilder()
 
-            val responseMessage = nfcV2Transact(message)
+            val responseMessage = nfcCceTransact(message)
 
             val encapsulatedMessage = encapsulateInDo53(responseMessage)
             val maxChunkSize = leReceived
@@ -329,4 +338,3 @@ class MdocNfcV2EngagementHelper(
         queueForPayloadReply.cancel(CancellationException("The session was deactivated ($reason)"))
     }
 }
-

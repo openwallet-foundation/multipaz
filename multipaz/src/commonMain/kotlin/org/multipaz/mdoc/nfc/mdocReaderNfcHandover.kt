@@ -1,10 +1,28 @@
 package org.multipaz.mdoc.nfc
 
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.ByteStringBuilder
+import kotlinx.io.bytestring.append
+import kotlinx.io.bytestring.decodeToString
+import kotlinx.io.bytestring.encodeToByteString
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.buildReaderEngagement
+import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.transport.encapsulateInDo53
+import org.multipaz.mdoc.transport.extractFromDo53
+import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
 import org.multipaz.nfc.NdefMessage
@@ -12,32 +30,17 @@ import org.multipaz.nfc.NdefRecord
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcCommandFailedException
 import org.multipaz.nfc.NfcIsoTag
+import org.multipaz.nfc.ResponseApdu
 import org.multipaz.nfc.ServiceParameterRecord
 import org.multipaz.nfc.ServiceSelectRecord
 import org.multipaz.nfc.TnepStatusRecord
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
-import kotlinx.io.bytestring.ByteString
-import kotlinx.io.bytestring.ByteStringBuilder
-import kotlinx.io.bytestring.append
-import kotlinx.io.bytestring.decodeToString
-import kotlinx.io.bytestring.encodeToByteString
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.putCborArray
-import org.multipaz.cbor.putCborMap
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
-import org.multipaz.mdoc.engagement.DeviceEngagement
-import org.multipaz.mdoc.role.MdocRole
-import org.multipaz.mdoc.transport.encapsulateInDo53
-import org.multipaz.mdoc.transport.extractFromDo53
-import org.multipaz.nfc.CommandApdu
-import org.multipaz.nfc.ResponseApdu
 import org.multipaz.util.getUInt16
 import org.multipaz.util.toHex
 import kotlin.math.min
 
-const private val TAG = "mdocReaderNfcHandover"
+private const val TAG = "mdocReaderNfcHandover"
 
 /**
  * The type of handover which occurred.
@@ -47,32 +50,42 @@ enum class MdocHandoverType {
     STATIC_HANDOVER,
     /** Negotiated handover according to ISO/IEC 18013-5:2021 */
     NEGOTIATED_HANDOVER,
-    /** Handover according to ISO/IEC 18013-5 Second Edition */
-    V2_HANDOVER
+    /** Concurrent Channel Engagement (CCE) handover according to ISO/IEC 18013-5 Second Edition */
+    CCE_HANDOVER
 }
 
 /**
- * The result of a successful NFC handover operation
+ * The result of a successful NFC handover operation.
  *
- * @property connectionMethods the possible connection methods for the mdoc reader to connect to.
- * @property encodedDeviceEngagement the bytes of DeviceEngagement.
+ * @property connectionMethods the possible connection methods for the mdoc reader to connect to (empty for NFC-only CCE).
+ * @property encodedDeviceEngagement the bytes of `DeviceEngagement`.
  * @property handover the handover value.
  * @property type the type of NFC handover which occurred.
+ * @property eReaderKey the ephemeral reader private key generated/used during CCE handover, or `null` for NDEF handovers.
+ * @property apduCommandMaxSize the maximum command APDU data length indicated by the mdoc during CCE handover.
+ * @property apduResponseMaxSize the maximum response APDU data length indicated by the mdoc during CCE handover.
  */
 data class MdocReaderNfcHandoverResult(
     val connectionMethods: List<MdocConnectionMethod>,
     val encodedDeviceEngagement: ByteString,
     val handover: DataItem,
     val type: MdocHandoverType,
+    val eReaderKey: EcPrivateKey? = null,
+    val apduCommandMaxSize: Int = 65535,
+    val apduResponseMaxSize: Int = 65536,
 )
 
 /**
  * Options for when performing handover as a mdoc reader.
  *
- * @property useNfcV2 if `true`, will attempt to use NFCv2 handover from ISO 18013-5 Second Edition.
+ * @property useCce if `true`, will attempt to use NFC Concurrent Channel Engagement (CCE) from ISO/IEC 18013-5 Second Edition.
+ * @property eReaderKeyCurve the curve to use when generating the ephemeral reader key for CCE if [eReaderKey] is `null`.
+ * @property eReaderKey optional explicit ephemeral reader private key to include in `ReaderEngagement` during CCE handover.
  */
 data class MdocReaderNfcHandoverOptions(
-    val useNfcV2: Boolean = false
+    val useCce: Boolean = false,
+    val eReaderKeyCurve: EcCurve = EcCurve.P256,
+    val eReaderKey: EcPrivateKey? = null,
 )
 
 /**
@@ -80,7 +93,7 @@ data class MdocReaderNfcHandoverOptions(
  *
  * @param tag the [NfcIsoTag] representing a NFC connection to the mdoc.
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
- * negotiated handover.
+ * negotiated handover or CCE.
  * @param options a [MdocReaderNfcHandoverOptions]
  * @return a [MdocReaderNfcHandoverResult] if the handover was successful or `null` if the tag isn't an NDEF tag.
  * @throws Throwable if an error occurs during handover.
@@ -90,23 +103,33 @@ suspend fun mdocReaderNfcHandover(
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
     options: MdocReaderNfcHandoverOptions = MdocReaderNfcHandoverOptions()
 ): MdocReaderNfcHandoverResult? {
-    // First try the new engagement method, if requested...
-    if (options.useNfcV2) {
+    // First try Concurrent Channel Engagement (CCE), if requested...
+    if (options.useCce) {
         val selectApplicationResponse = try {
-            tag.selectApplication(Nfc.MDOC_NFC_ENGAGEMENT_V2_AID)
+            tag.selectApplication(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID)
         } catch (e: NfcCommandFailedException) {
             if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND) {
-                Logger.i(TAG, "Selecting NFCv2 AID returned FILE_NOT_FOUND")
+                Logger.i(TAG, "Selecting NFC CCE AID returned FILE_NOT_FOUND")
             }
             null
         }
         if (selectApplicationResponse != null) {
-            Logger.i(TAG, "Successfully selected NFCv2 AID")
+            Logger.i(TAG, "Successfully selected NFC CCE AID")
             Logger.d(TAG, "payload: ${selectApplicationResponse.payload.toByteArray().toHex()}")
             val payload = Cbor.decode(selectApplicationResponse.payload.toByteArray())
-            val mdocNfcMaxCommandApduSize = payload.get(0).asNumber.toInt()
-            Logger.i(TAG, "mdoc indicates APDU max command length is $mdocNfcMaxCommandApduSize")
-            return mdocReaderNfcV2Handover(tag, mdocNfcMaxCommandApduSize, negotiatedHandoverConnectionMethods)
+            val apduCommandMaxSize = payload[0].asNumber.toInt()
+            val apduResponseMaxSize = payload.getOrNull(1)?.asNumber?.toInt() ?: 65536
+            Logger.i(
+                TAG,
+                "mdoc indicates APDU max command length is $apduCommandMaxSize, max response length is $apduResponseMaxSize"
+            )
+            return mdocReaderNfcCceHandover(
+                tag = tag,
+                apduCommandMaxSize = apduCommandMaxSize,
+                apduResponseMaxSize = apduResponseMaxSize,
+                negotiatedHandoverConnectionMethods = negotiatedHandoverConnectionMethods,
+                options = options
+            )
         }
     }
 
@@ -167,7 +190,7 @@ suspend fun mdocReaderNfcHandover(
     // Select the service, the resulting NDEF message is specified in
     // in Tag NDEF Exchange Protocol Technical Specification Version 1.0
     // section 4.3 TNEP Status Message
-    Logger.i(TAG, "Service parameter record found, continuing with Static Handover")
+    Logger.i(TAG, "Service parameter record found, continuing with Negotiated Handover")
     val serviceSelectionResponse = tag.ndefTransact(
         NdefMessage(listOf(
             ServiceSelectRecord(Nfc.SERVICE_NAME_CONNECTION_HANDOVER).toNdefRecord()
@@ -276,49 +299,46 @@ private fun supplementBleConnectionMethods(
     }
 }
 
-private suspend fun mdocReaderNfcV2Handover(
+private suspend fun mdocReaderNfcCceHandover(
     tag: NfcIsoTag,
-    mdocNfcMaxCommandApduSize: Int,
+    apduCommandMaxSize: Int,
+    apduResponseMaxSize: Int,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
-): MdocReaderNfcHandoverResult? {
-    // Send Handover Request message, the resulting NDEF message is Handover Response
-    //
-    val combinedNegotiatedHandoverConnectionMethods = listOf(MdocConnectionMethodNfcV2()) +
-            MdocConnectionMethod.combine(negotiatedHandoverConnectionMethods)
+    options: MdocReaderNfcHandoverOptions,
+): MdocReaderNfcHandoverResult {
+    val eReaderKey = options.eReaderKey ?: Crypto.createEcPrivateKey(options.eReaderKeyCurve)
+    val combinedNegotiatedHandoverConnectionMethods = MdocConnectionMethod.combine(negotiatedHandoverConnectionMethods)
 
-    val nfcV2HandoverRequest = buildCborMap {
-        // ReaderEngagement is at key 0
-        putCborMap(0) {
-            // DeviceRetrievalMethods is at key 2
-            putCborArray(2) {
-                for (method in combinedNegotiatedHandoverConnectionMethods) {
-                    val encodedDeviceRetrievalMethod = method.toDeviceEngagement()
-                    add(Cbor.decode(encodedDeviceRetrievalMethod))
-                }
-            }
+    val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
+        for (method in combinedNegotiatedHandoverConnectionMethods) {
+            addConnectionMethod(method)
         }
     }
-    val encodedNfcV2HandoverRequest = Cbor.encode(nfcV2HandoverRequest)
-    Logger.dCbor(TAG, "NFCv2 Handover Request", nfcV2HandoverRequest)
 
-    val encodedNfcV2HandoverSelect = tag.nfcV2Transact(
-        message = ByteString(encodedNfcV2HandoverRequest),
-        commandDataFieldMaxLength = tag.maxTransceiveLength,
-        responseDataFieldMaxLength = tag.maxTransceiveLength
+    val cceHandoverRequest = buildCborMap {
+        put(0, readerEngagement.toDataItem())
+    }
+    val encodedCceHandoverRequest = Cbor.encode(cceHandoverRequest)
+    Logger.dCbor(TAG, "CCE Handover Request", cceHandoverRequest)
+
+    val encodedCceHandoverSelect = tag.nfcCceTransact(
+        message = ByteString(encodedCceHandoverRequest),
+        commandDataFieldMaxLength = min(tag.maxTransceiveLength, apduCommandMaxSize),
+        responseDataFieldMaxLength = min(tag.maxTransceiveLength, apduResponseMaxSize)
     ).toByteArray()
-    Logger.dCbor(TAG, "NFCv2 Handover Select", encodedNfcV2HandoverSelect)
+    Logger.dCbor(TAG, "CCE Handover Select", encodedCceHandoverSelect)
 
     Logger.i(TAG, "Handover complete")
 
-    val nfcV2HandoverSelect = Cbor.decode(encodedNfcV2HandoverSelect)
+    val cceHandoverSelect = Cbor.decode(encodedCceHandoverSelect)
 
-    val deviceEngagementDataItem = nfcV2HandoverSelect.get(0)
+    val deviceEngagementDataItem = cceHandoverSelect[0]
     val encodedDeviceEngagement = Cbor.encode(deviceEngagementDataItem)
 
     val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementDataItem)
 
-    check(deviceEngagement.connectionMethods.size == 1) {
-        "Expected exactly one Device Retrieval methods in engagement, found ${deviceEngagement.connectionMethods.size}"
+    check(deviceEngagement.connectionMethods.size <= 1) {
+        "Expected at most one Device Retrieval method in CCE engagement, found ${deviceEngagement.connectionMethods.size}"
     }
 
     val supplementedConnectionMethods = supplementBleConnectionMethods(
@@ -327,8 +347,8 @@ private suspend fun mdocReaderNfcV2Handover(
     )
 
     val handover = buildCborArray {
-        add(encodedNfcV2HandoverSelect) // Handover Select message
-        add(encodedNfcV2HandoverRequest)  // Handover Request message
+        add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCceHandoverSelect))) // CCEHandoverSelectBytes
+        add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCceHandoverRequest))) // CCEHandoverRequestBytes
     }
 
     return MdocReaderNfcHandoverResult(
@@ -338,7 +358,10 @@ private suspend fun mdocReaderNfcV2Handover(
         ),
         encodedDeviceEngagement = ByteString(encodedDeviceEngagement),
         handover = handover,
-        type = MdocHandoverType.V2_HANDOVER
+        type = MdocHandoverType.CCE_HANDOVER,
+        eReaderKey = eReaderKey,
+        apduCommandMaxSize = apduCommandMaxSize,
+        apduResponseMaxSize = apduResponseMaxSize,
     )
 }
 
@@ -422,7 +445,7 @@ private fun parseHandoverSelectMessage(
 }
 
 
-internal suspend fun NfcIsoTag.nfcV2Transact(
+internal suspend fun NfcIsoTag.nfcCceTransact(
     message: ByteString,
     commandDataFieldMaxLength: Int,
     responseDataFieldMaxLength: Int,

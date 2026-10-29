@@ -1,14 +1,14 @@
 package org.multipaz.testapp
 
 import org.multipaz.compose.prompt.PresentmentActivity
-import org.multipaz.mdoc.nfc.MdocNfcV2Service
+import org.multipaz.mdoc.nfc.MdocNfcCceService
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 
-private const val TAG = "TestAppMdocNfcV2Service"
+private const val TAG = "TestAppMdocNfcCceService"
 
-class TestAppMdocNfcV2Service : MdocNfcV2Service() {
+class TestAppMdocNfcCceService : MdocNfcCceService() {
 
     override suspend fun getSettings(): Settings {
         // TODO: optimize initialization of App so we can just get settingsModel and presentmentSource() out
@@ -35,7 +35,7 @@ class TestAppMdocNfcV2Service : MdocNfcV2Service() {
             presentmentModel = PresentmentActivity.presentmentModel,
             launchUi = { PresentmentActivity.startActivity() },
             sessionEncryptionCurve = app.settingsModel.presentmentSessionEncryptionCurve.value,
-            onlyAllowNfc = app.settingsModel.presentmentNfcV2OnlyAllowNfc.value,
+            onlyAllowNfc = app.settingsModel.presentmentNfcCceOnlyAllowNfc.value,
             handoverPreferredOrder = app.settingsModel.presentmentNegotiatedHandoverPreferredOrder.value,
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,

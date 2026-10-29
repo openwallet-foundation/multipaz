@@ -48,7 +48,9 @@ final class MdocPresentmentViewModel: ObservableObject {
                     version: "1.0"
                 ) { builder in
                     advertisedTransports.forEach {
-                        builder.addConnectionMethod(connectionMethod: $0.connectionMethod)
+                        if let connectionMethod = $0.connectionMethod {
+                            builder.addConnectionMethod(connectionMethod: connectionMethod)
+                        }
                     }
                 }
 

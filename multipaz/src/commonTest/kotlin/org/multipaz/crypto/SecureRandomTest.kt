@@ -1,7 +1,9 @@
 package org.multipaz.crypto
 
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.UUID
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -10,6 +12,9 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class SecureRandomTest {
+
+    @BeforeTest
+    fun setup() = testUtilSetupCryptoProvider()
 
     @Test
     fun testNextBytesVariousSizes() {

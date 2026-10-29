@@ -8,16 +8,15 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
@@ -25,14 +24,13 @@ import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportException
-import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
-import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
+import org.multipaz.mdoc.transport.NfcCceTransportMdoc
+import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.NfcTagLostException
@@ -52,55 +50,55 @@ import kotlin.test.fail
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-private const val TAG = "MdocNfcV2EngagementHelperTest"
+private const val TAG = "MdocNfcCceEngagementHelperTest"
 
 /**
- * Unit tests for [MdocNfcV2EngagementHelper] (wallet-side NFCv2 engagement and data transfer) and
- * [mdocReaderNfcHandover] / [NfcHybridTransportMdocReader] / [NfcHybridTransportMdoc] according to
- * ISO/IEC 18013-5 Second Edition (AID `A0000002480401`).
+ * Unit tests for [MdocNfcCceEngagementHelper] (wallet-side NFC CCE engagement and data transfer) and
+ * [mdocReaderNfcHandover] / [NfcCceTransportMdocReader] / [NfcCceTransportMdoc] according to
+ * ISO/IEC 18013-5 Second Edition Clause 9.5 (AID `A0000002480401`).
  *
- * ### How ISO 18013-5 Second Edition NFCv2 Engagement works
+ * ### How ISO 18013-5 Second Edition NFC CCE Engagement works
  * Unlike the 2021 NDEF engagement (which uses Type 4 Tag `READ BINARY` / `UPDATE BINARY` commands
  * on AID `D2760000850101` followed by a separate `SELECT APPLICATION` for NFC data transfer on AID
- * `A0000002480400`), NFCv2 uses a single application (`A0000002480401`) for both engagement and
+ * `A0000002480400`), NFC CCE uses a single application (`A0000002480401`) for both engagement and
  * data transfer:
  * 1. **Application selection (`SELECT APPLICATION`)**:
  *    - The reader selects `A0000002480401`.
- *    - [MdocNfcV2EngagementHelper] responds with `9000` and a CBOR map `{0: maxCommandApduSize}`
- *      indicating the maximum command APDU payload size supported by the mdoc.
+ *    - [MdocNfcCceEngagementHelper] responds with `9000` and a CBOR `CCESelectResponse` map
+ *      `{0: apduCommandMaxSize, 1: apduResponseMaxSize}`.
  * 2. **Handover exchange (`INS_ENVELOPE` #1)**:
- *    - The reader sends a CBOR `HandoverRequest` `{0: {2: [DeviceRetrievalMethods...]}}` encapsulated
- *      in BER-TLV `DO'53'`, always offering [MdocConnectionMethodNfcV2] plus any combined BLE
- *      connection methods.
- *    - [MdocNfcV2EngagementHelper] invokes `handoverPicker` to select a connection method, builds
- *      `DeviceEngagement` with the chosen method, invokes `onHandoverComplete`, and returns the CBOR
- *      `HandoverSelect` `{0: DeviceEngagement}` in `DO'53'`.
+ *    - The reader sends a CBOR `CCEHandoverRequest` `{0: ReaderEngagement}` encapsulated
+ *      in BER-TLV `DO'53'`, containing `EReaderKey` and any offered secondary connection methods.
+ *    - [MdocNfcCceEngagementHelper] invokes `handoverPicker` to select at most one secondary
+ *      connection method (or `null` for NFC-only), builds `DeviceEngagement` (omitting
+ *      `DeviceRetrievalMethods` for NFC-only), invokes `onHandoverComplete`, and returns the CBOR
+ *      `CCEHandoverSelect` `{0: DeviceEngagement}` in `DO'53'`.
  *    - If the mdoc omitted the BLE UUID in `DeviceEngagement` (because the UUID was supplied by the
- *      reader in `HandoverRequest`), [mdocReaderNfcHandover] supplements the reader's BLE UUID back
+ *      reader in `CCEHandoverRequest`), [mdocReaderNfcHandover] supplements the reader's BLE UUID back
  *      onto the returned [MdocConnectionMethodBle].
- * 3. **Hybrid / NFC-only data transfer (`INS_ENVELOPE` #2+)**:
+ * 3. **Concurrent / NFC-only data transfer (`INS_ENVELOPE` #2+)**:
  *    - Subsequent `ENVELOPE` APDUs on the same selected application carry encrypted session messages
  *      (`DeviceRequest` / `DeviceResponse` / session termination) between
- *      [NfcHybridTransportMdocReader] and [NfcHybridTransportMdoc] (via
- *      [MdocNfcV2EngagementHelper.onMessageReceived] and [MdocNfcV2EngagementHelper.sendMessage]),
+ *      [NfcCceTransportMdocReader] and [NfcCceTransportMdoc] (via
+ *      [MdocNfcCceEngagementHelper.onMessageReceived] and [MdocNfcCceEngagementHelper.sendMessage]),
  *      running in parallel with any negotiated secondary BLE transport.
  *
  * ### Test doubles used in this file
  * - [LoopbackIsoTag]: In-memory [NfcIsoTag] that forwards [CommandApdu] calls to
- *   [MdocNfcV2EngagementHelper.processApdu], records a full APDU transcript, tracks `close()` calls
+ *   [MdocNfcCceEngagementHelper.processApdu], records a full APDU transcript, tracks `close()` calls
  *   (`closeCount` and `closedDeferred`), and supports simulating mid-transaction tag loss via
  *   `failNextTransceive`.
  * - [LoopbackTransport]: Pair of in-memory [Channel]-connected [MdocTransport] instances used to
- *   simulate the negotiated secondary BLE transport between [NfcHybridTransportMdocReader] and
- *   [NfcHybridTransportMdoc].
+ *   simulate the negotiated secondary BLE transport between [NfcCceTransportMdocReader] and
+ *   [NfcCceTransportMdoc].
  */
-class MdocNfcV2EngagementHelperTest {
+class MdocNfcCceEngagementHelperTest {
 
     /**
-     * In-memory [NfcIsoTag] that routes [transceive] calls to [MdocNfcV2EngagementHelper.processApdu],
+     * In-memory [NfcIsoTag] that routes [transceive] calls to [MdocNfcCceEngagementHelper.processApdu],
      * records the APDU transcript, and tracks `close()` invocations.
      */
-    class LoopbackIsoTag(val engagementHelper: MdocNfcV2EngagementHelper): NfcIsoTag() {
+    class LoopbackIsoTag(val engagementHelper: MdocNfcCceEngagementHelper): NfcIsoTag() {
         val transcript = StringBuilder()
         var failNextTransceive = false
         var closeCount = 0
@@ -147,11 +145,10 @@ class MdocNfcV2EngagementHelperTest {
     }
 
     /**
-     * Verifies end-to-end NFCv2 engagement and data transfer in NFC-only mode
-     * ([MdocConnectionMethodNfcV2]), including:
-     * - Handover negotiation over `A0000002480401`.
+     * Verifies end-to-end NFC CCE engagement and data transfer in NFC-only mode, including:
+     * - Handover negotiation over `A0000002480401` with `CCESelectResponse` and `CCEHandover`.
      * - Request, response, and session termination message exchange between
-     *   [NfcHybridTransportMdocReader] and [NfcHybridTransportMdoc].
+     *   [NfcCceTransportMdocReader] and [NfcCceTransportMdoc].
      * - Deferred tag closing (500ms grace period) when `close()` is called immediately after sending
      *   the session termination message, and idempotency when `close()` is called multiple times.
      */
@@ -160,25 +157,28 @@ class MdocNfcV2EngagementHelperTest {
         val eDeviceKey = getEDeviceKey()
         val eReaderKey = getEReaderKey()
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
         var handoverComplete = false
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        var receivedHandover: DataItem? = null
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethod, encodedDeviceEngagement, handover, receivedEReaderKey ->
+                assertNull(connectionMethod)
+                assertEquals(eReaderKey.publicKey, receivedEReaderKey)
+                receivedHandover = handover
                 handoverComplete = true
             },
-            onMessageReceived = {
-                message -> mdocTransport.onMessageReceivedViaNfc(message)
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error ->
                 fail("onError should not be called with $error")
             },
             handoverPicker = { connectionMethods ->
-                assertEquals(1, connectionMethods.size)
-                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
-                connectionMethods.first()
+                assertTrue(connectionMethods.isEmpty())
+                null
             },
         )
 
@@ -186,24 +186,29 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
-        assertEquals(1, handoverResult.connectionMethods.size)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
-        assertTrue(handoverResult.connectionMethods.first() is MdocConnectionMethodNfcV2)
+        assertTrue(handoverResult.connectionMethods.isEmpty())
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
+        assertEquals(eReaderKey, handoverResult.eReaderKey)
+        assertEquals(65535, handoverResult.apduCommandMaxSize)
+        assertEquals(65536, handoverResult.apduResponseMaxSize)
+        assertEquals(receivedHandover, handoverResult.handover)
 
         assertTrue(handoverComplete)
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
-            negotiatedTransport = null
+            negotiatedTransport = null,
+            apduCommandMaxSize = handoverResult.apduCommandMaxSize,
+            apduResponseMaxSize = handoverResult.apduResponseMaxSize,
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
-            sendMessageViaNfc = {
-                message -> engagementHelper.sendMessage(message)
+        mdocTransport = NfcCceTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
                 true
             }
         )
@@ -241,9 +246,9 @@ class MdocNfcV2EngagementHelperTest {
         assertEquals(
             """
                 CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=0)
-                ResponseApdu(status=36864, payload=ByteString(size=7 hex=a1001a00010000))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a100a10281830501a0), le=65536)
-                ResponseApdu(status=36864, payload=ByteString(size=106 hex=5368a100a50063312e31018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c0281830501a0058006a203f504f5))
+                ResponseApdu(status=36864, payload=ByteString(size=11 hex=a20019ffff011a00010000))
+                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=92 hex=535aa100a20063312e31018201d818584ba401022001215820db1b6d2cc5e6baebd12fb76d4fa40957659832e41cade15db9038f37ef5ba321225820b0361e208471bb94a687089c4957fc4d9983abe04cdeeb155bcd690640137727), le=65536)
+                ResponseApdu(status=36864, payload=ByteString(size=100 hex=5362a100a40063312e31018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c058006a203f504f5))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65530)
                 ResponseApdu(status=36864, payload=ByteString(size=13 hex=530ba164646174614401020304))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65530)
@@ -255,7 +260,7 @@ class MdocNfcV2EngagementHelperTest {
 
     /**
      * In-memory [MdocTransport] backed by a pair of [Channel]s to simulate a secondary BLE transport
-     * alongside NFCv2.
+     * alongside NFC CCE.
      */
     class LoopbackTransport(
         override val role: MdocRole,
@@ -293,17 +298,17 @@ class MdocNfcV2EngagementHelperTest {
     }
 
     /**
-     * Verifies NFCv2 handover where the reader offers BLE Central Client Mode alongside NFCv2, the
-     * mdoc selects the BLE method, and both [NfcHybridTransportMdocReader] and [NfcHybridTransportMdoc]
-     * exchange messages with the secondary BLE [LoopbackTransport] attached.
+     * Verifies NFC CCE handover where the reader offers BLE Central Client Mode, the mdoc selects
+     * the BLE method, and both [NfcCceTransportMdocReader] and [NfcCceTransportMdoc] exchange
+     * messages with the secondary BLE [LoopbackTransport] attached.
      */
     @Test
     fun testWithBle() = runTest {
         val eDeviceKey = getEDeviceKey()
         val eReaderKey = getEReaderKey()
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
         val methods = listOf(MdocConnectionMethodBle(
             supportsPeripheralServerMode = false,
@@ -315,23 +320,24 @@ class MdocNfcV2EngagementHelperTest {
         ))
 
         var handoverComplete = false
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethod, encodedDeviceEngagement, handover, receivedEReaderKey ->
+                assertEquals(methods.first(), connectionMethod)
+                assertEquals(eReaderKey.publicKey, receivedEReaderKey)
                 handoverComplete = true
             },
-            onMessageReceived = {
-                    message -> mdocTransport.onMessageReceivedViaNfc(message)
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error ->
                 fail("onError should not be called with $error")
             },
             handoverPicker = { connectionMethods ->
-                assertEquals(2, connectionMethods.size)
-                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
-                assertEquals(methods.first(), connectionMethods[1])
+                assertEquals(1, connectionMethods.size)
+                assertEquals(methods.first(), connectionMethods[0])
                 // Pick the BLE method
-                connectionMethods[1]
+                connectionMethods[0]
             },
         )
 
@@ -339,10 +345,10 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = methods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
         assertEquals(methods.first(), handoverResult.connectionMethods[0])
 
@@ -365,13 +371,13 @@ class MdocNfcV2EngagementHelperTest {
             outgoingMessages = mdocToReader
         )
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 engagementHelper.sendMessage(message)
                 true
@@ -399,28 +405,12 @@ class MdocNfcV2EngagementHelperTest {
 
         mdocTransport.sendMessage(sessionTermination)
         assertContentEquals(sessionTermination, mdocReaderTransport.waitForMessage())
-
-        /* TODO
-        assertEquals(
-            """
-                CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=0)
-                ResponseApdu(status=36864, payload=ByteString(size=5 hex=a10019fde8))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=19 hex=5311a100a10281830501a20019fde80119fde8), le=65536)
-                ResponseApdu(status=36864, payload=ByteString(size=106 hex=5368a100a30063312e30018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c0281830501a20019fde80119fde8))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65530)
-                ResponseApdu(status=36864, payload=ByteString(size=13 hex=530ba164646174614401020304))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65530)
-                ResponseApdu(status=36864, payload=ByteString(size=11 hex=5309a16673746174757314))
-            """.trimIndent().trim(),
-            tag.transcript.toString().trim()
-        )
-         */
     }
 
     /**
-     * Verifies that when the mdoc selects BLE Central Client Mode during NFCv2 handover and omits the
+     * Verifies that when the mdoc selects BLE Central Client Mode during NFC CCE handover and omits the
      * `centralClientModeUuid` from its `DeviceEngagement` (per ISO 18013-5 Second Edition, since the
-     * reader already provided the UUID in `HandoverRequest`), [mdocReaderNfcHandover] supplements the
+     * reader already provided the UUID in `CCEHandoverRequest`), [mdocReaderNfcHandover] supplements the
      * reader's UUID onto the returned [MdocConnectionMethodBle] while preserving the raw
      * `encodedDeviceEngagement` bytes for `SessionTranscript`.
      */
@@ -451,13 +441,13 @@ class MdocNfcV2EngagementHelperTest {
             peripheralServerModeMacAddress = null
         )
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
         var handoverComplete = false
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethod, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 handoverComplete = true
             },
             onMessageReceived = { message ->
@@ -467,9 +457,8 @@ class MdocNfcV2EngagementHelperTest {
                 fail("onError should not be called with $error")
             },
             handoverPicker = { connectionMethods ->
-                assertEquals(2, connectionMethods.size)
-                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
-                assertEquals(readerMethods.first(), connectionMethods[1])
+                assertEquals(1, connectionMethods.size)
+                assertEquals(readerMethods.first(), connectionMethods[0])
                 // Pick the BLE method without UUID
                 mdocBleMethodWithoutUuid
             },
@@ -479,10 +468,10 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
 
         // Verify that the reader supplemented the UUID from readerMethods
@@ -519,13 +508,13 @@ class MdocNfcV2EngagementHelperTest {
             outgoingMessages = mdocToReader
         )
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 engagementHelper.sendMessage(message)
                 true
@@ -548,7 +537,7 @@ class MdocNfcV2EngagementHelperTest {
     }
 
     /**
-     * Verifies that when the mdoc selects BLE Peripheral Server Mode during NFCv2 handover and omits
+     * Verifies that when the mdoc selects BLE Peripheral Server Mode during NFC CCE handover and omits
      * the `peripheralServerModeUuid` from its `DeviceEngagement`, [mdocReaderNfcHandover] supplements
      * the reader's UUID onto the returned [MdocConnectionMethodBle].
      */
@@ -579,13 +568,13 @@ class MdocNfcV2EngagementHelperTest {
             peripheralServerModeMacAddress = null
         )
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
         var handoverComplete = false
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethod, encodedDeviceEngagement, handover, receivedEReaderKey ->
                 handoverComplete = true
             },
             onMessageReceived = { message ->
@@ -595,9 +584,8 @@ class MdocNfcV2EngagementHelperTest {
                 fail("onError should not be called with $error")
             },
             handoverPicker = { connectionMethods ->
-                assertEquals(2, connectionMethods.size)
-                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
-                assertEquals(readerMethods.first(), connectionMethods[1])
+                assertEquals(1, connectionMethods.size)
+                assertEquals(readerMethods.first(), connectionMethods[0])
                 mdocBleMethodWithoutUuid
             },
         )
@@ -606,10 +594,10 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
 
         // Verify that the reader supplemented the UUID from readerMethods
@@ -644,13 +632,13 @@ class MdocNfcV2EngagementHelperTest {
             outgoingMessages = mdocToReader
         )
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 engagementHelper.sendMessage(message)
                 true
@@ -704,14 +692,14 @@ class MdocNfcV2EngagementHelperTest {
             peripheralServerModeMacAddress = null
         )
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
             onError = { error ->
                 fail("onError should not be called with $error")
             },
-            handoverPicker = { connectionMethods ->
+            handoverPicker = { _ ->
                 mdocBleMethodWithoutUuid
             },
         )
@@ -720,10 +708,10 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
 
         // Disambiguation for MDOC_READER splits the combined BLE into central client and peripheral server modes
         assertEquals(2, handoverResult.connectionMethods.size)
@@ -754,7 +742,7 @@ class MdocNfcV2EngagementHelperTest {
 
     /**
      * Verifies that if the mdoc explicitly includes its own BLE UUID in `DeviceEngagement` during
-     * NFCv2 handover, [mdocReaderNfcHandover] preserves the mdoc's UUID rather than overwriting it
+     * NFC CCE handover, [mdocReaderNfcHandover] preserves the mdoc's UUID rather than overwriting it
      * with the reader's UUID.
      */
     @Test
@@ -780,14 +768,14 @@ class MdocNfcV2EngagementHelperTest {
             centralClientModeUuid = null,
         )
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
             onError = { error ->
                 fail("onError should not be called with $error")
             },
-            handoverPicker = { connectionMethods ->
+            handoverPicker = { _ ->
                 mdocBleMethodWithUuid
             },
         )
@@ -796,10 +784,10 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true)
         )
         assertNotNull(handoverResult)
-        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
 
         // Verify that mdoc's UUID is kept and not overwritten by readerUuid
@@ -809,19 +797,19 @@ class MdocNfcV2EngagementHelperTest {
     }
 
     /**
-     * Verifies that during an NFCv2 + BLE hybrid session, if the holder removes their phone from the
-     * NFC field (`tag.failNextTransceive = true`), [NfcHybridTransportMdocReader] immediately closes
+     * Verifies that during an NFC CCE + BLE session, if the holder removes their phone from the
+     * NFC field (`tag.failNextTransceive = true`), [NfcCceTransportMdocReader] immediately closes
      * the [NfcIsoTag] (so platform NFC scanning UI such as the iOS system sheet is dismissed right
      * away), seamlessly completes the transaction over the secondary BLE transport, and does not close
-     * the tag a second time when [NfcHybridTransportMdocReader.close] is called at the end.
+     * the tag a second time when [NfcCceTransportMdocReader.close] is called at the end.
      */
     @Test
     fun testTagClosedOnNfcDisconnectWithBleFallback() = runTest {
         val eDeviceKey = getEDeviceKey()
         val eReaderKey = getEReaderKey()
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
         val methods = listOf(
             MdocConnectionMethodBle(
@@ -834,9 +822,9 @@ class MdocNfcV2EngagementHelperTest {
             )
         )
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = { message ->
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
@@ -844,7 +832,7 @@ class MdocNfcV2EngagementHelperTest {
                 fail("onError should not be called with $error")
             },
             handoverPicker = { connectionMethods ->
-                connectionMethods[1]
+                connectionMethods.first()
             },
         )
 
@@ -852,7 +840,7 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = methods,
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true)
         )
         assertNotNull(handoverResult)
         assertEquals(0, tag.closeCount)
@@ -874,13 +862,13 @@ class MdocNfcV2EngagementHelperTest {
             outgoingMessages = mdocToReader
         )
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 engagementHelper.sendMessage(message)
                 true
@@ -914,7 +902,7 @@ class MdocNfcV2EngagementHelperTest {
         mdocTransport.sendMessage(response)
         assertContentEquals(response, mdocReaderTransport.waitForMessage())
 
-        // Closing the hybrid transport afterwards must be idempotent and not close the tag a second time.
+        // Closing the CCE transport afterwards must be idempotent and not close the tag a second time.
         mdocReaderTransport.close()
         assertEquals(1, tag.closeCount)
         assertEquals(MdocTransport.State.CLOSED, mdocReaderTransport.state.value)
@@ -922,8 +910,8 @@ class MdocNfcV2EngagementHelperTest {
     }
 
     /**
-     * Verifies that during an NFCv2 NFC-only session (`negotiatedTransport = null`), if the NFC tag
-     * disconnects mid-transaction, [NfcHybridTransportMdocReader] immediately closes the [NfcIsoTag],
+     * Verifies that during an NFC CCE NFC-only session (`negotiatedTransport = null`), if the NFC tag
+     * disconnects mid-transaction, [NfcCceTransportMdocReader] immediately closes the [NfcIsoTag],
      * transitions to [MdocTransport.State.FAILED], throws [MdocTransportException] from
      * `waitForMessage()`, and does not close the tag a second time when `close()` is called afterward.
      */
@@ -932,20 +920,20 @@ class MdocNfcV2EngagementHelperTest {
         val eDeviceKey = getEDeviceKey()
         val eReaderKey = getEReaderKey()
 
-        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
-        lateinit var mdocTransport: NfcHybridTransportMdoc
+        lateinit var mdocReaderTransport: NfcCceTransportMdocReader
+        lateinit var mdocTransport: NfcCceTransportMdoc
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = { message ->
                 mdocTransport.onMessageReceivedViaNfc(message)
             },
             onError = { error ->
                 fail("onError should not be called with $error")
             },
-            handoverPicker = { connectionMethods ->
-                connectionMethods.first()
+            handoverPicker = { _ ->
+                null
             },
         )
 
@@ -953,18 +941,18 @@ class MdocNfcV2EngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+            options = MdocReaderNfcHandoverOptions(useCce = true)
         )
         assertNotNull(handoverResult)
         assertEquals(0, tag.closeCount)
 
-        mdocReaderTransport = NfcHybridTransportMdocReader(
+        mdocReaderTransport = NfcCceTransportMdocReader(
             nfcTag = tag,
             negotiatedTransport = null
         )
         mdocReaderTransport.open(eReaderKey.publicKey)
 
-        mdocTransport = NfcHybridTransportMdoc(
+        mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 engagementHelper.sendMessage(message)
                 true

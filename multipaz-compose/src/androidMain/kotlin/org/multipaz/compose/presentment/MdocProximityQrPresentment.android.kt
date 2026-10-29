@@ -146,7 +146,7 @@ private fun MdocProximityQrPresentmentAndroid(
                             )
                             advertisedTransports = transports
                             val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                                transports.forEach { addConnectionMethod(it.connectionMethod) }
+                                transports.forEach { it.connectionMethod?.let { cm -> addConnectionMethod(cm) } }
                                 capabilities.forEach { (capability, value) -> addCapability(capability, value) }
                             }.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))

@@ -137,7 +137,9 @@ class PresentmentModel {
      * This moves the model into the [State.WaitingForReader] state.
      */
     fun setWaitingForReader() {
-        mutableState.value = State.WaitingForReader
+        if (mutableState.value != State.CanceledByUser) {
+            mutableState.value = State.WaitingForReader
+        }
     }
 
     /**
@@ -157,7 +159,9 @@ class PresentmentModel {
      * This moves the model into the [State.WaitingForUserInput] state.
      */
     fun setWaitingForUserInput() {
-        mutableState.value = State.WaitingForUserInput
+        if (mutableState.value != State.CanceledByUser) {
+            mutableState.value = State.WaitingForUserInput
+        }
     }
 
     /**
@@ -167,7 +171,9 @@ class PresentmentModel {
      */
     fun setSending() {
         mutableNumRequestsServed.value += 1
-        mutableState.value = State.Sending
+        if (mutableState.value != State.CanceledByUser) {
+            mutableState.value = State.Sending
+        }
     }
 
     /**

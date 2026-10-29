@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborMap
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
@@ -23,17 +25,39 @@ import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 
+internal data class CceSessionMessageInfo(
+    val seq: Int?,
+    val disconnectNfc: Boolean,
+)
+
+internal fun parseCceSessionMessageInfo(message: ByteString): CceSessionMessageInfo {
+    if (message.size == 0) {
+        return CceSessionMessageInfo(seq = null, disconnectNfc = false)
+    }
+    return try {
+        val item = Cbor.decode(message.toByteArray())
+        if (item is CborMap) {
+            val seq = item.getOrNull("seq")?.asNumber?.toInt()
+            val disconnectNfc = item.getOrNull("disconnectNfc")?.asBoolean ?: false
+            CceSessionMessageInfo(seq = seq, disconnectNfc = disconnectNfc)
+        } else {
+            CceSessionMessageInfo(seq = null, disconnectNfc = false)
+        }
+    } catch (_: Exception) {
+        CceSessionMessageInfo(seq = null, disconnectNfc = false)
+    }
+}
+
 /**
- * Hybrid transport for using NFCv2.
+ * Transport for ISO/IEC 18013-5 Second Edition NFC Concurrent Channel Engagement (CCE) on the mdoc side.
  *
- * @param sendMessageViaNfc a function to send a message via NFC, returns false if the NFC connection is no longer up.
- * be on NFC
+ * @param sendMessageViaNfc a function to send a message via NFC, returns `false` if the NFC connection is no longer up.
  */
-class NfcHybridTransportMdoc(
+class NfcCceTransportMdoc(
     private val sendMessageViaNfc: suspend (message: ByteString) -> Boolean,
 ): MdocTransport() {
     companion object {
-        private const val TAG = "NfcHybridTransportMdoc"
+        private const val TAG = "NfcCceTransportMdoc"
     }
 
     private val _state = MutableStateFlow<State>(State.IDLE)
@@ -52,10 +76,8 @@ class NfcHybridTransportMdoc(
     override val role: MdocRole
         get() = MdocRole.MDOC
 
-    override val connectionMethod: MdocConnectionMethod
-        get() {
-            throw IllegalStateException("Should not be called")
-        }
+    override val connectionMethod: MdocConnectionMethod?
+        get() = transport?.connectionMethod ?: expectedConnectionMethod
 
     override val scanningTime: Duration?
         get() = null
@@ -65,6 +87,19 @@ class NfcHybridTransportMdoc(
     private var transport: MdocTransport? = null
     private var transportMessageBacklog = mutableListOf<ByteString>()
     private var transportListenMessageJob: Job? = null
+
+    @Volatile
+    private var disconnectNfcSent = false
+
+    @Volatile
+    private var disconnectNfcReceived = false
+
+    /**
+     * Whether the next outgoing session message should include `"disconnectNfc": true`
+     * because the secondary transport is connected and NFC is still active.
+     */
+    val shouldSendDisconnectNfc: Boolean
+        get() = transport != null && !disconnectNfcSent && !disconnectNfcReceived && _isNfcConnected.value
 
     /**
      * Sets whether a [setTransport] is expected to be called.
@@ -83,7 +118,7 @@ class NfcHybridTransportMdoc(
     }
 
     /**
-     * Whether this hybrid transport is operating in NFC-only mode without alternative transports.
+     * Whether this CCE transport is operating in NFC-only mode without a secondary transport.
      */
     val isNfcOnly: Boolean
         get() = !expectTransport && transport == null && closedSecondaryStats == null
@@ -111,6 +146,11 @@ class NfcHybridTransportMdoc(
         if (!_isNfcConnected.value) {
             numNfcReTaps += 1
             addWarning(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
+            if (isNfcOnly) {
+                mutex.withLock {
+                    receivedMessagesBySeq.clear()
+                }
+            }
         }
         _isNfcConnected.value = true
         if (responsePending) {
@@ -142,7 +182,9 @@ class NfcHybridTransportMdoc(
                 null
             } else {
                 this.transport = transport
-                transportMessageBacklog.map { it.toByteArray() }
+                val list = transportMessageBacklog.map { it.toByteArray() }
+                transportMessageBacklog.clear()
+                list
             }
         }
         if (backlog == null) {
@@ -193,6 +235,7 @@ class NfcHybridTransportMdoc(
     private val mutex = Mutex()
     private val writingQueue = Channel<ByteString>(Channel.UNLIMITED)
     private val incomingMessages = Channel<ByteString>(Channel.UNLIMITED)
+    private val receivedMessagesBySeq = mutableMapOf<Int, ByteString>()
     private var incomingMessagesNumViaNfc = 0
     private var incomingMessagesNumViaTransport = 0
     private var incomingMessagesNumConveyed = 0
@@ -225,7 +268,7 @@ class NfcHybridTransportMdoc(
             MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE -> return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
             else -> {}
         }
-        val cm = transport?.let { runCatching { it.connectionMethod }.getOrNull() }
+        val cm = transport?.connectionMethod
             ?: closedSecondaryConnectionMethod
             ?: expectedConnectionMethod
         if (cm is MdocConnectionMethodBle) {
@@ -240,7 +283,7 @@ class NfcHybridTransportMdoc(
     }
 
     /**
-     * Statistics about the [NfcHybridTransportMdoc].
+     * Statistics about the [NfcCceTransportMdoc].
      */
     override val stats: MdocTransportStats
         get() {
@@ -274,24 +317,66 @@ class NfcHybridTransportMdoc(
         }
 
     private suspend fun conveyMessage(message: ByteString, fromNfc: Boolean) {
+        val info = parseCceSessionMessageInfo(message)
         val shouldConveyMessage = mutex.withLock {
-            val shouldConvey = if (fromNfc) {
-                incomingMessagesNumViaNfc++ == incomingMessagesNumConveyed
-            } else {
-                incomingMessagesNumViaTransport++ == incomingMessagesNumConveyed
+            if (info.disconnectNfc) {
+                disconnectNfcReceived = true
             }
-            if (shouldConvey) {
-                incomingMessagesNumConveyed += 1
-                if (fromNfc) {
-                    incomingMessagesNumConveyedWasViaNfc += 1
+            if (info.seq != null) {
+                // Confirm receipt of any queued messages with a lower sequence number (Clause 9.5.5 Note 1)
+                transportMessageBacklog.removeAll { queued ->
+                    val queuedSeq = parseCceSessionMessageInfo(queued).seq
+                    queuedSeq != null && queuedSeq < info.seq
+                }
+                val existing = receivedMessagesBySeq[info.seq]
+                if (existing != null) {
+                    if (fromNfc) {
+                        incomingMessagesNumViaNfc += 1
+                    } else {
+                        incomingMessagesNumViaTransport += 1
+                    }
+                    if (existing != message) {
+                        val err = MdocTransportException(
+                            "Received non-identical messages with seq=${info.seq} on NFC and secondary transport"
+                        )
+                        failTransport(err)
+                        throw err
+                    }
+                    false
                 } else {
-                    incomingMessagesNumConveyedWasViaTransport += 1
+                    receivedMessagesBySeq[info.seq] = message
+                    if (fromNfc) {
+                        incomingMessagesNumViaNfc += 1
+                        incomingMessagesNumConveyedWasViaNfc += 1
+                    } else {
+                        incomingMessagesNumViaTransport += 1
+                        incomingMessagesNumConveyedWasViaTransport += 1
+                    }
+                    incomingMessagesNumConveyed += 1
+                    if (message.size > 0) {
+                        bytesReceived += message.size
+                    }
+                    true
                 }
-                if (message.size > 0) {
-                    bytesReceived += message.size
+            } else {
+                val shouldConvey = if (fromNfc) {
+                    incomingMessagesNumViaNfc++ == incomingMessagesNumConveyed
+                } else {
+                    incomingMessagesNumViaTransport++ == incomingMessagesNumConveyed
                 }
+                if (shouldConvey) {
+                    incomingMessagesNumConveyed += 1
+                    if (fromNfc) {
+                        incomingMessagesNumConveyedWasViaNfc += 1
+                    } else {
+                        incomingMessagesNumConveyedWasViaTransport += 1
+                    }
+                    if (message.size > 0) {
+                        bytesReceived += message.size
+                    }
+                }
+                shouldConvey
             }
-            shouldConvey
         }
         val (conveyanceName, otherName) = if (fromNfc) Pair("NFC", "Transport") else Pair("Transport", "NFC")
         if (shouldConveyMessage) {
@@ -310,35 +395,44 @@ class NfcHybridTransportMdoc(
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
         val messageBs = ByteString(message)
+        val info = parseCceSessionMessageInfo(messageBs)
+        val canSendViaNfc = !disconnectNfcSent && !disconnectNfcReceived
+        if (info.disconnectNfc) {
+            disconnectNfcSent = true
+        }
         if (message.isNotEmpty()) {
             numSent += 1
             bytesSent += message.size
         }
         writingQueue.send(messageBs)
-        if (sendMessageViaNfc(messageBs)) {
-            Logger.i(TAG, "Sending message over NFC of length ${messageBs.size}")
-            numSentViaNfc += 1
-        } else {
-            if (expectTransport) {
-                Logger.i(TAG, "Error sending message over NFC of length ${messageBs.size} - " +
-                        "NFC is disconnected, continuing on non-NFC transport")
-                nfcDisconnected = true
+        if (canSendViaNfc) {
+            if (sendMessageViaNfc(messageBs)) {
+                Logger.i(TAG, "Sending message over NFC of length ${messageBs.size}")
+                numSentViaNfc += 1
             } else {
-                Logger.i(TAG, "NFC disconnected while sending message. Waiting for re-tap...")
-                addWarning(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
-                _isNfcConnected.value = false
-                _isNfcConnected.first { it }
-                if (sendMessageViaNfc(messageBs)) {
-                    Logger.i(TAG, "Successfully sent message over NFC after re-tap of length ${messageBs.size}")
-                    numSentViaNfc += 1
+                if (expectTransport) {
+                    Logger.i(TAG, "Error sending message over NFC of length ${messageBs.size} - " +
+                            "NFC is disconnected, continuing on non-NFC transport")
+                    nfcDisconnected = true
                 } else {
-                    val e = MdocTransportException("Error sending on NFC after re-tap and no non-NFC transport is expected")
-                    mutex.withLock {
-                        failTransport(e)
+                    Logger.i(TAG, "NFC disconnected while sending message. Waiting for re-tap...")
+                    addWarning(TransportWarning(TransportWarningCode.NFC_DISCONNECTED_WAITING_FOR_RETAP))
+                    _isNfcConnected.value = false
+                    _isNfcConnected.first { it }
+                    if (sendMessageViaNfc(messageBs)) {
+                        Logger.i(TAG, "Successfully sent message over NFC after re-tap of length ${messageBs.size}")
+                        numSentViaNfc += 1
+                    } else {
+                        val e = MdocTransportException("Error sending on NFC after re-tap and no non-NFC transport is expected")
+                        mutex.withLock {
+                            failTransport(e)
+                        }
+                        throw e
                     }
-                    throw e
                 }
             }
+        } else {
+            Logger.i(TAG, "Not sending message of length ${messageBs.size} over NFC because disconnectNfc was sent or received")
         }
 
         val toSend = mutex.withLock {
@@ -384,10 +478,10 @@ class NfcHybridTransportMdoc(
             if (_state.value == State.CLOSED) {
                 return
             }
-            if (_isNfcConnected.value) {
+            if (_isNfcConnected.value && !disconnectNfcSent && !disconnectNfcReceived) {
                 try {
                     sendMessageViaNfc(ByteString())
-                } catch (e: Throwable) {
+                } catch (_: Throwable) {
                     // Ignore
                 }
             }
@@ -397,7 +491,7 @@ class NfcHybridTransportMdoc(
             transportListenMessageJob = null
             transport?.let {
                 closedSecondaryStats = it.stats
-                closedSecondaryConnectionMethod = runCatching { it.connectionMethod }.getOrNull()
+                closedSecondaryConnectionMethod = it.connectionMethod
                 it.close()
             }
             transport = null

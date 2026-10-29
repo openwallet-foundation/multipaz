@@ -2,6 +2,7 @@ package org.multipaz.mdoc.nfc
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -171,7 +172,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         }
 
         listenForCancellationFromUiJob?.cancel()
-        listenForCancellationFromUiJob = serviceScope.launch(Dispatchers.Default) {
+        listenForCancellationFromUiJob = serviceScope.launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
             settings.presentmentModel?.state?.collect { state ->
                 if (state == PresentmentModel.State.CanceledByUser) {
                     engagementComplete = true
@@ -253,12 +254,16 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 val previousTransactionJob = transactionJob
                 previousTransactionJob?.cancel(TransactionSupersededException())
 
+                val engagementCancelJob = listenForCancellationFromUiJob
+                listenForCancellationFromUiJob = null
+
                 // We launch transactionJob in a new detached scope so it survives both
                 // NFC deactivation (the reader moving away) and the Service's onDestroy
                 // (as the transaction may continue over BLE and wait for UI consent).
                 transactionJob = CoroutineScope(Dispatchers.Default + settings.promptModel).launch {
                     startTransaction(
                         previousTransactionJob = previousTransactionJob,
+                        engagementCancelJob = engagementCancelJob,
                         timeStarted = timeStarted,
                         settings = settings,
                         connectionMethods = connectionMethods,
@@ -301,6 +306,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
 
     private suspend fun startTransaction(
         previousTransactionJob: Job?,
+        engagementCancelJob: Job?,
         timeStarted: Instant,
         settings: Settings,
         connectionMethods: List<MdocConnectionMethod>,
@@ -331,13 +337,14 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
             settings.presentmentModel?.setConnecting()
 
-            uiCancelJob = CoroutineScope(context).launch {
+            uiCancelJob = CoroutineScope(context).launch(start = CoroutineStart.UNDISPATCHED) {
                 settings.presentmentModel?.state?.collect { state ->
                     if (state == PresentmentModel.State.CanceledByUser) {
                         context.cancel(CancellationException("Presentment was cancelled by user"))
                     }
                 }
             }
+            engagementCancelJob?.cancel()
 
             Logger.i(TAG, "startEngagement - advertising and waiting for connection")
             val transports = connectionMethods.advertise(
@@ -416,8 +423,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             withContext(NonCancellable) {
                 monitorJob?.cancel()
                 uiCancelJob?.cancel()
-                listenForCancellationFromUiJob?.cancel()
-                listenForCancellationFromUiJob = null
+                engagementCancelJob?.cancel()
                 if (!enteredPresentment) {
                     connectedTransport?.let {
                         try {
