@@ -139,7 +139,7 @@ kotlin {
                 implementation(libs.zxing.core)
                 implementation(libs.ktor.client.android)
                 implementation(libs.androidx.browser)
-                implementation(libs.jj2000)
+                implementation(project(":multipaz-jpeg2000"))
             }
         }
         val androidUnitTest by getting {
