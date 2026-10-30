@@ -174,16 +174,6 @@ internal class OpenID4VCIProvisioningClient(
             if (keyProofs != null) {
                 put("proofs", keyProofs)
             }
-            when (credentialMetadata.format) {
-                is CredentialFormat.Mdoc -> {
-                    put("format", "mso_mdoc")
-                    put("doctype", credentialMetadata.format.docType)
-                }
-                is CredentialFormat.SdJwt -> {
-                    put("format", "dc+sd-jwt")
-                    put("vct", credentialMetadata.format.vct)
-                }
-            }
         }
         Logger.dJson(TAG, "Sending credential request to ${issuerConfiguration.credentialEndpoint}", requestBody)
         while (true) {
