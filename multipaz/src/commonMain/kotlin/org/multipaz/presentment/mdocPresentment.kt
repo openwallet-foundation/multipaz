@@ -10,7 +10,6 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
@@ -22,7 +21,6 @@ import org.multipaz.document.Document
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
-import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -197,7 +195,7 @@ suspend fun mdocPerformFaceMatching(
         }
 
         val documentType = source.documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
-        val peData = documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
+        val peData = credential.document.portraitEquivalenceData ?: documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
             ?: throw FaceNotMatchedException("Credential docType '${credential.docType}' does not support portrait image equivalence")
         val issuerSignedItem = credential.issuerNamespaces.data[peData.namespace]?.get(peData.dataElementName)
             ?: throw FaceNotMatchedException("Portrait data element '${peData.dataElementName}' not found in namespace '${peData.namespace}'")
@@ -666,7 +664,7 @@ internal fun canSatisfyChv1(
         return false
     }
     val docType = presentmentSource.documentTypeRepository.getDocumentTypeForMdoc(cred.docType)
-    val peData = docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
+    val peData = cred.document.portraitEquivalenceData ?: docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
     val hasPortrait = cred.issuerNamespaces.data[peData.namespace]?.containsKey(peData.dataElementName) == true
     if (!hasPortrait) {
         return false

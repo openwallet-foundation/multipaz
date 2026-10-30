@@ -28,7 +28,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.MapBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -273,7 +272,7 @@ private suspend fun exportMdocCredential(
                         "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
                     emptyList()
                 }
-                val peData = credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
+                val peData = credential.document.portraitEquivalenceData ?: credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
                 val hasPortrait = peData != null && claims.any {
                     it.namespaceName == peData.namespace && it.dataElementName == peData.dataElementName
                 }
