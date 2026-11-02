@@ -5,10 +5,14 @@ toolchain installed, specifically version 20. It should be installed in `~/wasi-
 
 The bundled `Makefile` will build the `build/matcher.wasm` binary which can be copied
 into `../assets/identitycredentialmatcher.wasm` where it will get picked up as part
-of the multipaz-dcapi-credman library. The following command-line does this
+of the multipaz-dcapi-credman library. It also builds `build/issuance_matcher.wasm`, the
+matcher used for credential offers from `navigator.credentials.create()`, see
+`issuance_matcher.cpp`, which goes into `../assets/issuancematcher.wasm`. The
+following command-line does this
 
 ```shell
-$ make clean && make -j && cp build/matcher.wasm ../assets/identitycredentialmatcher.wasm
+$ make clean && make -j && cp build/matcher.wasm ../assets/identitycredentialmatcher.wasm \
+    && cp build/issuance_matcher.wasm ../assets/issuancematcher.wasm
 ```
 
 The [cJSON library](https://github.com/DaveGamble/cJSON) is bundled as `cJSON.[c, h]` with

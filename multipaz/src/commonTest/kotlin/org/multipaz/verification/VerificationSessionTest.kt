@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -332,6 +333,37 @@ class VerificationSessionTest {
         assertVerifiedMdl(record)
     }
 
+    /**
+     * OpenID4VP 1.0 Appendix A.3.2.2 does not say where in `data` the JWS JSON Serialization of a multisigned
+     * request goes: [VerificationUtil] makes it `data` itself, and e.g. the OpenID Foundation conformance suite
+     * sends it as the value of `request`. The wallet must answer both.
+     */
+    @Test
+    fun testOpenID4VPDcApiMultisignedInRequest() = runTest {
+        setup()
+
+        val nonce = ByteString(Random.nextBytes(18))
+        val session = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
+            dcql = MDL_DCQL,
+            transactionData = mdlPingTransactionData,
+            verifierIdentities = listOf(secondaryIdentity, readerIdentity),
+            origin = ORIGIN,
+            nonce = nonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+
+        val dcResponse = walletDcApiResponse(
+            session = session,
+            protocolName = "openid4vp-v1-multisigned",
+            transformData = { data -> buildJsonObject { put("request", data) } },
+        )
+        val record = session.processDcResponse(dcResponse)
+        record.verifyNonce(nonce)
+        assertVerifiedMdl(record)
+    }
+
     @Test
     fun testOpenID4VPDcApiDraft24() = runTest {
         setup()
@@ -581,11 +613,13 @@ class VerificationSessionTest {
      * Wallet-side dispatch for both DC API protocols. Pulls the entry for [protocolName] from
      * `getDcRequest()`, runs it through [digitalCredentialsPresentment], and returns the
      * `{ "protocol", "data" }` envelope that [VerificationSession.processDcResponse] expects.
+     * [transformData] changes the entry's `data` before the wallet reads it.
      */
     private suspend fun walletDcApiResponse(
         session: VerificationSession,
         protocolName: String,
         preselectedDocuments: List<Document> = emptyList(),
+        transformData: (data: JsonObject) -> JsonObject = { it },
     ): JsonObject {
         val dcRequest = session.getDcRequest()
         val protocolEntry = dcRequest["requests"]!!.jsonArray
@@ -593,7 +627,7 @@ class VerificationSessionTest {
             .jsonObject
         return digitalCredentialsPresentment(
             protocol = protocolEntry["protocol"]!!.jsonPrimitive.content,
-            data = protocolEntry["data"]!!.jsonObject,
+            data = transformData(protocolEntry["data"]!!.jsonObject),
             appId = APP_ID,
             origin = ORIGIN,
             preselectedDocuments = preselectedDocuments,

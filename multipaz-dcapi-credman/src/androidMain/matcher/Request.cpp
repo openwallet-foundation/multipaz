@@ -552,7 +552,16 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
     std::vector<std::vector<uint8_t>> readerAuthAkis;
 
     cJSON* request = cJSON_GetObjectItem(dataJson, "request");
+    // OpenID4VP 1.0 Appendix A.3.2.2 does not say where in `data` the JWS JSON Serialization of a multisigned
+    // request goes: read it both as `data` itself and as the value of `request`.
+    if (request != nullptr && cJSON_IsObject(request)) {
+        dataJson = request;
+        request = nullptr;
+    }
     if (request != nullptr) {
+        if (!cJSON_IsString(request)) {
+            return nullptr;
+        }
         std::string jwtStr = std::string(cJSON_GetStringValue(request));
         size_t firstDot = jwtStr.find(".");
         if (firstDot == std::string::npos) {

@@ -16,10 +16,6 @@
 package org.multipaz.document
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.openid.claim.OpenID4VCIClaimDescription
@@ -34,6 +30,7 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.MdocPortraitEquivalenceData
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.tags.Tags
 import kotlin.collections.component1
@@ -188,6 +185,13 @@ class Document internal constructor(
         get() = data.openID4VCIClaimDescriptions?.let { decodeOpenID4VCIClaimDescriptions(it) } ?: emptyList()
 
     /**
+     * The portrait equivalence data for this document, if any. This is used to determine whether a
+     * document type supports portrait equivalence and what data elements are used for that purpose.
+     * If this is `null`, the document type does not support portrait equivalence.
+     */
+    val portraitEquivalenceData: MdocPortraitEquivalenceData? get() = data.portraitEquivalenceData
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -215,7 +219,8 @@ class Document internal constructor(
                     } else {
                         ByteString(Cbor.encode(newData))
                     },
-                    openID4VCIClaimDescriptions = data.openID4VCIClaimDescriptions
+                    openID4VCIClaimDescriptions = data.openID4VCIClaimDescriptions,
+                    portraitEquivalenceData = data.portraitEquivalenceData
                 )
                 // Emit events only if something actually changed.
                 if (data != this.data) {
@@ -477,7 +482,8 @@ class Document internal constructor(
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags),
-                openID4VCIClaimDescriptions = openID4VCIClaimDescriptions
+                openID4VCIClaimDescriptions = openID4VCIClaimDescriptions,
+                portraitEquivalenceData = data.portraitEquivalenceData
             )
             editAction.invoke(editor)
             val newTagsData = if (editor.tags.tags.isEmpty()) {
@@ -501,7 +507,8 @@ class Document internal constructor(
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
-                openID4VCIClaimDescriptions = editor.openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor()
+                openID4VCIClaimDescriptions = editor.openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor(),
+                portraitEquivalenceData = editor.portraitEquivalenceData
             )
             // Emit events only if something actually changed.
             if (data != this.data) {
@@ -536,6 +543,7 @@ class Document internal constructor(
      * @property tags A [Tags] for storing application-specific data.
      * @property openID4VCIClaimDescriptions Descriptions of the claims in the document as provided by the issuer
      *  in its OpenID4VCI metadata.
+     * @property portraitEquivalenceData The portrait equivalence data for this document, if any.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -551,7 +559,8 @@ class Document internal constructor(
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor,
-        var openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList()
+        var openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList(),
+        var portraitEquivalenceData: MdocPortraitEquivalenceData?
     )
 
     /**

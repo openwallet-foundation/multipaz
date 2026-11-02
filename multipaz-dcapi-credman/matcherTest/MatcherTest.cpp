@@ -9,6 +9,9 @@
 // See matcher.cpp for this
 extern "C" void matcher(void);
 
+// See issuance_matcher.cpp for this
+extern "C" void issuance_matcher(void);
+
 static void* requestBuf = nullptr;
 static uint32_t requestSize = 0;
 
@@ -16,6 +19,9 @@ static void* credentialDatabaseBuf = nullptr;
 static uint32_t credentialDatabaseSize = 0;
 
 static std::string output;
+
+// Details of entries added with AddStringIdEntry(), only included in the output of the issuance matcher.
+static std::string entryDetails;
 
 extern "C"
 JNIEXPORT jstring JNICALL
@@ -34,6 +40,24 @@ Java_org_multipaz_presentment_MatcherTest_runMatcher(
     return env->NewStringUTF(output.c_str());
 }
 
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_org_multipaz_digitalcredentials_IssuanceMatcherTest_runIssuanceMatcher(
+        JNIEnv *env,
+        jobject thiz,
+        jbyteArray request,
+        jbyteArray creationOptions) {
+    jboolean isCopy;
+    requestBuf = env->GetByteArrayElements(request, &isCopy);
+    requestSize = env->GetArrayLength(request);
+    credentialDatabaseBuf = env->GetByteArrayElements(creationOptions, &isCopy);
+    credentialDatabaseSize = env->GetArrayLength(creationOptions);
+    output = "";
+    entryDetails = "";
+    issuance_matcher();
+    return env->NewStringUTF((output + entryDetails).c_str());
+}
+
 // Stub out all the CredentialManager functions so they pipe/to from our tests
 
 // Deprecated. Use AddStringIdEntry instead.
@@ -48,6 +72,9 @@ extern "C" void AddField(long long cred_id, char *field_display_name, char *fiel
 extern "C" void AddStringIdEntry(char *cred_id, char* icon, size_t icon_len, char *title, char *subtitle, char *disclaimer, char *warning) {
     output += "Entry\n";
     output += std::format("  cred_id {}\n", cred_id);
+    entryDetails += std::format("  title {}\n", title != nullptr ? title : "(null)");
+    entryDetails += std::format("  subtitle {}\n", subtitle != nullptr ? subtitle : "(null)");
+    entryDetails += std::format("  icon {} bytes\n", icon != nullptr ? icon_len : 0);
 }
 
 extern "C" void AddFieldForStringIdEntry(char *cred_id, char *field_display_name, char *field_display_value) {

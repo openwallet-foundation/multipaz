@@ -45,6 +45,9 @@ extern "C" void matcher(void) {
                     protocolValue == "openid4vp-v1-multisigned") {
 
                 auto request = OpenID4VPRequest::parseOpenID4VP(protocolData, protocolValue);
+                if (request == nullptr) {
+                    continue;
+                }
                 auto dcqlResponse = request->dclqQuery.execute(db, protocolValue);
                 if (dcqlResponse.has_value()) {
                     auto combinations = dcqlResponse.value().getCredentialCombinations();
