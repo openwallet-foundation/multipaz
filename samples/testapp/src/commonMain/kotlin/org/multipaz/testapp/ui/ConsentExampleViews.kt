@@ -6,12 +6,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -45,22 +43,13 @@ private fun selectedFare(context: TransactionDataContext): TransitFareTransactio
     return payload.fares.find { it.id == fareId } ?: TransitFareTransaction.defaultFare(payload)
 }
 
-@Composable
-private fun ViewAllDetails(context: TransactionDataContext) {
-    context.showDetails?.let { showDetails ->
-        TextButton(onClick = showDetails) {
-            Text(text = "View all details ›")
-        }
-    }
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransitFareSummary(context: TransactionDataContext) {
     val payload = context.transactionData.first().payload as TransitFareTransaction.Payload
     val fare = selectedFare(context)
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = if (context.hasClaims) 12.dp else 0.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
@@ -82,7 +71,6 @@ private fun TransitFareSummary(context: TransactionDataContext) {
                 )
             }
         }
-        ViewAllDetails(context)
     }
 }
 
@@ -106,7 +94,7 @@ private fun PrescriptionPickupSummary(context: TransactionDataContext) {
     val payload = context.transactionData.first().payload as PrescriptionPickupTransaction.Payload
     val count = payload.items.size
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = if (context.hasClaims) 12.dp else 0.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
@@ -125,7 +113,6 @@ private fun PrescriptionPickupSummary(context: TransactionDataContext) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        ViewAllDetails(context)
     }
 }
 

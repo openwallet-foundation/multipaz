@@ -310,8 +310,15 @@ class DocumentType private constructor(
             val splits = identifier.split(".")
             when (splits.size ) {
                 1 -> {
-                    jsonBuilder?.addClaim(type, identifier, displayName, description, icon, sampleValue)
-                        ?: throw Exception("The JSON Document Type was not initialized")
+                    jsonBuilder?.addClaim(
+                        type = type,
+                        identifier = identifier,
+                        displayName = displayName,
+                        description = description,
+                        sensitivity = sensitivity,
+                        icon = icon,
+                        sampleValue = sampleValue
+                    ) ?: throw Exception("The JSON Document Type was not initialized")
                 }
                 2 -> {
                     jsonBuilder?.addEmbeddedAttribute(

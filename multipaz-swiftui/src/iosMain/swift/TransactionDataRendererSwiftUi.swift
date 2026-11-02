@@ -16,8 +16,8 @@ open class TransactionDataRendererSwiftUi: TransactionDataRenderer {
     /// Drawn in the consent prompt; should show only what the user needs to decide.
     public let summary: (_ context: TransactionDataContext) -> AnyView
 
-    /// Drawn on a separate page inside the consent prompt when `summary` calls
-    /// `TransactionDataContext.showDetails`, or `nil` for no details page.
+    /// Drawn on a separate page inside the consent prompt when the user taps the
+    /// "View details" button rendered by the prompt, or `nil` for no details page.
     public let details: ((_ context: TransactionDataContext) -> AnyView)?
 
     public init(

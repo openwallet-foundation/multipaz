@@ -26,4 +26,10 @@ data class Requester(
      */
     val isWebOrigin: Boolean
         get() = origin != null && (origin.isEmpty() || origin.startsWith("http://") || origin.startsWith("https://"))
+
+    /**
+     * Set to `true` if this is a proximity request (neither [origin] nor [appId] is set).
+     */
+    val isProximity: Boolean
+        get() = origin == null && appId == null
 }

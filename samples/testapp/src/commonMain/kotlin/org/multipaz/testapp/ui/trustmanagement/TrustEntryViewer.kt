@@ -29,9 +29,9 @@ import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.datetime.formattedDateTime
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemText
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
+import org.multipaz.compose.items.SegmentedItemText
 import org.multipaz.compose.trustmanagement.TrustEntryInfo
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.crypto.X509CertChain
@@ -115,11 +115,11 @@ fun TrustEntryViewer(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
-            FloatingItemList(
+            SegmentedItemList(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                 title = null
             ) {
-                FloatingItemHeadingAndText("Test only",
+                SegmentedItemHeadingAndText("Test only",
                     if (entry.metadata.testOnly) {
                         "Yes"
                     } else {
@@ -160,43 +160,43 @@ private fun VicalDetails(
     onViewVicalEntry: (vicalCertNum: Int) -> Unit,
     onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
-    FloatingItemList(
+    SegmentedItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
         title = "VICAL data"
     ) {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Version",
             text = signedVical.vical.version
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Provider",
             text = signedVical.vical.vicalProvider
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Issue",
             text = signedVical.vical.vicalIssueID.toString()
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Issued at",
             text = formattedDateTime(signedVical.vical.date)
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Next update",
             text = signedVical.vical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Valid until",
             text = signedVical.vical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Update URL",
             text = signedVical.vical.vicalUrl ?: "-"
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             "Signer",
             "Click to view certificate chain",
             modifier = Modifier.clickable {
@@ -211,12 +211,12 @@ private fun VicalDetails(
         }
     }
 
-    FloatingItemList(
+    SegmentedItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
         title = "Certificates"
     ) {
         signedVical.vical.certificateInfos.forEachIndexed { n, certificateInfo ->
-            FloatingItemText(
+            SegmentedItemText(
                 modifier = Modifier.clickable { onViewVicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,
@@ -233,47 +233,47 @@ private fun RicalDetails(
     onViewRicalEntry: (ricalCertNum: Int) -> Unit,
     onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
-    FloatingItemList(
+    SegmentedItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
         title = "RICAL data"
     ) {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Type",
             text = signedRical.rical.type
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Version",
             text = signedRical.rical.version
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Provider",
             text = signedRical.rical.provider
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "ID",
             text = signedRical.rical.id?.toString() ?: "-"
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Issued at",
             text = formattedDateTime(signedRical.rical.date)
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Next update",
             text = signedRical.rical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Valid until",
             text = signedRical.rical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "URL",
             text = signedRical.rical.latestRicalUrl ?: "-"
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             "Signer",
             "Click to view certificate chain",
             modifier = Modifier.clickable {
@@ -288,12 +288,12 @@ private fun RicalDetails(
         }
     }
 
-    FloatingItemList(
+    SegmentedItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
         title = "Certificates"
     ) {
         signedRical.rical.certificateInfos.forEachIndexed { n, certificateInfo ->
-            FloatingItemText(
+            SegmentedItemText(
                 modifier = Modifier.clickable { onViewRicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,
@@ -323,7 +323,7 @@ internal fun ItemWithExtensions(
         ))
         sb.append("$key: $valueStr\n")
     }
-    return FloatingItemHeadingAndText(
+    return SegmentedItemHeadingAndText(
         heading = heading,
         text = sb.toString(),
         modifier = modifier

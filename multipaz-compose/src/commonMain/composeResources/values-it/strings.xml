@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">Concedi autorizzazione</string>
     <string name="face_matcher_prompt_cancel">Annulla</string>
     <string name="face_matcher_prompt_confirm">Conferma</string>
+    <string name="certificate_viewer_tab_leaf">Foglia</string>
+    <string name="certificate_viewer_tab_intermediate">Intermedio</string>
+    <string name="certificate_viewer_tab_intermediate_n">Interm. %1$d</string>
+    <string name="certificate_viewer_tab_root">Radice</string>
 </resources>

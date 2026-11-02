@@ -1,5 +1,6 @@
 package org.multipaz.presentment
 
+import org.multipaz.consent.PresentmentPurpose
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.request.Requester
@@ -26,17 +27,16 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @property trustedRequesterIdentity the requester's trust status, or `null` if not trusted.
  * @property hasClaims whether the credential also discloses claims, for wording such as
  *   "will also be approved".
+ * @property purposes the inferred [PresentmentPurpose]s for the current selection.
  * @property userInput the input the user has given for this type so far, or `null`.
  * @property onUserInputChanged called when the user changes their input.
- * @property showDetails opens the details page for this type, or `null` if the renderer has no
- *   details view or this is the details page itself.
  */
 class TransactionDataContext(
     val transactionData: List<TransactionData<*>>,
     val requester: Requester,
     val trustedRequesterIdentity: TrustedRequesterIdentity?,
     val hasClaims: Boolean,
+    val purposes: Set<PresentmentPurpose> = emptySet(),
     val userInput: TransactionUserInput?,
     val onUserInputChanged: (userInput: TransactionUserInput) -> Unit,
-    val showDetails: (() -> Unit)?,
 )

@@ -54,6 +54,7 @@ class ViewModel {
     var documentStore: DocumentStore!
     var documentModel: DocumentModel!
     var readerTrustManager: TrustManager!
+    var requesterHistory: RequesterHistory!
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
     var faceMatcherRepository: FaceMatcherRepository!
@@ -90,6 +91,11 @@ class ViewModel {
             storage: storage,
             secureAreaRepository: secureAreaRepository
         ).build()
+        requesterHistory = SimpleRequesterHistory(
+            storage: storage,
+            partitionId: "default",
+            clock: KotlinClockCompanion.shared.getSystem()
+        )
         readerTrustManager = TrustManager(storage: storage, identifier: "default", partitionId: "default_default")
         try! await readerTrustManager.deleteAll()
         try! await readerTrustManager.addX509Cert(
@@ -392,6 +398,7 @@ class ViewModel {
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: nil,
+            requesterHistory: requesterHistory,
             getFaceMatcherFn: {
                 if self.selectedFaceMatcher == "None" {
                     return nil
@@ -424,7 +431,8 @@ class ViewModel {
                     presentmentData: presentmentData,
                     preselectedDocuments: preselectedDocuments,
                     onDocumentsInFocus: { documents in onDocumentsInFocus(documents) },
-                    transactionDataRendererRepository: self.transactionDataRendererRepository
+                    transactionDataRendererRepository: self.transactionDataRendererRepository,
+                    requesterHistory: self.requesterHistory
                 )
             },
             preferSignatureToKeyAgreement: false,

@@ -101,6 +101,7 @@ import org.multipaz.mpzpass.MpzPass
 import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.SimpleRequesterHistory
 import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
 import org.multipaz.facenet.FaceNetModelConfig
@@ -142,8 +143,8 @@ import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
 import org.multipaz.testapp.ui.EventViewerScreen
-import org.multipaz.testapp.ui.FloatingItemListScreen
-import org.multipaz.testapp.ui.LazyFloatingItemListScreen
+import org.multipaz.testapp.ui.LazySegmentedItemListScreen
+import org.multipaz.testapp.ui.SegmentedItemListScreen
 import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
@@ -180,6 +181,7 @@ import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toHex
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
@@ -267,6 +269,7 @@ class App private constructor (val promptModel: PromptModel) {
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             eventLogger = eventLogger,
+            requesterHistory = requesterHistory,
             getFaceMatcherFn = {
                 val selected = settingsModel.presentmentFaceMatcher.value
                 if (selected == "None") {
@@ -287,6 +290,7 @@ class App private constructor (val promptModel: PromptModel) {
                         preselectedDocuments = preselectedDocuments,
                         onDocumentsInFocus = onDocumentsInFocus,
                         transactionDataRendererRepository = transactionDataRendererRepository,
+                        requesterHistory = requesterHistory,
                     )
                 }
             } else {
@@ -325,14 +329,17 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun resolveTrust(requesterIdentity: RequesterIdentity): TrustMetadata? {
         // If available, use dynamic metadata in Multipaz X509 extension for a Google account... Since this is
         // TestApp also trust the "Untrusted Devices" CA (production wallets would not want to do that)
-        val rootPublicKey = requesterIdentity.certChain.certificates.last().ecPublicKey
+        val rootCert = requesterIdentity.certChain.certificates.last()
+        val rootPublicKey = rootCert.ecPublicKey
         if (rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_PUBLIC_KEY ||
             rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES_PUBLIC_KEY) {
             val readerCert = requesterIdentity.certChain.certificates.first()
             readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let { extData ->
                 MultipazExtension.fromCbor(extData).googleAccount?.let { googleAccount ->
                     if (googleAccount.emailAddress != null && googleAccount.profilePictureUri != null) {
+                        val rootSki = rootCert.subjectKeyIdentifier?.toHex().orEmpty()
                         return TrustMetadata(
+                                identifier = "${rootSki}_${googleAccount.id}",
                                 displayName = googleAccount.emailAddress,
                                 displayIconUrl = googleAccount.profilePictureUri,
                                 disclaimer = "The email and picture shown are from the requester's Google Account. " +
@@ -952,6 +959,7 @@ class App private constructor (val promptModel: PromptModel) {
     }
     
     lateinit var eventLogger: SimpleEventLogger
+    lateinit var requesterHistory: SimpleRequesterHistory
 
     private suspend fun eventLoggerInit() {
         eventLogger = SimpleEventLogger(
@@ -959,6 +967,9 @@ class App private constructor (val promptModel: PromptModel) {
             onAddEvent = { event ->
                 emptyMap()
             }
+        )
+        requesterHistory = SimpleRequesterHistory(
+            storage = TestAppConfiguration.storage,
         )
     }
 
@@ -1289,7 +1300,7 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickEventLog = { navController.navigate(EventLogDestination) },
                             onClickShareSheet = { navController.navigate(ShareSheetDestination) },
                             onClickGenerateMpzPass = { navController.navigate(GenerateMpzPassDestination) },
-                            onClickFloatingItemList = { navController.navigate(FloatingItemListDestination) },
+                            onClickSegmentedItemList = { navController.navigate(SegmentedItemListDestination) },
                             onClickDeviceCheck = { navController.navigate(DeviceCheckDestination) },
                         )
                     }
@@ -1969,19 +1980,19 @@ class App private constructor (val promptModel: PromptModel) {
                         )
                     }
                 }
-                composable<FloatingItemListDestination> { backstackEntry ->
-                    WithAppBar(navController, "FloatingItemList examples") {
-                        FloatingItemListScreen(
+                composable<SegmentedItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "SegmentedItemList examples") {
+                        SegmentedItemListScreen(
                             showToast = { message -> showToast(message) },
-                            onNavigateToLazyFloatingItemList = {
-                                navController.navigate(LazyFloatingItemListDestination)
+                            onNavigateToLazySegmentedItemList = {
+                                navController.navigate(LazySegmentedItemListDestination)
                             }
                         )
                     }
                 }
-                composable<LazyFloatingItemListDestination> { backstackEntry ->
-                    WithAppBar(navController, "LazyFloatingItemList example") {
-                        LazyFloatingItemListScreen(
+                composable<LazySegmentedItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "LazySegmentedItemList example") {
+                        LazySegmentedItemListScreen(
                             showToast = { message -> showToast(message) },
                         )
                     }

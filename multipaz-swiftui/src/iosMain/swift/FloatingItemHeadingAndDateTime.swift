@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A list item view that displays a bold heading with a date and time below it,
 /// an optional leading image, and an optional trailing view.
-public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View>: View {
+public struct SegmentedItemHeadingAndDateTime<ImageView: View, TrailingView: View>: View {
 
     /// The heading string displayed in a bold font above the primary text.
     public var heading: String
@@ -30,7 +30,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
     /// A view builder that creates the trailing content, pushed to the rightmost edge.
     @ViewBuilder public var trailingContent: () -> TrailingView
 
-    /// Creates a new floating item with a heading and a date and time.
+    /// Creates a new segmented item with a heading and a date and time.
     ///
     /// - Parameters:
     ///   - heading: The bold heading to display.
@@ -45,7 +45,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
         heading: String,
         dateTime: Date?,
         showChevron: Bool = false,
-        timeZone: Foundation.TimeZone = TimeZone.current,
+        timeZone: Foundation.TimeZone = swiftUiTimeZoneForTesting ?? TimeZone.current,
         dateStyle: DateFormatter.Style = .medium,
         timeStyle: DateFormatter.Style = .medium,
         @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
@@ -72,7 +72,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
     }
 
     public var body: some View {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading: heading,
             text: text,
             showChevron: showChevron,
@@ -81,3 +81,52 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
         )
     }
 }
+
+/// A list item view that displays a bold heading with a date and time below it,
+/// an optional leading image, and an optional trailing view.
+@available(*, deprecated, renamed: "SegmentedItemHeadingAndDateTime")
+public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View>: View {
+
+    public var heading: String
+    public var dateTime: Date?
+    public var showChevron: Bool
+    public var timeZone: Foundation.TimeZone
+    public var dateStyle: DateFormatter.Style
+    public var timeStyle: DateFormatter.Style
+    @ViewBuilder public var image: () -> ImageView
+    @ViewBuilder public var trailingContent: () -> TrailingView
+
+    public init(
+        heading: String,
+        dateTime: Date?,
+        showChevron: Bool = false,
+        timeZone: Foundation.TimeZone = swiftUiTimeZoneForTesting ?? TimeZone.current,
+        dateStyle: DateFormatter.Style = .medium,
+        timeStyle: DateFormatter.Style = .medium,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.heading = heading
+        self.dateTime = dateTime
+        self.showChevron = showChevron
+        self.timeZone = timeZone
+        self.dateStyle = dateStyle
+        self.timeStyle = timeStyle
+        self.image = image
+        self.trailingContent = trailingContent
+    }
+
+    public var body: some View {
+        SegmentedItemHeadingAndDateTime(
+            heading: heading,
+            dateTime: dateTime,
+            showChevron: showChevron,
+            timeZone: timeZone,
+            dateStyle: dateStyle,
+            timeStyle: timeStyle,
+            image: image,
+            trailingContent: trailingContent
+        )
+    }
+}
+

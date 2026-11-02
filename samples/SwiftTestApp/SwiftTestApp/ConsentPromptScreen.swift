@@ -104,9 +104,14 @@ struct ConsentPromptScreen: View {
                                 presentmentData: requestData.presentmentData,
                                 preselectedDocuments: [],
                                 onDocumentsInFocus: { documents in },
-                                transactionDataRendererRepository: viewModel.transactionDataRendererRepository
+                                transactionDataRendererRepository: viewModel.transactionDataRendererRepository,
+                                requesterHistory: viewModel.requesterHistory
                             )
                             if selection != nil {
+                                try? await viewModel.requesterHistory.recordShare(
+                                    requester: requestData.requester,
+                                    trustedRequesterIdentity: requestData.trustedRequesterIdentity
+                                )
                                 print("Selection: \(selection!)")
                             } else {
                                 print("Consent prompt was dismissed!")

@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">İzin Ver</string>
     <string name="face_matcher_prompt_cancel">İptal</string>
     <string name="face_matcher_prompt_confirm">Onayla</string>
+    <string name="certificate_viewer_tab_leaf">Uç</string>
+    <string name="certificate_viewer_tab_intermediate">Ara</string>
+    <string name="certificate_viewer_tab_intermediate_n">Ara %1$d</string>
+    <string name="certificate_viewer_tab_root">Kök</string>
 </resources>

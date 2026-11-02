@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import org.multipaz.compose.items.FloatingItemCenteredText
+import org.multipaz.compose.items.SegmentedItemCenteredText
 import org.multipaz.compose.pickers.FilePicker
 import org.multipaz.compose.pickers.rememberFilePicker
 import org.multipaz.compose.trustmanagement.TrustManagerModel
@@ -282,8 +282,8 @@ fun TrustManagerScreen(
                 trustManagerModel = builtIn,
                 title = "Built-in",
                 imageLoader = imageLoader,
-                loading = { FloatingItemCenteredText(text = "Loading...") },
-                noItems = { FloatingItemCenteredText(text = "No built-in trust points") },
+                loading = { SegmentedItemCenteredText(text = "Loading...") },
+                noItems = { SegmentedItemCenteredText(text = "No built-in trust points") },
                 onTrustEntryClicked = { trustEntry ->
                     onTrustEntryClicked(builtIn.trustManager.identifier, trustEntry.identifier)
                 }
@@ -293,8 +293,8 @@ fun TrustManagerScreen(
                 trustManagerModel = user,
                 title = "Manually imported",
                 imageLoader = imageLoader,
-                loading = { FloatingItemCenteredText(text = "Loading...") },
-                noItems = { FloatingItemCenteredText(text = "Certificates and trust lists manually imported will appear in this list") },
+                loading = { SegmentedItemCenteredText(text = "Loading...") },
+                noItems = { SegmentedItemCenteredText(text = "Certificates and trust lists manually imported will appear in this list") },
                 onTrustEntryClicked = { trustEntry ->
                     onTrustEntryClicked(user.trustManager.identifier, trustEntry.identifier)
                 }

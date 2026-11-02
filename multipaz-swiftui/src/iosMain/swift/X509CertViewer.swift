@@ -1,57 +1,112 @@
 import SwiftUI
 import Combine
+import UIKit
 
 private let oidToPrettyName = [
-    OID.commonName.oid: "Common Name",
-    OID.serialNumber.oid: "Serial Number",
-    OID.countryName.oid: "Country",
+    OID.commonName.oid: "Common name",
+    OID.serialNumber.oid: "Serial number",
+    OID.countryName.oid: "Country name",
     OID.localityName.oid: "Locality",
     OID.stateOrProvinceName.oid: "State or province",
     OID.organizationName.oid: "Organization",
     OID.organizationalUnitName.oid: "Organizational unit",
 ]
 
+/// Shows an X.509 certificate or certificate chain.
+///
+/// When initialized with a chain containing more than one certificate, a segmented control is
+/// displayed at the top allowing the user to switch between the leaf, intermediate, and root
+/// certificates.
 public struct X509CertViewer: View {
-    let certificate: X509Cert
-    private let data: CertificateViewData
+    let certificates: [X509Cert]
+    @State private var selectedCertIndex: Int = 0
 
+    /// Creates a viewer for a single ``X509Cert``.
+    ///
+    /// - Parameter certificate: The ``X509Cert`` to display.
     public init(certificate: X509Cert) {
-        self.certificate = certificate
-        self.data = CertificateViewData(from: certificate)
+        self.certificates = [certificate]
+    }
+
+    /// Creates a viewer for an ``X509CertChain``.
+    ///
+    /// - Parameter certChain: The ``X509CertChain`` to display.
+    public init(certChain: X509CertChain) {
+        self.certificates = certChain.certificates
+    }
+
+    /// Creates a viewer for an array of ``X509Cert``s representing a certificate chain.
+    ///
+    /// - Parameter certificates: The certificates in the chain (from leaf to root).
+    public init(certificates: [X509Cert]) {
+        self.certificates = certificates
+    }
+
+    private func tabLabel(for index: Int, count: Int) -> String {
+        if index == 0 {
+            return "Leaf"
+        } else if index == count - 1 {
+            return "Root"
+        } else if count == 3 {
+            return "Intermediate"
+        } else {
+            return "Int. \(index)"
+        }
     }
 
     public var body: some View {
-        VStack(spacing: 10) {
-            BasicInfoView(data: data)
-            SubjectView(data: data)
-            IssuerView(data: data)
-            PublicKeyInfoView(data: data)
-            ExtensionsView(data: data)
+        if certificates.isEmpty {
+            EmptyView()
+        } else {
+            let safeIndex = min(max(0, selectedCertIndex), certificates.count - 1)
+            let data = CertificateViewData(from: certificates[safeIndex])
+            VStack(spacing: 12) {
+                if certificates.count > 1 {
+                    Picker("Certificate", selection: $selectedCertIndex) {
+                        ForEach(0..<certificates.count, id: \.self) { index in
+                            Text(tabLabel(for: index, count: certificates.count))
+                                .tag(index)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                BasicInfoView(data: data)
+                SubjectView(data: data)
+                IssuerView(data: data)
+                PublicKeyInfoView(data: data)
+                ExtensionsView(data: data)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct BasicInfoView: View {
     let data: CertificateViewData
-    @State private var isCopied = false
 
     var body: some View {
-        FloatingItemList(title: "Basic Information") {
-            FloatingItemHeadingAndText(heading: "Type", text: "Version \(data.version)")
-            FloatingItemHeadingAndText(heading: "Serial Number", text: data.serialNumber)
-            FloatingItemHeadingAndText(heading: "Valid From", text: data.validFromFormatted)
-            FloatingItemHeadingAndText(heading: "Valid Until", text: data.validUntilFormatted)
+        SegmentedItemList(title: "Basic information") {
+            SegmentedItemHeadingAndText(
+                heading: "Type",
+                text: "X.509 version \(data.version) certificate"
+            )
+            .onTapGesture {
+                UIPasteboard.general.string = data.pem
+            }
+            SegmentedItemHeadingAndText(heading: "Serial number", text: data.serialNumber)
+            SegmentedItemHeadingAndText(heading: "Valid from", text: data.validFromFormatted)
+            SegmentedItemHeadingAndText(heading: "Valid until", text: data.validUntilFormatted)
             validityLine
         }
     }
 
     @ViewBuilder
     private var validityLine: some View {
-        let now = Date()
+        let now = swiftUiClockForTesting?() ?? Date()
 
         if now > data.validUntil {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading: "Validity Info",
                 text: AttributedString(
                     "This certificate is no longer valid, it expired \(data.validUntil.relativeTimeText)",
@@ -63,7 +118,7 @@ private struct BasicInfoView: View {
                 )
             )
         } else if data.validFrom > now {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading: "Validity Info",
                 text: AttributedString(
                     "This certificate is not yet valid, it will be valid \(data.validFrom.relativeTimeText)",
@@ -75,9 +130,9 @@ private struct BasicInfoView: View {
                 )
             )
         } else {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading: "Validity Info",
-                text: "Valid (Expires \(data.validUntil.relativeTimeText))"
+                text: "Currently valid, expires \(data.validUntil.relativeTimeText)"
             )
         }
     }
@@ -87,16 +142,18 @@ private struct SubjectView: View {
     let data: CertificateViewData
 
     var body: some View {
-        FloatingItemList(title: "Subject") {
-            let oids = Array(data.subject.components.keys)
-            ForEach(0..<oids.count, id: \.self) { oidIdx in
-                let componentOid = oids[oidIdx]
-                let componentName = oidToPrettyName[componentOid] ?? componentOid
-                let componentValue = data.subject.components[componentOid]!
-                FloatingItemHeadingAndText(
-                    heading: componentName,
-                    text: componentValue.value
-                )
+        if !data.subject.components.isEmpty {
+            SegmentedItemList(title: "Subject") {
+                let oids = Array(data.subject.components.keys)
+                ForEach(0..<oids.count, id: \.self) { oidIdx in
+                    let componentOid = oids[oidIdx]
+                    let componentName = oidToPrettyName[componentOid] ?? "Other name (OID \(componentOid))"
+                    let componentValue = data.subject.components[componentOid]!
+                    SegmentedItemHeadingAndText(
+                        heading: componentName,
+                        text: componentValue.value
+                    )
+                }
             }
         }
     }
@@ -106,16 +163,18 @@ private struct IssuerView: View {
     let data: CertificateViewData
 
     var body: some View {
-        FloatingItemList(title: "Issuer") {
-            let oids = Array(data.issuer.components.keys)
-            ForEach(0..<oids.count, id: \.self) { oidIdx in
-                let componentOid = oids[oidIdx]
-                let componentName = oidToPrettyName[componentOid] ?? componentOid
-                let componentValue = data.issuer.components[componentOid]!
-                FloatingItemHeadingAndText(
-                    heading: componentName,
-                    text: componentValue.value
-                )
+        if !data.issuer.components.isEmpty {
+            SegmentedItemList(title: "Issuer") {
+                let oids = Array(data.issuer.components.keys)
+                ForEach(0..<oids.count, id: \.self) { oidIdx in
+                    let componentOid = oids[oidIdx]
+                    let componentName = oidToPrettyName[componentOid] ?? "Other name (OID \(componentOid))"
+                    let componentValue = data.issuer.components[componentOid]!
+                    SegmentedItemHeadingAndText(
+                        heading: componentName,
+                        text: componentValue.value
+                    )
+                }
             }
         }
     }
@@ -125,12 +184,12 @@ private struct PublicKeyInfoView: View {
     let data: CertificateViewData
 
     var body: some View {
-        FloatingItemList(title: "Public Key Info") {
-            FloatingItemHeadingAndText(heading: "Algorithm", text: data.pkAlgorithm)
+        SegmentedItemList(title: "Public key information") {
+            SegmentedItemHeadingAndText(heading: "Algorithm", text: data.pkAlgorithm)
             if let curve = data.pkNamedCurve {
-                FloatingItemHeadingAndText(heading: "Named Curve", text: curve)
+                SegmentedItemHeadingAndText(heading: "Named curve", text: curve)
             }
-            FloatingItemHeadingAndText(heading: "Key Value", text: data.pkValue)
+            SegmentedItemHeadingAndText(heading: "Value", text: data.pkValue)
         }
     }
 }
@@ -140,11 +199,11 @@ private struct ExtensionsView: View {
 
     var body: some View {
         if !data.extensions.isEmpty {
-            FloatingItemList(title: "Extensions") {
-                ForEach(data.extensions, id: \.oid) { ext in
-                    FloatingItemHeadingAndText(heading: "Critical", text: ext.isCritical ? "Yes" : "No")
-                    FloatingItemHeadingAndText(heading: "OID", text: ext.oid)
-                    FloatingItemHeadingAndText(heading: "Value", text: ext.value)
+            ForEach(Array(data.extensions.enumerated()), id: \.offset) { index, ext in
+                SegmentedItemList(title: index == 0 ? "Extensions" : nil) {
+                    SegmentedItemHeadingAndText(heading: "Critical", text: ext.isCritical ? "Yes" : "No")
+                    SegmentedItemHeadingAndText(heading: "OID", text: ext.oid)
+                    SegmentedItemHeadingAndText(heading: "Value", text: ext.value)
                 }
             }
         }
@@ -165,11 +224,19 @@ fileprivate struct CertificateViewData {
     fileprivate let extensions: [FormattedExtension]
 
     var validFromFormatted: String {
-        validFrom.formatted(date: .complete, time: .standard)
+        var style = Date.FormatStyle(date: .complete, time: .standard)
+        if let tz = swiftUiTimeZoneForTesting {
+            style.timeZone = tz
+        }
+        return validFrom.formatted(style)
     }
 
     var validUntilFormatted: String {
-        validUntil.formatted(date: .complete, time: .standard)
+        var style = Date.FormatStyle(date: .complete, time: .standard)
+        if let tz = swiftUiTimeZoneForTesting {
+            style.timeZone = tz
+        }
+        return validUntil.formatted(style)
     }
 
     // Factory method to map from the shared X509Cert type
@@ -204,7 +271,7 @@ extension Date {
     var relativeTimeText: String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        return formatter.localizedString(for: self, relativeTo: Date())
+        return formatter.localizedString(for: self, relativeTo: swiftUiClockForTesting?() ?? Date())
     }
 }
 

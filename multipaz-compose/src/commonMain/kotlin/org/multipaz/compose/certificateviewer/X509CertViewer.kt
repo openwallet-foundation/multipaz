@@ -1,27 +1,43 @@
 package org.multipaz.compose.certificateviewer
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.asn1.OID
+import org.multipaz.compose.datetime.clockForTesting
 import org.multipaz.compose.datetime.durationFromNowText
 import org.multipaz.compose.datetime.formattedDateTime
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
 import org.multipaz.crypto.X509Cert
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_critical
@@ -41,12 +57,17 @@ import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_k_st
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_k_type
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_k_valid_from
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_k_valid_until
+import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_k_validity_info
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_oid
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_sub_basic_info
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_sub_extensions
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_sub_issuer
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_sub_public_key_info
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_sub_subject
+import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_tab_intermediate
+import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_tab_intermediate_n
+import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_tab_leaf
+import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_tab_root
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_valid_now
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_validity_in_the_future
 import org.multipaz.multipaz_compose.generated.resources.certificate_viewer_validity_in_the_past
@@ -65,9 +86,10 @@ fun X509CertViewer(
     modifier: Modifier = Modifier,
     certificate: X509Cert,
 ) {
-    val data = remember { CertificateViewData.from(certificate) }
+    val data = remember(certificate) { CertificateViewData.from(certificate) }
     Column(
         modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         BasicInfo(data)
         Subject(data)
@@ -77,15 +99,86 @@ fun X509CertViewer(
     }
 }
 
+/**
+ * Shows a X.509 certificate chain.
+ *
+ * When the chain contains more than one certificate, a segmented button row is displayed at the
+ * top allowing the user to switch between the leaf, intermediate, and root certificates while
+ * the certificate details scroll vertically below it.
+ *
+ * @param modifier a [Modifier].
+ * @param certChain the [X509CertChain] to show.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun X509CertViewer(
+    modifier: Modifier = Modifier,
+    certChain: X509CertChain,
+) {
+    val certificates = certChain.certificates
+    check(certificates.isNotEmpty())
+    var selectedCertIndex by remember(certChain) { mutableIntStateOf(0) }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(selectedCertIndex) {
+        scrollState.scrollTo(0)
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        if (certificates.size > 1) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                certificates.forEachIndexed { index, _ ->
+                    val label = when {
+                        index == 0 -> stringResource(Res.string.certificate_viewer_tab_leaf)
+                        index == certificates.size - 1 -> stringResource(Res.string.certificate_viewer_tab_root)
+                        certificates.size == 3 -> stringResource(Res.string.certificate_viewer_tab_intermediate)
+                        else -> stringResource(Res.string.certificate_viewer_tab_intermediate_n, index)
+                    }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = certificates.size
+                        ),
+                        selected = selectedCertIndex == index,
+                        onClick = { selectedCertIndex = index },
+                        label = {
+                            Text(
+                                text = label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        val currentCert = certificates.getOrNull(selectedCertIndex) ?: certificates[0]
+        key(selectedCertIndex, currentCert) {
+            X509CertViewer(
+                modifier = Modifier
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 16.dp),
+                certificate = currentCert
+            )
+        }
+    }
+}
+
 @Composable
 private fun BasicInfo(data: CertificateViewData) {
     @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
-    FloatingItemList(
-        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+    SegmentedItemList(
         title = stringResource(Res.string.certificate_viewer_sub_basic_info),
     ) {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_type),
             stringResource(Res.string.certificate_viewer_version_text, data.version),
             // Little bit of an easter-egg but very useful: Copy the PEM-encoded certificate
@@ -97,11 +190,11 @@ private fun BasicInfo(data: CertificateViewData) {
                 clipboardManager.setText(AnnotatedString(data.pem))
             },
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_serial_number),
             data.serialNumber
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_valid_from),
             formattedDateTime(
                 instant = data.validFrom,
@@ -109,7 +202,7 @@ private fun BasicInfo(data: CertificateViewData) {
                 timeStyle = FormatStyle.LONG,
             )
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_valid_until),
             formattedDateTime(
                 instant = data.validUntil,
@@ -118,10 +211,10 @@ private fun BasicInfo(data: CertificateViewData) {
             )
         )
 
-        val now = Clock.System.now()
+        val now = (clockForTesting ?: Clock.System).now()
         if (now > data.validUntil) {
-            FloatingItemHeadingAndText(
-                "Validity Info",
+            SegmentedItemHeadingAndText(
+                stringResource(Res.string.certificate_viewer_k_validity_info),
                 buildAnnotatedString {
                     withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
                         append(
@@ -134,8 +227,8 @@ private fun BasicInfo(data: CertificateViewData) {
                 }
             )
         } else if (data.validFrom > now) {
-            FloatingItemHeadingAndText(
-                "Validity Info",
+            SegmentedItemHeadingAndText(
+                stringResource(Res.string.certificate_viewer_k_validity_info),
                 buildAnnotatedString {
                     withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
                         append(
@@ -148,8 +241,8 @@ private fun BasicInfo(data: CertificateViewData) {
                 }
             )
         } else {
-            FloatingItemHeadingAndText(
-                "Validity Info",
+            SegmentedItemHeadingAndText(
+                stringResource(Res.string.certificate_viewer_k_validity_info),
                 stringResource(
                     Res.string.certificate_viewer_valid_now,
                     durationFromNowText(data.validUntil)
@@ -163,16 +256,15 @@ private fun BasicInfo(data: CertificateViewData) {
 private fun Subject(data: CertificateViewData) {
     if (data.subject.isEmpty()) return
 
-    FloatingItemList(
-        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+    SegmentedItemList(
         title = stringResource(Res.string.certificate_viewer_sub_subject),
     ) {
         data.subject.forEach { (oid, value) ->
             val res = oidToResourceMap[oid]
             if (res != null) {
-                FloatingItemHeadingAndText(stringResource(res), value)
+                SegmentedItemHeadingAndText(stringResource(res), value)
             } else {
-                FloatingItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
+                SegmentedItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
             }
         }
     }
@@ -182,16 +274,15 @@ private fun Subject(data: CertificateViewData) {
 private fun Issuer(data: CertificateViewData) {
     if (data.issuer.isEmpty()) return
 
-    FloatingItemList(
-        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+    SegmentedItemList(
         title = stringResource(Res.string.certificate_viewer_sub_issuer),
     ) {
         data.issuer.forEach { (oid, value) ->
             val res = oidToResourceMap[oid]
             if (res != null) {
-                FloatingItemHeadingAndText(stringResource(res), value)
+                SegmentedItemHeadingAndText(stringResource(res), value)
             } else {
-                FloatingItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
+                SegmentedItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
             }
         }
     }
@@ -199,21 +290,20 @@ private fun Issuer(data: CertificateViewData) {
 
 @Composable
 private fun PublicKeyInfo(data: CertificateViewData) {
-    FloatingItemList(
-        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+    SegmentedItemList(
         title = stringResource(Res.string.certificate_viewer_sub_public_key_info),
     ) {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_pk_algorithm),
             data.pkAlgorithm
         )
         if (data.pkNamedCurve != null) {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_k_pk_named_curve),
                 data.pkNamedCurve
             )
         }
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_pk_value),
             data.pkValue
         )
@@ -224,12 +314,15 @@ private fun PublicKeyInfo(data: CertificateViewData) {
 private fun Extensions(data: CertificateViewData) {
     if (data.extensions.isEmpty()) return
 
-    FloatingItemList(
-        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-        title = stringResource(Res.string.certificate_viewer_sub_extensions),
-    ) {
-        data.extensions.forEach { (isCritical, oid, value) ->
-            FloatingItemHeadingAndText(
+    data.extensions.forEachIndexed { n, (isCritical, oid, value) ->
+        SegmentedItemList(
+            title = if (n == 0) {
+                stringResource(Res.string.certificate_viewer_sub_extensions)
+            } else {
+                null
+            },
+        ) {
+            SegmentedItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_critical),
                 if (isCritical) {
                     stringResource(Res.string.certificate_viewer_critical_yes)
@@ -237,11 +330,11 @@ private fun Extensions(data: CertificateViewData) {
                     stringResource(Res.string.certificate_viewer_critical_no)
                 }
             )
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_oid),
                 oid
             )
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_value),
                 value
             )

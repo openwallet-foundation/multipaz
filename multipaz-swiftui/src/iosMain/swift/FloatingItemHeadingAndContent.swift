@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A list item view that displays a bold heading with content below it,
 /// an optional leading image, and an optional trailing view.
-public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, TrailingView: View>: View {
+public struct SegmentedItemHeadingAndContent<ContentView: View, ImageView: View, TrailingView: View>: View {
 
     /// The heading string displayed in a bold font above the primary text.
     public var heading: String
@@ -19,7 +19,7 @@ public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, 
     /// A view builder that creates the trailing content, pushed to the rightmost edge.
     @ViewBuilder public var trailingContent: () -> TrailingView
 
-    /// Creates a new floating item with a heading and content.
+    /// Creates a new segmented item with a heading and content.
     ///
     /// - Parameters:
     ///   - heading: The bold heading to display.
@@ -42,7 +42,7 @@ public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, 
     }
 
     public var body: some View {
-        FloatingItemContainer(showChevron: showChevron) {
+        SegmentedItemContainer(showChevron: showChevron) {
             HStack(alignment: .center, spacing: 16) {
                 image()
 
@@ -61,3 +61,40 @@ public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, 
         }
     }
 }
+
+/// A list item view that displays a bold heading with content below it,
+/// an optional leading image, and an optional trailing view.
+@available(*, deprecated, renamed: "SegmentedItemHeadingAndContent")
+public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, TrailingView: View>: View {
+
+    public var heading: String
+    public var showChevron: Bool
+    @ViewBuilder public var content: () -> ContentView
+    @ViewBuilder public var image: () -> ImageView
+    @ViewBuilder public var trailingContent: () -> TrailingView
+
+    public init(
+        heading: String,
+        showChevron: Bool = false,
+        @ViewBuilder content: @escaping () -> ContentView,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.heading = heading
+        self.showChevron = showChevron
+        self.content = content
+        self.image = image
+        self.trailingContent = trailingContent
+    }
+
+    public var body: some View {
+        SegmentedItemHeadingAndContent(
+            heading: heading,
+            showChevron: showChevron,
+            content: content,
+            image: image,
+            trailingContent: trailingContent
+        )
+    }
+}
+

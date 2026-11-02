@@ -20,8 +20,8 @@ import org.multipaz.prompt.TransactionDataRenderer
  * [TransactionDataContext].
  *
  * @property summary drawn in the consent prompt; should show only what the user needs to decide.
- * @property details drawn on a separate page inside the consent prompt when [summary] calls
- *   [TransactionDataContext.showDetails], or `null` for no details page.
+ * @property details drawn on a separate page inside the consent prompt when the user taps the
+ *   "View details" chip rendered by the prompt, or `null` for no details page.
  */
 open class TransactionDataRendererCompose(
     val summary: @Composable (context: TransactionDataContext) -> Unit,

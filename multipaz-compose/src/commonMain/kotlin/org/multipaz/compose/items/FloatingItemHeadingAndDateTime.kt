@@ -2,19 +2,14 @@ package org.multipaz.compose.items
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
 import kotlinx.datetime.TimeZone
-import org.jetbrains.compose.resources.stringResource
-import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.datetime.FormatStyle
-import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.floating_item_heading_and_date_time_not_set
 import kotlin.time.Instant
 
 /**
- * Like [FloatingItemHeadingAndText], but with a date and time instead of text.
+ * Like [SegmentedItemHeadingAndText], but with a date and time instead of text.
  *
- * @param heading will be shown in bold at the top.
+ * @param heading will be shown at the top.
  * @param dateAndTime will be shown below the heading or "Not set" if `null`.
  * @param timeZone the timezone to use for displaying the point in time.
  * @param dateStyle the amount of data to include in the date component.
@@ -24,6 +19,13 @@ import kotlin.time.Instant
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
+@Deprecated(
+    message = "Use SegmentedItemHeadingAndDateTime instead.",
+    replaceWith = ReplaceWith(
+        expression = "SegmentedItemHeadingAndDateTime(heading = heading, dateAndTime = dateAndTime, timeZone = timeZone, dateStyle = dateStyle, timeStyle = timeStyle, modifier = modifier, showChevron = showChevron, image = image, trailingContent = trailingContent)",
+        imports = ["org.multipaz.compose.items.SegmentedItemHeadingAndDateTime"]
+    )
+)
 @Composable
 fun FloatingItemHeadingAndDateTime(
     heading: String,
@@ -36,16 +38,12 @@ fun FloatingItemHeadingAndDateTime(
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
-    val text = dateAndTime?.let { formattedDateTime(
-        instant = it,
+    SegmentedItemHeadingAndDateTime(
+        heading = heading,
+        dateAndTime = dateAndTime,
         timeZone = timeZone,
         dateStyle = dateStyle,
-        timeStyle = timeStyle
-    ) }
-        ?: AnnotatedString(stringResource(Res.string.floating_item_heading_and_date_time_not_set))
-    FloatingItemHeadingAndText(
-        heading = heading,
-        text = text,
+        timeStyle = timeStyle,
         modifier = modifier,
         showChevron = showChevron,
         image = image,

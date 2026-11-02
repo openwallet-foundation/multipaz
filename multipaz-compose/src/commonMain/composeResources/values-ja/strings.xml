@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">許可する</string>
     <string name="face_matcher_prompt_cancel">キャンセル</string>
     <string name="face_matcher_prompt_confirm">確認</string>
+    <string name="certificate_viewer_tab_leaf">リーフ</string>
+    <string name="certificate_viewer_tab_intermediate">中間</string>
+    <string name="certificate_viewer_tab_intermediate_n">中間 %1$d</string>
+    <string name="certificate_viewer_tab_root">ルート</string>
 </resources>

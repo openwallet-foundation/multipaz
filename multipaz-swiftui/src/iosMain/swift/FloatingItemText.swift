@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A list item view that displays a primary text, an optional secondary text below it,
 /// an optional leading image, and an optional trailing view.
-public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
+public struct SegmentedItemText<ImageView: View, TrailingView: View>: View {
 
     /// The primary text to display, formatted as an `AttributedString`.
     public var text: AttributedString
@@ -22,7 +22,7 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     /// A view builder that creates the trailing content, pushed to the rightmost edge.
     @ViewBuilder public var trailingContent: () -> TrailingView
 
-    /// Creates a new floating item text view using an `AttributedString` for the primary text.
+    /// Creates a new segmented item text view using an `AttributedString` for the primary text.
     ///
     /// - Parameters:
     ///   - text: The primary text to display.
@@ -47,7 +47,7 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
         self.trailingContent = trailingContent
     }
 
-    /// Creates a new floating item text view using a `String` for the primary text.
+    /// Creates a new segmented item text view using a `String` for the primary text.
     ///
     /// - Parameters:
     ///   - text: The primary string to display.
@@ -68,7 +68,7 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     }
 
     public var body: some View {
-        FloatingItemContainer(showChevron: showChevron) {
+        SegmentedItemContainer(showChevron: showChevron) {
             HStack(alignment: .center, spacing: 16) {
                 image()
 
@@ -96,3 +96,55 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
         }
     }
 }
+
+/// A list item view that displays a primary text, an optional secondary text below it,
+/// an optional leading image, and an optional trailing view.
+@available(*, deprecated, renamed: "SegmentedItemText")
+public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
+
+    public var text: AttributedString
+    public var showChevron: Bool
+    public var secondary: String?
+    public var secondaryColor: Color
+    @ViewBuilder public var image: () -> ImageView
+    @ViewBuilder public var trailingContent: () -> TrailingView
+
+    public init(
+        text: AttributedString,
+        showChevron: Bool = false,
+        secondary: String? = nil,
+        secondaryColor: Color = .secondary,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.text = text
+        self.showChevron = showChevron
+        self.secondary = secondary
+        self.secondaryColor = secondaryColor
+        self.image = image
+        self.trailingContent = trailingContent
+    }
+
+    public init(
+        text: String,
+        showChevron: Bool = false,
+        secondary: String? = nil,
+        secondaryColor: Color = .secondary,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.init(text: AttributedString(text), showChevron: showChevron, secondary: secondary, secondaryColor: secondaryColor, image: image, trailingContent: trailingContent)
+    }
+
+    public var body: some View {
+        SegmentedItemText(
+            text: text,
+            showChevron: showChevron,
+            secondary: secondary,
+            secondaryColor: secondaryColor,
+            image: image,
+            trailingContent: trailingContent
+        )
+    }
+}
+

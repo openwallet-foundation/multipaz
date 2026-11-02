@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A list item view that displays a bold heading with primary text below it,
 /// an optional leading image, and an optional trailing view.
-public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: View {
+public struct SegmentedItemHeadingAndText<ImageView: View, TrailingView: View>: View {
 
     /// The heading string displayed in a bold font above the primary text.
     public var heading: String
@@ -19,7 +19,7 @@ public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: V
     /// A view builder that creates the trailing content, pushed to the rightmost edge.
     @ViewBuilder public var trailingContent: () -> TrailingView
 
-    /// Creates a new floating item with a heading and an `AttributedString` body.
+    /// Creates a new segmented item with a heading and an `AttributedString` body.
     ///
     /// - Parameters:
     ///   - heading: The bold heading to display.
@@ -41,7 +41,7 @@ public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: V
         self.trailingContent = trailingContent
     }
 
-    /// Creates a new floating item with a heading and a standard `String` body.
+    /// Creates a new segmented item with a heading and a standard `String` body.
     ///
     /// - Parameters:
     ///   - heading: The bold heading to display.
@@ -60,7 +60,7 @@ public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: V
     }
 
     public var body: some View {
-        FloatingItemContainer(showChevron: showChevron) {
+        SegmentedItemContainer(showChevron: showChevron) {
             HStack(alignment: .center, spacing: 16) {
                 image()
 
@@ -82,3 +82,50 @@ public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: V
         }
     }
 }
+
+/// A list item view that displays a bold heading with primary text below it,
+/// an optional leading image, and an optional trailing view.
+@available(*, deprecated, renamed: "SegmentedItemHeadingAndText")
+public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: View {
+
+    public var heading: String
+    public var text: AttributedString
+    public var showChevron: Bool
+    @ViewBuilder public var image: () -> ImageView
+    @ViewBuilder public var trailingContent: () -> TrailingView
+
+    public init(
+        heading: String,
+        text: AttributedString,
+        showChevron: Bool = false,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.heading = heading
+        self.text = text
+        self.showChevron = showChevron
+        self.image = image
+        self.trailingContent = trailingContent
+    }
+
+    public init(
+        heading: String,
+        text: String,
+        showChevron: Bool = false,
+        @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
+        @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
+    ) {
+        self.init(heading: heading, text: AttributedString(text), showChevron: showChevron, image: image, trailingContent: trailingContent)
+    }
+
+    public var body: some View {
+        SegmentedItemHeadingAndText(
+            heading: heading,
+            text: text,
+            showChevron: showChevron,
+            image: image,
+            trailingContent: trailingContent
+        )
+    }
+}
+

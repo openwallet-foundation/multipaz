@@ -21,6 +21,8 @@ import org.multipaz.cbor.annotation.CborSerializable
  *   the user interface that the particular reader or issuer being authenticated is used
  *   only for testing.
  * @param extensions additional metadata which can be used by the application.
+ * @param identifier a unique, stable identifier for the trusted entity (for example, the hex-encoded
+ *   Subject Key Identifier of the trusted root certificate) or `null`.
  */
 @CborSerializable
 data class TrustMetadata(
@@ -30,7 +32,8 @@ data class TrustMetadata(
     val privacyPolicyUrl: String? = null,
     val disclaimer: String? = null,
     val testOnly: Boolean = false,
-    val extensions: Map<String, String> = emptyMap()
+    val extensions: Map<String, String> = emptyMap(),
+    val identifier: String? = null,
 ) {
     companion object
 }

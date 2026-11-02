@@ -16,8 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.multipaz.compose.certificateviewer.X509CertViewer
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
 import org.multipaz.compose.trustmanagement.TrustEntryInfo
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
@@ -59,11 +59,11 @@ fun TrustEntryVicalEntryViewer(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
             title = "VICAL entry"
         ) {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Document Types",
                 text = vicalCertInfo.docTypes.joinToString("\n")
             )
