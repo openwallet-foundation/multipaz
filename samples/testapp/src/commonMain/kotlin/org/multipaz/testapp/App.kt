@@ -243,7 +243,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val documentsToView = Channel<String>()
 
-    private lateinit var provisioningSupport: ProvisioningSupport
+    lateinit var provisioningSupport: ProvisioningSupport
+        private set
 
     lateinit var zkSystemRepository: ZkSystemRepository
     private val initLock = Mutex()
@@ -490,8 +491,23 @@ class App private constructor (val promptModel: PromptModel) {
 
 
     private suspend fun provisioningModelInit() {
+        provisioningModel = createProvisioningModel(promptModel)
+        provisioningSupport = ProvisioningSupport(
+            storage = TestAppConfiguration.storage,
+            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
+        )
+        provisioningSupport.init()
+    }
+
+    /**
+     * Creates a [ProvisioningModel] using [promptModel] for its UI.
+     *
+     * This is also used for provisioning credentials offered through the W3C Digital Credentials API, which
+     * happens in another activity on Android.
+     */
+    suspend fun createProvisioningModel(promptModel: PromptModel): ProvisioningModel {
         val secureArea = Platform.getSecureArea(TestAppConfiguration.storage)
-        provisioningModel = ProvisioningModel(
+        return ProvisioningModel(
             documentProvisioningHandler = DocumentProvisioningHandler(
                 documentStore = documentStore,
                 secureArea = secureArea,
@@ -503,11 +519,6 @@ class App private constructor (val promptModel: PromptModel) {
             authorizationSecureArea = secureArea,
             eventLogger = eventLogger
         )
-        provisioningSupport = ProvisioningSupport(
-            storage = TestAppConfiguration.storage,
-            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
-        )
-        provisioningSupport.init()
     }
 
     @OptIn(ExperimentalResourceApi::class)
