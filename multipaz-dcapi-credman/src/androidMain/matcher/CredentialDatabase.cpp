@@ -31,6 +31,11 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         auto title = cred->get("title")->asTstr()->value();
         auto subtitle = cred->get("subtitle")->asTstr()->value();
         auto bitmap = cred->get("bitmap")->asBstr()->value();
+        std::string noClaimsRequestedText = "";
+        auto& noClaimsRequestedTextPtr = cred->get("noClaimsRequestedText");
+        if (noClaimsRequestedTextPtr != nullptr && noClaimsRequestedTextPtr->asTstr() != nullptr) {
+            noClaimsRequestedText = noClaimsRequestedTextPtr->asTstr()->value();
+        }
 
         std::string documentId = "";
         std::string mdocDoctype = "";
@@ -222,7 +227,8 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 resultingClaims,
                 supportsPortraitImageEquivalence,
                 omitClaims,
-                claimDisplayNames
+                claimDisplayNames,
+                noClaimsRequestedText
             )
         );
     }
@@ -377,6 +383,9 @@ Claim* Credential::findMatchingClaim(const DcqlRequestedClaim& requestedClaim) {
     return nullptr;
 }
 
+// The text of the field shown when a request names no claim to show, if the app set none.
+static const char* DEFAULT_NO_CLAIMS_REQUESTED_TEXT = "No data requested";
+
 void Combination::addToCredmanPicker(const Request& request) const {
     uint32_t credmanRuntimeVersion = 0;
     GetWasmVersion(&credmanRuntimeVersion);
@@ -428,10 +437,12 @@ void Combination::addToCredmanPicker(const Request& request) const {
                 );
             }
 
+            int fieldsAdded = 0;
             for (const auto &claim: match.claims) {
                 if (claim->isDeviceSigned) {
                     continue;
                 }
+                fieldsAdded++;
                 char *fieldValue = claim->omitValue ? nullptr : strdup(claim->value.c_str());
                 if (credmanRuntimeVersion >= 2) {
                     ::AddFieldToEntrySet(entryId,
@@ -445,6 +456,20 @@ void Combination::addToCredmanPicker(const Request& request) const {
                                                strdup(claim->displayName.c_str()),
                                                fieldValue
                     );
+                }
+            }
+
+            // Credential Manager does not show an entry without a field, and then tells the user
+            // their info wasn't found. That is the case for a request naming no claims at all, or
+            // only device-signed ones, so the entry gets one field saying no data is requested.
+            if (fieldsAdded == 0) {
+                const char* text = credential->noClaimsRequestedText.empty()
+                        ? DEFAULT_NO_CLAIMS_REQUESTED_TEXT
+                        : credential->noClaimsRequestedText.c_str();
+                if (credmanRuntimeVersion >= 2) {
+                    ::AddFieldToEntrySet(entryId, strdup(text), nullptr, setId, setIndex);
+                } else {
+                    ::AddFieldForStringIdEntry(entryId, strdup(text), nullptr);
                 }
             }
 

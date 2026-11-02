@@ -7,6 +7,7 @@ private const val TAG_ANDROID_CREDMAN_SUBTITLE = "org.multipaz.document.androidC
 private const val TAG_ANDROID_CREDMAN_BITMAP = "org.multipaz.document.androidCredman.Bitmap"
 private const val TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS = "org.multipaz.document.androidCredman.ExchangeProtocols"
 private const val TAG_ANDROID_CREDMAN_OMIT_CLAIMS = "org.multipaz.document.androidCredman.OmitClaims"
+private const val TAG_ANDROID_CREDMAN_NO_CLAIMS_REQUESTED_TEXT = "org.multipaz.document.androidCredman.NoClaimsRequestedText"
 
 /**
  * The title for a document in Android Credential Manager or `null` if not configured.
@@ -107,4 +108,26 @@ suspend fun Document.setAndroidCredmanOmitClaims(value: Boolean) {
     }
 }
 
+/**
+ * The text Android Credential Manager shows for a document when a request names no claim to show,
+ * or `null` if not configured.
+ *
+ * A request can name no claims at all, or only claims that are not shown in the picker, such as
+ * device-signed data elements. Credential Manager does not show an entry without a field, so the
+ * entry gets one field with this text. When not configured, the text is "No data requested".
+ */
+val Document.androidCredmanNoClaimsRequestedText: String?
+    get() = tags.getString(TAG_ANDROID_CREDMAN_NO_CLAIMS_REQUESTED_TEXT)
 
+/**
+ * Sets the text Android Credential Manager shows for a document when a request names no claim to show.
+ *
+ * @param value the value or `null` to unconfigure.
+ */
+suspend fun Document.setAndroidCredmanNoClaimsRequestedText(value: String?) {
+    edit {
+        value?.let {
+            tags.setString(TAG_ANDROID_CREDMAN_NO_CLAIMS_REQUESTED_TEXT, value)
+        } ?: tags.remove(TAG_ANDROID_CREDMAN_NO_CLAIMS_REQUESTED_TEXT)
+    }
+}

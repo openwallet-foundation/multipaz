@@ -64,6 +64,10 @@ struct Credential {
     // Maps from claimName to displayName when omitClaims is true.
     std::map<std::string, std::string> claimDisplayNames;
 
+    // The text of the one field shown when a request names no claim to show, or the empty
+    // string to use the default text.
+    std::string noClaimsRequestedText;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 
@@ -85,7 +89,8 @@ struct Credential {
         std::map<std::string, Claim> claims_,
         bool supportsPortraitImageEquivalence_ = false,
         bool omitClaims_ = false,
-        std::map<std::string, std::string> claimDisplayNames_ = {}
+        std::map<std::string, std::string> claimDisplayNames_ = {},
+        std::string noClaimsRequestedText_ = ""
     ) : title(std::move(title_)),
         subtitle(std::move(subtitle_)),
         bitmap(std::move(bitmap_)),
@@ -100,7 +105,8 @@ struct Credential {
         claims(std::move(claims_)),
         supportsPortraitImageEquivalence(supportsPortraitImageEquivalence_),
         omitClaims(omitClaims_),
-        claimDisplayNames(std::move(claimDisplayNames_)) {}
+        claimDisplayNames(std::move(claimDisplayNames_)),
+        noClaimsRequestedText(std::move(noClaimsRequestedText_)) {}
 
     std::string lookupClaimDisplayName(const std::vector<std::string>& path) const;
 
