@@ -124,7 +124,8 @@ open class DocumentProvisioningHandler(
                 credentialDisplay = credentialMetadata.display,
                 issuerDisplay = issuerMetadata.display,
                 authorizationData = documentAuthorizationData
-            )
+            ),
+            openID4VCIClaimDescriptions = credentialMetadata.openID4VCIClaimDescriptions ?: emptyList()
         )
 
     override suspend fun updateDocument(

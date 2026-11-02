@@ -1141,7 +1141,10 @@ class DocumentStoreTest {
             return Pair(parsed.validFrom, parsed.validUntil)
         }
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
 
@@ -1186,7 +1189,10 @@ class DocumentStoreTest {
         override val credentialType: String
             get() = CREDENTIAL_TYPE
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
 

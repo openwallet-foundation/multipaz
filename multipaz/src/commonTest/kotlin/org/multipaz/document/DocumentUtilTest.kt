@@ -341,7 +341,10 @@ class DocumentUtilTest {
         override val credentialType: String
             get() = CREDENTIAL_TYPE
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
 

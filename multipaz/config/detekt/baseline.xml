@@ -238,7 +238,6 @@
     <ID>UndocumentedPublicFunction:RpcStub.kt$RpcStub$fun toCbor(): ByteArray</ID>
     <ID>UndocumentedPublicFunction:RpcStub.kt$RpcStub$fun toDataItem(): DataItem</ID>
     <ID>UndocumentedPublicFunction:RpcStub.kt$RpcStub.Companion$fun rpcParameter(obj: Any)</ID>
-    <ID>UndocumentedPublicFunction:SdJwtVcCredential.kt$SdJwtVcCredential$suspend fun getClaimsImpl( documentTypeRepository: DocumentTypeRepository? ): List&lt;JsonClaim></ID>
     <ID>UndocumentedPublicFunction:SecureAreaProvider.kt$SecureAreaProvider$suspend fun get(): T</ID>
     <ID>UndocumentedPublicFunction:ServiceSelectRecord.kt$ServiceSelectRecord$fun toNdefRecord(): NdefRecord</ID>
     <ID>UndocumentedPublicFunction:ServiceSelectRecord.kt$ServiceSelectRecord.Companion$fun fromNdefRecord(record: NdefRecord): ServiceSelectRecord?</ID>

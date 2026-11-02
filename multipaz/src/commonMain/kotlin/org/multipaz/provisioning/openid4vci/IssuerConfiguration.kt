@@ -100,7 +100,8 @@ internal data class IssuerConfiguration(
                     ),
                     format = format,
                     keyBindingType = keyProofType,
-                    maxBatchSize = maxBatchSize
+                    maxBatchSize = maxBatchSize,
+                    openID4VCIClaimDescriptions = extractClaims(config.objOrNull("credential_metadata") ?: config)
                 )
             }
 

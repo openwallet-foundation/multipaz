@@ -195,7 +195,8 @@ private func calcRequestData(
         appData: nil,
         created: now.toKotlinInstant(),
         readerIdentifiers: [],
-        metadata: nil
+        metadata: nil,
+        openID4VCIClaimDescriptions: []
     )
     let _ = try! await DrivingLicense.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
@@ -235,7 +236,8 @@ private func calcRequestData(
         appData: nil,
         created: now.toKotlinInstant(),
         readerIdentifiers: [],
-        metadata: nil
+        metadata: nil,
+        openID4VCIClaimDescriptions: []
     )
     let _ = try! await PhotoID.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
@@ -275,7 +277,8 @@ private func calcRequestData(
         appData: nil,
         created: now.toKotlinInstant(),
         readerIdentifiers: [],
-        metadata: nil
+        metadata: nil,
+        openID4VCIClaimDescriptions: []
     )
     let _ = try! await PhotoID.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
@@ -315,7 +318,8 @@ private func calcRequestData(
         appData: nil,
         created: now.toKotlinInstant(),
         readerIdentifiers: [],
-        metadata: nil
+        metadata: nil,
+        openID4VCIClaimDescriptions: []
     )
     let _ = try! await UtopiaBoardingPass.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
@@ -355,7 +359,8 @@ private func calcRequestData(
         appData: nil,
         created: now.toKotlinInstant(),
         readerIdentifiers: [],
-        metadata: nil
+        metadata: nil,
+        openID4VCIClaimDescriptions: []
     )
     let _ = try! await DigitalPaymentCredential.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
@@ -1218,7 +1223,8 @@ extension DocumentStore {
             appData: nil,
             created: Date.now.toKotlinInstant(),
             readerIdentifiers: [],
-            metadata: nil
+            metadata: nil,
+            openID4VCIClaimDescriptions: []
         )
         
         let credential = try await KeyBoundSdJwtVcCredential.Companion.shared.create(

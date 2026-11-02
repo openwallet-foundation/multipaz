@@ -16,6 +16,8 @@
 package org.multipaz.document
 
 import org.multipaz.credential.CredentialLoader
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.encodeToCbor
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.storage.Storage
@@ -141,6 +143,8 @@ class DocumentStore private constructor(
      * @param created The time the document was created.
      * @param readerIdentifiers A list of reader identifiers for reader authentication.
      * @param metadata initial value for [Document.metadata]
+     * @param openID4VCIClaimDescriptions initial value for [Document.openID4VCIClaimDescriptions], as provided
+     *  by the issuer in its OpenID4VCI metadata.
      * @return A newly created document.
      */
     suspend fun createDocument(
@@ -153,6 +157,7 @@ class DocumentStore private constructor(
         created: Instant = Clock.System.now(),
         readerIdentifiers: List<ByteString> = emptyList(),
         metadata: AbstractDocumentMetadata? = null,
+        openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList(),
     ): Document {
         val table = storage.getTable(documentTableSpec)
         val data = DocumentData(
@@ -165,7 +170,8 @@ class DocumentStore private constructor(
             authorizationData = authorizationData,
             appData = appData,
             readerIdentifiers = readerIdentifiers.ifEmpty { null },
-            metadata = metadata?.serialize()
+            metadata = metadata?.serialize(),
+            openID4VCIClaimDescriptions = openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor()
         )
         // NB: insertion in the storage is when the document is actually added, it may be
         // inserted in the cache before we manage to call lock.withLock below

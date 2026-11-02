@@ -140,7 +140,10 @@ class AndroidKeystoreSecureAreaDocumentStoreTest {
             throw NotImplementedError()
         }
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
     }

@@ -258,7 +258,7 @@ public class DocumentModel {
             keyInvalidated = try await secureAreaBoundCredential.isInvalidated().boolValue
         }
         let claims: [Claim] = if credential.isCertified {
-            try await credential.getClaims(documentTypeRepository: documentTypeRepository)
+            try await credential.getClaims(documentTypeRepository: documentTypeRepository, locales: [])
         } else {
             []
         }

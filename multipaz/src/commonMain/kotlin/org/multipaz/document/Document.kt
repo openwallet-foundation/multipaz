@@ -22,6 +22,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.decodeOpenID4VCIClaimDescriptions
+import org.multipaz.openid.claim.encodeToCbor
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import kotlinx.coroutines.sync.Mutex
@@ -174,6 +177,17 @@ class Document internal constructor(
     val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
 
     /**
+     * Descriptions of the claims in the document, including their display names, as provided by the issuer in
+     * its OpenID4VCI metadata.
+     *
+     * These are used by [Credential.getClaims] to name claims for which the
+     * [org.multipaz.documenttype.DocumentTypeRepository] has no entry. An empty list is returned if the issuer
+     * did not provide any.
+     */
+    val openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription>
+        get() = data.openID4VCIClaimDescriptions?.let { decodeOpenID4VCIClaimDescriptions(it) } ?: emptyList()
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -200,7 +214,8 @@ class Document internal constructor(
                         null
                     } else {
                         ByteString(Cbor.encode(newData))
-                    }
+                    },
+                    openID4VCIClaimDescriptions = data.openID4VCIClaimDescriptions
                 )
                 // Emit events only if something actually changed.
                 if (data != this.data) {
@@ -461,7 +476,8 @@ class Document internal constructor(
                 mpzPassVersion = data.mpzPassVersion,
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
-                tags = Tags.Editor(this@Document.tags._tags)
+                tags = Tags.Editor(this@Document.tags._tags),
+                openID4VCIClaimDescriptions = openID4VCIClaimDescriptions
             )
             editAction.invoke(editor)
             val newTagsData = if (editor.tags.tags.isEmpty()) {
@@ -484,7 +500,8 @@ class Document internal constructor(
                 mpzPassVersion = editor.mpzPassVersion,
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
-                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
+                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
+                openID4VCIClaimDescriptions = editor.openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor()
             )
             // Emit events only if something actually changed.
             if (data != this.data) {
@@ -517,6 +534,8 @@ class Document internal constructor(
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
+     * @property openID4VCIClaimDescriptions Descriptions of the claims in the document as provided by the issuer
+     *  in its OpenID4VCI metadata.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -531,7 +550,8 @@ class Document internal constructor(
         var mpzPassVersion: Long?,
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
-        val tags: Tags.Editor
+        val tags: Tags.Editor,
+        var openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList()
     )
 
     /**

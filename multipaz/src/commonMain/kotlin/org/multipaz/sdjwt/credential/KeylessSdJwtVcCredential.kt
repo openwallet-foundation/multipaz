@@ -62,8 +62,11 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
         builder.put("vct", vct)
     }
 
-    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
-        return getClaimsImpl(documentTypeRepository)
+    override suspend fun getClaims(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
+    ): List<JsonClaim> {
+        return getClaimsImpl(documentTypeRepository, locales)
     }
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =

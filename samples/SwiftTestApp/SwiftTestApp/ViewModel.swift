@@ -348,7 +348,8 @@ class ViewModel {
             appData: nil,
             created: now.toKotlinInstant(),
             readerIdentifiers: [],
-            metadata: nil
+            metadata: nil,
+            openID4VCIClaimDescriptions: []
         )
         var deviceKeyAuthorizedDataElements: [String: [String]] = [:]
         if documentType.mdocDocumentType?.supportsPortraitImageEquivalence != nil {
