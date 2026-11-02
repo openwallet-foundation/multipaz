@@ -5,6 +5,7 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.crypto.Algorithm
@@ -15,59 +16,56 @@ import org.multipaz.util.Logger
 internal data class AuthorizationConfiguration(
     val identifier: String,
     val challengeEndpoint: String?,
-    val pushedAuthorizationRequestEndpoint: String,
-    val authorizationEndpoint: String,
+    val pushedAuthorizationRequestEndpoint: String?,
+    val authorizationEndpoint: String?,
     val tokenEndpoint: String,
+    val codeResponseTypeSupported: Boolean,
+    val s256CodeChallengeSupported: Boolean,
     val dpopSigningAlgorithm: Algorithm,
     val clientAttestationSigningAlgorithm: Algorithm,
     val clientAuthentication: ClientAuthenticationType
 ) {
     companion object: JsonParsing("Authorization server metadata") {
-        suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): AuthorizationConfiguration {
-            val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+        suspend fun get(
+            url: String,
+            clientPreferences: OpenID4VCIClientPreferences,
+            // TODO: Out-of-spec inline metadata from unmerged OpenID4VCI PR #476
+            //  (https://github.com/openid/OpenID4VCI/pull/476). Remove once standardized/no longer needed.
+            authorizationServerMetadata: JsonObject? = null
+        ): AuthorizationConfiguration {
+            val metadata = if (authorizationServerMetadata != null) {
+                // TODO: Out-of-spec inline metadata from unmerged OpenID4VCI PR #476
+                //  (https://github.com/openid/OpenID4VCI/pull/476). Remove once standardized/no longer needed.
+                Logger.w(TAG, "Using out-of-spec inline authorization_server_metadata (OpenID4VCI PR #476)")
+                Logger.dJson(TAG, "Using inline authorization server metadata", authorizationServerMetadata)
+                authorizationServerMetadata
+            } else {
+                val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
-            // Fetch issuer metadata
-            val metadataUrl = wellKnown(url, "oauth-authorization-server", dropTrailingSlash = true)
-            Logger.d(TAG, "Fetching authorization server metadata from $metadataUrl")
-            val metadataRequest = httpClient.get(metadataUrl) {}
-            if (metadataRequest.status != HttpStatusCode.OK) {
-                throw IllegalStateException("Invalid issuer, no $metadataUrl")
+                // Fetch issuer metadata
+                val metadataUrl = wellKnown(url, "oauth-authorization-server", dropTrailingSlash = true)
+                Logger.d(TAG, "Fetching authorization server metadata from $metadataUrl")
+                val metadataRequest = httpClient.get(metadataUrl) {}
+                if (metadataRequest.status != HttpStatusCode.OK) {
+                    throw IllegalStateException("Invalid issuer, no $metadataUrl")
+                }
+                val metadataText = metadataRequest.readRawBytes().decodeToString()
+                val parsed = Json.parseToJsonElement(metadataText).jsonObject
+                Logger.dJson(TAG, "Received authorization server metadata", parsed)
+                parsed
             }
-            val metadataText = metadataRequest.readRawBytes().decodeToString()
-            val metadata = Json.parseToJsonElement(metadataText).jsonObject
-            Logger.dJson(TAG, "Received authorization server metadata", metadata)
             val identifier = metadata.stringOrNull("issuer") ?: url
             val challengeEndpoint = metadata.stringOrNull("challenge_endpoint")
-            val authorizationEndpoint = metadata.string("authorization_endpoint")
-            val parEndpoint = metadata.string("pushed_authorization_request_endpoint")
+            val authorizationEndpoint = metadata.stringOrNull("authorization_endpoint")
+            val parEndpoint = metadata.stringOrNull("pushed_authorization_request_endpoint")
             val tokenEndpoint = metadata.string("token_endpoint")
 
-            val responseType = metadata.arrayOrNull("response_types_supported")
-            if (responseType != null) {
-                var codeSupported = false
-                for (response in responseType) {
-                    if (response is JsonPrimitive && response.content == "code") {
-                        codeSupported = true
-                        break
-                    }
-                }
-                if (!codeSupported) {
-                    throw IllegalStateException("response type 'code' is not supported")
-                }
-            }
-            val codeChallengeMethods = metadata.array("code_challenge_methods_supported")
-            if (responseType != null) {
-                var challengeSupported = false
-                for (method in codeChallengeMethods) {
-                    if (method is JsonPrimitive && method.content == "S256") {
-                        challengeSupported = true
-                        break
-                    }
-                }
-                if (!challengeSupported) {
-                    throw IllegalStateException("challenge type 'S256' is not supported")
-                }
-            }
+            val responseTypes = metadata.arrayOrNull("response_types_supported")
+            val codeResponseTypeSupported = responseTypes == null ||
+                responseTypes.any { it is JsonPrimitive && it.content == "code" }
+            val codeChallengeMethods = metadata.arrayOrNull("code_challenge_methods_supported")
+            val s256CodeChallengeSupported = codeChallengeMethods == null ||
+                codeChallengeMethods.any { it is JsonPrimitive && it.content == "S256" }
 
             val dpopSigningAlgorithm = preferredAlgorithm(
                 available = metadata.arrayOrNull("dpop_signing_alg_values_supported"),
@@ -76,7 +74,7 @@ internal data class AuthorizationConfiguration(
                 available = metadata.arrayOrNull("client_attestation_pop_signing_alg_values_supported"),
                 clientPreferences = clientPreferences
             )
-            var clientAuthentication = ClientAuthenticationType.CLIENT_ASSERTION
+            var clientAuthentication = ClientAuthenticationType.CLIENT_ATTESTATION
             val authMethods = metadata.arrayOrNull("token_endpoint_auth_methods_supported")
             if (authMethods != null) {
                 var walletAttestationSupported = false
@@ -109,6 +107,8 @@ internal data class AuthorizationConfiguration(
                 pushedAuthorizationRequestEndpoint = parEndpoint,
                 authorizationEndpoint = authorizationEndpoint,
                 tokenEndpoint = tokenEndpoint,
+                codeResponseTypeSupported = codeResponseTypeSupported,
+                s256CodeChallengeSupported = s256CodeChallengeSupported,
                 dpopSigningAlgorithm = dpopSigningAlgorithm,
                 clientAttestationSigningAlgorithm = clientAttestationSigningAlgorithm,
                 clientAuthentication = clientAuthentication

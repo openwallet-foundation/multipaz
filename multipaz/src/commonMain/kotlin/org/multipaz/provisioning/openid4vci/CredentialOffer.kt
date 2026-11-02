@@ -21,6 +21,11 @@ internal sealed class CredentialOffer {
     abstract val issuerUri: String
     abstract val configurationId: String
     abstract val authorizationServer: String?
+    // TODO: Out-of-spec extension from unmerged OpenID4VCI PR #476
+    //  (https://github.com/openid/OpenID4VCI/pull/476) used by https://digital-credentials.dev.
+    //  Remove or update once OpenID4VCI over Digital Credentials API is standardized.
+    abstract val credentialIssuerMetadata: JsonObject?
+    abstract val authorizationServerMetadata: JsonObject?
 
 
     /**
@@ -29,7 +34,9 @@ internal sealed class CredentialOffer {
     data class Grantless(
         override val issuerUri: String,
         override val configurationId: String,
-        override val authorizationServer: String? = null
+        override val authorizationServer: String? = null,
+        override val credentialIssuerMetadata: JsonObject? = null,
+        override val authorizationServerMetadata: JsonObject? = null
     ): CredentialOffer()
 
     /**
@@ -41,7 +48,9 @@ internal sealed class CredentialOffer {
         override val authorizationServer: String?,
         val preauthorizedCode: String,
         /* Describes tx_code parameter (see OpenId4Vci spec referenced above) */
-        val txCode: SecretCodeRequest?
+        val txCode: SecretCodeRequest?,
+        override val credentialIssuerMetadata: JsonObject? = null,
+        override val authorizationServerMetadata: JsonObject? = null
     ) : CredentialOffer()
 
     /**
@@ -51,7 +60,9 @@ internal sealed class CredentialOffer {
         override val issuerUri: String,
         override val configurationId: String,
         override val authorizationServer: String?,
-        val issuerState: String?
+        val issuerState: String?,
+        override val credentialIssuerMetadata: JsonObject? = null,
+        override val authorizationServerMetadata: JsonObject? = null
     ) : CredentialOffer()
 
 
@@ -95,31 +106,55 @@ internal sealed class CredentialOffer {
             val credentialConfigurationIds = json.array("credential_configuration_ids")
             // Right now only use the first configuration id
             val credentialConfigurationId = credentialConfigurationIds[0].jsonPrimitive.content
+            // TODO: Out-of-spec extension from unmerged OpenID4VCI PR #476
+            //  (https://github.com/openid/OpenID4VCI/pull/476) used by https://digital-credentials.dev.
+            //  Remove or update once OpenID4VCI over Digital Credentials API is standardized.
+            val credentialIssuerMetadata = json.objOrNull("credential_issuer_metadata")
+            val authorizationServerMetadata = json.objOrNull("authorization_server_metadata")
             if (!json.containsKey("grants")) {
-                return Grantless(credentialIssuerUri, credentialConfigurationId)
+                return Grantless(
+                    issuerUri = credentialIssuerUri,
+                    configurationId = credentialConfigurationId,
+                    credentialIssuerMetadata = credentialIssuerMetadata,
+                    authorizationServerMetadata = authorizationServerMetadata
+                )
             }
             val grants = json.obj("grants")
             val preAuthGrant = grants.objOrNull("urn:ietf:params:oauth:grant-type:pre-authorized_code")
             if (preAuthGrant != null) {
                 val preauthorizedCode = preAuthGrant.string("pre-authorized_code")
                 val authorizationServer = preAuthGrant.stringOrNull("authorization_server")
+                if (authorizationServerMetadata != null && authorizationServer != null) {
+                    throw IllegalStateException(
+                        "Credential offer: 'authorization_server' must not be present when 'authorization_server_metadata' is provided"
+                    )
+                }
                 val txCode = extractTxCode(preAuthGrant.objOrNull("tx_code"))
                 return PreauthorizedCode(
                     issuerUri = credentialIssuerUri,
                     configurationId = credentialConfigurationId,
                     authorizationServer = authorizationServer,
                     preauthorizedCode = preauthorizedCode,
-                    txCode = txCode
+                    txCode = txCode,
+                    credentialIssuerMetadata = credentialIssuerMetadata,
+                    authorizationServerMetadata = authorizationServerMetadata
                 )
             } else {
                 val grant = grants.obj("authorization_code")
                 val issuerState = grant.stringOrNull("issuer_state")
                 val authorizationServer = grant.stringOrNull("authorization_server")
+                if (authorizationServerMetadata != null && authorizationServer != null) {
+                    throw IllegalStateException(
+                        "Credential offer: 'authorization_server' must not be present when 'authorization_server_metadata' is provided"
+                    )
+                }
                 return AuthorizationCode(
                     issuerUri = credentialIssuerUri,
                     configurationId = credentialConfigurationId,
                     authorizationServer = authorizationServer,
-                    issuerState = issuerState
+                    issuerState = issuerState,
+                    credentialIssuerMetadata = credentialIssuerMetadata,
+                    authorizationServerMetadata = authorizationServerMetadata
                 )
             }
         }
