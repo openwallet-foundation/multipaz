@@ -42,6 +42,7 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.androidCredmanBitmap
 import org.multipaz.document.androidCredmanExchangeProtocols
+import org.multipaz.document.androidCredmanNoClaimsRequestedText
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.androidCredmanSubtitle
 import org.multipaz.document.androidCredmanTitle
@@ -237,6 +238,7 @@ private suspend fun exportMdocCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        document.androidCredmanNoClaimsRequestedText?.let { put("noClaimsRequestedText", it) }
         if (exchangeProtocols != null) {
             putCborArray("protocols") {
                 exchangeProtocols.forEach { add(it) }
@@ -356,6 +358,7 @@ private suspend fun exportSdJwtVcCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        document.androidCredmanNoClaimsRequestedText?.let { put("noClaimsRequestedText", it) }
         if (exchangeProtocols != null) {
             putCborArray("protocols") {
                 exchangeProtocols.forEach { add(it) }

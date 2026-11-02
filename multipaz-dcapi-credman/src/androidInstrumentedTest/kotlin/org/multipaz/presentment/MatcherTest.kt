@@ -55,6 +55,7 @@ import org.multipaz.digitalcredentials.DigitalCredentialsCredman
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanExchangeProtocols
+import org.multipaz.document.setAndroidCredmanNoClaimsRequestedText
 import org.multipaz.document.setAndroidCredmanOmitClaims
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
@@ -603,6 +604,105 @@ class MatcherTest {
                     City of birth: "Sample City"
                     Photo of holder: Image (5318 bytes)
             """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    /**
+     * A DCQL query may name no claims at all. Credential Manager does not show an entry without a
+     * field and then tells the user their info wasn't found, so the entry gets one field saying no
+     * data is requested.
+     */
+    @Test
+    fun testMatcher_OpenID4VP_mDL_no_claims() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    No data requested
+                """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_no_claims() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": ["urn:eudi:pid:1"] }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    No data requested
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    No data requested
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    /** The text of that field is the document's own when the app set one, e.g. in the user's language. */
+    @Test
+    fun testMatcher_OpenID4VP_no_claims_with_document_text() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                harness.docMdl.setAndroidCredmanNoClaimsRequestedText("Nothing requested from this document")
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Nothing requested from this document
+                """.trimIndent().trim() + "\n",
             matcherResult
         )
     }
@@ -4392,9 +4492,11 @@ class MatcherTest {
                     .build()
             }
         )
-        // Entry is offered without any field items (since only device-signed data was requested)
+        // Only device-signed data was requested, so the entry shows the one field saying no data is
+        // requested instead of none: Credential Manager does not show an entry without a field.
         Assert.assertTrue(matcherResult.contains("__PaymentCard__"))
         Assert.assertFalse(matcherResult.contains("payment_transaction"))
+        Assert.assertTrue(matcherResult.contains("    No data requested\n"))
     }
 
     @Test
@@ -5894,8 +5996,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Erika__
+                    No data requested
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Max__
+                    No data requested
             """.trimIndent().trim() + "\n",
             matcherResult
         )
