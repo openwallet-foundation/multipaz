@@ -25,8 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
 import org.multipaz.nfc.ExternalNfcReaderState
 import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.nfc.ExternalNfcReaderUsb
@@ -103,21 +103,21 @@ fun NfcReaderScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
             title = "External NFC Reader"
         ) {
-            FloatingItemHeadingAndText("Name", reader.userDisplayName ?: reader.displayName)
+            SegmentedItemHeadingAndText("Name", reader.userDisplayName ?: reader.displayName)
             if (reader.userDisplayName != null) {
-                FloatingItemHeadingAndText("Original Name", reader.displayName)
+                SegmentedItemHeadingAndText("Original Name", reader.displayName)
             }
             if (reader is ExternalNfcReaderUsb) {
-                FloatingItemHeadingAndText("Connection", "USB")
-                FloatingItemHeadingAndText("Vendor ID", reader.vendorId.toHexString(hexFormat))
-                FloatingItemHeadingAndText("Product ID", reader.productId.toHexString(hexFormat))
-                FloatingItemHeadingAndText("Interface Index", reader.interfaceIndex.toString())
+                SegmentedItemHeadingAndText("Connection", "USB")
+                SegmentedItemHeadingAndText("Vendor ID", reader.vendorId.toHexString(hexFormat))
+                SegmentedItemHeadingAndText("Product ID", reader.productId.toHexString(hexFormat))
+                SegmentedItemHeadingAndText("Interface Index", reader.interfaceIndex.toString())
             }
-            FloatingItemHeadingAndText("State", state.toString())
+            SegmentedItemHeadingAndText("State", state.toString())
         }
 
         Row(

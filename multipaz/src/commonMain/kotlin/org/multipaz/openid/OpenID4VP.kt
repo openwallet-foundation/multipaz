@@ -609,6 +609,13 @@ object OpenID4VP {
             vpToken
         }
 
+        if (selection.matches.isNotEmpty()) {
+            source.requesterHistory?.recordShare(
+                requester = requester,
+                trustedRequesterIdentity = trustedRequesterIdentity,
+            )
+        }
+
         return OpenID4VPResponse(
             response = response,
             vpToken = vpToken,

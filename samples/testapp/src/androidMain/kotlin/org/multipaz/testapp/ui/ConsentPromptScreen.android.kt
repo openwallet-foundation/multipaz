@@ -40,6 +40,7 @@ actual suspend fun launchAndroidPresentmentActivity(
     )
     PresentmentActivity.startActivity()
 
+    var completedSuccessfully = false
     val consentAndAuthJob = CoroutineScope(Dispatchers.IO + PresentmentActivity.promptModel).launch {
         try {
             PresentmentActivity.presentmentModel.setWaitingForReader()
@@ -100,6 +101,7 @@ actual suspend fun launchAndroidPresentmentActivity(
 
             PresentmentActivity.presentmentModel.setSending()
             delay(paData.sendResponseDuration)
+            completedSuccessfully = true
             PresentmentActivity.presentmentModel.setCompleted(null)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -118,5 +120,5 @@ actual suspend fun launchAndroidPresentmentActivity(
     consentAndAuthJob.join()
     listenForCancellationFromUiJob.cancel()
 
-    return presentmentData.select(emptyList())
+    return if (completedSuccessfully) presentmentData.select(emptyList()) else null
 }

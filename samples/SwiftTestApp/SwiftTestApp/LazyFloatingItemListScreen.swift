@@ -8,30 +8,30 @@ struct LazyFloatingItemListScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("This screen contains text at the top, a floating list in the middle with 50 items, and a button at the bottom to illustrate that the whole screen scrolls.")
+                Text("This screen contains text at the top, a segmented list in the middle with 50 items, and a button at the bottom to illustrate that the whole screen scrolls.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
 
-                LazyFloatingItemList(
+                LazySegmentedItemList(
                     count: 50,
-                    title: "LazyFloatingItemList (50 items)"
+                    title: "LazySegmentedItemList (50 items)"
                 ) { index in
                     if index % 3 == 0 {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading: "Heading #\(index)",
-                            text: "This is item \(index) in a LazyFloatingItemList with a total of 50 items.",
+                            text: "This is item \(index) in a LazySegmentedItemList with a total of 50 items.",
                             showChevron: true
                         )
                     } else if index % 3 == 1 {
-                        FloatingItemText(
+                        SegmentedItemText(
                             text: "Item #\(index)",
                             showChevron: true,
                             secondary: "Secondary detail for item \(index)",
                             image: { Image(systemName: "star") }
                         )
                     } else {
-                        FloatingItemText(
+                        SegmentedItemText(
                             text: "Item #\(index)",
                             showChevron: false
                         )
@@ -51,9 +51,10 @@ struct LazyFloatingItemListScreen: View {
                 .padding(.top, 8)
                 .padding(.bottom, 16)
             }
-            .padding(10)
+            .padding(16)
         }
-        .navigationTitle("LazyFloatingItemList")
+        .background(Color(UIColor.systemGroupedBackground))
+        .navigationTitle("LazySegmentedItemList")
         .alert("Alert", isPresented: $showingAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -61,3 +62,4 @@ struct LazyFloatingItemListScreen: View {
         }
     }
 }
+

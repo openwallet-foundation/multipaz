@@ -462,6 +462,12 @@ suspend fun mdocPresentmentGenerateResponse(
     } catch (e: KeyLockedException) {
         throw AuthenticationFailedException("User authentication failed", e)
     }
+    if (selection.matches.isNotEmpty()) {
+        source.requesterHistory?.recordShare(
+            requester = requester,
+            trustedRequesterIdentity = trustedRequesterIdentity,
+        )
+    }
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
     }

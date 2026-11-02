@@ -39,9 +39,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.eventlogger.SimpleEventLoggerModel
-import org.multipaz.compose.items.FloatingItemCenteredText
-import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemText
+import org.multipaz.compose.items.SegmentedItemCenteredText
+import org.multipaz.compose.items.SegmentedItemList
+import org.multipaz.compose.items.SegmentedItemText
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.eventlogger.Event
 import org.multipaz.eventlogger.EventPresentment
@@ -149,7 +149,7 @@ fun EventLoggerScreen(
             .padding(innerPadding)
             .padding(10.dp)
         ) {
-            FloatingItemList(
+            SegmentedItemList(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                 title = "Events"
             ) {
@@ -159,7 +159,7 @@ fun EventLoggerScreen(
                     }
 
                     emptyList<Event>() -> {
-                        FloatingItemCenteredText(
+                        SegmentedItemCenteredText(
                             text = "No events recorded yet",
                         )
                     }
@@ -226,7 +226,7 @@ private fun EventItem(
             )
         }
         is EventSimple -> {
-            FloatingItemCenteredText(
+            SegmentedItemCenteredText(
                 text = "EventSimple w/ ${event.appData.size} bytes of data"
             )
         }
@@ -257,7 +257,7 @@ private fun EventItemProvisioning(
     val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
     val text = "$eventDateTimeString • $eventType"
 
-    FloatingItemText(
+    SegmentedItemText(
         modifier = modifier,
         image = {
             docInfo?.cardArt?.let {
@@ -302,7 +302,7 @@ private fun EventItemPresentment(
         if (it.outcome.name != "SUCCESS") " • ${it.outcome.name}" else ""
     } ?: ""
     val text = "$eventDateTimeString • $sharingType$outcomeSuffix"
-    FloatingItemText(
+    SegmentedItemText(
         modifier = modifier,
         image = {
             firstDocInfo?.cardArt?.let {
@@ -367,7 +367,7 @@ private fun EventItemVerification(
     }
     val text = "$eventDateTimeString • $details"
 
-    FloatingItemText(
+    SegmentedItemText(
         modifier = modifier,
         image = {
             Icon(

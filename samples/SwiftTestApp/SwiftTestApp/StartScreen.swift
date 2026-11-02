@@ -31,7 +31,7 @@ struct StartScreen: View {
                     Text("ISO 18013-5 Proximity Presentment")
                 }
                 Button(action: { viewModel.path.append(Destination.floatingItemListScreen) }) {
-                    Text("FloatingItemList examples")
+                    Text("SegmentedItemList examples")
                 }
             }
         }

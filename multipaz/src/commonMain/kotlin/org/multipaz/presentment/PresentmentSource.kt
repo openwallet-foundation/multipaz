@@ -31,13 +31,15 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository a [ZkSystemRepository] with ZKP systems or `null`.
  * @property eventLogger an [EventLogger] for logging events or `null`.
+ * @property requesterHistory a [RequesterHistory] for tracking relying party interactions or `null`.
  * @see SimplePresentmentSource for one concrete implementation tailored for ISO mdoc and IETF SD-JWT VC credentials.
  */
 abstract class PresentmentSource(
     open val documentStore: DocumentStore,
     open val documentTypeRepository: DocumentTypeRepository,
     open val zkSystemRepository: ZkSystemRepository? = null,
-    open val eventLogger: EventLogger? = null
+    open val eventLogger: EventLogger? = null,
+    open val requesterHistory: RequesterHistory? = null,
 ) {
     /**
      * Determines if a request comes from a trusted requestor and returns the information about the

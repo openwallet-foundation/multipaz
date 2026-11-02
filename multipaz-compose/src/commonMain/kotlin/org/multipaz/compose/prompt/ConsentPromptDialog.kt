@@ -38,6 +38,9 @@ fun ConsentPromptDialog(
             imageLoader = imageLoader,
             maxHeight = maxHeight,
             transactionDataRendererRepository = dialogParameters.transactionDataRendererRepository,
+            requesterHistory = dialogParameters.requesterHistory,
+            classifyPurposesFn = dialogParameters.classifyPurposesFn,
+            classifyRiskFn = dialogParameters.classifyRiskFn,
             onDocumentsInFocus = dialogParameters.onDocumentsInFocus,
             onConfirm = { credentialPresentmentSelection ->
                 coroutineScope.launch {

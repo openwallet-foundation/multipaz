@@ -99,6 +99,7 @@ class MdocDocumentType private constructor(
                     displayName = dataElement.attribute.displayName,
                     description = dataElement.attribute.description,
                     mandatory = dataElement.mandatory,
+                    sensitivity = dataElement.attribute.sensitivity,
                     icon = dataElement.attribute.icon,
                     sampleValue = dataElement.attribute.sampleValueMdoc
                 )

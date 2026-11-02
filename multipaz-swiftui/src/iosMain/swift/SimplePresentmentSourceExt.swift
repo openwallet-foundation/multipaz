@@ -32,6 +32,7 @@ extension SimplePresentmentSource.Companion {
     ///   - zkSystemRepository: the [ZkSystemRepository] to use or `nil`.
     ///   - faceMatcherRepository: the [FaceMatcherRepository] to use or `nil`.
     ///   - eventLogger: an [EventLogger] for logging events or `nil`.
+    ///   - requesterHistory: a [RequesterHistory] for tracking relying party interactions or `nil`.
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
     ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
     ///   - getBadgesFn: a function to get badges for a document.
@@ -46,6 +47,7 @@ extension SimplePresentmentSource.Companion {
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
         eventLogger: EventLogger? = nil,
+        requesterHistory: RequesterHistory? = nil,
         getFaceMatcherFn: @escaping () -> FaceMatcher? = { nil },
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
@@ -80,6 +82,7 @@ extension SimplePresentmentSource.Companion {
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: zkSystemRepository,
             eventLogger: eventLogger,
+            requesterHistory: requesterHistory,
             getFaceMatcherFn: getFaceMatcherFn,
             resolveTrustFn: resolveTrustHandler,
             showConsentPromptFn: showConsentPromptHandler,

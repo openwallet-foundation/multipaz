@@ -337,6 +337,23 @@ fun SettingsScreen(
                 },
             )
         }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            app.requesterHistory.deleteAll()
+                            showToast("Requester history cleared")
+                        }
+                    },
+                ) {
+                    Text(text = "Reset Requester History")
+                }
+            }
+        }
 
         item {
             HorizontalDivider(

@@ -1,11 +1,16 @@
 package org.multipaz.prompt
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FacePose
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -77,6 +82,12 @@ suspend fun PromptModel.requestPassphrase(
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
  *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+ *   credentials with [requester] before.
+ * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+ *   for the active selection.
+ * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+ *   for the active selection.
  * @return a [PresentmentSelection] object conveying which credentials the user selected, if multiple
  *   options are available.
  * @throws PromptDismissedException if the user dismissed the prompt.
@@ -96,7 +107,10 @@ suspend fun PromptModel.requestConsent(
     presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
-    transactionDataRendererRepository: TransactionDataRendererRepository? = null
+    transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
+    classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+    classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
 ): PresentmentSelection {
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
@@ -106,6 +120,9 @@ suspend fun PromptModel.requestConsent(
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
             transactionDataRendererRepository = transactionDataRendererRepository,
+            requesterHistory = requesterHistory,
+            classifyPurposesFn = classifyPurposesFn,
+            classifyRiskFn = classifyRiskFn,
         )
     )
 }

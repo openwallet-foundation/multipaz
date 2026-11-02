@@ -175,3 +175,23 @@ with the following changes
   `getFirst()` / `getLast()` on Java collections—use Kotlin's `.first()` / `.last()` extensions
   instead).
 
+## UI Golden Screenshots (`multipaz-compose`)
+
+* **Consent Prompt Golden Suite & Visual Catalog:** The `Consent` composable and related presentment
+  UI (`X509CertViewer`, `RenderClaimValue`, purpose/risk classification, localization, RTL, and dark
+  mode) are verified against a Robolectric-based golden-master screenshot suite in
+  `multipaz-compose/src/androidUnitTest/kotlin/org/multipaz/compose/presentment/ConsentGoldenScreenshotTest.kt`,
+  with reference PNGs and a browsable visual catalog in
+  [`multipaz-compose/golden-screenshots/README.md`](multipaz-compose/golden-screenshots/README.md).
+
+* **Updating Golden Screenshots:** Whenever a change intentionally alters the consent prompt UI,
+  layout, styling, or string resources (`values/strings.xml`, `values-da/strings.xml`,
+  `values-ar/strings.xml`), regenerate the golden PNGs and `README.md` catalog by passing
+  `-PupdateGoldens=true`, and inspect the resulting image diffs before committing:
+  ```bash
+  ./gradlew :multipaz-compose:testDebugUnitTest \
+    --tests "org.multipaz.compose.presentment.ConsentGoldenScreenshotTest" \
+    -PupdateGoldens=true --rerun-tasks -Pdisable.web.targets=true
+  ```
+
+

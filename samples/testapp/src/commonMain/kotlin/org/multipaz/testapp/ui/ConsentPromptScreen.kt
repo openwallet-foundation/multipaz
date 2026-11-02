@@ -42,6 +42,8 @@ import org.multipaz.compose.document.DocumentModel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
@@ -70,7 +72,9 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.SimpleRequesterHistory
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherRepository
@@ -90,7 +94,9 @@ import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import kotlin.time.Clock
@@ -143,6 +149,7 @@ private enum class Example(
     MDL_AGE_OVER_21_AND_PORTRAIT("mDL: Age over 21 + portrait"),
     MDL_MANDATORY("mDL: Mandatory data elements"),
     MDL_ALL("mDL: All data elements"),
+    MDL_ADDRESS_ONLY("mDL: Address only"),
     MDL_NAME_AND_ADDRESS_PARTIALLY_STORED("mDL: Name and address (partially stored)"),
     MDL_NAME_AND_ADDRESS_ALL_STORED("mDL: Name and address (all stored)"),
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
@@ -218,6 +225,7 @@ fun ConsentPromptScreen(
     val coroutineScope = rememberCoroutineScope()
     var example by remember { mutableStateOf(Example.MDL_US_TRANSPORTATION) }
     var certChain by remember { mutableStateOf(CertChain.entries.first()) }
+    var secondaryCertChain by remember { mutableStateOf(CertChain.CERT_CHAIN_NONE) }
     var encryptionTarget by remember { mutableStateOf(EncryptionTarget.entries.first()) }
     var origin by remember { mutableStateOf(Origin.entries.first()) }
     var appId by remember { mutableStateOf(AppId.entries.first()) }
@@ -230,6 +238,7 @@ fun ConsentPromptScreen(
     var utopiaCbpIcon by remember { mutableStateOf(ByteString()) }
     var identityReaderIcon by remember { mutableStateOf(ByteString()) }
     var documentStore by remember { mutableStateOf<DocumentStore?>(null) }
+    var requesterHistory by remember { mutableStateOf<RequesterHistory?>(null) }
     var onDocumentsInFocus by remember { mutableStateOf<List<Document>?>(null) }
     var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
     var paShowConsent by remember { mutableStateOf(true) }
@@ -271,6 +280,7 @@ fun ConsentPromptScreen(
 
         val storage = EphemeralStorage()
         val secureArea = SoftwareSecureArea.create(storage)
+        requesterHistory = SimpleRequesterHistory(storage = TestAppConfiguration.storage)
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
         documentModel = DocumentModel.create(documentStore = documentStore!!, documentTypeRepository = documentTypeRepository)
 
@@ -440,6 +450,15 @@ fun ConsentPromptScreen(
 
         item {
             SettingMultipleChoice(
+                title = "Secondary TrustPoint",
+                choices = CertChain.entries.map { it.desc },
+                initialChoice = CertChain.CERT_CHAIN_NONE.desc,
+                onChoiceSelected = { choice -> secondaryCertChain = CertChain.entries.find { it.desc == choice }!! },
+            )
+        }
+
+        item {
+            SettingMultipleChoice(
                 title = "Encryption Target",
                 choices = EncryptionTarget.entries.map { it.desc },
                 initialChoice = EncryptionTarget.entries.first().desc,
@@ -481,6 +500,7 @@ fun ConsentPromptScreen(
                     val queryResult = getQueryResult(
                         example = example,
                         certChain = certChain,
+                        secondaryCertChain = secondaryCertChain,
                         encryptionTarget = encryptionTarget,
                         origin = origin,
                         appId = appId,
@@ -491,11 +511,12 @@ fun ConsentPromptScreen(
                         documentStore = documentStore,
                         documentTypeRepository = documentTypeRepository,
                         faceMatcherRepository = faceMatcherRepository,
-                        transactionDataRendererRepository = transactionDataRendererRepository
+                        transactionDataRendererRepository = transactionDataRendererRepository,
+                        requesterHistory = requesterHistory,
                     )
                     val trustedRequesterIdentity =
                         queryResult.source.resolveTrust(queryResult.requester)
-                    launcher(
+                    val selection = launcher(
                         queryResult.source,
                         paData,
                         queryResult.requester,
@@ -506,6 +527,12 @@ fun ConsentPromptScreen(
                             onDocumentsInFocus = documents
                         },
                     )
+                    if (selection != null && selection.matches.isNotEmpty()) {
+                        queryResult.source.requesterHistory?.recordShare(
+                            requester = queryResult.requester,
+                            trustedRequesterIdentity = trustedRequesterIdentity,
+                        )
+                    }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     e.printStackTrace()
@@ -529,6 +556,7 @@ fun ConsentPromptScreen(
                                 preselectedDocuments = preselectedDocuments,
                                 onDocumentsInFocus = onDocumentsInFocus,
                                 transactionDataRendererRepository = transactionDataRendererRepository,
+                                requesterHistory = source.requesterHistory,
                             )
                         },
                         paData = AndroidPresentmentActivityData()
@@ -536,6 +564,20 @@ fun ConsentPromptScreen(
                 }
             ) {
                 Text("Show Consent Prompt")
+            }
+        }
+
+        item {
+            Button(
+                enabled = requesterHistory != null,
+                onClick = {
+                    coroutineScope.launch {
+                        requesterHistory?.deleteAll()
+                        showToast("Requester history cleared")
+                    }
+                }
+            ) {
+                Text("Reset Requester History")
             }
         }
 
@@ -718,6 +760,7 @@ private data class QueryResult(
 private suspend fun getQueryResult(
     example: Example,
     certChain: CertChain,
+    secondaryCertChain: CertChain = CertChain.CERT_CHAIN_NONE,
     encryptionTarget: EncryptionTarget,
     origin: Origin,
     appId: AppId,
@@ -728,7 +771,8 @@ private suspend fun getQueryResult(
     documentStore: DocumentStore?,
     documentTypeRepository: DocumentTypeRepository,
     faceMatcherRepository: FaceMatcherRepository? = null,
-    transactionDataRendererRepository: TransactionDataRendererRepository? = null
+    transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
 ): QueryResult {
     val dcql = when (example) {
         Example.MDL_AGE_OVER_21_AND_PORTRAIT ->
@@ -739,6 +783,26 @@ private suspend fun getQueryResult(
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
         Example.MDL_ALL ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.mdocRequest!!.toDcql(emptyList())
+        Example.MDL_ADDRESS_ONLY -> Json.parseToJsonElement(
+            """
+            {
+              "credentials": [
+                {
+                  "id": "cred1",
+                  "format": "mso_mdoc",
+                  "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                  "claims": [
+                    { "path": ["${DrivingLicense.MDL_NAMESPACE}", "resident_address"] },
+                    { "path": ["${DrivingLicense.MDL_NAMESPACE}", "resident_city"] },
+                    { "path": ["${DrivingLicense.MDL_NAMESPACE}", "resident_state"] },
+                    { "path": ["${DrivingLicense.MDL_NAMESPACE}", "resident_postal_code"] },
+                    { "path": ["${DrivingLicense.MDL_NAMESPACE}", "resident_country"] }
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
         Example.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.mdocRequest!!.toDcql(emptyList())
         Example.MDL_NAME_AND_ADDRESS_ALL_STORED ->
@@ -1048,8 +1112,9 @@ private suspend fun getQueryResult(
         Example.BORDER_CROSSING_EXAMPLE,
         Example.BORDER_CROSSING_EXAMPLE_NO_RETAIN -> null
     }
-    val (requester, trustMetadata) = calculateRequester(
+    val (requester, trustMetadataMap) = calculateRequester(
         certChain = certChain,
+        secondaryCertChain = secondaryCertChain,
         origin = origin,
         appId = appId,
         utopiaMarketplaceIcon = utopiaMarketplaceIcon,
@@ -1059,6 +1124,7 @@ private suspend fun getQueryResult(
     val source = SimplePresentmentSource(
         documentStore = documentStore!!,
         documentTypeRepository = documentTypeRepository,
+        requesterHistory = requesterHistory,
         getFaceMatcherFn = { faceMatcherRepository?.defaultMatcher },
         resolveTrustFn = { requester ->
             for (requesterIdentity in requester.requesterIdentities) {
@@ -1066,13 +1132,10 @@ private suspend fun getQueryResult(
                     encryptionTarget,
                     utopiaCbpIcon,
                     requesterIdentity
-                ) ?: continue
+                ) ?: trustMetadataMap[requesterIdentity] ?: continue
                 return@SimplePresentmentSource TrustedRequesterIdentity(requesterIdentity, trustMetadata)
             }
-            // Otherwise, just base it on the trustMetadata
-            trustMetadata?.let {
-                TrustedRequesterIdentity(requester.requesterIdentities.first(), it)
-            }
+            null
         },
         showConsentPromptFn = { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
             promptModelRequestConsent(
@@ -1082,6 +1145,7 @@ private suspend fun getQueryResult(
                 preselectedDocuments = preselectedDocuments,
                 onDocumentsInFocus = onDocumentsInFocus,
                 transactionDataRendererRepository = transactionDataRendererRepository,
+                requesterHistory = requesterHistory,
             )
         },
         domainsMdocSignature = listOf("mdoc"),
@@ -1118,6 +1182,7 @@ private suspend fun getQueryResult(
         Example.MDL_AGE_OVER_21_AND_PORTRAIT,
         Example.MDL_MANDATORY,
         Example.MDL_ALL,
+        Example.MDL_ADDRESS_ONLY,
         Example.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED,
         Example.MDL_NAME_AND_ADDRESS_ALL_STORED,
         Example.PHOTO_ID_MANDATORY,
@@ -1212,6 +1277,7 @@ private fun resolveTrust(
             TrustMetadata(
                 displayName = encryptionTarget.desc,
                 displayIcon = utopiaCbpIcon,     // For now, assume this is the only encryption target
+                privacyPolicyUrl = "https://apps.multipaz.org",
             )
         }
     }
@@ -1222,7 +1288,9 @@ private fun resolveTrust(
     if (mpzExtensionData != null) {
         val mpzExtension = MultipazExtension.fromCbor(mpzExtensionData)
         mpzExtension.googleAccount?.let {
+            val rootSki = requesterIdentity.certChain.certificates.last().subjectKeyIdentifier?.toHex().orEmpty()
             return TrustMetadata(
+                identifier = "${rootSki}_${it.id}",
                 displayName = it.emailAddress,
                 displayIconUrl = it.profilePictureUri,
                 disclaimer = "The email and picture shown are from the requester's Google Account. " +
@@ -1234,18 +1302,42 @@ private fun resolveTrust(
     return null
 }
 
+private val testReaderRootKey: EcPrivateKey by lazy {
+    val readerRootKeyPub = EcPublicKey.fromPem(
+        """
+            -----BEGIN PUBLIC KEY-----
+            MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+QDye70m2O0llPXMjVjxVZz3m5k6agT+
+            wih+L79b7jyqUl99sbeUnpxaLD+cmB3HK3twkA7fmVJSobBc+9CDhkh3mx6n+YoH
+            5RulaSWThWBfMyRjsfVODkosHLCDnbPV
+            -----END PUBLIC KEY-----
+        """.trimIndent().trim(),
+    )
+    EcPrivateKey.fromPem(
+        """
+            -----BEGIN PRIVATE KEY-----
+            MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDCcRuzXW3pW2h9W8pu5
+            /CSR6JSnfnZVATq+408WPoNC3LzXqJEQSMzPsI9U1q+wZ2yhZANiAAT5APJ7vSbY
+            7SWU9cyNWPFVnPebmTpqBP7CKH4vv1vuPKpSX32xt5SenFosP5yYHccre3CQDt+Z
+            UlKhsFz70IOGSHebHqf5igflG6VpJZOFYF8zJGOx9U4OSiwcsIOds9U=
+            -----END PRIVATE KEY-----
+        """.trimIndent().trim(),
+        readerRootKeyPub
+    )
+}
+
 private suspend fun calculateRequester(
     certChain: CertChain,
+    secondaryCertChain: CertChain = CertChain.CERT_CHAIN_NONE,
     origin: Origin,
     appId: AppId,
     utopiaMarketplaceIcon: ByteString,
     utopiaAirlinesIcon: ByteString,
     identityReaderIcon: ByteString
-): Pair<Requester, TrustMetadata?> {
+): Pair<Requester, Map<RequesterIdentity, TrustMetadata>> {
     val now = Clock.System.now().truncateToWholeSeconds()
     val validFrom = now - 1.days
     val validUntil = now + 1.days
-    val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+    val readerRootKey = testReaderRootKey
     val readerRootCert = MdocUtil.generateReaderRootCertificate(
         readerRootKey = AsymmetricKey.anonymous(readerRootKey),
         subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
@@ -1259,104 +1351,91 @@ private suspend fun calculateRequester(
         privateKey = readerRootKey
     )
     val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    val readerCertWithoutGoogleAccount = MdocUtil.generateReaderCertificate(
-        readerRootKey = readerRootSigningKey,
-        readerKey =readerKey.publicKey,
-        subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
-        dnsName = null,
-        serial = ASN1Integer.fromRandom(128),
-        validFrom = validFrom,
-        validUntil = validUntil
-    )
-    val readerCertWithGoogleAccount = MdocUtil.generateReaderCertificate(
-        readerRootKey = readerRootSigningKey,
-        readerKey = readerKey.publicKey,
-        subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
-        dnsName = null,
-        serial = ASN1Integer.fromRandom(128),
-        validFrom = validFrom,
-        validUntil = validUntil,
-        extensions = listOf(X509Extension(
-            oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
-            isCritical = false,
-            data = ByteString(MultipazExtension(
-                googleAccount = GoogleAccount(
-                    id = "1234",
-                    emailAddress = "example@gmail.com",
-                    displayName = "Example Google Account",
-                    profilePictureUri = "https://lh3.googleusercontent.com/a/ACg8ocI0A6iHTOJdLsEeVq929dWnJ617_ggBn6PdnP4DgcCR4eK5uu4A=s160-p-k-rw-no"
-                )
-            ).toCbor())
-        ))
-    )
-
-    val (trustMetadata, readerCert) = when (certChain) {
-        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE -> {
-            Pair(
+    suspend fun buildEntry(chain: CertChain): Pair<RequesterIdentity, TrustMetadata>? {
+        val trustMetadata = when (chain) {
+            CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE -> {
                 TrustMetadata(
+                    identifier = "utopia_marketplace",
                     displayName = "Utopia Marketplace",
                     displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
-                ),
-                readerCertWithoutGoogleAccount
-            )
-        }
-        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY -> {
-            Pair(
-            TrustMetadata(
+                )
+            }
+            CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY -> {
+                TrustMetadata(
+                    identifier = "utopia_marketplace",
                     displayName = "Utopia Marketplace",
                     displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = null,
-                ),
-                readerCertWithoutGoogleAccount
-            )
-        }
-        CertChain.CERT_CHAIN_UTOPIA_AIRLINES -> {
-            Pair(
+                )
+            }
+            CertChain.CERT_CHAIN_UTOPIA_AIRLINES -> {
                 TrustMetadata(
+                    identifier = "utopia_airlines",
                     displayName = "Utopia Airlines",
                     displayIcon = utopiaAirlinesIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
-                ),
-                readerCertWithoutGoogleAccount
-            )
-        }
-        CertChain.CERT_CHAIN_IDENTITY_READER ->  {
-            Pair(
-            TrustMetadata(
+                )
+            }
+            CertChain.CERT_CHAIN_IDENTITY_READER,
+            CertChain.CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT -> {
+                TrustMetadata(
+                    identifier = "multipaz_identity_reader",
                     displayName = "Multipaz Identity Reader",
                     displayIcon = identityReaderIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
-                ),
-                readerCertWithoutGoogleAccount
-            )
+                )
+            }
+            CertChain.CERT_CHAIN_NONE -> return null
         }
-        CertChain.CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT -> {
-            Pair(
-            TrustMetadata(
-                    displayName = "Multipaz Identity Reader",
-                    displayIcon = identityReaderIcon,
-                    privacyPolicyUrl = "https://apps.multipaz.org",
-                ),
-                readerCertWithGoogleAccount
+        val extensions = if (chain == CertChain.CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT) {
+            listOf(
+                X509Extension(
+                    oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
+                    isCritical = false,
+                    data = ByteString(
+                        MultipazExtension(
+                            googleAccount = GoogleAccount(
+                                id = "1234",
+                                emailAddress = "example@gmail.com",
+                                displayName = "Example Google Account",
+                                profilePictureUri = "https://lh3.googleusercontent.com/a/ACg8ocI0A6iHTOJdLsEeVq929dWnJ617_ggBn6PdnP4DgcCR4eK5uu4A=s160-p-k-rw-no"
+                            )
+                        ).toCbor()
+                    )
+                )
             )
+        } else {
+            emptyList()
         }
-        CertChain.CERT_CHAIN_NONE -> Pair(null, null)
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = readerRootSigningKey,
+            readerKey = readerKey.publicKey,
+            subject = X500Name.fromName("CN=${trustMetadata.displayName} Single-Use key"),
+            dnsName = null,
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            extensions = extensions,
+        )
+        val identity = Iso18013RequesterIdentity(
+            certChain = X509CertChain(certificates = listOf(readerCert, readerRootCert))
+        )
+        return Pair(identity, trustMetadata)
     }
+
+    val entries = listOfNotNull(
+        buildEntry(certChain),
+        buildEntry(secondaryCertChain),
+    )
 
     return Pair(
         Requester(
-            requesterIdentities = buildList {
-                readerCert?.let {
-                    add(Iso18013RequesterIdentity(
-                        certChain = X509CertChain(certificates = listOf(readerCert, readerRootCert))
-                    ))
-                }
-            },
+            requesterIdentities = entries.map { it.first },
             appId = appId.appId,
             origin = origin.origin
         ),
-        trustMetadata
+        entries.toMap()
     )
 }
 

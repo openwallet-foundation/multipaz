@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">Εκχώρηση Άδειας</string>
     <string name="face_matcher_prompt_cancel">Άκυρο</string>
     <string name="face_matcher_prompt_confirm">Επιβεβαίωση</string>
+    <string name="certificate_viewer_tab_leaf">Τελικό</string>
+    <string name="certificate_viewer_tab_intermediate">Ενδιάμεσο</string>
+    <string name="certificate_viewer_tab_intermediate_n">Ενδιάμ. %1$d</string>
+    <string name="certificate_viewer_tab_root">Ρίζα</string>
 </resources>

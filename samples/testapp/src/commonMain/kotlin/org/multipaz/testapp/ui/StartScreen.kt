@@ -58,7 +58,7 @@ fun StartScreen(
     onClickEventLog: () -> Unit = {},
     onClickShareSheet: () -> Unit = {},
     onClickGenerateMpzPass: () -> Unit = {},
-    onClickFloatingItemList: () -> Unit = {},
+    onClickSegmentedItemList: () -> Unit = {},
     onClickDeviceCheck: () -> Unit = {},
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
@@ -311,8 +311,8 @@ fun StartScreen(
                 }
 
                 item {
-                    TextButton(onClick = onClickFloatingItemList) {
-                        Text("FloatingItemList examples")
+                    TextButton(onClick = onClickSegmentedItemList) {
+                        Text("SegmentedItemList examples")
                     }
                 }
 

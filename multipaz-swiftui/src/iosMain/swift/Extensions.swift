@@ -1,5 +1,11 @@
 import Foundation
 
+/// Optional clock override used by deterministic unit/snapshot tests.
+nonisolated(unsafe) public var swiftUiClockForTesting: (() -> Date)? = nil
+
+/// Optional time zone override used by deterministic unit/snapshot tests.
+nonisolated(unsafe) public var swiftUiTimeZoneForTesting: Foundation.TimeZone? = nil
+
 extension URL {
     /// Gets the serialized origin according to the [WHATWG HTML standard](https://html.spec.whatwg.org/multipage/browsers.html#origin).
     ///
@@ -22,11 +28,35 @@ extension Duration {
     }
 }
 
+extension TrustMetadata {
+    public convenience init(
+        displayName: String?,
+        displayIcon: ByteString?,
+        displayIconUrl: String?,
+        privacyPolicyUrl: String?,
+        disclaimer: String?,
+        testOnly: Bool,
+        extensions: [String: String]
+    ) {
+        self.init(
+            displayName: displayName,
+            displayIcon: displayIcon,
+            displayIconUrl: displayIconUrl,
+            privacyPolicyUrl: privacyPolicyUrl,
+            disclaimer: disclaimer,
+            testOnly: testOnly,
+            extensions: extensions,
+            identifier: nil
+        )
+    }
+}
+
 // Needed until it's possible to annotate in Kotlin.
 //
 extension Requester: @unchecked Sendable {}
 extension TrustMetadata: @unchecked Sendable {}
-extension Requester: @unchecked Sendable {}
+extension TrustedRequesterIdentity: @unchecked Sendable {}
+extension RequesterHistoryEntry: @unchecked Sendable {}
 extension Document: @unchecked Sendable {}
 extension PresentmentSource: @unchecked Sendable {}
 extension DocumentTypeRepository: @unchecked Sendable {}

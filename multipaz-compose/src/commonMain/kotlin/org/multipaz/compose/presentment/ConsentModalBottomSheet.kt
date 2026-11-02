@@ -1,6 +1,6 @@
 package org.multipaz.compose.presentment
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -12,9 +12,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
 import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -33,6 +38,12 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @param maxHeight the maximum height of the bottom sheet or `null` if no limit.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] to find renderers for
  *   transaction data in, or `null` to use only the built-in rendering.
+ * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+ *   credentials with [requester] before.
+ * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+ *   for the active selection.
+ * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+ *   for the active selection.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Continue" button, returns the user's selection.
@@ -49,6 +60,9 @@ fun ConsentModalBottomSheet(
     imageLoader: ImageLoader?,
     maxHeight: Dp? = null,
     transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
+    classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+    classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
     onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
@@ -58,17 +72,23 @@ fun ConsentModalBottomSheet(
         onDismissRequest = { onCancel() },
         sheetState = sheetState,
         dragHandle = null,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
     ) {
         Consent(
-            modifier = (if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
-                .animateContentSize(),
+            modifier = if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier,
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
             presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             imageLoader = imageLoader,
             transactionDataRendererRepository = transactionDataRendererRepository,
+            requesterHistory = requesterHistory,
+            classifyPurposesFn = classifyPurposesFn,
+            classifyRiskFn = classifyRiskFn,
             onDocumentsInFocus = onDocumentsInFocus,
             onConfirm = onConfirm,
             onCancel = {

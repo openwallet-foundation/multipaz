@@ -171,10 +171,10 @@ data object ShareSheetDestination: Destination()
 data object GenerateMpzPassDestination: Destination()
 
 @Serializable
-data object FloatingItemListDestination: Destination()
+data object SegmentedItemListDestination: Destination()
 
 @Serializable
-data object LazyFloatingItemListDestination: Destination()
+data object LazySegmentedItemListDestination: Destination()
 
 @Serializable
 data object DeviceCheckDestination: Destination()

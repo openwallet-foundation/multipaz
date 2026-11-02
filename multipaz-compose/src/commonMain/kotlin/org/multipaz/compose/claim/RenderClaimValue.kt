@@ -12,14 +12,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.resources.stringResource
 import org.multipaz.claim.Claim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.claim.JsonClaim
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.util.fromBase64Url
 import kotlinx.datetime.TimeZone
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.compose.decodeImage
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.claim_value_boolean_false
+import org.multipaz.multipaz_compose.generated.resources.claim_value_boolean_true
 
 
 /**
@@ -68,10 +73,27 @@ fun RenderClaimValue(
                 )
             }
         } else {
-            val str = claim.render(timeZone)
+            val str = if (claim.attribute?.type == DocumentAttributeType.Boolean) {
+                val boolVal = runCatching {
+                    when (claim) {
+                        is MdocClaim -> claim.value.asBoolean
+                        is JsonClaim -> claim.value.jsonPrimitive.boolean
+                    }
+                }.getOrNull()
+                if (boolVal != null) {
+                    stringResource(
+                        if (boolVal) Res.string.claim_value_boolean_true else Res.string.claim_value_boolean_false
+                    )
+                } else {
+                    claim.render(timeZone)
+                }
+            } else {
+                claim.render(timeZone)
+            }
             Text(
                 text = str,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

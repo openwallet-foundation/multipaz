@@ -153,6 +153,6 @@ public struct RequestAuthorizationView : View {
             )
         }
         .frame(maxHeight: .infinity)
-        .background(Color(.secondarySystemBackground))
+        .background(Color(.systemGroupedBackground))
     }
 }

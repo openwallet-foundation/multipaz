@@ -73,9 +73,14 @@ class ConfigurableTrustManager(
                         if (ski == null) {
                             Logger.w(TAG, "Skipping certificate without SKI")
                         } else {
+                            val effectiveMetadata = if (entry.metadata.identifier == null) {
+                                entry.metadata.copy(identifier = ski)
+                            } else {
+                                entry.metadata
+                            }
                             loadedSkiToTrustPoint[ski] = TrustPoint(
                                 certificate = entry.certificate,
-                                metadata = entry.metadata,
+                                metadata = effectiveMetadata,
                                 trustManager = this
                             )
                         }

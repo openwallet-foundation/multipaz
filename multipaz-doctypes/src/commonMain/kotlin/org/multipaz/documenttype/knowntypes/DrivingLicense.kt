@@ -158,7 +158,6 @@ object DrivingLicense {
                 description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_DRIVING_PRIVILEGES),
                 mandatory = true,
                 mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.VALIDITY,
                 icon = Icon.DIRECTIONS_CAR,
                 sampleValue = buildCborArray {
                     addCborMap {

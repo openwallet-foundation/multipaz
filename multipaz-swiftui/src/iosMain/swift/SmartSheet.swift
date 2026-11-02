@@ -39,6 +39,19 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// Optional binding to propagate the calculated height to a parent view.
     public var heightBinding: Binding<CGFloat>?
     
+    /// Optional binding to propagate whether the sheet content exceeds the visible scroll container
+    /// (i.e. the sheet has reached its maximum height and is scrollable).
+    public var isScrollableBinding: Binding<Bool>?
+    
+    /// Optional trigger counter to programmatically scroll to the bottom without animation.
+    public var scrollToBottomTrigger: Int = 0
+    
+    /// Whether this sheet is currently the top-most active view in a navigation stack.
+    public var isActive: Bool = true
+    
+    /// Optional callback invoked when the scroll container/content heights change.
+    public var onScrollMetricsChange: ((CGFloat, CGFloat) -> Void)? = nil
+    
     private let header: () -> Header
     private let content: () -> Content
     private let footer: (Bool, @escaping () -> Void) -> Footer
@@ -90,6 +103,10 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         maxHeight: CGFloat = 500,
         updateDetents: Bool = true,
         heightBinding: Binding<CGFloat>? = nil,
+        isScrollableBinding: Binding<Bool>? = nil,
+        scrollToBottomTrigger: Int = 0,
+        isActive: Bool = true,
+        onScrollMetricsChange: ((CGFloat, CGFloat) -> Void)? = nil,
         @ViewBuilder header: @escaping () -> Header,
         @ViewBuilder content: @escaping () -> Content,
         @ViewBuilder footer: @escaping (Bool, @escaping () -> Void) -> Footer
@@ -97,6 +114,10 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         self.maxHeight = maxHeight
         self.updateDetents = updateDetents
         self.heightBinding = heightBinding
+        self.isScrollableBinding = isScrollableBinding
+        self.scrollToBottomTrigger = scrollToBottomTrigger
+        self.isActive = isActive
+        self.onScrollMetricsChange = onScrollMetricsChange
         self.header = header
         self.content = content
         self.footer = footer
@@ -147,6 +168,30 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
                 currentScrollY = newValue.offsetY
                 scrollContainerHeight = newValue.containerHeight
                 scrollContentHeight = newValue.contentHeight
+                if isActive {
+                    onScrollMetricsChange?(newValue.containerHeight, newValue.contentHeight)
+                }
+                if let isScrollableBinding = isScrollableBinding {
+                    let newTotal = headerHeight + contentHeight + footerHeight + topSafeAreaHeight
+                    let constrained = maxHeight == .infinity ? newTotal : min(newTotal, maxHeight)
+                    let isSettled = abs(constrained - presentationHeight) <= 1.0
+                    let scrollable = isSettled && newValue.containerHeight > 0 && newValue.contentHeight > newValue.containerHeight + 1.0
+                    if isScrollableBinding.wrappedValue != scrollable {
+                        DispatchQueue.main.async {
+                            isScrollableBinding.wrappedValue = scrollable
+                        }
+                    }
+                }
+            }
+            .onChange(of: isActive) {
+                if isActive && scrollContainerHeight > 0 {
+                    onScrollMetricsChange?(scrollContainerHeight, scrollContentHeight)
+                }
+            }
+            .onChange(of: scrollToBottomTrigger) {
+                let maxScroll = max(0, scrollContentHeight - scrollContainerHeight)
+                currentScrollY = maxScroll
+                scrollPosition = .init(point: CGPoint(x: 0, y: maxScroll))
             }
             
             // 3. Measure Footer
@@ -200,6 +245,12 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
                  DispatchQueue.main.async {
                      presentationHeight = constrained
                      heightBinding?.wrappedValue = constrained
+                     if let isScrollableBinding = isScrollableBinding, scrollContainerHeight > 0 {
+                         let scrollable = scrollContentHeight > scrollContainerHeight + 1.0
+                         if isScrollableBinding.wrappedValue != scrollable {
+                             isScrollableBinding.wrappedValue = scrollable
+                         }
+                     }
                  }
              }
         }

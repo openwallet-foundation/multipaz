@@ -71,12 +71,6 @@ private struct PaymentSummary: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                if let showDetails = context.showDetails {
-                    Button("View all details ›") {
-                        showDetails()
-                    }
-                    .font(.subheadline)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, context.hasClaims ? 12 : 0)

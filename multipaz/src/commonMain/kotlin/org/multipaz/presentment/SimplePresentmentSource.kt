@@ -40,6 +40,7 @@ private data class CredentialForPresentment(
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository the [ZkSystemRepository] to use or `null`.
  * @property eventLogger an [EventLogger] for logging events or `null`.
+ * @property requesterHistory a [RequesterHistory] for tracking relying party interactions or `null`.
  * @property getFaceMatcherFn a function returning the [FaceMatcher] to use or `null`.
  * @property resolveTrustFn a function which can be used to determine if a requester is trusted.
  * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
@@ -58,6 +59,7 @@ class SimplePresentmentSource(
     override val documentTypeRepository: DocumentTypeRepository,
     override val zkSystemRepository: ZkSystemRepository? = null,
     override val eventLogger: EventLogger? = null,
+    override val requesterHistory: RequesterHistory? = null,
     private val getFaceMatcherFn: () -> FaceMatcher? = { null },
     private val resolveTrustFn: suspend (requester: Requester) -> TrustedRequesterIdentity? = { null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
@@ -75,7 +77,8 @@ class SimplePresentmentSource(
     documentStore = documentStore,
     documentTypeRepository = documentTypeRepository,
     zkSystemRepository = zkSystemRepository,
-    eventLogger = eventLogger
+    eventLogger = eventLogger,
+    requesterHistory = requesterHistory,
 ) {
     override fun getFaceMatcher(): FaceMatcher? = getFaceMatcherFn()
 

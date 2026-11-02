@@ -1,8 +1,13 @@
 package org.multipaz.prompt
 
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
 import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 
@@ -26,6 +31,12 @@ class ConsentPromptDialogModel():
      *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
      * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
      *   find renderers for transaction data, or `null` to use only the built-in rendering.
+     * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+     *   credentials with [requester] before.
+     * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+     *   for the active selection.
+     * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+     *   for the active selection.
      */
     class ConsentPromptRequest(
         val requester: Requester,
@@ -33,6 +44,9 @@ class ConsentPromptDialogModel():
         val presentmentData: PresentmentData,
         val preselectedDocuments: List<Document>,
         val onDocumentsInFocus: (documents: List<Document>) -> Unit,
-        val transactionDataRendererRepository: TransactionDataRendererRepository?
+        val transactionDataRendererRepository: TransactionDataRendererRepository?,
+        val requesterHistory: RequesterHistory? = null,
+        val classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+        val classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
     )
 }

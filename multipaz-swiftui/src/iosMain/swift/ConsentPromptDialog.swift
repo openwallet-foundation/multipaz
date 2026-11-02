@@ -31,14 +31,18 @@ struct ConsentPromptDialog: View {
                 }
             }
             .sheet(item: $data) { data in
+                let params = data.state.parameters!
                 Consent(
-                    presentmentData: data.state.parameters!.presentmentData,
-                    requester: data.state.parameters!.requester,
-                    trustedRequesterIdentity: data.state.parameters!.trustedRequesterIdentity,
-                    preselectedDocuments: data.state.parameters!.preselectedDocuments,
-                    transactionDataRendererRepository: data.state.parameters!.transactionDataRendererRepository,
+                    presentmentData: params.presentmentData,
+                    requester: params.requester,
+                    trustedRequesterIdentity: params.trustedRequesterIdentity,
+                    preselectedDocuments: params.preselectedDocuments,
+                    transactionDataRendererRepository: params.transactionDataRendererRepository,
+                    requesterHistory: params.requesterHistory,
+                    classifyPurposesFn: params.classifyPurposesFn,
+                    classifyRiskFn: params.classifyRiskFn,
                     onDocumentsInFocus: { documents in
-                        data.state.parameters!.onDocumentsInFocus(documents)
+                        params.onDocumentsInFocus(documents)
                     },
                     onConfirm: { selection in
                         Task {

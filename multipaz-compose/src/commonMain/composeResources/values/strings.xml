@@ -29,9 +29,35 @@
     <!-- Consent.kt -->
     <string name="credential_presentment_button_cancel">Cancel</string>
     <string name="credential_presentment_button_more">More</string>
+    <string name="credential_presentment_button_wait">Wait…</string>
     <string name="credential_presentment_button_continue">Continue</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Unknown requester</string>
     <string name="credential_presentment_headline_share_with_unknown_website">Unknown website</string>
+
+    <string name="credential_presentment_purpose_payment">is requesting payment</string>
+    <string name="credential_presentment_purpose_age_verification">is requesting your age</string>
+    <string name="credential_presentment_purpose_driving_privileges">is requesting your driving privileges</string>
+    <string name="credential_presentment_purpose_address_verification">is requesting your address</string>
+    <string name="credential_presentment_purpose_identity_verification">is requesting your identity</string>
+    <string name="credential_presentment_purpose_loyalty_verification">is requesting your loyalty membership</string>
+    <string name="credential_presentment_purpose_ticket_verification">is requesting your ticket</string>
+    <string name="credential_presentment_purpose_two_items">is requesting %1$s and %2$s</string>
+    <string name="credential_presentment_purpose_multiple_items">is requesting %1$s, and %2$s</string>
+    <string name="credential_presentment_purpose_list_separator">, </string>
+    <string name="credential_presentment_purpose_item_payment">payment</string>
+    <string name="credential_presentment_purpose_item_age_verification">your age</string>
+    <string name="credential_presentment_purpose_item_driving_privileges">your driving privileges</string>
+    <string name="credential_presentment_purpose_item_address_verification">your address</string>
+    <string name="credential_presentment_purpose_item_identity_verification">your identity</string>
+    <string name="credential_presentment_purpose_item_loyalty_verification">your loyalty membership</string>
+    <string name="credential_presentment_purpose_item_ticket_verification">your ticket</string>
+    <string name="credential_presentment_purpose_item_bare_age_verification">age</string>
+    <string name="credential_presentment_purpose_item_bare_driving_privileges">driving privileges</string>
+    <string name="credential_presentment_purpose_item_bare_address_verification">address</string>
+    <string name="credential_presentment_purpose_item_bare_identity_verification">identity</string>
+    <string name="credential_presentment_purpose_item_bare_loyalty_verification">loyalty membership</string>
+    <string name="credential_presentment_purpose_item_bare_ticket_verification">ticket</string>
+    <string name="credential_presentment_purpose_unknown">is requesting information</string>
 
     <string name="credential_presentment_share_with_known_requester">This data will be shared with %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">This data will be shared:</string>
@@ -45,7 +71,7 @@
     <string name="credential_presentment_share_and_stored_by_unknown_requester">This data will be stored:</string>
 
     <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s is requesting this data on behalf of an unknown party who will store it:</string>
-    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">This data is requested this data on behalf of an unknown party who will store it:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">This data is requested on behalf of an unknown party who will store it:</string>
     <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s is requesting this data on behalf of %2$s who will store it:</string>
     <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">This data is requested on behalf of %1$s who will store it:</string>
 
@@ -53,10 +79,17 @@
     <string name="credential_presentment_warning_verifier_not_in_trust_list_anonymous">The identity reader requesting this data is anonymous. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_website">The website requesting this data is unknown. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_app">The application requesting this data is unknown. Make sure you are comfortable sharing this data</string>
-    <string name="credential_presentment_info_verifier_in_trust_list">The identity reader requesting this data is trusted</string>
-    <string name="credential_presentment_info_verifier_in_trust_list_website">The website requesting this data is trusted</string>
-    <string name="credential_presentment_info_verifier_in_trust_list_app">The application requesting this data is trusted</string>
-    <string name="credential_presentment_privacy_policy">Review the [%1$s privacy policy](%2$s)</string>
+    <string name="credential_presentment_requester_shared_before">You have shared with **%1$s** before</string>
+    <string name="credential_presentment_requester_first_time">This is the first time you are sharing with **%1$s**</string>
+    <string name="credential_presentment_requester_shared_before_unnamed">You have shared with this requester before</string>
+    <string name="credential_presentment_requester_first_time_unnamed">This is the first time you are sharing with this requester</string>
+    <string name="credential_presentment_more_information_and_privacy_policy">[More information and privacy policy](requester_info)</string>
+    <string name="credential_presentment_more_information">[More information](requester_info)</string>
+    <string name="credential_presentment_warning_pii_requested">This request includes personal information that can be used to identify you. Only continue if you trust the requester.</string>
+    <string name="credential_presentment_warning_unusual_request">This requester is asking for an unusual combination of information. Make sure you trust them before sharing.</string>
+    <string name="credential_presentment_warning_untrusted_encryption_target">Part of your information will be encrypted for an unknown recipient. Only continue if you trust the requester.</string>
+    <string name="credential_presentment_warning_intent_to_retain">This requester intends to store your information. Only continue if you trust the requester.</string>
+    <string name="credential_presentment_warning_transaction_data">This request authorizes a transaction with an unverified requester. Only continue if you trust the requester.</string>
     <string name="credential_presentment_card_art_description">Card art</string>
     <string name="credential_presentment_verifier_icon_description">Verifier icon</string>
     <string name="credential_presentment_data_element_icon_description">Data element icon</string>
@@ -65,11 +98,61 @@
     <string name="credential_presentment_share_something_else">Share something else…</string>
     <string name="credential_presentment_not_sharing_any_document">Share something…</string>
     <string name="credential_presentment_dont_return_any_document">Don't share anything</string>
-    <string name="credential_presentment_no_document_returned">No document returned</string>
+    <string name="credential_presentment_no_document_returned">No document shared</string>
     <string name="credential_presentment_requester_information">Requester information</string>
+    <string name="credential_presentment_requester_info_verified_title">%1$s is a verified requester</string>
+    <string name="credential_presentment_requester_info_verified_body">The wallet verified the digital signature on this request and confirmed that %1$s is in the wallet's trust list.</string>
+    <string name="credential_presentment_requester_info_test_only">Note: This requester is configured for testing only.</string>
+    <string name="credential_presentment_requester_info_unverified_title">Unverified requester</string>
+    <string name="credential_presentment_requester_info_unverified_body">This request was signed with a digital certificate, but the certificate is not in the wallet's trust list. The wallet cannot verify the requester's identity.</string>
+    <string name="credential_presentment_requester_info_anonymous_title">Anonymous requester</string>
+    <string name="credential_presentment_requester_info_anonymous_body">This requester did not provide a digital certificate or signature to authenticate its identity.</string>
+    <string name="credential_presentment_requester_info_enc_target_verified_title">Verified encryption target: %1$s</string>
+    <string name="credential_presentment_requester_info_enc_target_verified_body">%1$s is in the wallet's trust list. Part of your information will be encrypted so only %1$s can read it.</string>
+    <string name="credential_presentment_requester_info_enc_target_unverified_title">Unverified encryption target</string>
+    <string name="credential_presentment_requester_info_enc_target_unverified_body">Part of your information will be encrypted for a recipient whose certificate is not in the wallet's trust list.</string>
+    <string name="credential_presentment_requester_info_enc_target_anonymous_title">Anonymous encryption target</string>
+    <string name="credential_presentment_requester_info_enc_target_anonymous_body">Part of your information will be encrypted for a recipient that did not provide a verifiable identity.</string>
+    <string name="credential_presentment_requester_info_privacy_policy_title">%1$s privacy policy</string>
+    <string name="credential_presentment_requester_info_history_header">Past interactions</string>
+    <string name="credential_presentment_requester_info_shared_once">Shared 1 time</string>
+    <string name="credential_presentment_requester_info_shared_n_times">Shared %1$d times</string>
+    <string name="credential_presentment_requester_info_first_shared">First shared: %1$s</string>
+    <string name="credential_presentment_requester_info_last_shared">Last shared: %1$s</string>
+    <string name="credential_presentment_requester_info_no_history_title">No previous shares</string>
+    <string name="credential_presentment_requester_info_no_history_body">You have not shared credentials with this requester before.</string>
+    <string name="credential_presentment_requester_info_technical_details_header">Technical details</string>
+    <string name="credential_presentment_requester_info_website_origin">Website</string>
+    <string name="credential_presentment_requester_info_application">Application</string>
+    <string name="credential_presentment_requester_info_certificate_chain">Certificate chain</string>
+    <string name="credential_presentment_requester_info_certificate_chain_numbered">Certificate chain #%1$d</string>
+    <string name="credential_presentment_requester_info_enc_target_certificate_chain">Encryption target certificate chain</string>
+    <string name="credential_presentment_requester_info_enc_target_certificate_chain_numbered">Encryption target certificate chain #%1$d</string>
+    <string name="credential_presentment_requester_info_issued_by">%1$s (issued by %2$s)</string>
+    <string name="credential_presentment_requester_info_client_id">Client ID: %1$s</string>
+    <string name="credential_presentment_requester_info_single_certificate">1 certificate</string>
+    <string name="credential_presentment_requester_info_n_certificates">%1$d certificates</string>
+    <string name="credential_presentment_and_n_more">And %1$d more</string>
+    <string name="credential_presentment_view_details">View details</string>
     <string name="credential_presentment_details">Details</string>
     <string name="credential_presentment_back">Back</string>
     <string name="credential_presentment_transaction_data">Includes transaction data:</string>
+    <string name="credential_presentment_no_credentials_available">No credentials available</string>
+    <string name="credential_presentment_ping_tx_also_approved">This test "ping" transaction will also be approved:</string>
+    <string name="credential_presentment_ping_tx_approved">This test "ping" transaction will be approved:</string>
+    <string name="credential_presentment_ping_tx_string">String: %1$s</string>
+    <string name="credential_presentment_ping_tx_blob">Blob: %1$s</string>
+    <string name="credential_presentment_payment_tx_also_approved">This payment will also be approved:</string>
+    <string name="credential_presentment_payment_tx_approved">This payment will be approved:</string>
+    <string name="credential_presentment_payment_tx_payee">Payee: %1$s</string>
+    <string name="credential_presentment_payment_tx_amount">Amount: %1$s %2$s</string>
+    <string name="credential_presentment_payment_tx_amount_with_tip">Amount: %1$s %2$s (tip: %3$s %4$s)</string>
+    <string name="credential_presentment_payment_tx_add_tip">Add tip</string>
+    <string name="credential_presentment_payment_tx_no_tip">No tip</string>
+    <string name="credential_presentment_generic_tx_also_approved">This %1$s transaction will also be approved:</string>
+    <string name="credential_presentment_generic_tx_approved">This %1$s transaction will be approved:</string>
+    <string name="claim_value_boolean_true">True</string>
+    <string name="claim_value_boolean_false">False</string>
 
     <!-- X509CertViewer.kt -->
     <string name="certificate_viewer_sub_basic_info">Basic information</string>
@@ -77,6 +160,7 @@
     <string name="certificate_viewer_k_serial_number">Serial number</string>
     <string name="certificate_viewer_k_valid_from">Valid from</string>
     <string name="certificate_viewer_k_valid_until">Valid until</string>
+    <string name="certificate_viewer_k_validity_info">Validity Info</string>
     <string name="certificate_viewer_sub_subject">Subject</string>
     <string name="certificate_viewer_sub_issuer">Issuer</string>
     <string name="certificate_viewer_k_country_name">Country name</string>
@@ -101,6 +185,10 @@
     <string name="certificate_viewer_validity_in_the_past">This certificate is no longer valid, it expired %1$s</string>
     <string name="certificate_viewer_validity_in_the_future">This certificate is not yet valid, it will be valid %1$s</string>
     <string name="certificate_viewer_valid_now">Currently valid, expires %1$s</string>
+    <string name="certificate_viewer_tab_leaf">Leaf</string>
+    <string name="certificate_viewer_tab_intermediate">Intermediate</string>
+    <string name="certificate_viewer_tab_intermediate_n">Int. %1$d</string>
+    <string name="certificate_viewer_tab_root">Root</string>
 
     <!-- PassphrasePromptBottomSheet -->
     <string name="pin_prompt_try_again">Wrong PIN, try again</string>

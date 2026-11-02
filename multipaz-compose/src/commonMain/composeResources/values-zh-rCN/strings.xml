@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">授予权限</string>
     <string name="face_matcher_prompt_cancel">取消</string>
     <string name="face_matcher_prompt_confirm">确认</string>
+    <string name="certificate_viewer_tab_leaf">终端</string>
+    <string name="certificate_viewer_tab_intermediate">中间</string>
+    <string name="certificate_viewer_tab_intermediate_n">中间 %1$d</string>
+    <string name="certificate_viewer_tab_root">根</string>
 </resources>

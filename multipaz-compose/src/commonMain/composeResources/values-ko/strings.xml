@@ -228,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">권한 허용</string>
     <string name="face_matcher_prompt_cancel">취소</string>
     <string name="face_matcher_prompt_confirm">확인</string>
+    <string name="certificate_viewer_tab_leaf">리프</string>
+    <string name="certificate_viewer_tab_intermediate">중간</string>
+    <string name="certificate_viewer_tab_intermediate_n">중간 %1$d</string>
+    <string name="certificate_viewer_tab_root">루트</string>
 </resources>

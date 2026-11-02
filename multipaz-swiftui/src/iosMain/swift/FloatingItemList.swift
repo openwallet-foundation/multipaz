@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// A view that presents a floating list of items, optionally accompanied by a title.
+/// A view that presents a segmented list of items, optionally accompanied by a title.
 ///
-/// The list is styled as a rounded card with a subtle shadow. The spacing between the items
-/// exposes the background color, creating a natural divider effect between each row.
+/// The list is displayed as a vertical stack of segmented containers with `16pt` outer corners,
+/// `4pt` inner corners between adjacent items, and a `2pt` vertical gap.
 ///
-/// The list is rendered to appear raised above the parent container. When using this view,
-/// make sure to leave 10 padding around it (top and sides) and 20 at the bottom, to leave
-/// enough room for its shadow.
-public struct FloatingItemList<Content: View>: View {
+/// See ``SegmentedItemHeadingAndText``, ``SegmentedItemText``, and ``SegmentedItemCenteredText``
+/// for items that are normally used inside this container. For a custom view, wrap it in
+/// ``SegmentedItemContainer``.
+public struct SegmentedItemList<Content: View>: View {
 
     /// An optional title displayed above the list container.
     public var title: String?
@@ -16,7 +16,7 @@ public struct FloatingItemList<Content: View>: View {
     /// A view builder that provides the content of the list.
     @ViewBuilder public var content: () -> Content
 
-    /// Creates a new floating item list.
+    /// Creates a new segmented item list.
     ///
     /// - Parameters:
     ///   - title: An optional title string to display above the list. Defaults to `nil`.
@@ -31,21 +31,36 @@ public struct FloatingItemList<Content: View>: View {
             if let title = title {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .padding(.bottom, 8)
             }
 
-            VStack(spacing: 0.5) { // Spacing creates the divider effect
+            VStack(spacing: segmentGap) {
                 content()
             }
-            .background(Color(UIColor.separator))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(
-                color: Color.black.opacity(0.12),
-                radius: 12,
-                x: 0,
-                y: 3
-            )
+            .clipShape(RoundedRectangle(cornerRadius: segmentOuterCornerRadius, style: .continuous))
         }
     }
 }
+
+/// A view that presents a floating list of items, optionally accompanied by a title.
+@available(*, deprecated, renamed: "SegmentedItemList")
+public struct FloatingItemList<Content: View>: View {
+
+    /// An optional title displayed above the list container.
+    public var title: String?
+
+    /// A view builder that provides the content of the list.
+    @ViewBuilder public var content: () -> Content
+
+    /// Creates a new floating item list.
+    public init(title: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.content = content
+    }
+
+    public var body: some View {
+        SegmentedItemList(title: title, content: content)
+    }
+}
+

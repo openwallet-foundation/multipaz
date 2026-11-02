@@ -1,8 +1,13 @@
 package org.multipaz.prompt
 
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
 import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
@@ -58,6 +63,12 @@ suspend fun promptModelSilentConsent(
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
  *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+ *   credentials with [requester] before.
+ * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+ *   for the active selection.
+ * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+ *   for the active selection.
  * @return `null` if the user dismissed the prompt, otherwise a [PresentmentSelection] object
  *   conveying which credentials the user selected, if multiple options are available.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
@@ -69,7 +80,10 @@ suspend fun promptModelRequestConsent(
     presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
-    transactionDataRendererRepository: TransactionDataRendererRepository? = null
+    transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
+    classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+    classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
 ): PresentmentSelection? {
     return try {
         PromptModel.get().requestConsent(
@@ -79,6 +93,9 @@ suspend fun promptModelRequestConsent(
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
             transactionDataRendererRepository = transactionDataRendererRepository,
+            requesterHistory = requesterHistory,
+            classifyPurposesFn = classifyPurposesFn,
+            classifyRiskFn = classifyRiskFn,
         )
     } catch (_: PromptDismissedException) {
         null

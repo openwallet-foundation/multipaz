@@ -6,12 +6,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -60,7 +58,7 @@ private fun PaymentSummary(context: TransactionDataContext) {
     val tipPercent = (context.userInput as? PaymentTransaction.UserInput)?.tipPercent ?: 0.0
     val total = payload.amount + tipAmount(payload, tipPercent)
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = if (context.hasClaims) 12.dp else 0.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
@@ -82,11 +80,6 @@ private fun PaymentSummary(context: TransactionDataContext) {
                         label = { Text(label) },
                     )
                 }
-            }
-        }
-        context.showDetails?.let { showDetails ->
-            TextButton(onClick = showDetails) {
-                Text(text = "View all details ›")
             }
         }
     }

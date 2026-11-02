@@ -12,12 +12,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemText
-import org.multipaz.compose.items.floatingItemList
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemText
+import org.multipaz.compose.items.segmentedItemList
 
 @Composable
-fun LazyFloatingItemListScreen(
+fun LazySegmentedItemListScreen(
     showToast: (message: String) -> Unit,
 ) {
     LazyColumn(
@@ -28,30 +28,30 @@ fun LazyFloatingItemListScreen(
         item {
             Text(
                 modifier = Modifier.padding(bottom = 16.dp),
-                text = "This screen contains text at the top, a floating list in the middle with 50 items, and a button at the bottom to illustrate that the whole screen scrolls."
+                text = "This screen contains text at the top, a segmented list in the middle with 50 items, and a button at the bottom to illustrate that the whole screen scrolls."
             )
         }
 
-        floatingItemList(
+        segmentedItemList(
             count = 50,
-            title = "LazyFloatingItemList (50 items)",
+            title = "LazySegmentedItemList (50 items)",
             key = { it }
         ) { index ->
             if (index % 3 == 0) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Heading #$index",
-                    text = "This is item $index in a LazyFloatingItemList with a total of 50 items.",
+                    text = "This is item $index in a LazySegmentedItemList with a total of 50 items.",
                     showChevron = true
                 )
             } else if (index % 3 == 1) {
-                FloatingItemText(
+                SegmentedItemText(
                     text = "Item #$index",
                     secondary = "Secondary detail for item $index",
                     image = { Icon(Icons.Outlined.Star, contentDescription = null) },
                     showChevron = true
                 )
             } else {
-                FloatingItemText(
+                SegmentedItemText(
                     text = "Item #$index",
                     showChevron = false
                 )
