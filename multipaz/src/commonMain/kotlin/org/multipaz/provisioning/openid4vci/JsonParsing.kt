@@ -6,14 +6,23 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.multipaz.crypto.Algorithm
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.OpenID4VCIClaimDisplay
 import org.multipaz.provisioning.Display
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64
+
+private const val TAG = "JsonParsing"
 
 internal open class JsonParsing(val source: String) {
     fun preferredAlgorithm(
@@ -111,6 +120,59 @@ internal open class JsonParsing(val source: String) {
         }
         return value
     }
+
+    /**
+     * Extracts the claims descriptions from the `claims` array of [element], as defined in Appendix B.2 of
+     * OpenID4VCI 1.0.
+     *
+     * Only the path and the display properties are kept. Claims descriptions with a malformed path and display
+     * objects which are malformed are skipped, since they only affect how the credential is presented to the user.
+     *
+     * @param element the `credential_metadata` object of a credential configuration, or `null`.
+     * @return the claims descriptions, or `null` if [element] has no `claims` array.
+     */
+    fun extractClaims(element: JsonObject?): List<OpenID4VCIClaimDescription>? {
+        val claims = element?.get("claims") as? JsonArray ?: return null
+        return claims.mapNotNull { claim ->
+            val description = (claim as? JsonObject)?.let { parseClaimDescription(it) }
+            if (description == null) {
+                Logger.w(TAG, "$source: ignoring malformed claims description: $claim")
+            }
+            description
+        }
+    }
+
+    private fun parseClaimDescription(claim: JsonObject): OpenID4VCIClaimDescription? {
+        val path = claim["path"] as? JsonArray ?: return null
+        val isValidPath = path.isNotEmpty() && path.all { element ->
+            element is JsonNull || (element is JsonPrimitive &&
+                    (element.isString || (element.longOrNull?.let { it >= 0 } ?: false)))
+        }
+        if (!isValidPath) {
+            return null
+        }
+        val display = (claim["display"] ?: JsonArray(emptyList())) as? JsonArray ?: return null
+        return OpenID4VCIClaimDescription(
+            path = path,
+            display = display.mapNotNull { item ->
+                val obj = item as? JsonObject
+                // Both are optional, but must be strings when present.
+                val name = obj?.get("name")
+                val locale = obj?.get("locale")
+                if (obj == null || !isOptionalString(name) || !isOptionalString(locale)) {
+                    Logger.w(TAG, "$source: ignoring malformed claim display: $item")
+                    return@mapNotNull null
+                }
+                OpenID4VCIClaimDisplay(
+                    name = (name as? JsonPrimitive)?.contentOrNull,
+                    locale = (locale as? JsonPrimitive)?.contentOrNull
+                )
+            }
+        )
+    }
+
+    private fun isOptionalString(value: JsonElement?): Boolean =
+        value == null || value is JsonNull || (value is JsonPrimitive && value.isString)
 
     suspend fun extractDisplay(
         element: JsonObject?,

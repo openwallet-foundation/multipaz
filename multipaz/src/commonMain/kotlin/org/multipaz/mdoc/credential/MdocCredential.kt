@@ -43,6 +43,7 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mpzpass.MpzPass
 import org.multipaz.mpzpass.MpzPassIsoMdoc
+import org.multipaz.openid.claim.findDisplayName
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyUnlockData
@@ -50,6 +51,9 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.validation.ValidationResult
 import org.multipaz.validation.buildValidationResult
+import org.multipaz.util.Logger
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 
 /**
  * An mdoc credential, according to [ISO/IEC 18013-5:2021](https://www.iso.org/standard/69084.html).
@@ -482,17 +486,29 @@ class MdocCredential : SecureAreaBoundCredential {
     }
 
     override suspend fun getClaims(
-        documentTypeRepository: DocumentTypeRepository?
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)
         val namespaces = issuerSigned.getOrNull("nameSpaces")
             ?: return emptyList()
+        val claimDescriptions = document.openID4VCIClaimDescriptions
         val ret = mutableListOf<MdocClaim>()
         for ((namespaceName, innerMap) in IssuerNamespaces.fromDataItem(namespaces).data) {
             for ((dataElementName, issuerSignedItem) in innerMap) {
                 val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                 val claim = MdocClaim(
-                    displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
+                    // TODO: findDisplayName() searches claimDescriptions linearly for each claim, making this
+                    //   O(n^2) in the number of claims. Use a map keyed by path if this becomes a problem.
+                    displayName = mdocAttr?.attribute?.displayName
+                        ?: claimDescriptions.findDisplayName(
+                            path = buildJsonArray {
+                                add(namespaceName)
+                                add(dataElementName)
+                            },
+                            locales = locales
+                        )
+                        ?: dataElementName,
                     attribute = mdocAttr?.attribute,
                     docType = docType,
                     namespaceName = namespaceName,

@@ -18,6 +18,9 @@ package org.multipaz.document
 import kotlinx.coroutines.CancellationException
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.decodeOpenID4VCIClaimDescriptions
+import org.multipaz.openid.claim.encodeToCbor
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import kotlinx.coroutines.sync.Mutex
@@ -171,6 +174,17 @@ class Document internal constructor(
     val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
 
     /**
+     * Descriptions of the claims in the document, including their display names, as provided by the issuer in
+     * its OpenID4VCI metadata.
+     *
+     * These are used by [Credential.getClaims] to name claims for which the
+     * [org.multipaz.documenttype.DocumentTypeRepository] has no entry. An empty list is returned if the issuer
+     * did not provide any.
+     */
+    val openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription>
+        get() = data.openID4VCIClaimDescriptions?.let { decodeOpenID4VCIClaimDescriptions(it) } ?: emptyList()
+
+    /**
      * The portrait equivalence data for this document, if any. This is used to determine whether a
      * document type supports portrait equivalence and what data elements are used for that purpose.
      * If this is `null`, the document type does not support portrait equivalence.
@@ -205,6 +219,7 @@ class Document internal constructor(
                     } else {
                         ByteString(Cbor.encode(newData))
                     },
+                    openID4VCIClaimDescriptions = data.openID4VCIClaimDescriptions,
                     portraitEquivalenceData = data.portraitEquivalenceData
                 )
                 // Emit events only if something actually changed.
@@ -467,6 +482,7 @@ class Document internal constructor(
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags),
+                openID4VCIClaimDescriptions = openID4VCIClaimDescriptions,
                 portraitEquivalenceData = data.portraitEquivalenceData
             )
             editAction.invoke(editor)
@@ -491,6 +507,7 @@ class Document internal constructor(
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
+                openID4VCIClaimDescriptions = editor.openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor(),
                 portraitEquivalenceData = editor.portraitEquivalenceData
             )
             // Emit events only if something actually changed.
@@ -524,6 +541,8 @@ class Document internal constructor(
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
+     * @property openID4VCIClaimDescriptions Descriptions of the claims in the document as provided by the issuer
+     *  in its OpenID4VCI metadata.
      * @property portraitEquivalenceData The portrait equivalence data for this document, if any.
      */
     class Editor internal constructor(
@@ -540,6 +559,7 @@ class Document internal constructor(
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor,
+        var openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList(),
         var portraitEquivalenceData: MdocPortraitEquivalenceData?
     )
 
