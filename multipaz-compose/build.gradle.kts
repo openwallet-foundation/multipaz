@@ -144,16 +144,37 @@ kotlin {
         }
         val androidUnitTest by getting {
             dependencies {
+                implementation(project(":multipaz-doctypes"))
+                implementation(project(":multipaz-utopia"))
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.robolectric)
+                implementation(libs.compose.junit4)
+                implementation(libs.compose.test.manifest)
+                implementation(libs.androidx.test.junit)
+                implementation(libs.androidx.espresso.core)
             }
         }
     }
 }
 
+val copyComposeResourcesForUnitTest = tasks.register<Copy>("copyComposeResourcesForUnitTest") {
+    dependsOn("prepareComposeResourcesTaskForCommonMain", "convertXmlValueResourcesForCommonMain")
+    from(layout.buildDirectory.dir("generated/compose/resourceGenerator/preparedResources/commonMain/composeResources"))
+    into(layout.buildDirectory.dir("generated/unitTestComposeResources/composeResources/org.multipaz.multipaz_compose.generated.resources"))
+}
+
+tasks.matching { it.name == "processDebugUnitTestJavaRes" || it.name == "processReleaseUnitTestJavaRes" }.configureEach {
+    dependsOn(copyComposeResourcesForUnitTest)
+}
+
 android {
     namespace = "org.multipaz.compose"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+
+    sourceSets["test"].resources.srcDir(layout.buildDirectory.dir("generated/unitTestComposeResources"))
 
     defaultConfig {
         minSdk = 29
@@ -161,7 +182,18 @@ android {
     }
 
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+            all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.systemProperty(
+                    "updateGoldens",
+                    project.findProperty("updateGoldens")?.toString() ?: "false"
+                )
+            }
+        }
     }
 
     compileOptions {

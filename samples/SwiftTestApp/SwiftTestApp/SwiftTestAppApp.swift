@@ -5,7 +5,11 @@ struct SwiftTestAppApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if ConsentGoldenScreenshotRunner.isGoldenRun {
+                ConsentGoldenScreenshotHostView()
+            } else {
+                ContentView()
+            }
         }
     }
 }
