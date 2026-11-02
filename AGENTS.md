@@ -70,6 +70,13 @@ Do not automatically create a commit when implementing the code, only create one
 *   **Compile Core:** `./gradlew :multipaz:assemble`
 *   **Test Core (JVM/Host):** `./gradlew :multipaz:jvmTest` (or check individual target tasks like `jsTest`, `iosX64Test`)
 *   **Run Detekt Linter:** `./gradlew detektMetadataCommonMain`
+*   **Verify Consent UI Golden Screenshots (`multipaz-compose`):** `./gradlew :multipaz-compose:testDebugUnitTest --tests "org.multipaz.compose.presentment.ConsentGoldenScreenshotTest" -Pdisable.web.targets=true`
+*   **Update Consent UI Golden Screenshots & Catalog (`multipaz-compose/golden-screenshots/`):** When modifying `Consent.kt`, `X509CertViewer.kt`, `RenderClaimValue.kt`, purpose/risk classification, or `multipaz-compose` string resources, regenerate the golden PNGs and `multipaz-compose/golden-screenshots/README.md` catalog with `-PupdateGoldens=true` and inspect the visual diffs:
+    ```bash
+    ./gradlew :multipaz-compose:testDebugUnitTest \
+      --tests "org.multipaz.compose.presentment.ConsentGoldenScreenshotTest" \
+      -PupdateGoldens=true --rerun-tasks -Pdisable.web.targets=true
+    ```
 
 ### Command-line Tool (`multipazctl/`)
 *   **Compile:** `./gradlew :multipazctl:assemble`
