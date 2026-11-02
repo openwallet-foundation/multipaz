@@ -16,10 +16,6 @@
 package org.multipaz.document
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.storage.StorageTableSpec
@@ -31,6 +27,7 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.MdocPortraitEquivalenceData
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.tags.Tags
 import kotlin.collections.component1
@@ -174,6 +171,13 @@ class Document internal constructor(
     val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
 
     /**
+     * The portrait equivalence data for this document, if any. This is used to determine whether a
+     * document type supports portrait equivalence and what data elements are used for that purpose.
+     * If this is `null`, the document type does not support portrait equivalence.
+     */
+    val portraitEquivalenceData: MdocPortraitEquivalenceData? get() = data.portraitEquivalenceData
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -200,7 +204,8 @@ class Document internal constructor(
                         null
                     } else {
                         ByteString(Cbor.encode(newData))
-                    }
+                    },
+                    portraitEquivalenceData = data.portraitEquivalenceData
                 )
                 // Emit events only if something actually changed.
                 if (data != this.data) {
@@ -461,7 +466,8 @@ class Document internal constructor(
                 mpzPassVersion = data.mpzPassVersion,
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
-                tags = Tags.Editor(this@Document.tags._tags)
+                tags = Tags.Editor(this@Document.tags._tags),
+                portraitEquivalenceData = data.portraitEquivalenceData
             )
             editAction.invoke(editor)
             val newTagsData = if (editor.tags.tags.isEmpty()) {
@@ -484,7 +490,8 @@ class Document internal constructor(
                 mpzPassVersion = editor.mpzPassVersion,
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
-                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
+                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
+                portraitEquivalenceData = editor.portraitEquivalenceData
             )
             // Emit events only if something actually changed.
             if (data != this.data) {
@@ -517,6 +524,7 @@ class Document internal constructor(
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
+     * @property portraitEquivalenceData The portrait equivalence data for this document, if any.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -531,7 +539,8 @@ class Document internal constructor(
         var mpzPassVersion: Long?,
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
-        val tags: Tags.Editor
+        val tags: Tags.Editor,
+        var portraitEquivalenceData: MdocPortraitEquivalenceData?
     )
 
     /**
