@@ -13,6 +13,10 @@ import org.junit.Assert
 import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
+import org.multipaz.cbor.putCborMap
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
@@ -56,6 +60,8 @@ class MatcherDcqlQueryExecuteTest {
         encryptionKey: EcPrivateKey?,
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcql: String,
+        // Replaces the database calculated from the document store, for fields it doesn't write.
+        credentialDatabase: DataItem? = null,
     ): String {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
@@ -100,7 +106,7 @@ class MatcherDcqlQueryExecuteTest {
             OpenID4VP.Version.DRAFT_29 -> if (signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
         }
 
-        val credentialDatabase = calculateCredentialDatabase(
+        val database = credentialDatabase ?: calculateCredentialDatabase(
             appName = "Test App",
             documentStore = harness.documentStore,
             documentTypeRepository = harness.documentTypeRepository,
@@ -116,7 +122,7 @@ class MatcherDcqlQueryExecuteTest {
                     }
                 }
             }.toString().encodeToByteArray(),
-            credentialDatabase = Cbor.encode(credentialDatabase)
+            credentialDatabase = Cbor.encode(database)
         )
         // To get stable output, replace all document IDs with displayName
         for (docId in harness.documentStore.listDocumentIds()) {
@@ -643,6 +649,142 @@ class MatcherDcqlQueryExecuteTest {
                                     claimName rewards_number
                                     displayName rewards_number
                                     value 24601
+            """.trimIndent().trim() + "\n",
+            dcqlExecutionDump
+        )
+    }
+
+    private suspend fun sdJwtDatabase(vararg credentials: DataItem): DataItem {
+        val protocols = DigitalCredentialsCredman.create().supportedProtocols
+        return buildCborMap {
+            putCborArray("protocols") {
+                protocols.forEach { add(it) }
+            }
+            putCborArray("credentials") {
+                credentials.forEach { add(it) }
+            }
+        }
+    }
+
+    private fun sdJwtCredential(
+        name: String,
+        vct: String,
+        extendedVcts: List<String> = emptyList()
+    ) = buildCborMap {
+        put("title", name)
+        put("subtitle", "")
+        put("bitmap", byteArrayOf())
+        putCborMap("sdjwt") {
+            put("documentId", name)
+            put("vct", vct)
+            if (extendedVcts.isNotEmpty()) {
+                putCborArray("extendedVcts") {
+                    extendedVcts.forEach { add(it) }
+                }
+            }
+            putCborMap("claims") {
+                putCborArray("given_name") {
+                    add("Given name")
+                    add("Erika")
+                    add("Erika")
+                }
+            }
+        }
+    }
+
+    private fun sdJwtVctQuery(vct: String) =
+        """
+            {
+              "credentials": [{
+                  "id": "pid",
+                  "format": "dc+sd-jwt",
+                  "meta": { "vct_values": ["$vct"] },
+                  "claims": [{ "path": ["given_name"] }]
+              }]
+            }
+        """.trimIndent().trim()
+
+    @Test
+    fun test_OpenID4VP_sdjwt_extendedVcts() = runTest {
+        val dcqlExecutionDump = testExecuteDcqlQuery(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = {},
+            dcql = sdJwtVctQuery("https://example.com/pid"),
+            credentialDatabase = sdJwtDatabase(
+                sdJwtCredential(
+                    name = "extending",
+                    vct = "https://bank.example/pid",
+                    extendedVcts = listOf("https://example.com/national_pid", "https://example.com/pid")
+                ),
+                sdJwtCredential(name = "base", vct = "https://example.com/pid"),
+                sdJwtCredential(name = "other", vct = "https://other.example/pid"),
+            ),
+        )
+        Assert.assertEquals(
+            """
+                DcqlResponse
+                  CredentialSet
+                    optional false
+                    options
+                      option
+                        members
+                          member
+                            matches
+                              match
+                                credential extending
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given name
+                                    value Erika
+                              match
+                                credential base
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given name
+                                    value Erika
+            """.trimIndent().trim() + "\n",
+            dcqlExecutionDump
+        )
+    }
+
+    @Test
+    fun test_OpenID4VP_sdjwt_extendedVcts_notTheOtherWay() = runTest {
+        val dcqlExecutionDump = testExecuteDcqlQuery(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = {},
+            dcql = sdJwtVctQuery("https://bank.example/pid"),
+            credentialDatabase = sdJwtDatabase(
+                sdJwtCredential(
+                    name = "extending",
+                    vct = "https://bank.example/pid",
+                    extendedVcts = listOf("https://example.com/pid")
+                ),
+                sdJwtCredential(name = "base", vct = "https://example.com/pid"),
+            ),
+        )
+        Assert.assertEquals(
+            """
+                DcqlResponse
+                  CredentialSet
+                    optional false
+                    options
+                      option
+                        members
+                          member
+                            matches
+                              match
+                                credential extending
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given name
+                                    value Erika
             """.trimIndent().trim() + "\n",
             dcqlExecutionDump
         )

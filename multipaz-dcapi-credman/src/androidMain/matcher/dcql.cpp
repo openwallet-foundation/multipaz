@@ -250,7 +250,11 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                     continue;
                 }
             } else if (query.format == "dc+sd-jwt") {
-                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) == query.vctValues.end()) {
+                auto isRequested = [&query](const std::string& vct) {
+                    return std::find(query.vctValues.begin(), query.vctValues.end(), vct) != query.vctValues.end();
+                };
+                if (!isRequested(cred.vcVct) &&
+                        std::none_of(cred.vcExtendedVcts.begin(), cred.vcExtendedVcts.end(), isRequested)) {
                     continue;
                 }
             }

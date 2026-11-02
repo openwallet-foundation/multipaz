@@ -44,6 +44,9 @@ struct Credential {
     // This is the empty string if not available as a VC.
     std::string vcVct;
 
+    // The vcts the VC's type extends. A query for one of them also matches the credential.
+    std::vector<std::string> vcExtendedVcts;
+
     // This is the set of protocols the credential can be exported on.
     std::vector<std::string> protocols;
 
@@ -81,6 +84,7 @@ struct Credential {
         std::string documentId_,
         std::string mdocDocType_,
         std::string vcVct_,
+        std::vector<std::string> vcExtendedVcts_,
         std::vector<std::string> protocols_,
         std::vector<std::vector<uint8_t>> issuerIdentifiers_,
         std::vector<std::vector<uint8_t>> readerIdentifiers_,
@@ -97,6 +101,7 @@ struct Credential {
         documentId(std::move(documentId_)),
         mdocDocType(std::move(mdocDocType_)),
         vcVct(std::move(vcVct_)),
+        vcExtendedVcts(std::move(vcExtendedVcts_)),
         protocols(std::move(protocols_)),
         issuerIdentifiers(std::move(issuerIdentifiers_)),
         readerIdentifiers(std::move(readerIdentifiers_)),
