@@ -91,6 +91,122 @@ private extension PresentmentCredentialMatch {
     }
 }
 
+private struct ClaimSection {
+    let storesData: Bool
+    let encryptionRequested: Bool
+    let encryptionTargetCertificationChain: X509CertChain?
+    let encryptionTargetTrustMetadata: TrustMetadata?
+    let claims: [Claim]
+}
+
+private struct DocumentMatchGroup {
+    let firstMatchIndex: Int
+    let matches: [PresentmentCredentialMatch]
+    let claimSections: [ClaimSection]
+
+    var credential: Credential { matches[0].credential }
+    var document: Document { credential.document }
+}
+
+private struct RecipientBucketKey: Equatable {
+    let encryptionRequested: Bool
+    let encryptionTargetCertificationChain: X509CertChain?
+    let encryptionTargetTrustMetadata: TrustMetadata?
+}
+
+private func groupMatchesByDocument(_ matches: [PresentmentCredentialMatch]) -> [DocumentMatchGroup] {
+    var docOrder: [String] = []
+    var groupsByDocId: [String: (firstIndex: Int, matches: [PresentmentCredentialMatch])] = [:]
+    for (index, match) in matches.enumerated() {
+        let docId = match.credential.document.identifier
+        if var existing = groupsByDocId[docId] {
+            existing.matches.append(match)
+            groupsByDocId[docId] = existing
+        } else {
+            docOrder.append(docId)
+            groupsByDocId[docId] = (firstIndex: index, matches: [match])
+        }
+    }
+    return docOrder.compactMap { docId in
+        guard let entry = groupsByDocId[docId] else { return nil }
+        return DocumentMatchGroup(
+            firstMatchIndex: entry.firstIndex,
+            matches: entry.matches,
+            claimSections: buildClaimSections(entry.matches)
+        )
+    }
+}
+
+private func buildClaimSections(_ groupMatches: [PresentmentCredentialMatch]) -> [ClaimSection] {
+    let orderedMatches = groupMatches.filter { !$0.encryptionRequested } +
+        groupMatches.filter { $0.encryptionRequested }
+    var byRecipient: [(key: RecipientBucketKey, matches: [PresentmentCredentialMatch])] = []
+    for match in orderedMatches {
+        let key = RecipientBucketKey(
+            encryptionRequested: match.encryptionRequested,
+            encryptionTargetCertificationChain: match.encryptionTargetCertificationChain,
+            encryptionTargetTrustMetadata: match.encryptionTargetTrustMetadata
+        )
+        if let idx = byRecipient.firstIndex(where: { $0.key == key }) {
+            byRecipient[idx].matches.append(match)
+        } else {
+            byRecipient.append((key: key, matches: [match]))
+        }
+    }
+
+    var sections: [ClaimSection] = []
+    for (recipient, recipientMatches) in byRecipient {
+        var notStoredDedup: [Claim] = []
+        for match in recipientMatches {
+            for (key, claim) in match.claims {
+                if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
+                    continue
+                }
+                if !notStoredDedup.contains(claim) {
+                    notStoredDedup.append(claim)
+                }
+            }
+        }
+        let notStoredClaims = notStoredDedup.sortedBySensitivity()
+
+        var storedDedup: [Claim] = []
+        for match in recipientMatches {
+            for (key, claim) in match.claims {
+                if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
+                    if !storedDedup.contains(claim) {
+                        storedDedup.append(claim)
+                    }
+                }
+            }
+        }
+        let storedClaims = storedDedup.sortedBySensitivity()
+
+        if !notStoredClaims.isEmpty {
+            sections.append(
+                ClaimSection(
+                    storesData: false,
+                    encryptionRequested: recipient.encryptionRequested,
+                    encryptionTargetCertificationChain: recipient.encryptionTargetCertificationChain,
+                    encryptionTargetTrustMetadata: recipient.encryptionTargetTrustMetadata,
+                    claims: notStoredClaims
+                )
+            )
+        }
+        if !storedClaims.isEmpty {
+            sections.append(
+                ClaimSection(
+                    storesData: true,
+                    encryptionRequested: recipient.encryptionRequested,
+                    encryptionTargetCertificationChain: recipient.encryptionTargetCertificationChain,
+                    encryptionTargetTrustMetadata: recipient.encryptionTargetTrustMetadata,
+                    claims: storedClaims
+                )
+            )
+        }
+    }
+    return sections
+}
+
 private enum ClaimsGridCell {
     case claim(Claim)
     case more(Int)
@@ -996,12 +1112,18 @@ private struct DocumentDetailsView: View {
         let isSelected = selectionIndex >= 0
         let solutionIndexToShow = isSelected ? selectionIndex : 0
         let solution = solutionIndexToShow < useCase.solutions.count ? useCase.solutions[solutionIndexToShow] : nil
-        let credential: PresentmentCredentialMatch? = {
+        let targetGroup: DocumentMatchGroup? = {
             guard let solution = solution else { return nil }
-            if matchIndex < solution.matches.count {
-                return solution.matches[matchIndex]
-            }
-            return solution.matches.first
+            let groups = groupMatchesByDocument(solution.matches)
+            let targetMatch: PresentmentCredentialMatch? = {
+                if matchIndex < solution.matches.count {
+                    return solution.matches[matchIndex]
+                }
+                return solution.matches.first
+            }()
+            guard let targetMatch = targetMatch else { return groups.first }
+            return groups.first { $0.document.identifier == targetMatch.credential.document.identifier }
+                ?? groups.first
         }()
 
         SmartSheet(
@@ -1011,70 +1133,28 @@ private struct DocumentDetailsView: View {
             onScrollMetricsChange: onScrollMetricsChange
         ) {
         } content: {
-            if let credential = credential, isSelected {
-                let notStoredClaims = credential.claims.compactMap { key, claim -> Claim? in
-                    if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
-                        return nil
-                    }
-                    return claim
-                }.sortedBySensitivity()
-
-                let storedClaims = credential.claims.compactMap { key, claim -> Claim? in
-                    if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
-                        return claim
-                    }
-                    return nil
-                }.sortedBySensitivity()
-
-                let sharedWithText = calcSharedWithText(
-                    requester: requester,
-                    requesterDisplayData: requesterDisplayData,
-                    storesData: false,
-                    encryptionRequested: credential.encryptionRequested,
-                    encryptionTargetTrustMetadata: credential.encryptionTargetTrustMetadata
-                )
-                let sharedWithAndStoredByText = calcSharedWithText(
-                    requester: requester,
-                    requesterDisplayData: requesterDisplayData,
-                    storesData: true,
-                    encryptionRequested: credential.encryptionRequested,
-                    encryptionTargetTrustMetadata: credential.encryptionTargetTrustMetadata
-                )
-
+            if let group = targetGroup, isSelected {
                 VStack(alignment: .leading, spacing: 12) {
                     SegmentedItemContainer(index: 0, count: 1) {
                         CredentialViewerRow(
-                            document: credential.credential.document,
+                            document: group.document,
                             showChevron: false,
                             onChevronClicked: {}
                         )
                     }
 
-                    if !notStoredClaims.isEmpty {
-                        SegmentedItemList(title: sharedWithText) {
-                            ForEach(0..<notStoredClaims.count, id: \.self) { claimIdx in
-                                let claim = notStoredClaims[claimIdx]
-                                SegmentedItemContainer {
-                                    HStack(alignment: .center, spacing: 16) {
-                                        Image(systemName: getIconName(claim: claim))
-                                            .imageScale(.medium)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(claim.displayName)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(.primary)
-                                            RenderClaimValueView(claim: claim)
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if !storedClaims.isEmpty {
-                        SegmentedItemList(title: sharedWithAndStoredByText) {
-                            ForEach(0..<storedClaims.count, id: \.self) { claimIdx in
-                                let claim = storedClaims[claimIdx]
+                    ForEach(0..<group.claimSections.count, id: \.self) { sectionIdx in
+                        let section = group.claimSections[sectionIdx]
+                        let sectionHeader = calcSharedWithText(
+                            requester: requester,
+                            requesterDisplayData: requesterDisplayData,
+                            storesData: section.storesData,
+                            encryptionRequested: section.encryptionRequested,
+                            encryptionTargetTrustMetadata: section.encryptionTargetTrustMetadata
+                        )
+                        SegmentedItemList(title: sectionHeader) {
+                            ForEach(0..<section.claims.count, id: \.self) { claimIdx in
+                                let claim = section.claims[claimIdx]
                                 SegmentedItemContainer {
                                     HStack(alignment: .center, spacing: 16) {
                                         Image(systemName: getIconName(claim: claim))
@@ -1457,7 +1537,12 @@ public struct Consent: View {
                         for (ucIdx, useCase) in presentmentData.useCases.enumerated() {
                             let solIdx = ucIdx < selections.count ? selections[ucIdx] : 0
                             if solIdx >= 0 && solIdx < useCase.solutions.count {
-                                for match in useCase.solutions[solIdx].matches {
+                                let solution = useCase.solutions[solIdx]
+                                for match in solution.matches {
+                                    let docId = match.credential.document.identifier
+                                    let hasClaims = solution.matches.contains {
+                                        $0.credential.document.identifier == docId && !$0.claims.isEmpty
+                                    }
                                     let blocks = transactionDataBlocks(match.transactionData, repository: transactionDataRendererRepository)
                                     for block in blocks {
                                         if case .wallet(let identifier, let items, let renderer) = block {
@@ -1466,7 +1551,7 @@ public struct Consent: View {
                                                 identifier: identifier,
                                                 items: items,
                                                 renderer: renderer,
-                                                hasClaims: !match.claims.isEmpty
+                                                hasClaims: hasClaims
                                             )
                                             path.append(ConsentDestinations.transactionDetails)
                                             return
@@ -2422,109 +2507,65 @@ private struct UseCaseSection: View {
 
         if useCase.solutions.count > solutionIndexToShow {
             let solution = useCase.solutions[solutionIndexToShow]
+            let documentGroups = groupMatchesByDocument(solution.matches)
             let canSwitchSolution = useCase.optional || useCase.solutions.count > 1
-            let showBottomSwitchSegment = isSelected && canSwitchSolution && solution.matches.count > 1
+            let showBottomSwitchSegment = isSelected && canSwitchSolution && documentGroups.count > 1
             let opacity = isSelected ? 1.0 : 0.5
 
             Group {
                 if !isSelected {
-                    ForEach(0..<solution.matches.count, id: \.self) { matchIdx in
-                        let match = solution.matches[matchIdx]
+                    ForEach(0..<documentGroups.count, id: \.self) { groupIdx in
+                        let group = documentGroups[groupIdx]
                         SegmentedItemContainer {
                             CredentialViewerNotSelectedRow(
-                                typeDisplayName: match.resolveTypeDisplayName(),
-                                showChevron: matchIdx == 0 && canSwitchSolution,
+                                typeDisplayName: group.matches[0].resolveTypeDisplayName(),
+                                showChevron: groupIdx == 0 && canSwitchSolution,
                                 onChevronClicked: onNavigateToPickSolution
                             )
                             .opacity(opacity)
                         }
                     }
                 } else {
-                    ForEach(0..<solution.matches.count, id: \.self) { matchIdx in
-                        let match = solution.matches[matchIdx]
-                        let canSwitchOnCredential = canSwitchSolution && (solution.matches.count == 1)
-
-                        let notStoredClaims = match.claims.compactMap { key, claim -> Claim? in
-                            if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
-                                return nil
-                            }
-                            return claim
-                        }.sortedBySensitivity()
-
-                        let storedClaims = match.claims.compactMap { key, claim -> Claim? in
-                            if let mdocReq = key as? MdocRequestedClaim, mdocReq.intentToRetain {
-                                return claim
-                            }
-                            return nil
-                        }.sortedBySensitivity()
-
-                        let sharedWithText = calcSharedWithText(
-                            requester: requester,
-                            requesterDisplayData: requesterDisplayData,
-                            storesData: false,
-                            encryptionRequested: match.encryptionRequested,
-                            encryptionTargetTrustMetadata: match.encryptionTargetTrustMetadata
-                        )
-                        let sharedWithAndStoredByText = calcSharedWithText(
-                            requester: requester,
-                            requesterDisplayData: requesterDisplayData,
-                            storesData: true,
-                            encryptionRequested: match.encryptionRequested,
-                            encryptionTargetTrustMetadata: match.encryptionTargetTrustMetadata
-                        )
+                    ForEach(0..<documentGroups.count, id: \.self) { groupIdx in
+                        let group = documentGroups[groupIdx]
+                        let canSwitchOnCredential = canSwitchSolution && (documentGroups.count == 1)
 
                         SegmentedItemContainer {
                             CredentialViewerRow(
-                                document: match.credential.document,
+                                document: group.document,
                                 showChevron: canSwitchOnCredential,
                                 onChevronClicked: onNavigateToPickSolution
                             )
                         }
 
-                        if !storedClaims.isEmpty || !notStoredClaims.isEmpty {
+                        if !group.claimSections.isEmpty {
                             let onViewDetails = {
                                 onShowDocumentDetails(
                                     DocumentDetailsTarget(
                                         useCaseIndex: useCaseIndex,
-                                        matchIndex: matchIdx
+                                        matchIndex: group.firstMatchIndex
                                     )
                                 )
                             }
                             SegmentedItemContainer {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    if storedClaims.isEmpty {
-                                        Text(sharedWithText)
-                                            .font(.subheadline.weight(.semibold))
-                                            .multilineTextAlignment(.leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        ClaimsGridView(
-                                            allClaims: notStoredClaims,
-                                            onViewDetailsClicked: onViewDetails
+                                    ForEach(0..<group.claimSections.count, id: \.self) { sectionIdx in
+                                        let section = group.claimSections[sectionIdx]
+                                        let isLastSection = sectionIdx == group.claimSections.count - 1
+                                        let headerText = calcSharedWithText(
+                                            requester: requester,
+                                            requesterDisplayData: requesterDisplayData,
+                                            storesData: section.storesData,
+                                            encryptionRequested: section.encryptionRequested,
+                                            encryptionTargetTrustMetadata: section.encryptionTargetTrustMetadata
                                         )
-                                    } else if notStoredClaims.isEmpty {
-                                        Text(sharedWithAndStoredByText)
+                                        Text(headerText)
                                             .font(.subheadline.weight(.semibold))
                                             .multilineTextAlignment(.leading)
                                             .fixedSize(horizontal: false, vertical: true)
                                         ClaimsGridView(
-                                            allClaims: storedClaims,
-                                            onViewDetailsClicked: onViewDetails
-                                        )
-                                    } else {
-                                        Text(sharedWithText)
-                                            .font(.subheadline.weight(.semibold))
-                                            .multilineTextAlignment(.leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        ClaimsGridView(
-                                            allClaims: notStoredClaims
-                                        )
-                                        Text(sharedWithAndStoredByText)
-                                            .font(.subheadline.weight(.semibold))
-                                            .multilineTextAlignment(.leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        ClaimsGridView(
-                                            allClaims: storedClaims,
-                                            onViewDetailsClicked: onViewDetails
+                                            allClaims: section.claims,
+                                            onViewDetailsClicked: isLastSection ? onViewDetails : nil
                                         )
                                     }
                                 }
@@ -2532,8 +2573,10 @@ private struct UseCaseSection: View {
                             }
                         }
 
-                        if !match.transactionData.isEmpty {
-                            let hasClaims = !storedClaims.isEmpty || !notStoredClaims.isEmpty
+                        let hasClaims = !group.claimSections.isEmpty
+                        let txMatches = group.matches.filter { !$0.transactionData.isEmpty }
+                        ForEach(0..<txMatches.count, id: \.self) { txIdx in
+                            let match = txMatches[txIdx]
                             let blocks = transactionDataBlocks(match.transactionData, repository: transactionDataRendererRepository)
                             SegmentedItemContainer {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -2643,6 +2686,7 @@ private struct PickSolutionView: View {
             VStack(spacing: 12) {
                 ForEach(0..<useCase.solutions.count, id: \.self) { idx in
                     let solution = useCase.solutions[idx]
+                    let solutionGroups = groupMatchesByDocument(solution.matches)
                     let isSelectedSolution = (idx == currentSolutionIndex)
                     Button {
                         onSolutionSelected(idx)
@@ -2650,10 +2694,10 @@ private struct PickSolutionView: View {
                         SegmentedItemContainer(index: 0, count: 1, selected: isSelectedSolution) {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    ForEach(0..<solution.matches.count, id: \.self) { credIdx in
-                                        let match = solution.matches[credIdx]
+                                    ForEach(0..<solutionGroups.count, id: \.self) { groupIdx in
+                                        let group = solutionGroups[groupIdx]
                                         CredentialViewerRow(
-                                            document: match.credential.document,
+                                            document: group.document,
                                             showChevron: false,
                                             onChevronClicked: {}
                                         )
@@ -2672,8 +2716,9 @@ private struct PickSolutionView: View {
 
                 if useCase.optional {
                     let isNotSharingSelected = currentSolutionIndex < 0
-                    let fallbackTypeName = useCase.solutions.first?.matches
-                        .map { $0.resolveTypeDisplayName() }
+                    let fallbackTypeName = useCase.solutions.first
+                        .map { groupMatchesByDocument($0.matches) }?
+                        .map { $0.matches[0].resolveTypeDisplayName() }
                         .joined(separator: ", ") ?? ""
                     Button {
                         onSolutionSelected(-1)

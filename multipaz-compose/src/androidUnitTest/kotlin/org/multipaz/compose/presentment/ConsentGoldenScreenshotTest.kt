@@ -1018,7 +1018,38 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 4.2 trusted_requester_trusted_target_retained
+        // 4.2 trusted_requester_trusted_target_multiple_choices
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
+            val pd = eco.executeBorderCrossingEncryptionRequest(
+                intentToRetain = false,
+                encryptionTargetRpId = ConsentGoldenEcosystem.RP_CBP,
+                encryptionTargetTrusted = true,
+                multiplePhotoIds = true,
+            )
+            runScenario(
+                categoryDir = cat4Dir,
+                categoryTitle = cat4Title,
+                categoryDescription = cat4Desc,
+                scenarioId = "trusted_requester_trusted_target_multiple_choices",
+                title = "Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)",
+                requesterSummary = "Utopia Airlines -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
+                protocolSummary = "Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)",
+                riskBadge = "NORMAL",
+                description = "When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards with 'Share something else…'.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (Erika's Photo ID selected for both)")
+                clickNodeWithText("Erika's Photo ID")
+                capture("chooser", "Solution chooser (4 combinations across 2 Photo IDs)")
+                clickNodeWithTextAtIndex("Erika's Photo ID #2", index = 0)
+                capture("main_switched", "Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)")
+            }
+        }
+
+        // 4.3 trusted_requester_trusted_target_retained
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -2149,6 +2180,11 @@ class ConsentGoldenScreenshotTest {
 
         fun clickNodeWithText(text: String) {
             composeTestRule.onNodeWithText(text, substring = true).performScrollTo().performClick()
+            settleUi()
+        }
+
+        fun clickNodeWithTextAtIndex(text: String, index: Int) {
+            composeTestRule.onAllNodes(hasText(text, substring = true))[index].performScrollTo().performClick()
             settleUi()
         }
 

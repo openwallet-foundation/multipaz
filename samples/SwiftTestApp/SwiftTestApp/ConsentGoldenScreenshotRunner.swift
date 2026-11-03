@@ -557,7 +557,24 @@ enum ConsentGoldenScreenshotRunner {
                 }
             }
 
-            // 4.2 trusted_requester_trusted_target_retained
+            // 4.2 trusted_requester_trusted_target_multiple_choices
+            do {
+                let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
+                let pd = try await eco.executeBorderCrossingEncryptionRequestMultipleChoices(
+                    intentToRetain: false,
+                    encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_CBP,
+                    encryptionTargetTrusted: true
+                )
+                try await runScenario(categoryDir: cat4, scenarioId: "trusted_requester_trusted_target_multiple_choices", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                    await s.showPickSolution(useCaseIndex: 0)
+                    try await s.capture("chooser")
+                    await s.selectSolution(useCaseIndex: 0, solutionIndex: 1)
+                    try await s.capture("main_switched")
+                }
+            }
+
+            // 4.3 trusted_requester_trusted_target_retained
             do {
                 let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
                 let pd = try await eco.executeBorderCrossingEncryptionRequest(

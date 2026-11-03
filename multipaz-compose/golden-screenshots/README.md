@@ -33,8 +33,9 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Compound Solution: ID + Boarding Pass in a Single Use-Case](#mdl_and_boarding_pass_single_use_case)
   - [Alternative Credential Types: mDL OR Boarding Pass](#mdl_or_boarding_pass)
   - [Mandatory mDL + Optional Loyalty Card (Opting Out)](#mandatory_mdl_and_optional_loyalty)
-- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#4-claimlevel-encryption-intermediary-encryption-target)** (`04_encryption` — 2 scenarios)
+- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#4-claimlevel-encryption-intermediary-encryption-target)** (`04_encryption` — 3 scenarios)
   - [Trusted Intermediary + Trusted Encryption Target (Transient)](#trusted_requester_trusted_target)
+  - [Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)](#trusted_requester_trusted_target_multiple_choices)
   - [Trusted Intermediary + Trusted Encryption Target (Retained)](#trusted_requester_trusted_target_retained)
 - **[5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII](#5-warning-yellow-unverified-requesters-unverified-encryption-targets-proximity-anonymous-pii)** (`05_warning_untrusted` — 7 scenarios)
   - [Unverified Website Requesting Age Over 18](#unverified_website_age_over_18)
@@ -360,6 +361,21 @@ Utopia Airlines verifies basic identity while forwarding HPKE-encrypted eMRTD da
 | :---: | :---: | :---: | :---: |
 | **Compose** | <img src="04_encryption/trusted_requester_trusted_target__main.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Main prompt (plain + encrypted sections)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target__requester_info.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Requester info (requester + encryption target)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target__enc_target_cert_chain.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Encryption target certificate chain" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__main.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Main prompt (plain + encrypted sections)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__requester_info.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Requester info (requester + encryption target)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__enc_target_cert_chain.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Encryption target certificate chain" width="260" /> |
+
+<a id="trusted_requester_trusted_target_multiple_choices"></a>
+
+### `trusted_requester_trusted_target_multiple_choices` — Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)
+
+- **Relying Party:** Utopia Airlines -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)
+- **Risk Assessment:** `NORMAL`
+
+When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards with 'Share something else…'.
+
+| | `main` — Main prompt (Erika's Photo ID selected for both) | `chooser` — Solution chooser (4 combinations across 2 Photo IDs) | `main_switched` — Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected) |
+| :---: | :---: | :---: | :---: |
+| **Compose** | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__main.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID selected for both)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__chooser.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Solution chooser (4 combinations across 2 Photo IDs)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__main_switched.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__main.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID selected for both)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__chooser.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Solution chooser (4 combinations across 2 Photo IDs)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__main_switched.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)" width="260" /> |
 
 <a id="trusted_requester_trusted_target_retained"></a>
 
