@@ -204,6 +204,14 @@ internal class ConsentGoldenEcosystem private constructor(
     }
 
     /**
+     * Builds an anonymous web [Requester] with no certificate chain.
+     */
+    fun anonymousWebRequester(
+        origin: String = "https://age-check.utopia-gaming.example.com",
+    ): Pair<Requester, TrustedRequesterIdentity?> =
+        Requester(origin = origin) to null
+
+    /**
      * Builds an untrusted Android application [Requester].
      */
     fun unverifiedAppRequester(appId: String): Pair<Requester, TrustedRequesterIdentity?> =
@@ -283,6 +291,7 @@ internal class ConsentGoldenEcosystem private constructor(
         intentToRetain: Boolean,
         encryptionTargetRpId: String,
         encryptionTargetTrusted: Boolean,
+        includeRecipientCertificates: Boolean = true,
     ): PresentmentData {
         val sessionTranscript = buildCborArray {
             add(Simple.NULL)
@@ -313,7 +322,11 @@ internal class ConsentGoldenEcosystem private constructor(
                 docRequestInfo = DocRequestInfo(
                     docResponseEncryption = EncryptionParameters.fromValues(
                         recipientPublicKey = encKey.publicKey as EcPublicKey,
-                        recipientCertificates = encKey.certChain.certificates,
+                        recipientCertificates = if (includeRecipientCertificates) {
+                            encKey.certChain.certificates
+                        } else {
+                            emptyList()
+                        },
                     )
                 ),
             )

@@ -188,6 +188,11 @@ class SwiftConsentGoldenEcosystem private constructor(
         )
     }
 
+    fun anonymousWebRequester(
+        origin: String = "https://age-check.utopia-gaming.example.com",
+    ): GoldenRequesterPair =
+        GoldenRequesterPair(requester = Requester(origin = origin), trustedRequesterIdentity = null)
+
     fun unverifiedAppRequester(appId: String): GoldenRequesterPair =
         GoldenRequesterPair(requester = Requester(appId = appId), trustedRequesterIdentity = null)
 
@@ -336,6 +341,18 @@ class SwiftConsentGoldenEcosystem private constructor(
         intentToRetain: Boolean,
         encryptionTargetRpId: String,
         encryptionTargetTrusted: Boolean,
+    ): PresentmentData = executeBorderCrossingEncryptionRequest(
+        intentToRetain = intentToRetain,
+        encryptionTargetRpId = encryptionTargetRpId,
+        encryptionTargetTrusted = encryptionTargetTrusted,
+        includeRecipientCertificates = true,
+    )
+
+    suspend fun executeBorderCrossingEncryptionRequest(
+        intentToRetain: Boolean,
+        encryptionTargetRpId: String,
+        encryptionTargetTrusted: Boolean,
+        includeRecipientCertificates: Boolean,
     ): PresentmentData {
         val sessionTranscript = buildCborArray {
             add(Simple.NULL)
@@ -366,7 +383,11 @@ class SwiftConsentGoldenEcosystem private constructor(
                 docRequestInfo = DocRequestInfo(
                     docResponseEncryption = EncryptionParameters.fromValues(
                         recipientPublicKey = encKey.publicKey as EcPublicKey,
-                        recipientCertificates = encKey.certChain.certificates,
+                        recipientCertificates = if (includeRecipientCertificates) {
+                            encKey.certChain.certificates
+                        } else {
+                            emptyList()
+                        },
                     )
                 ),
             )

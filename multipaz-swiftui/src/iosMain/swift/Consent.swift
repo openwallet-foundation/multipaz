@@ -392,12 +392,13 @@ private func buildRequesterDisplayData(
 }
 
 private func resolveRequesterHeadlineName(
+    requester: Requester,
     requesterDisplayData: RequesterDisplayData,
     trustedRequesterIdentity: TrustedRequesterIdentity?
 ) -> String {
     return requesterDisplayData.name
         ?? trustedRequesterIdentity?.identity.certChain.certificates.last?.subject.name
-        ?? "Unknown requester"
+        ?? (requester.requesterIdentities.isEmpty ? "Anonymous requester" : "Unknown requester")
 }
 
 private func calcSharedWithText(
@@ -536,6 +537,7 @@ private struct RelyingPartySection: View {
 
     var body: some View {
         let requesterName = resolveRequesterHeadlineName(
+            requester: requester,
             requesterDisplayData: requesterDisplayData,
             trustedRequesterIdentity: trustedRequesterIdentity
         )
@@ -605,6 +607,7 @@ private func calcRelyingPartySentences(
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     trustMetadata: TrustMetadata?,
     showUntrustedWarning: Bool,
+    showAnonymousWarning: Bool,
     requesterHistoryLoaded: Bool,
     requesterHistoryEntry: RequesterHistoryEntry?,
     hasEncryptionTargetPrivacyPolicy: Bool
@@ -615,15 +618,24 @@ private func calcRelyingPartySentences(
         ?? requester.appId
 
     let untrustedSentence: String? = {
-        guard showUntrustedWarning else { return nil }
-        if requester.isWebOrigin {
-            return "The website requesting this data is unknown. Make sure you are comfortable sharing this data"
-        } else if requester.appId != nil {
-            return "The application requesting this data is unknown. Make sure you are comfortable sharing this data"
-        } else if !requester.requesterIdentities.isEmpty {
-            return "The identity reader requesting this data is unknown. Make sure you are comfortable sharing this data"
+        if showAnonymousWarning {
+            if requester.isWebOrigin {
+                return "The website requesting this data is unknown. Make sure you are comfortable sharing this data"
+            } else if requester.appId != nil {
+                return "The application requesting this data is unknown. Make sure you are comfortable sharing this data"
+            } else {
+                return "The identity reader requesting this data is anonymous. Make sure you are comfortable sharing this data"
+            }
+        } else if showUntrustedWarning {
+            if requester.isWebOrigin {
+                return "The website requesting this data is unknown. Make sure you are comfortable sharing this data"
+            } else if requester.appId != nil {
+                return "The application requesting this data is unknown. Make sure you are comfortable sharing this data"
+            } else {
+                return "The identity reader requesting this data is unknown. Make sure you are comfortable sharing this data"
+            }
         } else {
-            return "The identity reader requesting this data is anonymous. Make sure you are comfortable sharing this data"
+            return nil
         }
     }()
 
@@ -667,6 +679,7 @@ private func calcRelyingPartySentences(
 
 private let orderedRiskReasons: [ConsentRiskReason] = [
     .untrustedRequester,
+    .anonymousRequester,
     .unusualRequest,
     .piiRequested,
     .untrustedEncryptionTarget,
@@ -688,6 +701,7 @@ private func calcRelyingPartyParagraphs(
         trustedRequesterIdentity: trustedRequesterIdentity,
         trustMetadata: trustMetadata,
         showUntrustedWarning: riskAssessment.reasons.contains(.untrustedRequester),
+        showAnonymousWarning: riskAssessment.reasons.contains(.anonymousRequester),
         requesterHistoryLoaded: requesterHistoryLoaded,
         requesterHistoryEntry: requesterHistoryEntry,
         hasEncryptionTargetPrivacyPolicy: hasEncryptionTargetPrivacyPolicy
@@ -707,7 +721,7 @@ private func calcRelyingPartyParagraphs(
 
     for reason in orderedRiskReasons where riskAssessment.reasons.contains(reason) {
         switch reason {
-        case .untrustedRequester:
+        case .untrustedRequester, .anonymousRequester:
             break
         case .unusualRequest:
             paragraphs.append("This requester is asking for an unusual combination of information. Make sure you trust them before sharing.")
@@ -1630,6 +1644,7 @@ private struct ShowRequesterInfo: View {
     var body: some View {
         let trustMetadata = trustedRequesterIdentity?.trustMetadata
         let requesterName = resolveRequesterHeadlineName(
+            requester: requester,
             requesterDisplayData: requesterDisplayData,
             trustedRequesterIdentity: trustedRequesterIdentity
         )
@@ -1924,7 +1939,7 @@ private struct EncryptionTargetTrustGroupView: View {
         let trustMetadata = target.trustMetadata
         let targetName = trustMetadata?.displayName
             ?? target.certChain?.certificates.last?.subject.name
-            ?? "Unknown requester"
+            ?? (target.certChain == nil ? "Anonymous requester" : "Unknown requester")
         let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl
         let groupCount = privacyPolicyUrl != nil ? 2 : 1
 
