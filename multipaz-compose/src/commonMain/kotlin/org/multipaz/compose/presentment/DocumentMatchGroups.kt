@@ -6,6 +6,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentUseCase
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.trustmanagement.TrustMetadata
 
@@ -63,6 +64,42 @@ internal fun groupMatchesByDocument(
             matches = groupMatches,
             claimSections = buildClaimSections(groupMatches),
         )
+    }
+}
+
+/**
+ * Returns the set of [Document.identifier]s within [documentGroups] that should render a trailing
+ * chevron to navigate to the solution chooser.
+ *
+ * - When [PresentmentUseCase.optional] is `true`, every displayed document can be omitted by
+ *   selecting "Don't share anything", so all documents in [documentGroups] are switchable.
+ * - When [PresentmentUseCase.optional] is `false` and there is at most one solution, no document
+ *   is switchable.
+ * - When [PresentmentUseCase.optional] is `false` and there are multiple solutions, any document
+ *   that appears in *every* solution is suppressed (unless every displayed document appears in
+ *   every solution, in which case all displayed documents remain switchable so the chooser stays
+ *   reachable).
+ */
+internal fun switchableDocumentIds(
+    useCase: PresentmentUseCase,
+    documentGroups: List<DocumentMatchGroup>,
+): Set<String> {
+    if (useCase.optional) {
+        return documentGroups.mapTo(mutableSetOf()) { it.document.identifier }
+    }
+    if (useCase.solutions.size <= 1) {
+        return emptySet()
+    }
+    val docIdsPerSolution = useCase.solutions.map { sol ->
+        sol.matches.mapTo(mutableSetOf()) { it.credential.document.identifier }
+    }
+    val varyingIds = documentGroups
+        .map { it.document.identifier }
+        .filterTo(mutableSetOf()) { docId ->
+            !docIdsPerSolution.all { docId in it }
+        }
+    return varyingIds.ifEmpty {
+        documentGroups.mapTo(mutableSetOf()) { it.document.identifier }
     }
 }
 

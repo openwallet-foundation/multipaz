@@ -842,13 +842,13 @@ class ConsentGoldenScreenshotTest {
                 requesterSummary = "Utopia Airlines — Proximity (ISO 18013-5)",
                 protocolSummary = "(mDL + Boarding Pass) OR (Photo ID + Boarding Pass)",
                 riskBadge = "NORMAL",
-                description = "A single use-case whose options each pair an identity document with a boarding pass. The chooser displays compound multi-card radio options.",
+                description = "A single use-case whose options each pair an identity document with a boarding pass. The identity document card renders a chevron while the invariant boarding pass card does not; the chooser displays compound multi-card radio options.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
             ) {
                 capture("main", "Main prompt (2 credentials in 1 use-case)")
-                clickNodeWithText("Share something else")
+                clickNodeWithText("Erika's Driving License")
                 capture("chooser", "Compound solution chooser")
             }
         }
@@ -1036,7 +1036,7 @@ class ConsentGoldenScreenshotTest {
                 requesterSummary = "Utopia Airlines -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
                 protocolSummary = "Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)",
                 riskBadge = "NORMAL",
-                description = "When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards with 'Share something else…'.",
+                description = "When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards each with an inline chevron.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,

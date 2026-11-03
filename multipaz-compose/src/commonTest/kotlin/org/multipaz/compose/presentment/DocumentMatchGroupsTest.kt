@@ -21,6 +21,8 @@ import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.presentment.PresentmentCredentialMatch
 import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
+import org.multipaz.presentment.PresentmentUseCase
+import org.multipaz.presentment.PresentmentUseCaseSolution
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaRepository
@@ -374,5 +376,53 @@ class DocumentMatchGroupsTest {
         assertEquals(2, sections.size)
         assertEquals(targetA, sections[0].encryptionTargetTrustMetadata)
         assertEquals(targetB, sections[1].encryptionTargetTrustMetadata)
+    }
+
+    @Test
+    fun switchableDocumentIdsSuppressesDocumentsInEverySolution() = runTest {
+        val creds = createTestCredentials()
+        val matchA = PresentmentCredentialMatch(
+            credential = creds.credDocA1,
+            claims = mapOf(makeClaimPair("given_name", "Given Names")),
+            source = creds.source,
+            transactionData = emptyList(),
+        )
+        val matchB = PresentmentCredentialMatch(
+            credential = creds.credDocB,
+            claims = mapOf(makeClaimPair("document_number", "Document Number")),
+            source = creds.source,
+            transactionData = emptyList(),
+        )
+        val docAId = creds.credDocA1.document.identifier
+        val docBId = creds.credDocB.document.identifier
+
+        // Compound non-optional use-case: Solution 0 = [DocA, DocB], Solution 1 = [DocB]
+        // DocB is in every solution, so only DocA is switchable when Solution 0 is shown.
+        val compoundUseCase = PresentmentUseCase(
+            optional = false,
+            solutions = listOf(
+                PresentmentUseCaseSolution(listOf(matchA, matchB)),
+                PresentmentUseCaseSolution(listOf(matchB)),
+            ),
+        )
+        val sol0Groups = groupMatchesByDocument(compoundUseCase.solutions[0].matches)
+        assertEquals(setOf(docAId), switchableDocumentIds(compoundUseCase, sol0Groups))
+
+        // When Solution 1 ([DocB] alone) is shown, DocB is the only displayed document, so the
+        // fallback keeps DocB switchable so the chooser remains reachable.
+        val sol1Groups = groupMatchesByDocument(compoundUseCase.solutions[1].matches)
+        assertEquals(setOf(docBId), switchableDocumentIds(compoundUseCase, sol1Groups))
+
+        // When the use-case is optional, all displayed documents are switchable even if a document
+        // appears in every solution.
+        val optionalCompound = compoundUseCase.copy(optional = true)
+        assertEquals(setOf(docAId, docBId), switchableDocumentIds(optionalCompound, sol0Groups))
+
+        // Single-solution non-optional use-case: no documents are switchable.
+        val singleMandatory = PresentmentUseCase(
+            optional = false,
+            solutions = listOf(PresentmentUseCaseSolution(listOf(matchA, matchB))),
+        )
+        assertEquals(emptySet(), switchableDocumentIds(singleMandatory, sol0Groups))
     }
 }

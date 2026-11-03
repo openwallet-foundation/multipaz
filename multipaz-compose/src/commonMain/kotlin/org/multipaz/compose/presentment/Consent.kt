@@ -127,7 +127,6 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_wait
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_continue
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_select_option
-import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_something_else
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_dont_return_any_document
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_data_element_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_details
@@ -1807,11 +1806,11 @@ private fun UseCaseViewer(
     val solutionIndexToShow = if (isSelected) selectionIndex else 0
     val solution = useCase.solutions.getOrNull(solutionIndexToShow)
 
-    val canSwitchSolution = useCase.optional || useCase.solutions.size > 1
-
     if (solution != null) {
         val documentGroups = remember(solution) { groupMatchesByDocument(solution.matches) }
-        val showBottomSwitchSegment = isSelected && canSwitchSolution && documentGroups.size > 1
+        val switchableDocIds = remember(useCase, documentGroups) {
+            switchableDocumentIds(useCase, documentGroups)
+        }
         val totalSegments = (if (!isSelected) {
             documentGroups.size
         } else {
@@ -1820,7 +1819,7 @@ private fun UseCaseViewer(
                 if (group.claimSections.isNotEmpty()) segments += 1
                 segments += group.matches.count { it.transactionData.isNotEmpty() }
                 segments
-            } + if (showBottomSwitchSegment) 1 else 0
+            }
         }) + if (bottomContent != null) 1 else 0
         var currentSegmentIndex = 0
         val alpha = if (isSelected) 1.0f else 0.5f
@@ -1844,7 +1843,7 @@ private fun UseCaseViewer(
                             )
                         }
                     } else {
-                        val canSwitchOnCredential = canSwitchSolution && (documentGroups.size == 1)
+                        val canSwitchOnCredential = group.document.identifier in switchableDocIds
                         val credSegmentIdx = currentSegmentIndex++
                         SegmentedItemContainer(
                             index = credSegmentIdx,
@@ -1917,36 +1916,6 @@ private fun UseCaseViewer(
                                     onShowTransactionDetails = onShowTransactionDetails,
                                 )
                             }
-                        }
-                    }
-                }
-                if (showBottomSwitchSegment) {
-                    val switchSegmentIdx = currentSegmentIndex++
-                    val boxShape = RoundedCornerShape(12.dp)
-                    SegmentedItemContainer(
-                        index = switchSegmentIdx,
-                        count = totalSegments,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(boxShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, boxShape)
-                                .clickable { onNavigateToPickSolution() }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                modifier = Modifier.weight(1.0f),
-                                text = stringResource(Res.string.credential_presentment_share_something_else),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }

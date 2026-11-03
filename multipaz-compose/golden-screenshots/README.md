@@ -304,7 +304,7 @@ Multi-credential requests exercising compound solutions, alternative credential 
 - **Protocol / Credentials:** (mDL + Boarding Pass) OR (Photo ID + Boarding Pass)
 - **Risk Assessment:** `NORMAL`
 
-A single use-case whose options each pair an identity document with a boarding pass. The chooser displays compound multi-card radio options.
+A single use-case whose options each pair an identity document with a boarding pass. The identity document card renders a chevron while the invariant boarding pass card does not; the chooser displays compound multi-card radio options.
 
 | | `main` — Main prompt (2 credentials in 1 use-case) | `chooser` — Compound solution chooser |
 | :---: | :---: | :---: |
@@ -370,7 +370,7 @@ Utopia Airlines verifies basic identity while forwarding HPKE-encrypted eMRTD da
 - **Protocol / Credentials:** Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)
 - **Risk Assessment:** `NORMAL`
 
-When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards with 'Share something else…'.
+When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards each with an inline chevron.
 
 | | `main` — Main prompt (Erika's Photo ID selected for both) | `chooser` — Solution chooser (4 combinations across 2 Photo IDs) | `main_switched` — Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected) |
 | :---: | :---: | :---: | :---: |

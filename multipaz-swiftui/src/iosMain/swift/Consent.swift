@@ -137,6 +137,32 @@ private func groupMatchesByDocument(_ matches: [PresentmentCredentialMatch]) -> 
     }
 }
 
+private func switchableDocumentIds(
+    useCase: PresentmentUseCase,
+    documentGroups: [DocumentMatchGroup]
+) -> Set<String> {
+    if useCase.optional {
+        return Set(documentGroups.map { $0.document.identifier })
+    }
+    if useCase.solutions.count <= 1 {
+        return []
+    }
+    let docIdsPerSolution: [Set<String>] = useCase.solutions.map { sol in
+        Set(sol.matches.map { $0.credential.document.identifier })
+    }
+    let varyingIds = Set(
+        documentGroups
+            .map { $0.document.identifier }
+            .filter { docId in
+                !docIdsPerSolution.allSatisfy { $0.contains(docId) }
+            }
+    )
+    if !varyingIds.isEmpty {
+        return varyingIds
+    }
+    return Set(documentGroups.map { $0.document.identifier })
+}
+
 private func buildClaimSections(_ groupMatches: [PresentmentCredentialMatch]) -> [ClaimSection] {
     let orderedMatches = groupMatches.filter { !$0.encryptionRequested } +
         groupMatches.filter { $0.encryptionRequested }
@@ -2509,7 +2535,7 @@ private struct UseCaseSection: View {
             let solution = useCase.solutions[solutionIndexToShow]
             let documentGroups = groupMatchesByDocument(solution.matches)
             let canSwitchSolution = useCase.optional || useCase.solutions.count > 1
-            let showBottomSwitchSegment = isSelected && canSwitchSolution && documentGroups.count > 1
+            let switchableDocIds = switchableDocumentIds(useCase: useCase, documentGroups: documentGroups)
             let opacity = isSelected ? 1.0 : 0.5
 
             Group {
@@ -2528,7 +2554,7 @@ private struct UseCaseSection: View {
                 } else {
                     ForEach(0..<documentGroups.count, id: \.self) { groupIdx in
                         let group = documentGroups[groupIdx]
-                        let canSwitchOnCredential = canSwitchSolution && (documentGroups.count == 1)
+                        let canSwitchOnCredential = switchableDocIds.contains(group.document.identifier)
 
                         SegmentedItemContainer {
                             CredentialViewerRow(
@@ -2620,30 +2646,6 @@ private struct UseCaseSection: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                        }
-                    }
-
-                    if showBottomSwitchSegment {
-                        SegmentedItemContainer {
-                            Button(action: onNavigateToPickSolution) {
-                                HStack(spacing: 8) {
-                                    Text("Share something else…")
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(Color(UIColor.separator), lineWidth: 1)
-                                )
-                                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
