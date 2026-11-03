@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Usia di atas 18 + kesetaraan potret",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Usia di atas 18 + (potret ATAU kesetaraan potret)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Usia di atas 18 + kesetaraan potret",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Usia di atas 18 + (potret ATAU kesetaraan potret)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Usia di atas 18 + (potret ATAU kesetaraan potret)",
+  "group_name": "Nama",
+  "group_alias_name": "Nama alias",
+  "group_name_at_birth": "Nama saat lahir",
+  "group_name_initials": "Inisial nama",
+  "group_residential_address": "Alamat tempat tinggal",
+  "group_place_of_birth": "Tempat lahir",
+  "group_date_of_birth": "Tanggal lahir",
+  "group_passport_data": "Data paspor"
 }

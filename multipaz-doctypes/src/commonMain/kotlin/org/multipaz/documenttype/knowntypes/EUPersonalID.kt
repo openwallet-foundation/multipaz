@@ -30,6 +30,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.PortraitEquivalenceRequest
 
@@ -49,6 +50,27 @@ object EUPersonalID {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val nameAtBirthGroup = DocumentAttributeGroup(
+            identifier = "name_at_birth",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME_AT_BIRTH),
+            icon = Icon.PERSON
+        )
+        val placeOfBirthGroup = DocumentAttributeGroup(
+            identifier = "place_of_birth",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_PLACE_OF_BIRTH),
+            icon = Icon.PLACE
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_EU_PERSONAL_ID))
             .addMdocDocumentType(EUPID_DOCTYPE)
             .setSupportsPortraitImageEquivalence(EUPID_NAMESPACE, "portrait")
@@ -62,7 +84,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PERSON,
                 sampleValueMdoc = SampleData.FAMILY_NAME.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.FAMILY_NAME)
+                sampleValueJson = JsonPrimitive(SampleData.FAMILY_NAME),
+                group = nameGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -73,7 +96,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PERSON,
                 sampleValueMdoc = SampleData.GIVEN_NAME.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.GIVEN_NAME)
+                sampleValueJson = JsonPrimitive(SampleData.GIVEN_NAME),
+                group = nameGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.Date,
@@ -97,7 +121,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PERSON,
                 sampleValueMdoc = SampleData.FAMILY_NAME_BIRTH.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.FAMILY_NAME_BIRTH)
+                sampleValueJson = JsonPrimitive(SampleData.FAMILY_NAME_BIRTH),
+                group = nameAtBirthGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -109,7 +134,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PERSON,
                 sampleValueMdoc = SampleData.GIVEN_NAME_BIRTH.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.GIVEN_NAME_BIRTH)
+                sampleValueJson = JsonPrimitive(SampleData.GIVEN_NAME_BIRTH),
+                group = nameAtBirthGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.ComplexType,
@@ -136,7 +162,8 @@ object EUPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_ATTRIBUTE_COUNTRY_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_COUNTRY_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_COUNTRY)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_COUNTRY),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -144,7 +171,8 @@ object EUPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_ATTRIBUTE_STATE_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_STATE_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_STATE)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_STATE),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -152,7 +180,8 @@ object EUPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_ATTRIBUTE_CITY_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_CITY_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_CITY)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_CITY),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.ComplexType,
@@ -180,7 +209,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_ADDRESS.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_ADDRESS)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_ADDRESS),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -192,7 +222,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_COUNTRY.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_COUNTRY)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_COUNTRY),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -204,7 +235,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_STATE.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_STATE)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_STATE),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -216,7 +248,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_CITY.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_CITY)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_CITY),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -228,7 +261,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_POSTAL_CODE.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -240,7 +274,8 @@ object EUPersonalID {
                 mdocNamespace = EUPID_NAMESPACE,
                 icon = Icon.PLACE,
                 sampleValueMdoc = SampleData.RESIDENT_STREET.toDataItem(),
-                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_STREET)
+                sampleValueJson = JsonPrimitive(SampleData.RESIDENT_STREET),
+                group = residentialAddressGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -248,7 +283,8 @@ object EUPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_ATTRIBUTE_RESIDENT_HOUSE_NUMBER),
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_RESIDENT_HOUSE_NUMBER),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.RESIDENT_HOUSE_NUMBER)
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_HOUSE_NUMBER),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),

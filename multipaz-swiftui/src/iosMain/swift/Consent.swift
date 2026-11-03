@@ -16,43 +16,50 @@ public typealias ClassifyRiskSwiftFn = (
     _ purposes: Set<PresentmentPurpose>
 ) -> ConsentRiskAssessment
 
-private func getIconName(claim: Claim) -> String {
-    if let attribute = claim.attribute {
-        switch attribute.icon {
-        case .person: return "person"
-        case .today: return "calendar.badge.plus"
-        case .dateRange: return "calendar"
-        case .calendarClock: return "calendar"
-        case .accountBalance: return "building.columns"
-        case .numbers: return "number"
-        case .accountBox: return "person.crop.circle"
-        case .directionsCar: return "car"
-        case .language: return "globe"
-        case .emergency: return "staroflife"
-        case .place: return "mappin.and.ellipse"
-        case .signature: return "signature"
-        case .militaryTech: return "star.circle"
-        case .stars: return "star.circle"
-        case .face: return "face.smiling"
-        case .fingerprint: return "touchid"
-        case .eyeTracking: return "eye"
-        case .airportShuttle: return "bus"
-        case .panoramaWideAngle: return "pano"
-        case .image: return "photo"
-        case .locationCity: return "building.2"
-        case .directions: return "arrow.trianglehead.turn.up.right.diamond"
-        case .house: return "house"
-        case .flag: return "flag"
-        case .apartment: return "building.2"
-        case .languageJapaneseKana: return "character.bubble"
-        case .globe: return "globe"
-        case .phone: return "phone"
-        case .badge: return "person.crop.circle"
-        case .email: return "envelope"
-        case .none: return "person"
-        }
+private func getIconName(icon: Icon?) -> String {
+    switch icon {
+    case .person: return "person"
+    case .today: return "calendar.badge.plus"
+    case .dateRange: return "calendar"
+    case .calendarClock: return "calendar"
+    case .accountBalance: return "building.columns"
+    case .numbers: return "number"
+    case .accountBox: return "person.crop.circle"
+    case .directionsCar: return "car"
+    case .language: return "globe"
+    case .emergency: return "staroflife"
+    case .place: return "mappin.and.ellipse"
+    case .signature: return "signature"
+    case .militaryTech: return "star.circle"
+    case .stars: return "star.circle"
+    case .face: return "face.smiling"
+    case .fingerprint: return "touchid"
+    case .eyeTracking: return "eye"
+    case .airportShuttle: return "bus"
+    case .panoramaWideAngle: return "pano"
+    case .image: return "photo"
+    case .locationCity: return "building.2"
+    case .directions: return "arrow.trianglehead.turn.up.right.diamond"
+    case .house: return "house"
+    case .flag: return "flag"
+    case .apartment: return "building.2"
+    case .languageJapaneseKana: return "character.bubble"
+    case .globe: return "globe"
+    case .phone: return "phone"
+    case .badge: return "person.crop.circle"
+    case .email: return "envelope"
+    case .none: return "person"
     }
-    return "person"
+}
+
+private func getIconName(claim: Claim) -> String {
+    return getIconName(icon: claim.attribute?.icon)
+}
+
+private struct DisplayClaim {
+    let displayName: String
+    let icon: Icon?
+    let sensitivity: DocumentAttributeSensitivity
 }
 
 private extension Array where Element == Claim {
@@ -63,15 +70,50 @@ private extension Array where Element == Claim {
             return sensA > sensB
         }
     }
+}
 
-    func salientClaims() -> [Claim] {
+private extension Array where Element == DisplayClaim {
+    func salientClaims() -> [DisplayClaim] {
         let filtered = self.filter { claim in
-            let sensitivity = claim.attribute?.sensitivity
+            let sensitivity = claim.sensitivity
             return sensitivity != DocumentAttributeSensitivity.issuer &&
                 sensitivity != DocumentAttributeSensitivity.validity
         }
         return filtered.isEmpty ? self : filtered
     }
+}
+
+private func collapseClaimsForDisplay(_ claims: [Claim]) -> [DisplayClaim] {
+    var groupCounts: [String: Int] = [:]
+    for claim in claims {
+        guard let group = claim.attribute?.group else { continue }
+        groupCounts[group.identifier, default: 0] += 1
+    }
+    var emittedGroups: Set<String> = []
+    var result: [DisplayClaim] = []
+    for claim in claims {
+        if let group = claim.attribute?.group,
+           (groupCounts[group.identifier] ?? 0) >= Int(group.minClaimsToGroup) {
+            if emittedGroups.insert(group.identifier).inserted {
+                result.append(
+                    DisplayClaim(
+                        displayName: group.displayName,
+                        icon: group.icon,
+                        sensitivity: group.sensitivity
+                    )
+                )
+            }
+        } else {
+            result.append(
+                DisplayClaim(
+                    displayName: claim.displayName,
+                    icon: claim.attribute?.icon,
+                    sensitivity: claim.attribute?.sensitivity ?? DocumentAttributeSensitivity.pii
+                )
+            )
+        }
+    }
+    return result.sorted { $0.sensitivity.ordinal > $1.sensitivity.ordinal }
 }
 
 private extension PresentmentCredentialMatch {
@@ -97,6 +139,7 @@ private struct ClaimSection {
     let encryptionTargetCertificationChain: X509CertChain?
     let encryptionTargetTrustMetadata: TrustMetadata?
     let claims: [Claim]
+    let displayClaims: [DisplayClaim]
 }
 
 private struct DocumentMatchGroup {
@@ -214,7 +257,8 @@ private func buildClaimSections(_ groupMatches: [PresentmentCredentialMatch]) ->
                     encryptionRequested: recipient.encryptionRequested,
                     encryptionTargetCertificationChain: recipient.encryptionTargetCertificationChain,
                     encryptionTargetTrustMetadata: recipient.encryptionTargetTrustMetadata,
-                    claims: notStoredClaims
+                    claims: notStoredClaims,
+                    displayClaims: collapseClaimsForDisplay(notStoredClaims)
                 )
             )
         }
@@ -225,7 +269,8 @@ private func buildClaimSections(_ groupMatches: [PresentmentCredentialMatch]) ->
                     encryptionRequested: recipient.encryptionRequested,
                     encryptionTargetCertificationChain: recipient.encryptionTargetCertificationChain,
                     encryptionTargetTrustMetadata: recipient.encryptionTargetTrustMetadata,
-                    claims: storedClaims
+                    claims: storedClaims,
+                    displayClaims: collapseClaimsForDisplay(storedClaims)
                 )
             )
         }
@@ -234,23 +279,23 @@ private func buildClaimSections(_ groupMatches: [PresentmentCredentialMatch]) ->
 }
 
 private enum ClaimsGridCell {
-    case claim(Claim)
+    case claim(DisplayClaim)
     case more(Int)
     case viewDetails
 }
 
 private struct ClaimsGridView: View {
-    let allClaims: [Claim]
+    let allClaims: [DisplayClaim]
     let onViewDetailsClicked: (() -> Void)?
 
-    init(allClaims: [Claim], onViewDetailsClicked: (() -> Void)? = nil) {
+    init(allClaims: [DisplayClaim], onViewDetailsClicked: (() -> Void)? = nil) {
         self.allClaims = allClaims
         self.onViewDetailsClicked = onViewDetailsClicked
     }
 
     var body: some View {
         let salient = allClaims.salientClaims()
-        let (visibleClaims, hiddenCount): ([Claim], Int) = {
+        let (visibleClaims, hiddenCount): ([DisplayClaim], Int) = {
             if allClaims.count - salient.count == 1 {
                 return (allClaims, 0)
             } else {
@@ -278,7 +323,7 @@ private struct ClaimsGridView: View {
                 switch cells[idx] {
                 case .claim(let claim):
                     HStack(spacing: 8) {
-                        Image(systemName: getIconName(claim: claim))
+                        Image(systemName: getIconName(icon: claim.icon))
                             .imageScale(.small)
                         Text(claim.displayName)
                             .font(.subheadline)
@@ -2590,7 +2635,7 @@ private struct UseCaseSection: View {
                                             .multilineTextAlignment(.leading)
                                             .fixedSize(horizontal: false, vertical: true)
                                         ClaimsGridView(
-                                            allClaims: section.claims,
+                                            allClaims: section.displayClaims,
                                             onViewDetailsClicked: isLastSection ? onViewDetails : nil
                                         )
                                     }

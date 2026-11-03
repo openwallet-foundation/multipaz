@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "年满18周岁 + 照片一致性",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "年满18周岁 + (照片 或 照片一致性)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "年满18周岁 + 照片一致性",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "年满18周岁 + (人像或人像等效)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "年满18周岁 + (人像或人像等效)",
+  "group_name": "姓名",
+  "group_alias_name": "别名",
+  "group_name_at_birth": "出生姓名",
+  "group_name_initials": "姓名首字母",
+  "group_residential_address": "居住地址",
+  "group_place_of_birth": "出生地",
+  "group_date_of_birth": "出生日期",
+  "group_passport_data": "护照数据"
 }

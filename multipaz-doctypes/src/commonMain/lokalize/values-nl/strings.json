@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Leeftijd boven 18 + portretgelijkwaardigheid",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Leeftijd boven 18 + (portret OF portretgelijkwaardigheid)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Leeftijd boven 18 + portretgelijkwaardigheid",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Leeftijd van 18+ + (portret OF portret-equivalent)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Leeftijd van 18+ + (portret OF portret-equivalent)",
+  "group_name": "Naam",
+  "group_alias_name": "Aliasnaam",
+  "group_name_at_birth": "Geboortenaam",
+  "group_name_initials": "Initialen",
+  "group_residential_address": "Woonadres",
+  "group_place_of_birth": "Geboorteplaats",
+  "group_date_of_birth": "Geboortedatum",
+  "group_passport_data": "Paspoortgegevens"
 }

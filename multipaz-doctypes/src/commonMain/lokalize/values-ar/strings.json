@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "العمر فوق 18 + معادلة صورة شخصية",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "العمر فوق 18 + (صورة شخصية أو معادلة صورة شخصية)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "العمر فوق 18 + معادلة صورة شخصية",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "العمر فوق 18 + (صورة شخصية أو ما يعادلها)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "العمر فوق 18 + (صورة شخصية أو ما يعادلها)",
+  "group_name": "الاسم",
+  "group_alias_name": "الاسم المستعار",
+  "group_name_at_birth": "الاسم عند الولادة",
+  "group_name_initials": "الأحرف الأولى من الاسم",
+  "group_residential_address": "عنوان السكن",
+  "group_place_of_birth": "مكان الميلاد",
+  "group_date_of_birth": "تاريخ الميلاد",
+  "group_passport_data": "بيانات جواز السفر"
 }

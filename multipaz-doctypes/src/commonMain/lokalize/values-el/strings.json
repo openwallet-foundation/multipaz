@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Ηλικία άνω των 18 + ισοδυναμία πορτρέτου",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Ηλικία άνω των 18 + (πορτρέτο Ή ισοδυναμία πορτρέτου)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Ηλικία άνω των 18 + ισοδυναμία πορτρέτου",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Ηλικία άνω των 18 + (πορτρέτο Ή ισοδύναμο πορτρέτου)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Ηλικία άνω των 18 + (πορτρέτο Ή ισοδύναμο πορτρέτου)",
+  "group_name": "Όνομα",
+  "group_alias_name": "Ψευδώνυμο",
+  "group_name_at_birth": "Όνομα κατά τη γέννηση",
+  "group_name_initials": "Αρχικά ονόματος",
+  "group_residential_address": "Διεύθυνση κατοικίας",
+  "group_place_of_birth": "Τόπος γέννησης",
+  "group_date_of_birth": "Ημερομηνία γέννησης",
+  "group_passport_data": "Δεδομένα διαβατηρίου"
 }

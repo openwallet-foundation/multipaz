@@ -26,6 +26,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
@@ -50,6 +51,22 @@ object DrivingLicense {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val aliasNameGroup = DocumentAttributeGroup(
+            identifier = "alias_name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_ALIAS_NAME),
+            icon = Icon.PERSON
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_DRIVING_LICENSE))
             .addMdocDocumentType(MDL_DOCTYPE)
             .setSupportsPortraitImageEquivalence(MDL_NAMESPACE, "portrait")
@@ -64,7 +81,8 @@ object DrivingLicense {
                 mandatory = true,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.FAMILY_NAME.toDataItem()
+                sampleValue = SampleData.FAMILY_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -74,7 +92,8 @@ object DrivingLicense {
                 mandatory = true,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.GIVEN_NAME.toDataItem()
+                sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Date,
@@ -289,7 +308,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
+                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Date,
@@ -451,7 +471,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_CITY.toDataItem()
+                sampleValue = SampleData.RESIDENT_CITY.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -461,7 +482,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_STATE.toDataItem()
+                sampleValue = SampleData.RESIDENT_STATE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -471,7 +493,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+                sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -481,7 +504,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_COUNTRY.toDataItem()
+                sampleValue = SampleData.RESIDENT_COUNTRY.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -491,7 +515,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.FAMILY_NAME_NATIONAL_CHARACTER.toDataItem()
+                sampleValue = SampleData.FAMILY_NAME_NATIONAL_CHARACTER.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -501,7 +526,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.GIVEN_NAMES_NATIONAL_CHARACTER.toDataItem()
+                sampleValue = SampleData.GIVEN_NAMES_NATIONAL_CHARACTER.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Picture,
@@ -531,7 +557,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "Jr III".toDataItem()
+                sampleValue = "Jr III".toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.IntegerOptions(
@@ -578,7 +605,8 @@ object DrivingLicense {
                 mandatory = true,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "N".toDataItem()
+                sampleValue = "N".toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.StringOptions(
@@ -595,7 +623,8 @@ object DrivingLicense {
                 mandatory = true,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "N".toDataItem()
+                sampleValue = "N".toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -605,7 +634,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "Musstermensch".toDataItem()
+                sampleValue = "Musstermensch".toDataItem(),
+                group = aliasNameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -615,7 +645,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "Erica".toDataItem()
+                sampleValue = "Erica".toDataItem(),
+                group = aliasNameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
@@ -625,7 +656,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = "Ica".toDataItem()
+                sampleValue = "Ica".toDataItem(),
+                group = aliasNameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.IntegerOptions(
@@ -729,7 +761,8 @@ object DrivingLicense {
                 mandatory = false,
                 mdocNamespace = AAMVA_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "037".toDataItem()
+                sampleValue = "037".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Date,

@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Idade acima de 18 + equivalência de retrato",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Idade acima de 18 + (retrato OU equivalência de retrato)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Idade acima de 18 + equivalência de retrato",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Idade superior a 18 anos + (retrato OU equivalência de retrato)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Idade superior a 18 anos + (retrato OU equivalência de retrato)",
+  "group_name": "Nome",
+  "group_alias_name": "Nome alternativo",
+  "group_name_at_birth": "Nome de nascimento",
+  "group_name_initials": "Iniciais do nome",
+  "group_residential_address": "Endereço residencial",
+  "group_place_of_birth": "Local de nascimento",
+  "group_date_of_birth": "Data de nascimento",
+  "group_passport_data": "Dados do passaporte"
 }

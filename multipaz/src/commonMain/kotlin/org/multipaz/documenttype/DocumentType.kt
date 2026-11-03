@@ -163,6 +163,7 @@ class DocumentType private constructor(
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
          * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addAttribute(
             type: DocumentAttributeType,
@@ -175,6 +176,7 @@ class DocumentType private constructor(
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
             sampleValueJson: JsonElement? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             addMdocAttribute(
                 type = type,
@@ -185,7 +187,8 @@ class DocumentType private constructor(
                 mdocNamespace = mdocNamespace,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValueMdoc
+                sampleValue = sampleValueMdoc,
+                group = group
             )
             addJsonAttribute(
                 type = type,
@@ -194,7 +197,8 @@ class DocumentType private constructor(
                 description = description,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValueJson
+                sampleValue = sampleValueJson,
+                group = group
             )
         }
 
@@ -213,6 +217,7 @@ class DocumentType private constructor(
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
          * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addAttribute(
             type: DocumentAttributeType,
@@ -226,6 +231,7 @@ class DocumentType private constructor(
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
             sampleValueJson: JsonElement? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             addMdocAttribute(
                 type = type,
@@ -236,7 +242,8 @@ class DocumentType private constructor(
                 mdocNamespace = mdocNamespace,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValueMdoc
+                sampleValue = sampleValueMdoc,
+                group = group
             )
             addJsonAttribute(
                 type = type,
@@ -245,7 +252,8 @@ class DocumentType private constructor(
                 description = description,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValueJson
+                sampleValue = sampleValueJson,
+                group = group
             )
         }
 
@@ -261,6 +269,7 @@ class DocumentType private constructor(
          * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addMdocAttribute(
             type: DocumentAttributeType,
@@ -271,7 +280,8 @@ class DocumentType private constructor(
             mdocNamespace: String,
             sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
-            sampleValue: DataItem? = null
+            sampleValue: DataItem? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             mdocBuilder?.addDataElement(
                 namespace = mdocNamespace,
@@ -282,7 +292,8 @@ class DocumentType private constructor(
                 mandatory = mandatory,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValue
+                sampleValue = sampleValue,
+                group = group
             ) ?: throw Exception("The ISO mdoc Document Type was not initialized")
         }
 
@@ -297,6 +308,7 @@ class DocumentType private constructor(
          * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addJsonAttribute(
             type: DocumentAttributeType,
@@ -305,7 +317,8 @@ class DocumentType private constructor(
             description: String,
             sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
-            sampleValue: JsonElement? = null
+            sampleValue: JsonElement? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             val splits = identifier.split(".")
             when (splits.size ) {
@@ -317,7 +330,8 @@ class DocumentType private constructor(
                         description = description,
                         sensitivity = sensitivity,
                         icon = icon,
-                        sampleValue = sampleValue
+                        sampleValue = sampleValue,
+                        group = group
                     ) ?: throw Exception("The JSON Document Type was not initialized")
                 }
                 2 -> {
@@ -329,7 +343,8 @@ class DocumentType private constructor(
                         description = description,
                         sensitivity = sensitivity,
                         icon = icon,
-                        sampleValue = sampleValue
+                        sampleValue = sampleValue,
+                        group = group
                     ) ?: throw Exception("The JSON Document Type was not initialized")
                 }
                 else -> throw Exception("Invalid identifier $identifier, can have at max one period")

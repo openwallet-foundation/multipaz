@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Věk nad 18 let + portrétní shoda",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Věk nad 18 let + (portrét NEBO portrétní shoda)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Věk nad 18 let + portrétní shoda",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Věk nad 18 let + (portrét NEBO ekvivalent portrétu)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Věk nad 18 let + (portrét NEBO ekvivalent portrétu)",
+  "group_name": "Jméno",
+  "group_alias_name": "Alternativní jméno",
+  "group_name_at_birth": "Rodné jméno",
+  "group_name_initials": "Iniciály jména",
+  "group_residential_address": "Adresa bydliště",
+  "group_place_of_birth": "Místo narození",
+  "group_date_of_birth": "Datum narození",
+  "group_passport_data": "Údaje z pasu"
 }

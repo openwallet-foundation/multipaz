@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "อายุ 18 ปีขึ้นไป + การยืนยันใบหน้า",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "อายุ 18 ปีขึ้นไป + (ใบหน้า หรือ การยืนยันใบหน้า)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "อายุ 18 ปีขึ้นไป + การยืนยันใบหน้า",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "อายุ 18 ปีขึ้นไป + (ภาพเหมือน หรือ ภาพเหมือนที่เทียบเท่า)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "อายุ 18 ปีขึ้นไป + (ภาพเหมือน หรือ ภาพเหมือนที่เทียบเท่า)",
+  "group_name": "ชื่อ",
+  "group_alias_name": "ชื่ออื่น",
+  "group_name_at_birth": "ชื่อแรกเกิด",
+  "group_name_initials": "ชื่อย่อ",
+  "group_residential_address": "ที่อยู่ปัจจุบัน",
+  "group_place_of_birth": "สถานที่เกิด",
+  "group_date_of_birth": "วันเกิด",
+  "group_passport_data": "ข้อมูลหนังสือเดินทาง"
 }

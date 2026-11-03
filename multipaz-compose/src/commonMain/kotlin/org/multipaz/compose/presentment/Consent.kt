@@ -1888,7 +1888,7 @@ private fun UseCaseViewer(
                                         )
                                         SharedStoredText(text = headerText)
                                         ClaimsGridView(
-                                            allClaims = section.claims,
+                                            allClaims = section.displayClaims,
                                             useColumns = true,
                                             onViewDetailsClicked = if (isLastSection) onViewDetails else null,
                                         )
@@ -2865,18 +2865,17 @@ private fun ButtonSection(
     }
 }
 
-private fun List<Claim>.salientClaims(): List<Claim> {
+private fun List<DisplayClaim>.salientClaims(): List<DisplayClaim> {
     val filtered = filter {
-        val sensitivity = it.attribute?.sensitivity
-        sensitivity != DocumentAttributeSensitivity.ISSUER &&
-            sensitivity != DocumentAttributeSensitivity.VALIDITY
+        it.sensitivity != DocumentAttributeSensitivity.ISSUER &&
+            it.sensitivity != DocumentAttributeSensitivity.VALIDITY
     }
     return filtered.ifEmpty { this }
 }
 
 @Composable
 private fun ClaimsGridView(
-    allClaims: List<Claim>,
+    allClaims: List<DisplayClaim>,
     useColumns: Boolean,
     onViewDetailsClicked: (() -> Unit)? = null,
 ) {
@@ -2993,14 +2992,14 @@ private fun ClaimsMoreView(
 @Composable
 private fun ClaimsView(
     modifier: Modifier,
-    claim: Claim,
+    claim: DisplayClaim,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
         modifier = modifier.padding(4.dp),
     ) {
-        val icon = claim.attribute?.icon ?: Icon.PERSON
+        val icon = claim.icon ?: Icon.PERSON
         Icon(
             imageVector = icon.getOutlinedImageVector(),
             contentDescription = stringResource(Res.string.credential_presentment_data_element_icon_description)

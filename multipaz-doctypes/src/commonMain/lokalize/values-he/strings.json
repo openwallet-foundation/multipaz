@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "גיל 18+ + שקילות דיוקן",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "גיל 18+ + (דיוקן או שקילות דיוקן)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "גיל 18+ + שקילות דיוקן",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "גיל 18+ (פורטרט או שווה ערך לפורטרט)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "גיל 18+ (פורטרט או שווה ערך לפורטרט)",
+  "group_name": "שם",
+  "group_alias_name": "שם נוסף",
+  "group_name_at_birth": "שם בלידה",
+  "group_name_initials": "ראשי תיבות של השם",
+  "group_residential_address": "כתובת מגורים",
+  "group_place_of_birth": "מקום לידה",
+  "group_date_of_birth": "תאריך לידה",
+  "group_passport_data": "נתוני דרכון"
 }

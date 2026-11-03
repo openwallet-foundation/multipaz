@@ -6,6 +6,7 @@ import org.multipaz.documenttype.Icon
 import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.utopia.localization.LocalizedStrings
 import org.multipaz.utopia.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.knowntypes.SampleData
 
 /**
@@ -20,6 +21,12 @@ object UtopiaNaturalization {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_NATURALIZATION_CERTIFICATE))
             .addJsonDocumentType(type = VCT, keyBound = true)
             .addJsonAttribute(
@@ -28,7 +35,8 @@ object UtopiaNaturalization {
                 displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_FAMILY_NAME),
                 description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_FAMILY_NAME),
                 icon = Icon.PERSON,
-                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME)
+                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME),
+                group = nameGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -36,7 +44,8 @@ object UtopiaNaturalization {
                 displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_GIVEN_NAMES),
                 description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_GIVEN_NAMES),
                 icon = Icon.PERSON,
-                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME)
+                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME),
+                group = nameGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.Date,

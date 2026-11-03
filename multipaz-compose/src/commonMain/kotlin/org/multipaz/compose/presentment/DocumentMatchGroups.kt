@@ -5,10 +5,21 @@ import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.Icon
 import org.multipaz.presentment.PresentmentCredentialMatch
 import org.multipaz.presentment.PresentmentUseCase
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.trustmanagement.TrustMetadata
+
+/**
+ * A claim entry displayed in the consent prompt's claims grid, either representing an individual
+ * [Claim] or a collapsed [org.multipaz.documenttype.DocumentAttributeGroup] pseudo-claim.
+ */
+internal data class DisplayClaim(
+    val displayName: String,
+    val icon: Icon?,
+    val sensitivity: DocumentAttributeSensitivity,
+)
 
 /**
  * One section of requested claims within a [DocumentMatchGroup], sharing the same recipient
@@ -20,6 +31,7 @@ internal data class ClaimSection(
     val encryptionTargetCertificationChain: X509CertChain?,
     val encryptionTargetTrustMetadata: TrustMetadata?,
     val claims: List<Claim>,
+    val displayClaims: List<DisplayClaim> = collapseClaimsForDisplay(claims),
 )
 
 /**
@@ -43,6 +55,39 @@ private data class RecipientBucketKey(
 
 internal fun List<Claim>.sortedBySensitivity(): List<Claim> =
     sortedByDescending { (it.attribute?.sensitivity ?: DocumentAttributeSensitivity.PII).ordinal }
+
+internal fun collapseClaimsForDisplay(claims: List<Claim>): List<DisplayClaim> {
+    val groupCounts = mutableMapOf<String, Int>()
+    for (claim in claims) {
+        val group = claim.attribute?.group ?: continue
+        groupCounts[group.identifier] = (groupCounts[group.identifier] ?: 0) + 1
+    }
+    val emittedGroups = mutableSetOf<String>()
+    val result = mutableListOf<DisplayClaim>()
+    for (claim in claims) {
+        val group = claim.attribute?.group
+        if (group != null && (groupCounts[group.identifier] ?: 0) >= group.minClaimsToGroup) {
+            if (emittedGroups.add(group.identifier)) {
+                result.add(
+                    DisplayClaim(
+                        displayName = group.displayName,
+                        icon = group.icon,
+                        sensitivity = group.sensitivity,
+                    )
+                )
+            }
+        } else {
+            result.add(
+                DisplayClaim(
+                    displayName = claim.displayName,
+                    icon = claim.attribute?.icon,
+                    sensitivity = claim.attribute?.sensitivity ?: DocumentAttributeSensitivity.PII,
+                )
+            )
+        }
+    }
+    return result.sortedByDescending { it.sensitivity.ordinal }
+}
 
 /**
  * Groups [matches] from a single use-case solution by [Document.identifier], preserving first-seen

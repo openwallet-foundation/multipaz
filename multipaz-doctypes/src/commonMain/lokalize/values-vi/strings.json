@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Tuổi trên 18 + ảnh chân dung tương đương",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Tuổi trên 18 + (ảnh chân dung HOẶC ảnh chân dung tương đương)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Tuổi trên 18 + ảnh chân dung tương đương",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Tuổi trên 18 + (ảnh chân dung HOẶC tương đương ảnh chân dung)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Tuổi trên 18 + (ảnh chân dung HOẶC tương đương ảnh chân dung)",
+  "group_name": "Tên",
+  "group_alias_name": "Tên gọi khác",
+  "group_name_at_birth": "Tên khai sinh",
+  "group_name_initials": "Chữ cái đầu của tên",
+  "group_residential_address": "Địa chỉ cư trú",
+  "group_place_of_birth": "Nơi sinh",
+  "group_date_of_birth": "Ngày sinh",
+  "group_passport_data": "Dữ liệu hộ chiếu"
 }

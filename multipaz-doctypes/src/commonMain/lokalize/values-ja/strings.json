@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "18歳以上 + 顔写真同等物",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "18歳以上 + (顔写真 または 顔写真同等物)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "18歳以上 + 顔写真同等物",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18歳以上＋（顔写真または顔写真に相当するもの）"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18歳以上＋（顔写真または顔写真に相当するもの）",
+  "group_name": "氏名",
+  "group_alias_name": "通称名",
+  "group_name_at_birth": "出生時の氏名",
+  "group_name_initials": "氏名のイニシャル",
+  "group_residential_address": "居住地住所",
+  "group_place_of_birth": "出生地",
+  "group_date_of_birth": "生年月日",
+  "group_passport_data": "パスポートデータ"
 }

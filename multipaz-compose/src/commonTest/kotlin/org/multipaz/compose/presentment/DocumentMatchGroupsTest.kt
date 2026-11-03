@@ -13,6 +13,7 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.Icon
@@ -138,6 +139,7 @@ class DocumentMatchGroupsTest {
         displayName: String,
         intentToRetain: Boolean = false,
         sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
+        group: DocumentAttributeGroup? = null,
     ): Pair<MdocRequestedClaim, MdocClaim> {
         val req = MdocRequestedClaim(
             docType = DrivingLicense.MDL_DOCTYPE,
@@ -156,6 +158,7 @@ class DocumentMatchGroupsTest {
             parentAttribute = null,
             embeddedAttributes = emptyList(),
             sensitivity = sensitivity,
+            group = group,
         )
         val claim = MdocClaim(
             displayName = displayName,
@@ -424,5 +427,62 @@ class DocumentMatchGroupsTest {
             solutions = listOf(PresentmentUseCaseSolution(listOf(matchA, matchB))),
         )
         assertEquals(emptySet(), switchableDocumentIds(singleMandatory, sol0Groups))
+    }
+
+    @Test
+    fun collapseClaimsForDisplayGroupsCompositeAndSingleThresholdClaims() = runTest {
+        val creds = createTestCredentials()
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = "Name",
+            icon = Icon.PERSON,
+            minClaimsToGroup = 2,
+        )
+        val passportDataGroup = DocumentAttributeGroup(
+            identifier = "passport_data",
+            displayName = "Passport data",
+            icon = Icon.LANGUAGE,
+            minClaimsToGroup = 1,
+        )
+
+        // When both given_name and family_name are requested, they collapse into "Name",
+        // while raw section.claims still preserves the individual claims for DocumentDetailsPage.
+        val matchBothNames = PresentmentCredentialMatch(
+            credential = creds.credDocA1,
+            claims = mapOf(
+                makeClaimPair("given_name", "Given names", group = nameGroup),
+                makeClaimPair("family_name", "Family name", group = nameGroup),
+                makeClaimPair("sod", "eMRTD SOD", group = passportDataGroup),
+            ),
+            source = creds.source,
+            transactionData = emptyList(),
+        )
+        val sectionBoth = groupMatchesByDocument(listOf(matchBothNames)).single().claimSections.single()
+        assertEquals(
+            listOf("Given names", "Family name", "eMRTD SOD"),
+            sectionBoth.claims.map { it.displayName },
+        )
+        assertEquals(
+            listOf(
+                DisplayClaim("Name", Icon.PERSON, DocumentAttributeSensitivity.PII),
+                DisplayClaim("Passport data", Icon.LANGUAGE, DocumentAttributeSensitivity.PII),
+            ),
+            sectionBoth.displayClaims,
+        )
+
+        // When only 1 claim from a minClaimsToGroup = 2 group is requested, it remains uncollapsed.
+        val matchSingleName = PresentmentCredentialMatch(
+            credential = creds.credDocA1,
+            claims = mapOf(
+                makeClaimPair("given_name", "Given names", group = nameGroup),
+            ),
+            source = creds.source,
+            transactionData = emptyList(),
+        )
+        val sectionSingle = groupMatchesByDocument(listOf(matchSingleName)).single().claimSections.single()
+        assertEquals(
+            listOf(DisplayClaim("Given names", Icon.PERSON, DocumentAttributeSensitivity.PII)),
+            sectionSingle.displayClaims,
+        )
     }
 }
