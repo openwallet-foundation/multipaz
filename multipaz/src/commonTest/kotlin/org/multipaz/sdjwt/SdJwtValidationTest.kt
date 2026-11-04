@@ -17,6 +17,7 @@ import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.util.toBase64Url
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -177,9 +178,11 @@ class SdJwtValidationTest {
         val orphanStr = "[\"${orphanDisclosure.salt}\",\"unreferenced_claim\",\"value\"]".encodeToByteArray().toBase64Url()
         val tamperedCompact = sdJwt.compactSerialization + orphanStr + "~"
         val result = SdJwt.validate(tamperedCompact, now = now)
-        assertFalse(result.hasErrors)
-        assertTrue(result.hasWarnings)
-        assertTrue(result.warnings.any { it.message.contains("Orphaned disclosure") })
+        assertTrue(result.hasErrors)
+        assertTrue(result.errors.any { it.message.contains("Orphaned disclosure") })
+        assertFailsWith<IllegalArgumentException> {
+            SdJwt.fromCompactSerialization(tamperedCompact).verify(issuerKey.publicKey)
+        }
     }
 
     @Test

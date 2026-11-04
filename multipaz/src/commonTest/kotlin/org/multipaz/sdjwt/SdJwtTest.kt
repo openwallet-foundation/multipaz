@@ -3082,4 +3082,22 @@ class SdJwtTest {
         assertEquals("user_42", otherSdJwt.subject)
     }
 
+    @Test
+    fun testRejectUnreferencedAndDuplicateDisclosures() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
+        val extraDisclosure = """["2GLC42sKQveCfGfryNRN9w","extra_claim","tampered"]"""
+            .encodeToByteArray()
+            .toBase64Url()
+        val withUnreferenced = sdJwt.compactSerialization + extraDisclosure + "~"
+        assertFailsWith<IllegalArgumentException> {
+            SdJwt.fromCompactSerialization(withUnreferenced).verify(sdJwtRfcIssuerKey)
+        }
+
+        val duplicateDisclosure = sdJwt.disclosures.first()
+        val withDuplicate = sdJwt.compactSerialization + duplicateDisclosure + "~"
+        assertFailsWith<IllegalArgumentException> {
+            SdJwt.fromCompactSerialization(withDuplicate)
+        }
+    }
+
 }
