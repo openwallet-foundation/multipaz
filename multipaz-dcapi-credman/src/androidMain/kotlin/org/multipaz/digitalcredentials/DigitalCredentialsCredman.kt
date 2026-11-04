@@ -64,9 +64,11 @@ private const val CREDMAN_MATCHER_SHA256_KEY = "org.multipaz.CredmanMatcherSha25
 private fun getAttributeForJsonClaim(
     documentTypeRepository: DocumentTypeRepository,
     vct: String,
+    otherVcts: List<String>,
     path: JsonArray,
 ): DocumentAttribute? {
     val documentType = documentTypeRepository.getDocumentTypeForJson(vct)
+        ?: otherVcts.firstNotNullOfOrNull { documentTypeRepository.getDocumentTypeForJson(it) }
     if (documentType != null) {
         val flattenedPath = path
             .filter { it is JsonPrimitive && it.isString }
@@ -367,6 +369,11 @@ private suspend fun exportSdJwtVcCredential(
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)
+            if (credential.otherVcts.isNotEmpty()) {
+                putCborArray("otherVcts") {
+                    credential.otherVcts.forEach { add(it) }
+                }
+            }
             if (issuerIdentifiers.isNotEmpty()) {
                 putCborArray("issuerIdentifiers") {
                     issuerIdentifiers.forEach { add(it) }
@@ -380,8 +387,9 @@ private suspend fun exportSdJwtVcCredential(
             if (omitClaims) {
                 put("omitClaims", true)
                 putCborMap("claimDisplayNames") {
-                    val jsonDocumentType = documentTypeRepository
-                        .getDocumentTypeForJson(credential.vct)?.jsonDocumentType
+                    val jsonDocumentType = (documentTypeRepository.getDocumentTypeForJson(credential.vct)
+                        ?: credential.otherVcts.firstNotNullOfOrNull { documentTypeRepository.getDocumentTypeForJson(it) })
+                        ?.jsonDocumentType
                     jsonDocumentType?.claims?.forEach { (claimName, attribute) ->
                         exportJsonAttributeDisplayNames(claimName, attribute)
                     }
@@ -401,6 +409,7 @@ private suspend fun exportSdJwtVcCredential(
                         val claimAttr = getAttributeForJsonClaim(
                             documentTypeRepository,
                             credential.vct,
+                            credential.otherVcts,
                             claim.claimPath,
                         )
                         val claimDisplayName = claimAttr?.displayName ?: claimName

@@ -67,8 +67,8 @@ public func promptModelRequestConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     presentmentData: PresentmentData,
-    preselectedDocuments: [Document],
-    onDocumentsInFocus: @escaping ([Document]) -> Void,
+    preselectedDocuments: [MultipazDocument],
+    onDocumentsInFocus: @escaping ([MultipazDocument]) -> Void,
     transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
     requesterHistory: (any RequesterHistory)? = nil
 ) async throws -> PresentmentSelection? {

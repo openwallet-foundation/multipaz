@@ -157,7 +157,10 @@ data class DcqlQuery(
                         val document =
                             presentmentSource.documentStore.lookupDocument(documentId) ?: continue
                         document.getCertifiedCredentials().find {
-                            it is SdJwtVcCredential && credentialQuery.vctValues!!.contains(it.vct)
+                            it is SdJwtVcCredential && (
+                                credentialQuery.vctValues!!.contains(it.vct) ||
+                                    it.otherVcts.any { otherVct -> credentialQuery.vctValues.contains(otherVct) }
+                            )
                         }?.let { ret.add(it) }
                     }
                     ret

@@ -186,6 +186,46 @@ func getPresentmentSource() async -> PresentmentSource {
 struct DocumentProviderExtension: IdentityDocumentProvider {
     
     var body: some IdentityDocumentRequestScene {
+#if compiler(>=6.4)
+        // Prefer the raw request if we're on iOS 27.3 or later since
+        // this will allow us to handle generic transaction data. It
+        // does mean that iOS will always show a wallet selector
+        // *even* if we're the only wallet who can handle a request.
+        //
+        if #available(iOS 27.3, *) {
+            ISO18013MobileDocumentRawRequestScene { context in
+                RequestAuthorizationView(
+                    requestContext: context,
+                    getPresentmentSource: {
+                        initializeLogging()
+                        return await getPresentmentSource()
+                    }
+                )
+            }
+        }
+        if #available(iOS 27.3, *) {
+            OpenID4VPRawRequestScene { context in
+                RequestAuthorizationView(
+                    requestContext: context,
+                    getPresentmentSource: {
+                        initializeLogging()
+                        return await getPresentmentSource()
+                    }
+                )
+            }
+        }
+        if #unavailable(iOS 27.3) {
+            ISO18013MobileDocumentRequestScene { context in
+                RequestAuthorizationView(
+                    requestContext: context,
+                    getPresentmentSource: {
+                        initializeLogging()
+                        return await getPresentmentSource()
+                    }
+                )
+            }
+        }
+#else
         ISO18013MobileDocumentRequestScene { context in
             RequestAuthorizationView(
                 requestContext: context,
@@ -195,6 +235,7 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
                 }
             )
         }
+#endif
     }
 
     func performRegistrationUpdates() async {

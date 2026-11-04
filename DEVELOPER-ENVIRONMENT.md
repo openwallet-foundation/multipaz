@@ -25,15 +25,21 @@ in Android Studio. If you're just making a library change in common code it's li
 enough to just rely on unit tests or the Android version of TestApp for testing. In other
 words there is rarely a need to use Xcode at all.
 
-Download Xcode and set Xcode 26.1.1 as the default
+Download Xcode (version 26.x or later) and set it as the default:
 
 ```shell
 sudo xcode-select -s /Applications/Xcode.app   # set default xcode
 
 xcode-select -p   # check whether set succesfully or not
 
-/Applications/Xcode.app   # expected to return 
+/Applications/Xcode.app/Contents/Developer   # expected to return
 ```
+
+Note that while Xcode 26.x can be used to build the project, **Xcode 27.3 or later** is required
+if you need OpenID4VP Digital Credentials support on iOS. The codebase currently uses temporary
+`#if compiler(>=6.4)` compile-time checks around the iOS 27 SDK APIs to maintain compatibility
+with Xcode 26.x; these checks will be removed once Multipaz has a hard dependency on Xcode 27.3
+or later.
 
 To build TestApp in Xcode you need local Apple signing settings in
 `samples/testapp/iosApp/DeveloperConfig.xcconfig`. This file is intentionally

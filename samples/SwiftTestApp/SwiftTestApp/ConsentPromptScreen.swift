@@ -1217,7 +1217,7 @@ extension DocumentStore {
         validFrom: Date,
         validUntil: Date,
         dsKey: AsymmetricKey
-    ) async throws -> Document {
+    ) async throws -> MultipazDocument {
         
         let document = try await self.createDocument(
             displayName: displayName,
@@ -1238,7 +1238,8 @@ extension DocumentStore {
             domain: "sdjwt",
             secureArea: secureArea,
             vct: vct,
-            createKeySettings: SoftwareCreateKeySettings.Builder().build()
+            createKeySettings: SoftwareCreateKeySettings.Builder().build(),
+            otherVcts: []
         )
 
         let nonSdClaims: [String: Any] = [

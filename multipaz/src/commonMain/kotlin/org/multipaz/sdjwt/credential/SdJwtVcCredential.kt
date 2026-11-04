@@ -33,6 +33,15 @@ interface SdJwtVcCredential {
     val vct: String
 
     /**
+     * Other Verifiable Credential Types (VCTs) that can be used for matching in addition to [vct].
+     *
+     * For example, a national PID credential with [vct] set to `urn:eudi:pid:de:1` may extend the
+     * base PID credential type `urn:eudi:pid:1` and include `urn:eudi:pid:1` in [otherVcts] so
+     * that requests for `urn:eudi:pid:1` also match this credential.
+     */
+    val otherVcts: List<String>
+
+    /**
      * The issuer-provided data associated with the credential, see [Credential.issuerProvidedData].
      *
      * This data must be the encoded string containing the SD-JWT VC. The SD-JWT VC itself is by
@@ -75,6 +84,7 @@ interface SdJwtVcCredential {
 
         // By design, we only include the top-level claims.
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
+            ?: otherVcts.firstNotNullOfOrNull { documentTypeRepository?.getDocumentTypeForJson(it) }
         for ((claimName, claimValue) in processedJwt) {
             val attribute = dt?.jsonDocumentType?.claims?.get(claimName)
             val claimPath = buildJsonArray { add(claimName) }

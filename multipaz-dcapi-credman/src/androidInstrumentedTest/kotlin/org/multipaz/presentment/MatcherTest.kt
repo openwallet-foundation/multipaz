@@ -608,6 +608,85 @@ class MatcherTest {
         )
     }
 
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_otherVcts() = runTest {
+        val dcql =
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "pid",
+                      "format": "dc+sd-jwt",
+                      "meta": {
+                        "vct_values": [
+                          "urn:eudi:pid:1"
+                        ]
+                      },
+                      "claims": [
+                        {
+                          "path": [
+                            "given_name"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent().trim()
+        val openid4vpResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "DE PID",
+                    vct = "urn:eudi:pid:de:1",
+                    otherVcts = listOf(EUPersonalID.EUPID_VCT),
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    )
+                )
+            },
+            dcql = dcql,
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __DE PID__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            openid4vpResult
+        )
+        val iso18013Result = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "DE PID",
+                    vct = "urn:eudi:pid:de:1",
+                    otherVcts = listOf(EUPersonalID.EUPID_VCT),
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    )
+                )
+            },
+            dcql = dcql,
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __DE PID__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            iso18013Result
+        )
+    }
+
     /**
      * A DCQL query may name no claims at all. Credential Manager does not show an entry without a
      * field and then tells the user their info wasn't found, so the entry gets one field saying no

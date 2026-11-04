@@ -19,20 +19,20 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Select Xcode 26
+      - name: Select Xcode 27
         run: |
           XCODE_PATH=""
-          # Check for Xcode 26
-          XCODE_26=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | tail -n 1)
-          if [ -n "$XCODE_26" ]; then
-            XCODE_PATH="$XCODE_26/Contents/Developer"
+          # Check for Xcode 27
+          XCODE_27=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | tail -n 1)
+          if [ -n "$XCODE_27" ]; then
+            XCODE_PATH="$XCODE_27/Contents/Developer"
           fi
           
           if [ -d "$XCODE_PATH" ]; then
             echo "Selecting Xcode: $XCODE_PATH"
             sudo xcode-select -s "$XCODE_PATH"
           else
-            echo "Xcode 26 not found, using default Xcode version"
+            echo "Xcode 27 not found, using default Xcode version"
           fi
           xcodebuild -version
 

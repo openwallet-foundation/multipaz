@@ -248,6 +248,69 @@ class MatcherDcqlQueryExecuteTest {
     }
 
     @Test
+    fun test_OpenID4VP_sdjwt_otherVcts() = runTest {
+        val dcqlExecutionDump = testExecuteDcqlQuery(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "DE PID",
+                    vct = "urn:eudi:pid:de:1",
+                    otherVcts = listOf(EUPersonalID.EUPID_VCT),
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    )
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                DcqlResponse
+                  CredentialSet
+                    optional false
+                    options
+                      option
+                        members
+                          member
+                            matches
+                              match
+                                credential DE PID
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given names
+                                    value Erika
+            """.trimIndent().trim() + "\n",
+            dcqlExecutionDump
+        )
+    }
+
+    @Test
     fun test_mDL_or_PID() = runTest {
         val dcqlExecutionDump = testExecuteDcqlQuery(
             version = OpenID4VP.Version.DRAFT_29,

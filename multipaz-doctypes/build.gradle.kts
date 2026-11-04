@@ -18,6 +18,7 @@ plugins {
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+val xcodeDeveloperPath: String by rootProject.extra
 
 val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
 
@@ -67,7 +68,7 @@ kotlin {
         }
         it.binaries.all {
             linkerOpts(
-                "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
+                "-L${xcodeDeveloperPath}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                 "-Wl,-rpath,/usr/lib/swift",
                 "-lsqlite3"
             )

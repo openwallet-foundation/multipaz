@@ -818,25 +818,37 @@ import AuthenticationServices
 
 @objc public class DocRegInfo: NSObject {
     @objc public let documentIdentifier: String
-    @objc public let documentType: String
+    @objc public let credentialFormat: String
+    @objc public let documentTypes: [String]
     @objc public let supportedAuthorityKeyIdentifiers: [Data]
     @objc public let supportedIssuerAuthorityKeyIdentifiers: [Data]
     @objc public let invalidationDate: Date?
 
     @objc public init(
         documentIdentifier: String,
-        documentType: String,
+        credentialFormat: String,
+        documentTypes: [String],
         supportedAuthorityKeyIdentifiers: [Data],
         supportedIssuerAuthorityKeyIdentifiers: [Data],
         invalidationDate: Date?
     ) {
         self.documentIdentifier = documentIdentifier
-        self.documentType = documentType
+        self.credentialFormat = credentialFormat
+        self.documentTypes = documentTypes
         self.supportedAuthorityKeyIdentifiers = supportedAuthorityKeyIdentifiers
         self.supportedIssuerAuthorityKeyIdentifiers = supportedIssuerAuthorityKeyIdentifiers
         self.invalidationDate = invalidationDate
     }
 }
+
+    @objc(docRegIsOpenID4VPSupported) public class func docRegIsOpenID4VPSupported() -> Bool {
+#if compiler(>=6.4)
+        if #available(iOS 27.3, *) {
+            return true
+        }
+#endif
+        return false
+    }
 
     @objc(docRegAdd::::::) public class func docRegAdd(
         documentIdentifier: String,
@@ -845,10 +857,22 @@ import AuthenticationServices
         supportedIssuerAuthorityKeyIdentifiers: [Data],
         invalidationDate: Date?
     ) async throws -> Bool {
+#if compiler(>=6.4)
+        if #available(iOS 27.0, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+            let registration = MobileDocumentRegistration(
+                mobileDocumentType: documentType,
+                supportedIssuerKeyIdentifiers: supportedIssuerAuthorityKeyIdentifiers,
+                supportedAuthorityKeyIdentifiers: supportedAuthorityKeyIdentifiers,
+                documentIdentifier: documentIdentifier,
+                invalidationDate: invalidationDate
+            )
+            try await store.addRegistration(registration)
+            return true
+        }
+#endif
         if #available(iOS 26.0, *) {
             let store = IdentityDocumentProviderRegistrationStore()
-
-            // TODO: pass supportedIssuerAuthorityKeyIdentifiers once we update to depend on the iOS 27 SDK or later.
             let registration = MobileDocumentRegistration(
                 mobileDocumentType: documentType,
                 supportedAuthorityKeyIdentifiers: supportedAuthorityKeyIdentifiers,
@@ -858,6 +882,30 @@ import AuthenticationServices
             try await store.addRegistration(registration)
             return true
         }
+        return false
+    }
+
+    @objc(docRegAddVerifiableCredential::::::) public class func docRegAddVerifiableCredential(
+        documentIdentifier: String,
+        verifiableCredentialTypes: [String],
+        supportedAuthorityKeyIdentifiers: [Data],
+        supportedIssuerAuthorityKeyIdentifiers: [Data],
+        invalidationDate: Date?
+    ) async throws -> Bool {
+#if compiler(>=6.4)
+        if #available(iOS 27.3, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+            let registration = VerifiableCredentialRegistration(
+                verifiableCredentialTypes: verifiableCredentialTypes,
+                supportedIssuerKeyIdentifiers: supportedIssuerAuthorityKeyIdentifiers,
+                supportedAuthorityKeyIdentifiers: supportedAuthorityKeyIdentifiers,
+                documentIdentifier: documentIdentifier,
+                invalidationDate: invalidationDate
+            )
+            try await store.addRegistration(registration)
+            return true
+        }
+#endif
         return false
     }
 
@@ -882,15 +930,37 @@ import AuthenticationServices
             var ret: [DocRegInfo] = []
             for registration in registrations {
                 if let mobileDocReg = registration as? MobileDocumentRegistration {
-                    // TODO: read supportedIssuerAuthorityKeyIdentifiers once we update to depend on the iOS 27 SDK or later.
+                    let issuerKeyIds: [Data]
+#if compiler(>=6.4)
+                    if #available(iOS 27.0, *) {
+                        issuerKeyIds = mobileDocReg.supportedIssuerKeyIdentifiers
+                    } else {
+                        issuerKeyIds = []
+                    }
+#else
+                    issuerKeyIds = []
+#endif
                     ret.append(DocRegInfo(
                         documentIdentifier: mobileDocReg.documentIdentifier,
-                        documentType: mobileDocReg.mobileDocumentType,
+                        credentialFormat: "mso_mdoc",
+                        documentTypes: [mobileDocReg.mobileDocumentType],
                         supportedAuthorityKeyIdentifiers: mobileDocReg.supportedAuthorityKeyIdentifiers,
-                        supportedIssuerAuthorityKeyIdentifiers: [],
+                        supportedIssuerAuthorityKeyIdentifiers: issuerKeyIds,
                         invalidationDate: mobileDocReg.invalidationDate
                     ))
                 }
+#if compiler(>=6.4)
+                if #available(iOS 27.3, *), let vcReg = registration as? VerifiableCredentialRegistration {
+                    ret.append(DocRegInfo(
+                        documentIdentifier: vcReg.documentIdentifier,
+                        credentialFormat: "dc+sd-jwt",
+                        documentTypes: vcReg.verifiableCredentialTypes,
+                        supportedAuthorityKeyIdentifiers: vcReg.supportedAuthorityKeyIdentifiers,
+                        supportedIssuerAuthorityKeyIdentifiers: vcReg.supportedIssuerKeyIdentifiers,
+                        invalidationDate: vcReg.invalidationDate
+                    ))
+                }
+#endif
             }
             return ret
         }

@@ -36,6 +36,8 @@ import org.multipaz.tags.Tags
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.concurrent.Volatile
+import kotlin.experimental.ExperimentalObjCName
+import kotlin.native.ObjCName
 
 /**
  * This class represents a document created in [DocumentStore].
@@ -90,6 +92,8 @@ import kotlin.concurrent.Volatile
  * @param store the [DocumentStore] that holds this [Document].
  * @param identifier the persistent id of the document which can be used with [DocumentStore].
  */
+@OptIn(ExperimentalObjCName::class)
+@ObjCName("MultipazDocument")
 class Document internal constructor(
     internal val store: DocumentStore,
     val identifier: String,

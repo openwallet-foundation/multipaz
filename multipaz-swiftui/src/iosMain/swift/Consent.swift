@@ -771,7 +771,7 @@ private struct RelyingPartyInfoContent: View {
 }
 
 private struct CredentialViewerRow: View {
-    let document: Document
+    let document: MultipazDocument
     let showChevron: Bool
     let onChevronClicked: () -> Void
 
@@ -1199,13 +1199,13 @@ public struct Consent: View {
     let presentmentData: PresentmentData
     let requester: Requester
     let trustedRequesterIdentity: TrustedRequesterIdentity?
-    let preselectedDocuments: [Document]
+    let preselectedDocuments: [MultipazDocument]
     let transactionDataRendererRepository: TransactionDataRendererRepository?
     let requesterHistory: RequesterHistory?
     let classifyPurposesFn: ClassifyPurposesSwiftFn
     let classifyRiskFn: ClassifyRiskSwiftFn
     let testController: ConsentTestController?
-    let onDocumentsInFocus: ((_ documents: [Document]) -> Void)?
+    let onDocumentsInFocus: ((_ documents: [MultipazDocument]) -> Void)?
     let onConfirm: (_: PresentmentSelection) -> Void
     let onCancel: () -> Void
 
@@ -1213,7 +1213,7 @@ public struct Consent: View {
         presentmentData: PresentmentData,
         requester: Requester,
         trustedRequesterIdentity: TrustedRequesterIdentity?,
-        preselectedDocuments: [Document] = [],
+        preselectedDocuments: [MultipazDocument] = [],
         maxHeight: CGFloat = .infinity,
         transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
         requesterHistory: RequesterHistory? = nil,
@@ -1235,7 +1235,7 @@ public struct Consent: View {
             )
         },
         testController: ConsentTestController? = nil,
-        onDocumentsInFocus: ((_ documents: [Document]) -> Void)? = nil,
+        onDocumentsInFocus: ((_ documents: [MultipazDocument]) -> Void)? = nil,
         onConfirm: @escaping (_: PresentmentSelection) -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -1266,8 +1266,8 @@ public struct Consent: View {
     @State private var transactionDetails: TransactionDetailsTarget? = nil
     @State private var selectedCertChain: X509CertChain? = nil
 
-    private func getDocumentsForSelections(_ selections: [Int]) -> [Document] {
-        var documents: [Document] = []
+    private func getDocumentsForSelections(_ selections: [Int]) -> [MultipazDocument] {
+        var documents: [MultipazDocument] = []
         for (useCaseIndex, solutionIndex) in selections.enumerated() {
             if useCaseIndex < presentmentData.useCases.count && solutionIndex >= 0 {
                 let useCase = presentmentData.useCases[useCaseIndex]
@@ -1285,7 +1285,7 @@ public struct Consent: View {
         return documents
     }
 
-    private func getInitialSelections(preselectedDocuments: [Document]) -> [Int] {
+    private func getInitialSelections(preselectedDocuments: [MultipazDocument]) -> [Int] {
         var result: [Int] = []
         for i in 0..<presentmentData.useCases.count {
             let useCase = presentmentData.useCases[i]

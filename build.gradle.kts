@@ -48,6 +48,15 @@ private fun runCommand(args: List<String>): String {
     return stdout.toString().trim()
 }
 
+val xcodeDeveloperPath: String by extra {
+    if (System.getProperty("os.name").lowercase().contains("mac")) {
+        System.getenv("DEVELOPER_DIR")?.takeIf { it.isNotBlank() }
+            ?: runCommand(listOf("xcode-select", "-p"))
+    } else {
+        "/Applications/Xcode.app/Contents/Developer"
+    }
+}
+
 // Generate a project version meeting the requirements of Semantic Versioning 2.0.0
 // according to https://semver.org/
 //
