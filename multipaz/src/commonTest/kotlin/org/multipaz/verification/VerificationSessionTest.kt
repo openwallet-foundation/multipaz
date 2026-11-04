@@ -825,6 +825,167 @@ class VerificationSessionTest {
         }
     }
 
+    @Test
+    fun testDcqlQueryConstraintsEnforced() = runTest {
+        setup()
+        val now = Clock.System.now()
+        val nonce = "test-nonce-dcql"
+        val holderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderKey = AsymmetricKey.anonymous(holderPrivateKey, Algorithm.ESP256)
+        val basicUserPresentation = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject { put("given_name", "Erika") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", "urn:example:basic-user")
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        ).present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ).compactSerialization
+
+        val adminDcql = """
+            {
+              "credentials": [{
+                "id": "administrator",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["urn:example:administrator"] },
+                "claims": [{ "path": ["admin_status"] }]
+              }]
+            }
+        """.trimIndent()
+        val adminRequest = """
+            {
+              "client_id": "$CLIENT_ID",
+              "nonce": "$nonce",
+              "response_uri": "https://$DNS_NAME/post",
+              "dcql_query": $adminDcql
+            }
+        """.trimIndent()
+
+        // 1. Type (vct) substitution under a privileged query ID is rejected
+        val substitutedRecord = OpenID4VPPresentmentRecord(
+            vpToken = buildJsonObject { putJsonArray("administrator") { add(basicUserPresentation) } }.toString(),
+            vpRequest = adminRequest,
+            mdocSessionTranscript = null,
+        )
+        assertFailsWith<IllegalStateException> {
+            substitutedRecord.verify(atTime = now)
+        }
+
+        // 2. Correct VCT but missing requested claim ("admin_status") is rejected
+        val missingClaimPresentation = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject { put("given_name", "Erika") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", "urn:example:administrator")
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        ).present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("administrator") { add(missingClaimPresentation) } }.toString(),
+                vpRequest = adminRequest,
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+
+        // 3. Empty vp_token ("{}") or unknown query ID is rejected
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = "{}",
+                vpRequest = adminRequest,
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("unknown_id") { add(basicUserPresentation) } }.toString(),
+                vpRequest = adminRequest,
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+
+        // 4. Multiple presentations when multiple=false is rejected, while multiple=true succeeds
+        val validAdminPresentation = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject { put("admin_status", "super") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", "urn:example:administrator")
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        ).present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject {
+                    putJsonArray("administrator") {
+                        add(validAdminPresentation)
+                        add(validAdminPresentation)
+                    }
+                }.toString(),
+                vpRequest = adminRequest,
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+
+        val multiAdminDcql = """
+            {
+              "credentials": [{
+                "id": "administrator",
+                "format": "dc+sd-jwt",
+                "multiple": true,
+                "meta": { "vct_values": ["urn:example:administrator"] },
+                "claims": [{ "path": ["admin_status"] }]
+              }]
+            }
+        """.trimIndent()
+        val multiVerified = OpenID4VPPresentmentRecord(
+            vpToken = buildJsonObject {
+                putJsonArray("administrator") {
+                    add(validAdminPresentation)
+                    add(validAdminPresentation)
+                }
+            }.toString(),
+            vpRequest = """
+                {
+                  "client_id": "$CLIENT_ID",
+                  "nonce": "$nonce",
+                  "response_uri": "https://$DNS_NAME/post",
+                  "dcql_query": $multiAdminDcql
+                }
+            """.trimIndent(),
+            mdocSessionTranscript = null,
+        ).verify(atTime = now)
+        assertEquals(2, multiVerified.size)
+        val processedMulti = DcqlProcessedResponse(multiAdminDcql, multiVerified)
+        assertEquals(setOf("administrator"), processedMulti.multipleQueryIds)
+        assertEquals(2, processedMulti.credentialLists["administrator"]?.size)
+    }
+
     private companion object {
         const val ORIGIN = "https://verifier.multipaz.org"
         const val DNS_NAME = "verifier.multipaz.org"
