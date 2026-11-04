@@ -162,11 +162,18 @@ suspend fun uriSchemePresentment(
         reqJwt = reqJwtBytes.decodeToString()
         val info = JsonWebSignature.getInfo(reqJwt)
         val requestObject = info.claimsSet
+        val requestClientId = requestObject["client_id"]?.jsonPrimitive?.content
+            ?: throw IllegalArgumentException("'client_id' is not given in the request")
+        val launchClientId = parameters["client_id"]
+        require(launchClientId == null || launchClientId == requestClientId) {
+            "Launch URI client_id '$launchClientId' does not match Request Object client_id '$requestClientId'"
+        }
         val requesterIdentity = OpenID4VPRequesterIdentity.fromSignedRequest(
             certChain = info.x5c!!,
-            clientId = requestObject["client_id"]!!.jsonPrimitive.content
+            clientId = requestClientId
         )
         JsonWebSignature.verify(reqJwt, requesterIdentity.certChain.certificates.first().publicKey)
+        requesterIdentity.certChain.validate()
         check(info.type == "oauth-authz-req+jwt") {
             "Expected JWT type oauth-authz-req+jwt, got ${info.type}"
         }

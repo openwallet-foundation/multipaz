@@ -270,4 +270,71 @@ class UriSchemeQueryParsingTest {
         }
         assertTrue(!responseSent, "Expected no response to be sent")
     }
+
+    @Test
+    fun launchClientIdMismatchingRequestObjectClientIdIsRejected() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.provisionStandardDocuments()
+        val requestUri = "https://verifier.example/oid4vp/request/abc"
+        val responseUri = "https://verifier.example/oid4vp/response/abc"
+        val requestJwt = createSignedRequestJwt(
+            harness = harness,
+            responseUri = responseUri,
+            clientId = "x509_san_dns:verifier.example"
+        )
+        val factory = mockEngineFactory { request ->
+            when (request.url.toString()) {
+                requestUri -> respond(
+                    content = requestJwt,
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/oauth-authz-req+jwt")
+                )
+                else -> error("Unexpected URL: ${request.url}")
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            uriSchemePresentment(
+                source = harness.presentmentSource,
+                uri = "openid4vp://?client_id=x509_hash%3AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                        "&request_uri=https%3A%2F%2Fverifier.example%2Foid4vp%2Frequest%2Fabc",
+                appId = null,
+                origin = "https://verifier.example",
+                httpClientEngineFactory = factory
+            )
+        }
+    }
+
+    @Test
+    fun x509HashClientIdMismatchingLeafCertificateIsRejected() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.provisionStandardDocuments()
+        val requestUri = "https://verifier.example/oid4vp/request/abc"
+        val responseUri = "https://verifier.example/oid4vp/response/abc"
+        val wrongHashClientId = "x509_hash:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        val requestJwt = createSignedRequestJwt(
+            harness = harness,
+            responseUri = responseUri,
+            clientId = wrongHashClientId
+        )
+        val factory = mockEngineFactory { request ->
+            when (request.url.toString()) {
+                requestUri -> respond(
+                    content = requestJwt,
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/oauth-authz-req+jwt")
+                )
+                else -> error("Unexpected URL: ${request.url}")
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            uriSchemePresentment(
+                source = harness.presentmentSource,
+                uri = "openid4vp://?client_id=x509_hash%3AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                        "&request_uri=https%3A%2F%2Fverifier.example%2Foid4vp%2Frequest%2Fabc",
+                appId = null,
+                origin = "https://verifier.example",
+                httpClientEngineFactory = factory
+            )
+        }
+    }
 }
