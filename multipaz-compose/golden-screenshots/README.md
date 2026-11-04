@@ -33,35 +33,40 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Compound Solution: ID + Boarding Pass in a Single Use-Case](#mdl_and_boarding_pass_single_use_case)
   - [Alternative Credential Types: mDL OR Boarding Pass](#mdl_or_boarding_pass)
   - [Mandatory mDL + Optional Loyalty Card (Opting Out)](#mandatory_mdl_and_optional_loyalty)
-- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#4-claimlevel-encryption-intermediary-encryption-target)** (`04_encryption` — 2 scenarios)
+- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#4-claimlevel-encryption-intermediary-encryption-target)** (`04_encryption` — 3 scenarios)
   - [Trusted Intermediary + Trusted Encryption Target (Transient)](#trusted_requester_trusted_target)
+  - [Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)](#trusted_requester_trusted_target_multiple_choices)
   - [Trusted Intermediary + Trusted Encryption Target (Retained)](#trusted_requester_trusted_target_retained)
-- **[5. Warning (Yellow) — Untrusted Over-the-Internet & App-to-App Requests for Non-PII](#5-warning-yellow-untrusted-overtheinternet-apptoapp-requests-for-nonpii)** (`05_warning_untrusted` — 2 scenarios)
+- **[5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII](#5-warning-yellow-unverified-requesters-unverified-encryption-targets-proximity-anonymous-pii)** (`05_warning_untrusted` — 7 scenarios)
   - [Unverified Website Requesting Age Over 18](#unverified_website_age_over_18)
   - [Unverified Local Android App Requesting Age Over 21](#unverified_app_age_over_21)
-- **[6. High-Risk (Red) & Cool-Off Safeguards](#6-highrisk-red-cooloff-safeguards)** (`06_high_risk` — 7 scenarios)
-  - [Untrusted Requester Asking for Personally Identifiable Information (PII)](#untrusted_requester_pii_requested)
+  - [Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII)](#untrusted_requester_pii_requested)
+  - [Trusted Intermediary + Unverified Encryption Target (With Certificate)](#trusted_requester_untrusted_encryption_target)
+  - [Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target](#anonymous_requester_trusted_target)
+  - [Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait](#untrusted_requester_intent_to_retain)
+  - [Unverified Requester (With Certificate) Attaching Transaction Data](#untrusted_requester_transaction_data)
+- **[6. High-Risk (Red) & Cool-Off Safeguards](#6-highrisk-red-cooloff-safeguards)** (`06_high_risk` — 6 scenarios)
+  - [Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII)](#anonymous_website_pii_requested)
   - [Trusted Requester Making an Over-Broad / Unusual Request (Scroll + Cool-Off)](#trusted_requester_unusual_overbroad)
   - [Trusted Requester with Mismatched ISO 18013-5 Purpose Hint](#trusted_requester_mismatched_purpose_hint)
-  - [Trusted Intermediary + Untrusted Encryption Target](#trusted_requester_untrusted_encryption_target)
-  - [Anonymous Intermediary Kiosk + Trusted Encryption Target](#anonymous_requester_trusted_target)
-  - [Untrusted Over-the-Internet Requester Asking to Retain Portrait (intentToRetain = true)](#untrusted_requester_intent_to_retain)
-  - [Untrusted Requester Attaching Transaction Data](#untrusted_requester_transaction_data)
+  - [Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain)](#trusted_requester_anonymous_encryption_target)
+  - [Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait](#anonymous_website_intent_to_retain)
+  - [Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data](#anonymous_website_transaction_data)
 - **[7. Custom Risk & Purpose Classification Callbacks](#7-custom-risk-purpose-classification-callbacks)** (`07_custom_policy` — 2 scenarios)
   - [Custom Policy: Elevate Trusted RP Data Retention to WARNING](#custom_warning_for_trusted_rp_retaining_data)
   - [Custom Policy: Allowlist First-Party Verifier App as NORMAL](#custom_normal_for_allowlisted_first_party_app)
 - **[8. Dark Theme Coverage](#8-dark-theme-coverage)** (`08_dark_mode` — 4 scenarios)
   - [Dark Mode — Normal Age Verification](#normal_age_verification)
   - [Dark Mode — Warning (Untrusted Over-the-Internet Requester)](#warning_untrusted_website)
-  - [Dark Mode — High-Risk (Untrusted Reader Requesting PII)](#high_risk_pii_requested)
+  - [Dark Mode — High-Risk (Anonymous Website Requesting PII)](#high_risk_pii_requested)
   - [Dark Mode — Requester Info Page with Encryption Target](#requester_info_with_encryption_target)
 - **[9. Localization — Danish & Right-to-Left (Arabic)](#9-localization-danish-righttoleft-arabic)** (`09_localization` — 6 scenarios)
   - [Danish (da-DK) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain](#danish_normal_with_subpages)
   - [Danish (da-DK) — Payment Transaction with Tip Selector](#danish_payment_with_tip)
-  - [Danish (da-DK) — High-Risk Untrusted Reader Requesting PII & Retention](#danish_high_risk_pii_and_retention)
+  - [Danish (da-DK) — High-Risk Anonymous Website Requesting PII & Retention](#danish_high_risk_pii_and_retention)
   - [Arabic RTL (ar-SA) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain](#arabic_rtl_normal_with_subpages)
   - [Arabic RTL (ar-SA) — Payment Transaction with Tip Selector](#arabic_rtl_payment_with_tip)
-  - [Arabic RTL (ar-SA) — High-Risk Untrusted Reader with RTL Cool-Off Progress Bar](#arabic_rtl_high_risk_pii_and_retention)
+  - [Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar](#arabic_rtl_high_risk_pii_and_retention)
 
 ---
 
@@ -195,7 +200,7 @@ A cinema usher scanner verifies a keyless IETF SD-JWT VC movie ticket for 'Retur
 
 - **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
 - **Protocol / Credentials:** mDL (age_over_21, portrait)
-- **Risk Assessment:** `NORMAL`
+- **Risk Assessment:** `NORMAL (UNTRUSTED_REQUESTER)`
 
 A proximity reader presents a valid X.509 certificate chain whose root CA is not in the wallet's trust list, requesting only non-PII (age_over_21 and portrait). Because the user is in physical proximity and the relying party is already free to capture their likeness, no warning is shown (unlike over-the-Internet or app-to-app requests, which trigger a warning). The Requester Info page still shows 'Unverified requester' with the inspectable certificate chain.
 
@@ -208,9 +213,9 @@ A proximity reader presents a valid X.509 certificate chain whose root CA is not
 
 ### `anonymous_proximity_reader_age_over_21` — Anonymous Proximity Reader Requesting Non-PII (No Reader Certificate)
 
-- **Relying Party:** Unknown Requester — Anonymous Proximity (ISO 18013-5)
+- **Relying Party:** Anonymous Requester — Anonymous Proximity (ISO 18013-5)
 - **Protocol / Credentials:** mDL (age_over_21, portrait)
-- **Risk Assessment:** `NORMAL`
+- **Risk Assessment:** `NORMAL (ANONYMOUS_REQUESTER)`
 
 A proximity reader provides no reader authentication certificate at all while requesting only non-PII (age_over_21 and portrait). Because the user is in physical proximity and the relying party is already free to capture their likeness, no warning is shown (whereas an over-the-Internet or app-to-app request would show a warning). The Requester Info page displays 'Anonymous requester'.
 
@@ -299,7 +304,7 @@ Multi-credential requests exercising compound solutions, alternative credential 
 - **Protocol / Credentials:** (mDL + Boarding Pass) OR (Photo ID + Boarding Pass)
 - **Risk Assessment:** `NORMAL`
 
-A single use-case whose options each pair an identity document with a boarding pass. The chooser displays compound multi-card radio options.
+A single use-case whose options each pair an identity document with a boarding pass. The identity document card renders a chevron while the invariant boarding pass card does not; the chooser displays compound multi-card radio options.
 
 | | `main` — Main prompt (2 credentials in 1 use-case) | `chooser` — Compound solution chooser |
 | :---: | :---: | :---: |
@@ -357,6 +362,21 @@ Utopia Airlines verifies basic identity while forwarding HPKE-encrypted eMRTD da
 | **Compose** | <img src="04_encryption/trusted_requester_trusted_target__main.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Main prompt (plain + encrypted sections)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target__requester_info.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Requester info (requester + encryption target)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target__enc_target_cert_chain.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Transient) - Encryption target certificate chain" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__main.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Main prompt (plain + encrypted sections)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__requester_info.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Requester info (requester + encryption target)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target__enc_target_cert_chain.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Transient) - Encryption target certificate chain" width="260" /> |
 
+<a id="trusted_requester_trusted_target_multiple_choices"></a>
+
+### `trusted_requester_trusted_target_multiple_choices` — Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)
+
+- **Relying Party:** Utopia Airlines -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)
+- **Risk Assessment:** `NORMAL`
+
+When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards each with an inline chevron.
+
+| | `main` — Main prompt (Erika's Photo ID selected for both) | `chooser` — Solution chooser (4 combinations across 2 Photo IDs) | `main_switched` — Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected) |
+| :---: | :---: | :---: | :---: |
+| **Compose** | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__main.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID selected for both)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__chooser.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Solution chooser (4 combinations across 2 Photo IDs)" width="260" /> | <img src="04_encryption/trusted_requester_trusted_target_multiple_choices__main_switched.png" alt="Compose: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__main.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID selected for both)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__chooser.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Solution chooser (4 combinations across 2 Photo IDs)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_multiple_choices__main_switched.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents) - Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)" width="260" /> |
+
 <a id="trusted_requester_trusted_target_retained"></a>
 
 ### `trusted_requester_trusted_target_retained` — Trusted Intermediary + Trusted Encryption Target (Retained)
@@ -374,9 +394,9 @@ Same border-crossing flow with intentToRetain = true, changing the encrypted sec
 
 ---
 
-## 5. Warning (Yellow) — Untrusted Over-the-Internet & App-to-App Requests for Non-PII
+## 5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII
 
-Over-the-Internet and app-to-app relying parties not in any trust list requesting only low-sensitivity non-PII claims (age booleans + portrait, no PII, no retention, no transaction data). Unlike proximity requests (where the user is physically present and the relying party is free to capture their likeness), over-the-Internet and app-to-app requests render a top-anchored yellow warning box without a 5-second cool-off timer.
+Requests triggering ConsentRiskLevel.WARNING, which renders a top-anchored yellow warning box without a 5-second cool-off timer. Includes over-the-Internet and app-to-app requests for non-PII, unverified requesters (who signed with a certificate not in the wallet's trust list) requesting PII, retention, or transaction data, unverified encryption targets with a certificate chain, and anonymous proximity readers requesting PII.
 
 <a id="unverified_website_age_over_18"></a>
 
@@ -386,7 +406,7 @@ Over-the-Internet and app-to-app relying parties not in any trust list requestin
 - **Protocol / Credentials:** mDL (age_over_18, portrait)
 - **Risk Assessment:** `WARNING (UNTRUSTED_REQUESTER)`
 
-An over-the-Internet website origin not in the wallet's trust list requests age_over_18 and portrait. Unlike a proximity request, an over-the-Internet request for non-PII triggers a WARNING: the headline displays the origin URL and the yellow warning box states 'Website is not in a trust list'.
+An over-the-Internet website origin not in the wallet's trust list requests age_over_18 and portrait. Unlike a proximity request, an over-the-Internet request for non-PII triggers a WARNING: the headline displays the origin URL and the yellow warning box states that the website is unknown.
 
 | | `main` — Main prompt (untrusted website warning) | `requester_info` — Requester info (Website origin + client ID) |
 | :---: | :---: | :---: |
@@ -399,35 +419,110 @@ An over-the-Internet website origin not in the wallet's trust list requests age_
 
 - **Relying Party:** Utopia Nightclub Scanner (org.utopia.nightclub.scanner) — App-to-app
 - **Protocol / Credentials:** mDL (age_over_21, portrait)
-- **Risk Assessment:** `WARNING (UNTRUSTED_REQUESTER)`
+- **Risk Assessment:** `WARNING (ANONYMOUS_REQUESTER)`
 
-An app-to-app request from a local Android application not in a trust list requesting age_over_21 and portrait. Unlike a proximity request, an app-to-app request for non-PII triggers a WARNING: the prompt resolves the app name and icon via PackageManager and displays 'Application is not in a trust list'.
+An app-to-app request from a local Android application not in a trust list requesting age_over_21 and portrait. Unlike a proximity request, an app-to-app request for non-PII triggers a WARNING: the prompt resolves the app name and icon via PackageManager and displays an unknown application warning.
 
 | | `main` — Main prompt (untrusted app warning) |
 | :---: | :---: |
 | **Compose** | <img src="05_warning_untrusted/unverified_app_age_over_21__main.png" alt="Compose: Unverified Local Android App Requesting Age Over 21 - Main prompt (untrusted app warning)" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/unverified_app_age_over_21__main.png" alt="SwiftUI: Unverified Local Android App Requesting Age Over 21 - Main prompt (untrusted app warning)" width="260" /> |
 
+<a id="untrusted_requester_pii_requested"></a>
+
+### `untrusted_requester_pii_requested` — Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII)
+
+- **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (given_name, family_name, birth_date, portrait)
+- **Risk Assessment:** `WARNING (UNTRUSTED_REQUESTER, PII_REQUESTED)`
+
+An unverified verifier that signed the request with a certificate not in the wallet's trust list requests PII attributes. Because the verifier presented a certificate chain (or is in physical proximity), this is classified as WARNING rather than HIGH_RISK: a yellow warning box is anchored at the top without a 5-second cool-off timer.
+
+| | `main` — Main prompt (unverified reader requesting PII) | `requester_info` — Requester info ('Unverified requester') |
+| :---: | :---: | :---: |
+| **Compose** | <img src="05_warning_untrusted/untrusted_requester_pii_requested__main.png" alt="Compose: Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII) - Main prompt (unverified reader requesting PII)" width="260" /> | <img src="05_warning_untrusted/untrusted_requester_pii_requested__requester_info.png" alt="Compose: Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII) - Requester info ('Unverified requester')" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/untrusted_requester_pii_requested__main.png" alt="SwiftUI: Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII) - Main prompt (unverified reader requesting PII)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/untrusted_requester_pii_requested__requester_info.png" alt="SwiftUI: Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII) - Requester info ('Unverified requester')" width="260" /> |
+
+<a id="trusted_requester_untrusted_encryption_target"></a>
+
+### `trusted_requester_untrusted_encryption_target` — Trusted Intermediary + Unverified Encryption Target (With Certificate)
+
+- **Relying Party:** Utopia Airlines -> encrypted for Unverified Recipient — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** Photo ID (plain org.iso.23220.2 + encrypted datagroups to unverified certificate)
+- **Risk Assessment:** `WARNING (UNTRUSTED_ENCRYPTION_TARGET)`
+
+Utopia Airlines is trusted, and the encryption recipient for the passport datagroups provided an X.509 certificate chain whose root CA is not in the wallet's trust list. Because the encryption target provided a certificate chain, this is classified as WARNING.
+
+| | `main` — Main prompt (unverified encryption target warning) | `requester_info` — Requester info (verified requester + unverified target) |
+| :---: | :---: | :---: |
+| **Compose** | <img src="05_warning_untrusted/trusted_requester_untrusted_encryption_target__main.png" alt="Compose: Trusted Intermediary + Unverified Encryption Target (With Certificate) - Main prompt (unverified encryption target warning)" width="260" /> | <img src="05_warning_untrusted/trusted_requester_untrusted_encryption_target__requester_info.png" alt="Compose: Trusted Intermediary + Unverified Encryption Target (With Certificate) - Requester info (verified requester + unverified target)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/trusted_requester_untrusted_encryption_target__main.png" alt="SwiftUI: Trusted Intermediary + Unverified Encryption Target (With Certificate) - Main prompt (unverified encryption target warning)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/trusted_requester_untrusted_encryption_target__requester_info.png" alt="SwiftUI: Trusted Intermediary + Unverified Encryption Target (With Certificate) - Requester info (verified requester + unverified target)" width="260" /> |
+
+<a id="anonymous_requester_trusted_target"></a>
+
+### `anonymous_requester_trusted_target` — Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target
+
+- **Relying Party:** Anonymous Kiosk -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** Photo ID (HPKE-encrypted datagroups only)
+- **Risk Assessment:** `WARNING (ANONYMOUS_REQUESTER, PII_REQUESTED)`
+
+An unauthenticated proximity airport kiosk forwards HPKE-encrypted passport datagroups to a verified Utopia Border Protection key. Because this is a proximity request, an anonymous reader requesting PII is classified as WARNING (and a wallet whose threat model accepts an untrusted intermediary forwarding encrypted claims to a trusted target could override classifyRiskFn to classify this as NORMAL).
+
+| | `main` — Main prompt (anonymous proximity kiosk + trusted encryption target) | `requester_info` — Requester info (anonymous requester + verified target) |
+| :---: | :---: | :---: |
+| **Compose** | <img src="05_warning_untrusted/anonymous_requester_trusted_target__main.png" alt="Compose: Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target - Main prompt (anonymous proximity kiosk + trusted encryption target)" width="260" /> | <img src="05_warning_untrusted/anonymous_requester_trusted_target__requester_info.png" alt="Compose: Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target - Requester info (anonymous requester + verified target)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/anonymous_requester_trusted_target__main.png" alt="SwiftUI: Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target - Main prompt (anonymous proximity kiosk + trusted encryption target)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/anonymous_requester_trusted_target__requester_info.png" alt="SwiftUI: Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target - Requester info (anonymous requester + verified target)" width="260" /> |
+
+<a id="untrusted_requester_intent_to_retain"></a>
+
+### `untrusted_requester_intent_to_retain` — Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait
+
+- **Relying Party:** https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)
+- **Protocol / Credentials:** mDL (age_over_21 & portrait with intentToRetain = true)
+- **Risk Assessment:** `WARNING (UNTRUSTED_REQUESTER, INTENT_TO_RETAIN)`
+
+An unverified over-the-Internet website that signed the request with a certificate not in the wallet's trust list requests age_over_21 and portrait with intentToRetain = true, adding the INTENT_TO_RETAIN warning paragraph inside the yellow warning box.
+
+| | `main` — Main prompt (unverified requester retention warning) |
+| :---: | :---: |
+| **Compose** | <img src="05_warning_untrusted/untrusted_requester_intent_to_retain__main.png" alt="Compose: Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait - Main prompt (unverified requester retention warning)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/untrusted_requester_intent_to_retain__main.png" alt="SwiftUI: Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait - Main prompt (unverified requester retention warning)" width="260" /> |
+
+<a id="untrusted_requester_transaction_data"></a>
+
+### `untrusted_requester_transaction_data` — Unverified Requester (With Certificate) Attaching Transaction Data
+
+- **Relying Party:** https://pay.unverified-merchant.example.com — Unverified Over-the-Internet (ISO 18013-7)
+- **Protocol / Credentials:** DigitalPaymentCredential + PaymentTransaction
+- **Risk Assessment:** `WARNING (UNTRUSTED_REQUESTER, TRANSACTION_DATA)`
+
+An unverified website that signed the request with a certificate not in the wallet's trust list attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA at the WARNING level.
+
+| | `main` — Main prompt (unverified requester transaction warning) |
+| :---: | :---: |
+| **Compose** | <img src="05_warning_untrusted/untrusted_requester_transaction_data__main.png" alt="Compose: Unverified Requester (With Certificate) Attaching Transaction Data - Main prompt (unverified requester transaction warning)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/05_warning_untrusted/untrusted_requester_transaction_data__main.png" alt="SwiftUI: Unverified Requester (With Certificate) Attaching Transaction Data - Main prompt (unverified requester transaction warning)" width="260" /> |
+
 ---
 
 ## 6. High-Risk (Red) & Cool-Off Safeguards
 
-Requests triggering ConsentRiskLevel.HIGH_RISK due to untrusted PII/retention/transactions, over-broad/unusual claim combinations, mismatched purpose hints, or untrusted encryption targets. Enforces a 5-second cool-off timer on the Continue button.
+Requests triggering ConsentRiskLevel.HIGH_RISK due to anonymous remote/app requesters asking for PII, retention, or transaction data, over-broad/unusual claim combinations, mismatched purpose hints, or anonymous encryption targets with no certificate chain. Enforces a 5-second cool-off timer on the Continue button.
 
-<a id="untrusted_requester_pii_requested"></a>
+<a id="anonymous_website_pii_requested"></a>
 
-### `untrusted_requester_pii_requested` — Untrusted Requester Asking for Personally Identifiable Information (PII)
+### `anonymous_website_pii_requested` — Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII)
 
-- **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
+- **Relying Party:** https://verify.unknown-portal.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** mDL (given_name, family_name, birth_date, portrait)
-- **Risk Assessment:** `HIGH_RISK (UNTRUSTED_REQUESTER, PII_REQUESTED)`
+- **Risk Assessment:** `HIGH_RISK (ANONYMOUS_REQUESTER, PII_REQUESTED)`
 
-An untrusted verifier requests PII attributes. A red danger box is anchored at the top and the primary button is disabled in the 'Wait' cool-off state for 5 seconds before transitioning to 'Continue'. The user can tap 'More information' to inspect the unverified requester details.
+An anonymous over-the-Internet website (providing no X.509 signature certificate at all) requests PII attributes. A red danger box is anchored at the top and the primary button is disabled in the 'Wait' cool-off state for 5 seconds before transitioning to 'Continue'. The user can tap 'More information' to inspect the anonymous requester details.
 
-| | `main_waiting` — Main prompt ('Wait' cool-off active) | `main_ready` — Main prompt ('Continue' enabled after 5s) | `requester_info` — Requester info ('Unverified requester') |
+| | `main_waiting` — Main prompt ('Wait' cool-off active) | `main_ready` — Main prompt ('Continue' enabled after 5s) | `requester_info` — Requester info ('Anonymous requester') |
 | :---: | :---: | :---: | :---: |
-| **Compose** | <img src="06_high_risk/untrusted_requester_pii_requested__main_waiting.png" alt="Compose: Untrusted Requester Asking for Personally Identifiable Information (PII) - Main prompt ('Wait' cool-off active)" width="260" /> | <img src="06_high_risk/untrusted_requester_pii_requested__main_ready.png" alt="Compose: Untrusted Requester Asking for Personally Identifiable Information (PII) - Main prompt ('Continue' enabled after 5s)" width="260" /> | <img src="06_high_risk/untrusted_requester_pii_requested__requester_info.png" alt="Compose: Untrusted Requester Asking for Personally Identifiable Information (PII) - Requester info ('Unverified requester')" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/untrusted_requester_pii_requested__main_waiting.png" alt="SwiftUI: Untrusted Requester Asking for Personally Identifiable Information (PII) - Main prompt ('Wait' cool-off active)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/untrusted_requester_pii_requested__main_ready.png" alt="SwiftUI: Untrusted Requester Asking for Personally Identifiable Information (PII) - Main prompt ('Continue' enabled after 5s)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/untrusted_requester_pii_requested__requester_info.png" alt="SwiftUI: Untrusted Requester Asking for Personally Identifiable Information (PII) - Requester info ('Unverified requester')" width="260" /> |
+| **Compose** | <img src="06_high_risk/anonymous_website_pii_requested__main_waiting.png" alt="Compose: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Main prompt ('Wait' cool-off active)" width="260" /> | <img src="06_high_risk/anonymous_website_pii_requested__main_ready.png" alt="Compose: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Main prompt ('Continue' enabled after 5s)" width="260" /> | <img src="06_high_risk/anonymous_website_pii_requested__requester_info.png" alt="Compose: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Requester info ('Anonymous requester')" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_website_pii_requested__main_waiting.png" alt="SwiftUI: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Main prompt ('Wait' cool-off active)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_website_pii_requested__main_ready.png" alt="SwiftUI: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Main prompt ('Continue' enabled after 5s)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_website_pii_requested__requester_info.png" alt="SwiftUI: Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII) - Requester info ('Anonymous requester')" width="260" /> |
 
 <a id="trusted_requester_unusual_overbroad"></a>
 
@@ -459,65 +554,50 @@ The reader declares the ISO 18013-5 purposeHint for Age Verification (1) in Devi
 | **Compose** | <img src="06_high_risk/trusted_requester_mismatched_purpose_hint__main.png" alt="Compose: Trusted Requester with Mismatched ISO 18013-5 Purpose Hint - Main prompt (mismatched purpose hint danger)" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/trusted_requester_mismatched_purpose_hint__main.png" alt="SwiftUI: Trusted Requester with Mismatched ISO 18013-5 Purpose Hint - Main prompt (mismatched purpose hint danger)" width="260" /> |
 
-<a id="trusted_requester_untrusted_encryption_target"></a>
+<a id="trusted_requester_anonymous_encryption_target"></a>
 
-### `trusted_requester_untrusted_encryption_target` — Trusted Intermediary + Untrusted Encryption Target
+### `trusted_requester_anonymous_encryption_target` — Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain)
 
-- **Relying Party:** Utopia Airlines -> encrypted for Unverified Recipient — Proximity (ISO 18013-5)
-- **Protocol / Credentials:** Photo ID (plain org.iso.23220.2 + encrypted datagroups to untrusted key)
+- **Relying Party:** Utopia Airlines -> encrypted for Anonymous Recipient — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** Photo ID (plain org.iso.23220.2 + encrypted datagroups to raw public key)
 - **Risk Assessment:** `HIGH_RISK (UNTRUSTED_ENCRYPTION_TARGET)`
 
-Utopia Airlines is trusted, but the encryption recipient certificate for the passport datagroups is not in any trust list.
+Utopia Airlines is trusted, but the encryption recipient for the passport datagroups provided only a raw public key with no X.509 certificate chain at all.
 
-| | `main` — Main prompt (untrusted encryption target danger) | `requester_info` — Requester info (verified requester + unverified target) |
+| | `main` — Main prompt (anonymous encryption target danger) | `requester_info` — Requester info (verified requester + anonymous target) |
 | :---: | :---: | :---: |
-| **Compose** | <img src="06_high_risk/trusted_requester_untrusted_encryption_target__main.png" alt="Compose: Trusted Intermediary + Untrusted Encryption Target - Main prompt (untrusted encryption target danger)" width="260" /> | <img src="06_high_risk/trusted_requester_untrusted_encryption_target__requester_info.png" alt="Compose: Trusted Intermediary + Untrusted Encryption Target - Requester info (verified requester + unverified target)" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/trusted_requester_untrusted_encryption_target__main.png" alt="SwiftUI: Trusted Intermediary + Untrusted Encryption Target - Main prompt (untrusted encryption target danger)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/trusted_requester_untrusted_encryption_target__requester_info.png" alt="SwiftUI: Trusted Intermediary + Untrusted Encryption Target - Requester info (verified requester + unverified target)" width="260" /> |
+| **Compose** | <img src="06_high_risk/trusted_requester_anonymous_encryption_target__main.png" alt="Compose: Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain) - Main prompt (anonymous encryption target danger)" width="260" /> | <img src="06_high_risk/trusted_requester_anonymous_encryption_target__requester_info.png" alt="Compose: Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain) - Requester info (verified requester + anonymous target)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/trusted_requester_anonymous_encryption_target__main.png" alt="SwiftUI: Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain) - Main prompt (anonymous encryption target danger)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/trusted_requester_anonymous_encryption_target__requester_info.png" alt="SwiftUI: Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain) - Requester info (verified requester + anonymous target)" width="260" /> |
 
-<a id="anonymous_requester_trusted_target"></a>
+<a id="anonymous_website_intent_to_retain"></a>
 
-### `anonymous_requester_trusted_target` — Anonymous Intermediary Kiosk + Trusted Encryption Target
+### `anonymous_website_intent_to_retain` — Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait
 
-- **Relying Party:** Anonymous Kiosk -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)
-- **Protocol / Credentials:** Photo ID (HPKE-encrypted datagroups only)
-- **Risk Assessment:** `HIGH_RISK (UNTRUSTED_REQUESTER, PII_REQUESTED)`
-
-An unauthenticated airport kiosk forwards HPKE-encrypted passport datagroups to a verified Utopia Border Protection key. Because the anonymous intermediary still has knowledge of the transaction, the default policy classifies this as HIGH_RISK (though a wallet whose threat model accepts an untrusted intermediary forwarding encrypted claims to a trusted target could override classifyRiskFn to classify this as NORMAL).
-
-| | `main` — Main prompt (anonymous kiosk + trusted encryption target) | `requester_info` — Requester info (anonymous requester + verified target) |
-| :---: | :---: | :---: |
-| **Compose** | <img src="06_high_risk/anonymous_requester_trusted_target__main.png" alt="Compose: Anonymous Intermediary Kiosk + Trusted Encryption Target - Main prompt (anonymous kiosk + trusted encryption target)" width="260" /> | <img src="06_high_risk/anonymous_requester_trusted_target__requester_info.png" alt="Compose: Anonymous Intermediary Kiosk + Trusted Encryption Target - Requester info (anonymous requester + verified target)" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_requester_trusted_target__main.png" alt="SwiftUI: Anonymous Intermediary Kiosk + Trusted Encryption Target - Main prompt (anonymous kiosk + trusted encryption target)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_requester_trusted_target__requester_info.png" alt="SwiftUI: Anonymous Intermediary Kiosk + Trusted Encryption Target - Requester info (anonymous requester + verified target)" width="260" /> |
-
-<a id="untrusted_requester_intent_to_retain"></a>
-
-### `untrusted_requester_intent_to_retain` — Untrusted Over-the-Internet Requester Asking to Retain Portrait (intentToRetain = true)
-
-- **Relying Party:** https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)
+- **Relying Party:** https://age-check.utopia-gaming.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** mDL (age_over_21 & portrait with intentToRetain = true)
-- **Risk Assessment:** `HIGH_RISK (UNTRUSTED_REQUESTER, INTENT_TO_RETAIN)`
+- **Risk Assessment:** `HIGH_RISK (ANONYMOUS_REQUESTER, INTENT_TO_RETAIN)`
 
-An unverified over-the-Internet website requests age_over_21 and portrait with intentToRetain = true. For non-proximity requests, retaining a claim with sensitivity >= PORTRAIT_IMAGE escalates the prompt from WARNING to HIGH_RISK (whereas for proximity requests, INTENT_TO_RETAIN only triggers for sensitivity >= PII).
+An anonymous over-the-Internet website (providing no X.509 signature certificate) requests age_over_21 and portrait with intentToRetain = true. For anonymous non-proximity requests, retaining a claim with sensitivity >= PORTRAIT_IMAGE escalates the prompt from WARNING to HIGH_RISK.
 
-| | `main` — Main prompt (untrusted retention danger) |
+| | `main` — Main prompt (anonymous website retention danger) |
 | :---: | :---: |
-| **Compose** | <img src="06_high_risk/untrusted_requester_intent_to_retain__main.png" alt="Compose: Untrusted Over-the-Internet Requester Asking to Retain Portrait (intentToRetain = true) - Main prompt (untrusted retention danger)" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/untrusted_requester_intent_to_retain__main.png" alt="SwiftUI: Untrusted Over-the-Internet Requester Asking to Retain Portrait (intentToRetain = true) - Main prompt (untrusted retention danger)" width="260" /> |
+| **Compose** | <img src="06_high_risk/anonymous_website_intent_to_retain__main.png" alt="Compose: Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait - Main prompt (anonymous website retention danger)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_website_intent_to_retain__main.png" alt="SwiftUI: Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait - Main prompt (anonymous website retention danger)" width="260" /> |
 
-<a id="untrusted_requester_transaction_data"></a>
+<a id="anonymous_website_transaction_data"></a>
 
-### `untrusted_requester_transaction_data` — Untrusted Requester Attaching Transaction Data
+### `anonymous_website_transaction_data` — Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data
 
-- **Relying Party:** https://pay.unverified-merchant.example.com — Unverified Over-the-Internet (ISO 18013-7)
+- **Relying Party:** https://pay.unverified-merchant.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** DigitalPaymentCredential + PaymentTransaction
-- **Risk Assessment:** `HIGH_RISK (UNTRUSTED_REQUESTER, TRANSACTION_DATA)`
+- **Risk Assessment:** `HIGH_RISK (ANONYMOUS_REQUESTER, TRANSACTION_DATA)`
 
-An untrusted website attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA.
+An anonymous website (providing no X.509 signature certificate) attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA at the HIGH_RISK level.
 
-| | `main` — Main prompt (untrusted transaction danger) |
+| | `main` — Main prompt (anonymous website transaction danger) |
 | :---: | :---: |
-| **Compose** | <img src="06_high_risk/untrusted_requester_transaction_data__main.png" alt="Compose: Untrusted Requester Attaching Transaction Data - Main prompt (untrusted transaction danger)" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/untrusted_requester_transaction_data__main.png" alt="SwiftUI: Untrusted Requester Attaching Transaction Data - Main prompt (untrusted transaction danger)" width="260" /> |
+| **Compose** | <img src="06_high_risk/anonymous_website_transaction_data__main.png" alt="Compose: Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data - Main prompt (anonymous website transaction danger)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/06_high_risk/anonymous_website_transaction_data__main.png" alt="SwiftUI: Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data - Main prompt (anonymous website transaction danger)" width="260" /> |
 
 ---
 
@@ -593,18 +673,18 @@ Dark mode rendering of the amber warning box (#3E3012 fill / #F9AB00 border) for
 
 <a id="high_risk_pii_requested"></a>
 
-### `high_risk_pii_requested` — Dark Mode — High-Risk (Untrusted Reader Requesting PII)
+### `high_risk_pii_requested` — Dark Mode — High-Risk (Anonymous Website Requesting PII)
 
-- **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
+- **Relying Party:** https://verify.unknown-portal.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** mDL (given_name, family_name, birth_date, portrait)
 - **Risk Assessment:** `HIGH_RISK (Dark Theme)`
 
-Dark mode rendering of the red danger box (#4A1C1A fill / #B3261E border) and disabled 'Wait' cool-off button.
+Dark mode rendering of the red danger box (#4A1C1A fill / #B3261E border) and disabled 'Wait' cool-off button for an anonymous website requesting PII.
 
 | | `main` — Main prompt (Dark mode HIGH_RISK) |
 | :---: | :---: |
-| **Compose** | <img src="08_dark_mode/high_risk_pii_requested__main.png" alt="Compose: Dark Mode — High-Risk (Untrusted Reader Requesting PII) - Main prompt (Dark mode HIGH_RISK)" width="260" /> |
-| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/08_dark_mode/high_risk_pii_requested__main.png" alt="SwiftUI: Dark Mode — High-Risk (Untrusted Reader Requesting PII) - Main prompt (Dark mode HIGH_RISK)" width="260" /> |
+| **Compose** | <img src="08_dark_mode/high_risk_pii_requested__main.png" alt="Compose: Dark Mode — High-Risk (Anonymous Website Requesting PII) - Main prompt (Dark mode HIGH_RISK)" width="260" /> |
+| **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/08_dark_mode/high_risk_pii_requested__main.png" alt="SwiftUI: Dark Mode — High-Risk (Anonymous Website Requesting PII) - Main prompt (Dark mode HIGH_RISK)" width="260" /> |
 
 <a id="requester_info_with_encryption_target"></a>
 
@@ -657,17 +737,17 @@ Danish localization of the built-in PaymentTransaction card showing payee ('Modt
 
 <a id="danish_high_risk_pii_and_retention"></a>
 
-### `danish_high_risk_pii_and_retention` — Danish (da-DK) — High-Risk Untrusted Reader Requesting PII & Retention
+### `danish_high_risk_pii_and_retention` — Danish (da-DK) — High-Risk Anonymous Website Requesting PII & Retention
 
-- **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
+- **Relying Party:** https://verify.unknown-portal.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** mDL (given_name, family_name, birth_date, portrait) retained
 - **Risk Assessment:** `HIGH_RISK (da-DK)`
 
-Danish localization of the red high-risk warning card (with bullets for PII requested and intent to retain) and the 3-second 'Vent…' -> 'Fortsæt' cool-off button.
+Danish localization of the red high-risk warning card (with bullets for PII requested and intent to retain) and the 5-second 'Vent…' -> 'Fortsæt' cool-off button.
 
 | `waiting` — High-risk prompt during cool-off ('Vent…', Danish da-DK) | `ready` — High-risk prompt after cool-off ('Fortsæt', Danish da-DK) |
 | :---: | :---: |
-| <img src="09_localization/danish_high_risk_pii_and_retention__waiting.png" alt="Compose: Danish (da-DK) — High-Risk Untrusted Reader Requesting PII &amp; Retention - High-risk prompt during cool-off ('Vent…', Danish da-DK)" width="260" /> | <img src="09_localization/danish_high_risk_pii_and_retention__ready.png" alt="Compose: Danish (da-DK) — High-Risk Untrusted Reader Requesting PII &amp; Retention - High-risk prompt after cool-off ('Fortsæt', Danish da-DK)" width="260" /> |
+| <img src="09_localization/danish_high_risk_pii_and_retention__waiting.png" alt="Compose: Danish (da-DK) — High-Risk Anonymous Website Requesting PII &amp; Retention - High-risk prompt during cool-off ('Vent…', Danish da-DK)" width="260" /> | <img src="09_localization/danish_high_risk_pii_and_retention__ready.png" alt="Compose: Danish (da-DK) — High-Risk Anonymous Website Requesting PII &amp; Retention - High-risk prompt after cool-off ('Fortsæt', Danish da-DK)" width="260" /> |
 
 <a id="arabic_rtl_normal_with_subpages"></a>
 
@@ -699,15 +779,15 @@ Arabic RTL rendering of the built-in PaymentTransaction card with right-aligned 
 
 <a id="arabic_rtl_high_risk_pii_and_retention"></a>
 
-### `arabic_rtl_high_risk_pii_and_retention` — Arabic RTL (ar-SA) — High-Risk Untrusted Reader with RTL Cool-Off Progress Bar
+### `arabic_rtl_high_risk_pii_and_retention` — Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar
 
-- **Relying Party:** Harbor View Lounge — Unverified Proximity (ISO 18013-5)
+- **Relying Party:** https://verify.unknown-portal.example.com — Anonymous Over-the-Internet
 - **Protocol / Credentials:** mDL (given_name, family_name, birth_date, portrait) retained
 - **Risk Assessment:** `HIGH_RISK (ar-SA RTL)`
 
-Arabic RTL rendering of the red high-risk warning card, RTL button placement ('إلغاء' on the right, 'انتظر…' / 'متابعة' on the left), and the 3-second cool-off progress bar filling from right to left.
+Arabic RTL rendering of the red high-risk warning card, RTL button placement ('إلغاء' on the right, 'انتظر…' / 'متابعة' on the left), and the 5-second cool-off progress bar filling from right to left.
 
 | `waiting` — High-risk prompt during cool-off with RTL progress fill (Arabic ar-SA RTL) | `ready` — High-risk prompt after cool-off ('متابعة', Arabic ar-SA RTL) |
 | :---: | :---: |
-| <img src="09_localization/arabic_rtl_high_risk_pii_and_retention__waiting.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Untrusted Reader with RTL Cool-Off Progress Bar - High-risk prompt during cool-off with RTL progress fill (Arabic ar-SA RTL)" width="260" /> | <img src="09_localization/arabic_rtl_high_risk_pii_and_retention__ready.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Untrusted Reader with RTL Cool-Off Progress Bar - High-risk prompt after cool-off ('متابعة', Arabic ar-SA RTL)" width="260" /> |
+| <img src="09_localization/arabic_rtl_high_risk_pii_and_retention__waiting.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar - High-risk prompt during cool-off with RTL progress fill (Arabic ar-SA RTL)" width="260" /> | <img src="09_localization/arabic_rtl_high_risk_pii_and_retention__ready.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar - High-risk prompt after cool-off ('متابعة', Arabic ar-SA RTL)" width="260" /> |
 

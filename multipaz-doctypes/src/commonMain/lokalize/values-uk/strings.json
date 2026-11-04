@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Вік понад 18 років + еквівалент портрета",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Вік понад 18 років + (портрет АБО еквівалент портрета)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Вік понад 18 років + еквівалент портрета",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Вік понад 18 + (портрет або еквівалент портрета)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Вік понад 18 + (портрет або еквівалент портрета)",
+  "group_name": "Ім'я",
+  "group_alias_name": "Псевдонім",
+  "group_name_at_birth": "Ім’я при народженні",
+  "group_name_initials": "Ініціали",
+  "group_residential_address": "Адреса проживання",
+  "group_place_of_birth": "Місце народження",
+  "group_date_of_birth": "Дата народження",
+  "group_passport_data": "Паспортні дані"
 }

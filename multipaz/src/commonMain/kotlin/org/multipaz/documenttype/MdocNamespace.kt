@@ -50,6 +50,7 @@ class MdocNamespace private constructor(
          * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addDataElement(
             type: DocumentAttributeType,
@@ -60,6 +61,7 @@ class MdocNamespace private constructor(
             sensitivity: DocumentAttributeSensitivity,
             icon: Icon?,
             sampleValue: DataItem?,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             dataElements[identifier] = MdocDataElement(
                 DocumentAttribute(
@@ -71,7 +73,8 @@ class MdocNamespace private constructor(
                     icon = icon,
                     sampleValueMdoc = sampleValue,
                     sampleValueJson = null,
-                    parentAttribute = null
+                    parentAttribute = null,
+                    group = group
                 ),
                 mandatory
             )

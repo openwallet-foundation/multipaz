@@ -44,7 +44,7 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.LocationCity
+import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Payment
 import androidx.compose.material.icons.outlined.Policy
@@ -127,7 +127,6 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_wait
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_continue
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_select_option
-import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_something_else
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_dont_return_any_document
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_data_element_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_details
@@ -247,7 +246,6 @@ import org.multipaz.presentment.RequesterHistoryEntry
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.prompt.TransactionDataRendererRepository
-import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -265,80 +263,87 @@ private const val TAG = "Consent"
 /**
  * A composable used for obtaining consent when presenting one or more credentials.
  *
- * ### RP-info box and Risk Levels (`NORMAL`, `WARNING`, `HIGH_RISK`)
+ * ### Purpose Classification (`classifyPurposesFn`)
  *
- * In addition to rendering the relying party header and the requested credentials, claims, and
- * transaction data, [Consent] displays an **RP-info box** containing contextual information about
- * the relying party—such as trust warnings, whether the user has shared with the relying party
- * before (when [requesterHistory] is provided), a link to the relying party's privacy policy,
- * high-risk warnings, and any [TrustMetadata.disclaimer].
+ * [Consent] evaluates the active credential selection using [classifyPurposesFn], which returns a
+ * set of [PresentmentPurpose]s:
+ * - **Subtitle text**: The classified purposes are localized and formatted into the purpose
+ *   subtitle displayed under the relying party header (e.g., "is requesting your age", "is
+ *   requesting your driving privileges and identity"). When multiple purposes are returned, they
+ *   are joined into a localized list in enum declaration order. If an empty set is returned, a
+ *   fallback unknown purpose phrase is shown.
+ * - **Forwarded to risk assessment**: The returned purposes set is forwarded directly as the
+ *   `purposes` argument to [classifyRiskFn].
  *
- * [Consent] evaluates the request and the user's current credential selection via
- * [classifyPurposesFn] and [classifyRiskFn] into a [ConsentRiskAssessment] whose
- * [ConsentRiskLevel] and [ConsentRiskReason]s govern the placement, visual treatment, and content
- * of the **RP-info box** as well as confirmation safeguards:
+ * Defaults to [defaultClassifyPurposes].
  *
- * - **`NORMAL` (Happy path)**:
- *   - **Default criteria**: Either (a) the relying party is trusted ([trustedRequesterIdentity] is
- *     non-`null`), any claim-level encryption target is trusted, and all selected use-cases match
- *     a recognized [PresentmentPurpose] with known claims; or (b) the request is a proximity
- *     presentment ([Requester.isProximity]) from an unverified or anonymous relying party asking
- *     only for low-sensitivity non-PII attributes (such as `age_over_21` and `portrait`) without
- *     data retention or transaction data, since the user is physically in proximity and the
- *     relying party is already free to capture their likeness.
- *   - **RP-info box placement & styling**: Placed at the **bottom** of the scrollable content using
- *     the standard neutral segmented container surface (no colored fill or border) and an info
- *     (`ⓘ`) icon. When there is only a single use-case, the RP-info box is attached as the bottom
- *     segment of that use-case's segmented container group; when there are multiple use-cases, it
- *     appears as a standalone segmented container below all use-cases.
- *   - **RP-info box content**: Share history sentence (first-time vs. returning share, if
- *     [requesterHistory] is provided), privacy policy link (if present in [TrustMetadata]), and
- *     optional [TrustMetadata.disclaimer].
+ * ### Risk Assessment (`classifyRiskFn`)
  *
- * - **`WARNING` (Caution)**:
- *   - **Default criteria**: The request does not trigger `HIGH_RISK`, but comes from an untrusted
- *     over-the-Internet or app-to-app relying party ([trustedRequesterIdentity] is `null` and
- *     `!requester.isProximity`)—for example, an unverified website or local application requesting
- *     low-sensitivity attributes such as age verification or a portrait image without data
- *     retention or transaction data.
- *   - **RP-info box placement & styling**: Placed at the **top** of the scrollable content
- *     (directly below the relying party header and above the credentials) in a yellow/amber warning
- *     box with a warning (`⚠`) icon.
- *   - **RP-info box content**: Untrusted verifier warning sentence (when
- *     [ConsentRiskReason.UNTRUSTED_REQUESTER] is present), share history sentence, any additional
- *     [ConsentRiskReason] warning paragraphs, and optional disclaimer.
+ * [Consent] evaluates the active credential selection and classified purposes using [classifyRiskFn],
+ * which returns a [ConsentRiskAssessment] containing a [ConsentRiskLevel] and a set of
+ * [ConsentRiskReason]s.
  *
- * - **`HIGH_RISK` (Danger)**:
- *   - **Default criteria**: At least one credential is selected and any of the following hold:
- *     1. Any selected use-case cannot be classified into a recognized [PresentmentPurpose] (e.g.,
- *        an over-broad request or a mismatch with declared purpose hints), or any requested claim
- *        is unknown (`attribute == null`) ([ConsentRiskReason.UNUSUAL_REQUEST]).
- *     2. Any selected credential match requests encryption to an untrusted target
- *        (`encryptionRequested && encryptionTargetTrustMetadata == null`)
- *        ([ConsentRiskReason.UNTRUSTED_ENCRYPTION_TARGET]).
- *     3. The relying party is untrusted ([trustedRequesterIdentity] is `null`) and requests
- *        [DocumentAttributeSensitivity.PII] claims ([ConsentRiskReason.PII_REQUESTED]), requests
- *        data retention (`intentToRetain = true`) on claims with sensitivity at least `PII` for
- *        proximity requests or at least `PORTRAIT_IMAGE` for non-proximity requests
- *        ([ConsentRiskReason.INTENT_TO_RETAIN]), or includes transaction data
- *        ([ConsentRiskReason.TRANSACTION_DATA]).
- *   - **RP-info box placement & styling**: Placed at the **top** of the scrollable content
- *     (directly below the relying party header and above the credentials) in a red danger box with
- *     a warning (`⚠`) icon.
- *   - **RP-info box content**: Untrusted verifier sentence (if [ConsentRiskReason.UNTRUSTED_REQUESTER]
- *     is present), share history sentence, privacy policy link, and explicit risk warning
- *     paragraph(s) for each [ConsentRiskReason] in [ConsentRiskAssessment.reasons], plus optional
- *     disclaimer.
- *   - **Cool-off timer**: Enforces a 5-second cool-off timer on the "Continue" button after
- *     scrolling to the bottom before the user can confirm.
+ * #### Risk Levels
+ *
+ * The evaluated [ConsentRiskLevel] governs the placement, visual styling, and confirmation
+ * safeguards of the RP-info box:
+ *
+ * - **[ConsentRiskLevel.NORMAL]**:
+ *   - **Placement & styling**: Placed at the **bottom** of the scrollable content using a neutral
+ *     surface container (no colored fill or border) with an info (`ⓘ`) icon. When there is only a
+ *     single use-case, the RP-info box is attached as the bottom segment of that use-case's
+ *     segmented container group; when there are multiple use-cases, it appears as a standalone
+ *     segmented container below all use-cases.
+ *   - **Confirmation**: The "Continue" button is immediately enabled without any cool-off delay.
+ *
+ * - **[ConsentRiskLevel.WARNING]**:
+ *   - **Placement & styling**: Placed at the **top** of the scrollable content (directly below the
+ *     relying party header and above the credentials) in a yellow/amber warning box with a warning
+ *     (`⚠`) icon.
+ *   - **Confirmation**: The "Continue" button is immediately enabled without any cool-off delay.
+ *
+ * - **[ConsentRiskLevel.HIGH_RISK]**:
+ *   - **Placement & styling**: Placed at the **top** of the scrollable content (directly below the
+ *     relying party header and above the credentials) in a red danger box with a warning (`⚠`) icon.
+ *   - **Confirmation**: Enforces a 5-second cool-off timer on the primary button ("Wait..."
+ *     transitioning to "Continue"). The user must scroll to the bottom of the prompt before the
+ *     timer begins.
+ *
+ * #### Risk Reasons
+ *
+ * Any [ConsentRiskReason]s in [ConsentRiskAssessment.reasons] generate corresponding explanatory copy
+ * inside the RP-info box (or warning/danger box):
+ * - [ConsentRiskReason.UNTRUSTED_REQUESTER]: Displays copy indicating that the relying party is
+ *   unknown or not in the wallet's trust list. (Rendered as informational copy in the bottom
+ *   RP-info container when risk level is [ConsentRiskLevel.NORMAL], or as a warning when [ConsentRiskLevel.WARNING]
+ *   or [ConsentRiskLevel.HIGH_RISK]).
+ * - [ConsentRiskReason.ANONYMOUS_REQUESTER]: Displays copy indicating that the relying party is
+ *   anonymous (did not provide a digital signature or certificate). (Rendered as informational
+ *   copy in the bottom RP-info container when risk level is [ConsentRiskLevel.NORMAL], or as a warning
+ *   when [ConsentRiskLevel.WARNING] or [ConsentRiskLevel.HIGH_RISK]).
+ * - [ConsentRiskReason.UNUSUAL_REQUEST]: Displays an alert that the requested claims are unrecognized,
+ *   over-broad, or not accounted for by standard schemas or purpose hints.
+ * - [ConsentRiskReason.PII_REQUESTED]: Displays an alert that personally identifiable information has
+ *   been requested.
+ * - [ConsentRiskReason.UNTRUSTED_ENCRYPTION_TARGET]: Displays an alert that parts of the response are
+ *   requested to be encrypted for a recipient not in the trust list.
+ * - [ConsentRiskReason.INTENT_TO_RETAIN]: Displays an alert that the requester intends to store or
+ *   retain the disclosed data.
+ * - [ConsentRiskReason.TRANSACTION_DATA]: Displays an alert that the request authorizes a transaction.
+ *
+ * In addition to reason-specific alerts, the RP-info box displays share history (first-time vs.
+ * returning share, if [requesterHistory] is provided), a link to the relying party's privacy
+ * policy (if available), and any [TrustMetadata.disclaimer].
+ *
+ * Defaults to [defaultClassifyRisk].
  *
  * @param modifier a [Modifier].
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
  * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
- * example an OS-provided credential picker like Android's Credential Manager) or the empty list
- * if the user didn't preselect.
+ *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ *   if the user didn't preselect.
  * @param imageLoader a [ImageLoader].
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] to find renderers for
  *   transaction data in, or `null` to use only the built-in rendering.
@@ -347,7 +352,7 @@ private const val TAG = "Consent"
  * @param classifyPurposesFn function used to classify the [PresentmentPurpose]s of the request.
  * @param classifyRiskFn function used to evaluate the [ConsentRiskAssessment] of the request.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
- * first shown. If the user selects a different set of documents in the prompt, this will be called again.
+ *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Continue" button, returns the user's selection.
  * @param onCancel called when the sheet is dismissed.
  */
@@ -469,7 +474,7 @@ fun Consent(
         )
     }
     val currentDocumentsInFocus = remember(currentSelection) {
-        currentSelection.matches.map { it.credential.document }
+        currentSelection.matches.map { it.credential.document }.distinctBy { it.identifier }
     }
     val encryptionTargets = remember(currentSelection) {
         currentSelection.matches
@@ -687,7 +692,11 @@ private fun ShowRequesterInfoPage(
     val trustMetadata = trustedRequesterIdentity?.trustMetadata
     val requesterName = requesterDisplayData.name
         ?: trustedRequesterIdentity?.identity?.certChain?.certificates?.lastOrNull()?.subject?.name
-        ?: stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+        ?: if (requester.requesterIdentities.isEmpty()) {
+            stringResource(Res.string.credential_presentment_requester_info_anonymous_title)
+        } else {
+            stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+        }
 
     Column {
         Row(
@@ -1107,7 +1116,11 @@ private fun EncryptionTargetTrustGroup(
     val trustMetadata = target.trustMetadata
     val targetName = trustMetadata?.displayName
         ?: target.certChain?.certificates?.lastOrNull()?.subject?.name
-        ?: stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+        ?: if (target.certChain == null) {
+            stringResource(Res.string.credential_presentment_requester_info_anonymous_title)
+        } else {
+            stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+        }
     val targetIcon = trustMetadata?.displayIcon?.let {
         remember(it) { it.toByteArray().decodeToImageBitmap() }
     }
@@ -1413,7 +1426,13 @@ private fun DocumentDetailsPage(
     val isSelected = selectionIndex >= 0
     val solutionIndexToShow = if (isSelected) selectionIndex else 0
     val solution = useCase.solutions.getOrNull(solutionIndexToShow)
-    val credential = solution?.matches?.getOrNull(matchIndex) ?: solution?.matches?.firstOrNull()
+    val targetMatch = solution?.matches?.getOrNull(matchIndex) ?: solution?.matches?.firstOrNull()
+    val group = if (solution != null && targetMatch != null) {
+        groupMatchesByDocument(solution.matches)
+            .firstOrNull { it.document.identifier == targetMatch.credential.document.identifier }
+    } else {
+        null
+    }
 
     Column {
         Row(
@@ -1437,111 +1456,41 @@ private fun DocumentDetailsPage(
                 .padding(top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (credential != null && isSelected) {
+            if (group != null && isSelected) {
                 SegmentedItemContainer(
                     index = 0,
                     count = 1,
                 ) {
                     CredentialViewer(
-                        credential = credential.credential,
+                        credential = group.credential,
                         showChevron = false,
                         onChevronClicked = {}
                     )
                 }
 
-                val notStoredClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
-                    if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
-                        null
-                    } else {
-                        claim
-                    }
-                }.sortedBySensitivity()
-                val storedClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
-                    if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
-                        claim
-                    } else {
-                        null
-                    }
-                }.sortedBySensitivity()
-
-                val sharedWithText = calcSharedWithText(
-                    requester = requester,
-                    requesterDisplayData = requesterDisplayData,
-                    appInfo = appInfo,
-                    storesData = false,
-                    encryptionRequested = credential.encryptionRequested,
-                    encryptionTargetTrustMetadata = credential.encryptionTargetTrustMetadata
-                )
-                val sharedWithAndStoredByText = calcSharedWithText(
-                    requester = requester,
-                    requesterDisplayData = requesterDisplayData,
-                    appInfo = appInfo,
-                    storesData = true,
-                    encryptionRequested = credential.encryptionRequested,
-                    encryptionTargetTrustMetadata = credential.encryptionTargetTrustMetadata
-                )
-
-                if (notStoredClaims.isNotEmpty()) {
+                for (section in group.claimSections) {
+                    val sectionHeader = calcSharedWithText(
+                        requester = requester,
+                        requesterDisplayData = requesterDisplayData,
+                        appInfo = appInfo,
+                        storesData = section.storesData,
+                        encryptionRequested = section.encryptionRequested,
+                        encryptionTargetTrustMetadata = section.encryptionTargetTrustMetadata
+                    )
                     Column(
                         verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
                     ) {
                         Text(
                             modifier = Modifier.padding(bottom = 8.dp),
-                            text = sharedWithText,
+                            text = sectionHeader,
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        notStoredClaims.forEachIndexed { claimIndex, claim ->
+                        section.claims.forEachIndexed { claimIndex, claim ->
                             val icon = claim.attribute?.icon ?: Icon.PERSON
                             SegmentedItemContainer(
                                 index = claimIndex,
-                                count = notStoredClaims.size,
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.Start),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = icon.getOutlinedImageVector(),
-                                        contentDescription = stringResource(
-                                            Res.string.credential_presentment_data_element_icon_description
-                                        )
-                                    )
-                                    Column(
-                                        modifier = Modifier.weight(1.0f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                    ) {
-                                        Text(
-                                            text = claim.displayName,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        RenderClaimValue(
-                                            claim = claim,
-                                            imageSize = 100.dp,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if (storedClaims.isNotEmpty()) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
-                    ) {
-                        Text(
-                            modifier = Modifier.padding(bottom = 8.dp),
-                            text = sharedWithAndStoredByText,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        storedClaims.forEachIndexed { claimIndex, claim ->
-                            val icon = claim.attribute?.icon ?: Icon.PERSON
-                            SegmentedItemContainer(
-                                index = claimIndex,
-                                count = storedClaims.size,
+                                count = section.claims.size,
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1707,6 +1656,7 @@ private fun ConsentPage(
                     trustMetadata = trustMetadata,
                     appInfo = appInfo,
                     showUntrustedWarning = ConsentRiskReason.UNTRUSTED_REQUESTER in riskAssessment.reasons,
+                    showAnonymousWarning = ConsentRiskReason.ANONYMOUS_REQUESTER in riskAssessment.reasons,
                     requesterHistoryLoaded = requesterHistoryLoaded,
                     requesterHistoryEntry = requesterHistoryEntry,
                     hasEncryptionTargetPrivacyPolicy = hasEncryptionTargetPrivacyPolicy,
@@ -1717,7 +1667,8 @@ private fun ConsentPage(
                     }
                     for (reason in riskAssessment.reasons) {
                         when (reason) {
-                            ConsentRiskReason.UNTRUSTED_REQUESTER -> {}
+                            ConsentRiskReason.UNTRUSTED_REQUESTER,
+                            ConsentRiskReason.ANONYMOUS_REQUESTER -> {}
                             ConsentRiskReason.UNUSUAL_REQUEST ->
                                 add(stringResource(Res.string.credential_presentment_warning_unusual_request))
                             ConsentRiskReason.PII_REQUESTED ->
@@ -1855,19 +1806,20 @@ private fun UseCaseViewer(
     val solutionIndexToShow = if (isSelected) selectionIndex else 0
     val solution = useCase.solutions.getOrNull(solutionIndexToShow)
 
-    val canSwitchSolution = useCase.optional || useCase.solutions.size > 1
-
     if (solution != null) {
-        val showBottomSwitchSegment = isSelected && canSwitchSolution && solution.matches.size > 1
+        val documentGroups = remember(solution) { groupMatchesByDocument(solution.matches) }
+        val switchableDocIds = remember(useCase, documentGroups) {
+            switchableDocumentIds(useCase, documentGroups)
+        }
         val totalSegments = (if (!isSelected) {
-            solution.matches.size
+            documentGroups.size
         } else {
-            solution.matches.sumOf { credential ->
+            documentGroups.sumOf { group ->
                 var segments = 1
-                if (credential.claims.isNotEmpty()) segments += 1
-                if (credential.transactionData.isNotEmpty()) segments += 1
+                if (group.claimSections.isNotEmpty()) segments += 1
+                segments += group.matches.count { it.transactionData.isNotEmpty() }
                 segments
-            } + if (showBottomSwitchSegment) 1 else 0
+            }
         }) + if (bottomContent != null) 1 else 0
         var currentSegmentIndex = 0
         val alpha = if (isSelected) 1.0f else 0.5f
@@ -1877,7 +1829,7 @@ private fun UseCaseViewer(
             Column(
                 verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
             ) {
-                solution.matches.forEachIndexed { matchIndex, credential ->
+                documentGroups.forEachIndexed { groupIndex, group ->
                     if (!isSelected) {
                         val segmentIdx = currentSegmentIndex++
                         SegmentedItemContainer(
@@ -1885,63 +1837,32 @@ private fun UseCaseViewer(
                             count = totalSegments,
                         ) {
                             CredentialViewerNotSelected(
-                                typeDisplayName = credential.resolveTypeDisplayName(),
-                                showChevron = (matchIndex == 0),
+                                typeDisplayName = group.matches.first().resolveTypeDisplayName(),
+                                showChevron = (groupIndex == 0),
                                 onChevronClicked = onNavigateToPickSolution
                             )
                         }
                     } else {
-                        val canSwitchOnCredential = canSwitchSolution && (solution.matches.size == 1)
+                        val canSwitchOnCredential = group.document.identifier in switchableDocIds
                         val credSegmentIdx = currentSegmentIndex++
                         SegmentedItemContainer(
                             index = credSegmentIdx,
                             count = totalSegments,
                         ) {
                             CredentialViewer(
-                                credential = credential.credential,
+                                credential = group.credential,
                                 showChevron = canSwitchOnCredential,
                                 onChevronClicked = onNavigateToPickSolution
                             )
                         }
-                        val notStoredClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
-                            if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
-                                null
-                            } else {
-                                claim
-                            }
-                        }.sortedBySensitivity()
-                        val storedClaims = credential.claims.mapNotNull { (requestedClaim, claim) ->
-                            if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
-                                claim
-                            } else {
-                                null
-                            }
-                        }.sortedBySensitivity()
 
-                        val sharedWithText = calcSharedWithText(
-                            requester = requester,
-                            requesterDisplayData = requesterDisplayData,
-                            appInfo = appInfo,
-                            storesData = false,
-                            encryptionRequested = credential.encryptionRequested,
-                            encryptionTargetTrustMetadata = credential.encryptionTargetTrustMetadata
-                        )
-                        val sharedWithAndStoredByText = calcSharedWithText(
-                            requester = requester,
-                            requesterDisplayData = requesterDisplayData,
-                            appInfo = appInfo,
-                            storesData = true,
-                            encryptionRequested = credential.encryptionRequested,
-                            encryptionTargetTrustMetadata = credential.encryptionTargetTrustMetadata
-                        )
-
-                        if (storedClaims.isNotEmpty() || notStoredClaims.isNotEmpty()) {
+                        if (group.claimSections.isNotEmpty()) {
                             val claimsSegmentIdx = currentSegmentIndex++
                             val onViewDetails = {
                                 onShowDocumentDetails(
                                     DocumentDetailsTarget(
                                         useCaseIndex = useCaseIndex,
-                                        matchIndex = matchIndex,
+                                        matchIndex = group.firstMatchIndex,
                                     )
                                 )
                             }
@@ -1952,46 +1873,40 @@ private fun UseCaseViewer(
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    if (storedClaims.isEmpty()) {
-                                        SharedStoredText(text = sharedWithText)
-                                        ClaimsGridView(
-                                            allClaims = notStoredClaims,
-                                            useColumns = true,
-                                            onViewDetailsClicked = onViewDetails,
+                                    group.claimSections.forEachIndexed { sectionIndex, section ->
+                                        if (sectionIndex > 0) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+                                        val isLastSection = (sectionIndex == group.claimSections.lastIndex)
+                                        val headerText = calcSharedWithText(
+                                            requester = requester,
+                                            requesterDisplayData = requesterDisplayData,
+                                            appInfo = appInfo,
+                                            storesData = section.storesData,
+                                            encryptionRequested = section.encryptionRequested,
+                                            encryptionTargetTrustMetadata = section.encryptionTargetTrustMetadata
                                         )
-                                    } else if (notStoredClaims.isEmpty()) {
-                                        SharedStoredText(text = sharedWithAndStoredByText)
+                                        SharedStoredText(text = headerText)
                                         ClaimsGridView(
-                                            allClaims = storedClaims,
+                                            allClaims = section.displayClaims,
                                             useColumns = true,
-                                            onViewDetailsClicked = onViewDetails,
-                                        )
-                                    } else {
-                                        SharedStoredText(text = sharedWithText)
-                                        ClaimsGridView(
-                                            allClaims = notStoredClaims,
-                                            useColumns = true,
-                                        )
-                                        SharedStoredText(text = sharedWithAndStoredByText)
-                                        ClaimsGridView(
-                                            allClaims = storedClaims,
-                                            useColumns = true,
-                                            onViewDetailsClicked = onViewDetails,
+                                            onViewDetailsClicked = if (isLastSection) onViewDetails else null,
                                         )
                                     }
                                 }
                             }
                         }
 
-                        if (credential.transactionData.isNotEmpty()) {
+                        val hasClaims = group.claimSections.isNotEmpty()
+                        for (txMatch in group.matches.filter { it.transactionData.isNotEmpty() }) {
                             val txSegmentIdx = currentSegmentIndex++
                             SegmentedItemContainer(
                                 index = txSegmentIdx,
                                 count = totalSegments,
                             ) {
                                 CredentialTransactionDataContent(
-                                    credential = credential,
-                                    hasClaims = storedClaims.isNotEmpty() || notStoredClaims.isNotEmpty(),
+                                    credential = txMatch,
+                                    hasClaims = hasClaims,
                                     requester = requester,
                                     trustedRequesterIdentity = trustedRequesterIdentity,
                                     purposes = purposes,
@@ -2001,36 +1916,6 @@ private fun UseCaseViewer(
                                     onShowTransactionDetails = onShowTransactionDetails,
                                 )
                             }
-                        }
-                    }
-                }
-                if (showBottomSwitchSegment) {
-                    val switchSegmentIdx = currentSegmentIndex++
-                    val boxShape = RoundedCornerShape(12.dp)
-                    SegmentedItemContainer(
-                        index = switchSegmentIdx,
-                        count = totalSegments,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(boxShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, boxShape)
-                                .clickable { onNavigateToPickSolution() }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                modifier = Modifier.weight(1.0f),
-                                text = stringResource(Res.string.credential_presentment_share_something_else),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }
@@ -2485,10 +2370,10 @@ private fun PickSolutionPage(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            solution.matches.forEach { credential ->
+                            groupMatchesByDocument(solution.matches).forEach { group ->
                                 CredentialViewer(
                                     modifier = Modifier.fillMaxWidth(),
-                                    credential = credential.credential,
+                                    credential = group.credential,
                                     showChevron = false,
                                     onChevronClicked = {}
                                 )
@@ -2505,8 +2390,8 @@ private fun PickSolutionPage(
             if (useCase.optional) {
                 val isNotSharingSelected = currentSolutionIndex < 0
                 val fallbackTypeName = useCase.solutions.firstOrNull()
-                    ?.matches
-                    ?.joinToString(", ") { it.resolveTypeDisplayName() }
+                    ?.let { groupMatchesByDocument(it.matches) }
+                    ?.joinToString(", ") { it.matches.first().resolveTypeDisplayName() }
                     ?: ""
                 SegmentedItemContainer(
                     index = 0,
@@ -2736,6 +2621,7 @@ private fun calcRelyingPartySentences(
     trustMetadata: TrustMetadata?,
     appInfo: ApplicationInfo?,
     showUntrustedWarning: Boolean = false,
+    showAnonymousWarning: Boolean = false,
     requesterHistoryLoaded: Boolean = false,
     requesterHistoryEntry: RequesterHistoryEntry? = null,
     hasEncryptionTargetPrivacyPolicy: Boolean = false,
@@ -2744,15 +2630,21 @@ private fun calcRelyingPartySentences(
         ?: trustedRequesterIdentity?.identity?.certChain?.certificates?.last()?.subject?.name
         ?: requester.origin?.takeIf { it.isNotEmpty() }
         ?: appInfo?.name
-    val untrustedSentence = if (showUntrustedWarning) {
+    val untrustedSentence = if (showAnonymousWarning) {
         if (requester.isWebOrigin) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_website)
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_app)
-        } else if (requester.requesterIdentities.isNotEmpty()) {
-            stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list)
         } else {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_anonymous)
+        }
+    } else if (showUntrustedWarning) {
+        if (requester.isWebOrigin) {
+            stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_website)
+        } else if (requester.appId != null) {
+            stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_app)
+        } else {
+            stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list)
         }
     } else {
         null
@@ -2973,21 +2865,17 @@ private fun ButtonSection(
     }
 }
 
-private fun List<Claim>.sortedBySensitivity(): List<Claim> =
-    sortedByDescending { (it.attribute?.sensitivity ?: DocumentAttributeSensitivity.PII).ordinal }
-
-private fun List<Claim>.salientClaims(): List<Claim> {
+private fun List<DisplayClaim>.salientClaims(): List<DisplayClaim> {
     val filtered = filter {
-        val sensitivity = it.attribute?.sensitivity
-        sensitivity != DocumentAttributeSensitivity.ISSUER &&
-            sensitivity != DocumentAttributeSensitivity.VALIDITY
+        it.sensitivity != DocumentAttributeSensitivity.ISSUER &&
+            it.sensitivity != DocumentAttributeSensitivity.VALIDITY
     }
     return filtered.ifEmpty { this }
 }
 
 @Composable
 private fun ClaimsGridView(
-    allClaims: List<Claim>,
+    allClaims: List<DisplayClaim>,
     useColumns: Boolean,
     onViewDetailsClicked: (() -> Unit)? = null,
 ) {
@@ -3104,14 +2992,14 @@ private fun ClaimsMoreView(
 @Composable
 private fun ClaimsView(
     modifier: Modifier,
-    claim: Claim,
+    claim: DisplayClaim,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
         modifier = modifier.padding(4.dp),
     ) {
-        val icon = claim.attribute?.icon ?: Icon.PERSON
+        val icon = claim.icon ?: Icon.PERSON
         Icon(
             imageVector = icon.getOutlinedImageVector(),
             contentDescription = stringResource(Res.string.credential_presentment_data_element_icon_description)
@@ -3141,9 +3029,11 @@ private fun RelyingPartySection(
         val requesterName = requesterDisplayData.name
             // If we have a trust point without `displayName` use the name in the root certificate.
             ?: trustedRequesterIdentity?.identity?.certChain?.certificates?.last()?.subject?.name
-            // We could distinguish between anonymous and unknown request but that's already
-            // done in the warning text
-            ?: stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+            ?: if (requester.requesterIdentities.isEmpty()) {
+                stringResource(Res.string.credential_presentment_requester_info_anonymous_title)
+            } else {
+                stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
+            }
 
         if (requesterDisplayData.icon != null) {
             Icon(
@@ -3166,7 +3056,7 @@ private fun RelyingPartySection(
                 imageVector = if (requester.isWebOrigin) {
                     Icons.Outlined.Language
                 } else {
-                    Icons.Outlined.LocationCity
+                    Icons.Outlined.Business
                 },
                 contentDescription = stringResource(Res.string.credential_presentment_verifier_icon_description),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

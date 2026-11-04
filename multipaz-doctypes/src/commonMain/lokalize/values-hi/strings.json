@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "18 वर्ष से अधिक आयु + पोर्ट्रेट इक्विवेलेंस",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "18 वर्ष से अधिक आयु + (पोर्ट्रेट या पोर्ट्रेट इक्विवेलेंस)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "18 वर्ष से अधिक आयु + पोर्ट्रेट इक्विवेलेंस",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18 वर्ष से अधिक आयु + (पोर्ट्रेट या पोर्ट्रेट समानता)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18 वर्ष से अधिक आयु + (पोर्ट्रेट या पोर्ट्रेट समानता)",
+  "group_name": "नाम",
+  "group_alias_name": "उपनाम",
+  "group_name_at_birth": "जन्म का नाम",
+  "group_name_initials": "नाम के आद्याक्षर",
+  "group_residential_address": "आवासीय पता",
+  "group_place_of_birth": "जन्म स्थान",
+  "group_date_of_birth": "जन्म तिथि",
+  "group_passport_data": "पासपोर्ट डेटा"
 }

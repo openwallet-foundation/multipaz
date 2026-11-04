@@ -9,6 +9,7 @@ import org.multipaz.utopia.localization.LocalizedStrings
 import org.multipaz.utopia.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.Options
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
@@ -27,6 +28,22 @@ object GermanPersonalID {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val placeOfBirthGroup = DocumentAttributeGroup(
+            identifier = "place_of_birth",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_PLACE_OF_BIRTH),
+            icon = Icon.PLACE
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_GERMAN_PERSONAL_ID))
             .addJsonDocumentType(type = EUPID_VCT, keyBound = true)
             .addJsonAttribute(
@@ -35,7 +52,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_FAMILY_NAME),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_FAMILY_NAME),
                 icon = Icon.PERSON,
-                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME)
+                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME),
+                group = nameGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -43,7 +61,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_GIVEN_NAMES),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_GIVEN_NAMES),
                 icon = Icon.PERSON,
-                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME)
+                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME),
+                group = nameGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.Date,
@@ -140,7 +159,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_PLACE_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_PLACE_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_PLACE)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_PLACE),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -148,7 +168,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_COUNTRY_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_COUNTRY_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_COUNTRY)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_COUNTRY),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -156,7 +177,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_STATE_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_STATE_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_STATE)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_STATE),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -164,7 +186,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_CITY_OF_BIRTH),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_CITY_OF_BIRTH),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.BIRTH_CITY)
+                sampleValue = JsonPrimitive(SampleData.BIRTH_CITY),
+                group = placeOfBirthGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -172,7 +195,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_ADDRESS),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_ADDRESS),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.RESIDENT_ADDRESS)
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_ADDRESS),
+                group = residentialAddressGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -180,7 +204,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_CITY),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_CITY),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.RESIDENT_CITY)
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_CITY),
+                group = residentialAddressGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -188,7 +213,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_COUNTRY),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_COUNTRY),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.RESIDENT_COUNTRY)
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_COUNTRY),
+                group = residentialAddressGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.String,
@@ -196,7 +222,8 @@ object GermanPersonalID {
                 displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_POSTAL_CODE),
                 description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_POSTAL_CODE),
                 icon = Icon.PLACE,
-                sampleValue = JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE)
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE),
+                group = residentialAddressGroup
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),

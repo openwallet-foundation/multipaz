@@ -68,6 +68,7 @@ class JsonDocumentType private constructor(
          * @param description a description of the claim.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          */
         fun addClaim(
             type: DocumentAttributeType,
@@ -76,7 +77,8 @@ class JsonDocumentType private constructor(
             description: String,
             sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
-            sampleValue: JsonElement? = null
+            sampleValue: JsonElement? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             val embeddedAttributes = mutableListOf<DocumentAttribute>()
             val attribute = DocumentAttribute(
@@ -89,7 +91,8 @@ class JsonDocumentType private constructor(
                 sampleValueMdoc = null,
                 sampleValueJson = sampleValue,
                 parentAttribute = null,
-                embeddedAttributes = embeddedAttributes
+                embeddedAttributes = embeddedAttributes,
+                group = group
             )
             claims[identifier] = Pair(attribute, embeddedAttributes)
         }
@@ -102,7 +105,8 @@ class JsonDocumentType private constructor(
             description: String,
             sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
-            sampleValue: JsonElement? = null
+            sampleValue: JsonElement? = null,
+            group: DocumentAttributeGroup? = null,
         ) {
             val (parentAttribute, embeddedAttributes) = claims[parentIdentifier]
                 ?: throw IllegalStateException("No attribute for $parentIdentifier")
@@ -116,7 +120,8 @@ class JsonDocumentType private constructor(
                     icon = icon,
                     sampleValueMdoc = null,
                     sampleValueJson = sampleValue,
-                    parentAttribute = parentAttribute
+                    parentAttribute = parentAttribute,
+                    group = group
                 )
             )
         }

@@ -137,12 +137,25 @@ class ConsentRiskLevelTest {
     @Test
     fun testNormalWarningAndHighRiskClassification() = runTest {
         val env = createTestEnv()
-        val proximityRequester = Requester()
-        val webRequester = Requester(origin = "https://verifier.example.com")
-        val appRequester = Requester(appId = "com.example.verifier")
+        val unverifiedCertChain = env.trustedIdentity.identity.certChain
+        val unverifiedProximityRequester = Requester(
+            requesterIdentities = listOf(Iso18013RequesterIdentity(unverifiedCertChain)),
+        )
+        val anonymousProximityRequester = Requester()
+        val unverifiedWebRequester = Requester(
+            requesterIdentities = listOf(Iso18013RequesterIdentity(unverifiedCertChain)),
+            origin = "https://verifier.example.com",
+        )
+        val anonymousWebRequester = Requester(origin = "https://verifier.example.com")
+        val unverifiedAppRequester = Requester(
+            requesterIdentities = listOf(Iso18013RequesterIdentity(unverifiedCertChain)),
+            appId = "com.example.verifier",
+        )
+        val anonymousAppRequester = Requester(appId = "com.example.verifier")
 
         // 1. Low-sensitivity request (age_over_21 + portrait, no retain):
-        // Trusted -> NORMAL; Untrusted Proximity -> NORMAL; Untrusted Web/App -> WARNING
+        // Trusted -> NORMAL; Untrusted Proximity (unverified or anonymous) -> NORMAL;
+        // Untrusted Web/App (unverified or anonymous) -> WARNING
         val agePortraitReq = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("session"); add("transcript") }
         ) {
@@ -159,23 +172,38 @@ class ConsentRiskLevelTest {
         val agePortraitData = agePortraitReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, agePortraitData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, agePortraitData)
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, null, agePortraitData)
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
+            defaultClassifyRisk(unverifiedProximityRequester, null, agePortraitData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousProximityRequester, null, agePortraitData)
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
-            defaultClassifyRisk(webRequester, null, agePortraitData)
+            defaultClassifyRisk(unverifiedWebRequester, null, agePortraitData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousWebRequester, null, agePortraitData)
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
-            defaultClassifyRisk(appRequester, null, agePortraitData)
+            defaultClassifyRisk(unverifiedAppRequester, null, agePortraitData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousAppRequester, null, agePortraitData)
         )
 
         // 2. PII request (given_name + family_name):
-        // Trusted -> NORMAL; Untrusted -> HIGH_RISK (UNTRUSTED_REQUESTER + PII_REQUESTED)
+        // Trusted -> NORMAL;
+        // Unverified (has cert) Proximity/Web/App -> WARNING (UNTRUSTED_REQUESTER + PII_REQUESTED);
+        // Anonymous Proximity -> WARNING (ANONYMOUS_REQUESTER + PII_REQUESTED);
+        // Anonymous Web/App -> HIGH_RISK (ANONYMOUS_REQUESTER + PII_REQUESTED)
         val piiReq = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("session"); add("transcript") }
         ) {
@@ -192,20 +220,56 @@ class ConsentRiskLevelTest {
         val piiData = piiReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, piiData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, piiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(unverifiedProximityRequester, null, piiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.ANONYMOUS_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(anonymousProximityRequester, null, piiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(unverifiedWebRequester, null, piiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(unverifiedAppRequester, null, piiData)
         )
         assertEquals(
             ConsentRiskAssessment(
                 ConsentRiskLevel.HIGH_RISK,
-                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+                setOf(ConsentRiskReason.ANONYMOUS_REQUESTER, ConsentRiskReason.PII_REQUESTED),
             ),
-            defaultClassifyRisk(proximityRequester, null, piiData)
+            defaultClassifyRisk(anonymousWebRequester, null, piiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.HIGH_RISK,
+                setOf(ConsentRiskReason.ANONYMOUS_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(anonymousAppRequester, null, piiData)
         )
 
         // 3. Intent to retain:
         // - Proximity: only triggers INTENT_TO_RETAIN for sensitivity >= PII
         // - Non-proximity (Web/App): triggers INTENT_TO_RETAIN for sensitivity >= PORTRAIT_IMAGE
-        // - When PII is retained by an untrusted requester, both PII_REQUESTED and INTENT_TO_RETAIN are returned.
+        // - Unverified (has cert) or Proximity Anonymous -> WARNING
+        // - Anonymous Web/App -> HIGH_RISK
         val retainedAgeOnlyReq = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("session"); add("transcript") }
         ) {
@@ -220,12 +284,12 @@ class ConsentRiskLevelTest {
         }
         val retainedAgeOnlyData = retainedAgeOnlyReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, null, retainedAgeOnlyData)
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousProximityRequester, null, retainedAgeOnlyData)
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
-            defaultClassifyRisk(webRequester, null, retainedAgeOnlyData)
+            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousWebRequester, null, retainedAgeOnlyData)
         )
 
         val retainedAgePortraitReq = buildDeviceRequest(
@@ -244,25 +308,39 @@ class ConsentRiskLevelTest {
         val retainedAgePortraitData = retainedAgePortraitReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, retainedAgePortraitData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, retainedAgePortraitData)
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, null, retainedAgePortraitData)
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousProximityRequester, null, retainedAgePortraitData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
+            ),
+            defaultClassifyRisk(unverifiedWebRequester, null, retainedAgePortraitData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
+            ),
+            defaultClassifyRisk(unverifiedAppRequester, null, retainedAgePortraitData)
         )
         assertEquals(
             ConsentRiskAssessment(
                 ConsentRiskLevel.HIGH_RISK,
-                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
+                setOf(ConsentRiskReason.ANONYMOUS_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
             ),
-            defaultClassifyRisk(webRequester, null, retainedAgePortraitData)
+            defaultClassifyRisk(anonymousWebRequester, null, retainedAgePortraitData)
         )
         assertEquals(
             ConsentRiskAssessment(
                 ConsentRiskLevel.HIGH_RISK,
-                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
+                setOf(ConsentRiskReason.ANONYMOUS_REQUESTER, ConsentRiskReason.INTENT_TO_RETAIN),
             ),
-            defaultClassifyRisk(appRequester, null, retainedAgePortraitData)
+            defaultClassifyRisk(anonymousAppRequester, null, retainedAgePortraitData)
         )
 
         val retainedPiiReq = buildDeviceRequest(
@@ -281,14 +359,47 @@ class ConsentRiskLevelTest {
         val retainedPiiData = retainedPiiReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(
-                ConsentRiskLevel.HIGH_RISK,
+                ConsentRiskLevel.WARNING,
                 setOf(
                     ConsentRiskReason.UNTRUSTED_REQUESTER,
                     ConsentRiskReason.PII_REQUESTED,
                     ConsentRiskReason.INTENT_TO_RETAIN,
                 ),
             ),
-            defaultClassifyRisk(proximityRequester, null, retainedPiiData)
+            defaultClassifyRisk(unverifiedProximityRequester, null, retainedPiiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(
+                    ConsentRiskReason.ANONYMOUS_REQUESTER,
+                    ConsentRiskReason.PII_REQUESTED,
+                    ConsentRiskReason.INTENT_TO_RETAIN,
+                ),
+            ),
+            defaultClassifyRisk(anonymousProximityRequester, null, retainedPiiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(
+                    ConsentRiskReason.UNTRUSTED_REQUESTER,
+                    ConsentRiskReason.PII_REQUESTED,
+                    ConsentRiskReason.INTENT_TO_RETAIN,
+                ),
+            ),
+            defaultClassifyRisk(unverifiedWebRequester, null, retainedPiiData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.HIGH_RISK,
+                setOf(
+                    ConsentRiskReason.ANONYMOUS_REQUESTER,
+                    ConsentRiskReason.PII_REQUESTED,
+                    ConsentRiskReason.INTENT_TO_RETAIN,
+                ),
+            ),
+            defaultClassifyRisk(anonymousWebRequester, null, retainedPiiData)
         )
 
         // 4. Unclassified purpose (e.g. eye_colour requested on mDL) -> HIGH_RISK (UNUSUAL_REQUEST) even when trusted,
@@ -309,21 +420,23 @@ class ConsentRiskLevelTest {
         val unusualData = unusualReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.HIGH_RISK, setOf(ConsentRiskReason.UNUSUAL_REQUEST)),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, unusualData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, unusualData)
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
             defaultClassifyRisk(
-                requester = proximityRequester,
+                requester = anonymousProximityRequester,
                 trustedRequesterIdentity = env.trustedIdentity,
                 presentmentData = unusualData,
                 purposes = setOf(PresentmentPurpose.IDENTITY_VERIFICATION),
             )
         )
 
-        // 5. Untrusted encryption target -> HIGH_RISK (UNTRUSTED_ENCRYPTION_TARGET) even when requester is trusted
+        // 5. Untrusted encryption target:
+        // - Unverified encryption target (has cert chain, not in trust list) -> WARNING (UNTRUSTED_ENCRYPTION_TARGET)
+        // - Anonymous encryption target (no cert chain) -> HIGH_RISK (UNTRUSTED_ENCRYPTION_TARGET)
         val match0 = agePortraitData.useCases[0].solutions[0].matches[0]
-        val untrustedEncData = PresentmentData(
+        val unverifiedEncData = PresentmentData(
             useCases = listOf(
                 agePortraitData.useCases[0].copy(
                     solutions = listOf(
@@ -331,6 +444,32 @@ class ConsentRiskLevelTest {
                             matches = listOf(
                                 match0.copy(
                                     encryptionRequested = true,
+                                    encryptionTargetCertificationChain = unverifiedCertChain,
+                                    encryptionTargetTrustMetadata = null,
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_ENCRYPTION_TARGET),
+            ),
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, unverifiedEncData)
+        )
+
+        val anonymousEncData = PresentmentData(
+            useCases = listOf(
+                agePortraitData.useCases[0].copy(
+                    solutions = listOf(
+                        PresentmentUseCaseSolution(
+                            matches = listOf(
+                                match0.copy(
+                                    encryptionRequested = true,
+                                    encryptionTargetCertificationChain = null,
                                     encryptionTargetTrustMetadata = null,
                                 )
                             )
@@ -344,7 +483,7 @@ class ConsentRiskLevelTest {
                 ConsentRiskLevel.HIGH_RISK,
                 setOf(ConsentRiskReason.UNTRUSTED_ENCRYPTION_TARGET),
             ),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, untrustedEncData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, anonymousEncData)
         )
 
         // Trusted encryption target + trusted requester -> NORMAL
@@ -356,6 +495,7 @@ class ConsentRiskLevelTest {
                             matches = listOf(
                                 match0.copy(
                                     encryptionRequested = true,
+                                    encryptionTargetCertificationChain = unverifiedCertChain,
                                     encryptionTargetTrustMetadata = env.trustedIdentity.trustMetadata,
                                 )
                             )
@@ -366,7 +506,7 @@ class ConsentRiskLevelTest {
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, trustedEncData)
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, trustedEncData)
         )
 
         // 6. Optional use-case omitted (selections = listOf(-1)):
@@ -395,19 +535,19 @@ class ConsentRiskLevelTest {
         val optionalData = optionalReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, env.trustedIdentity, optionalData, selections = listOf(-1))
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, optionalData, selections = listOf(-1))
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(proximityRequester, null, optionalData, selections = listOf(-1))
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousProximityRequester, null, optionalData, selections = listOf(-1))
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
-            defaultClassifyRisk(webRequester, null, optionalData, selections = listOf(-1))
+            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousWebRequester, null, optionalData, selections = listOf(-1))
         )
         assertEquals(
-            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.UNTRUSTED_REQUESTER)),
-            defaultClassifyRisk(appRequester, null, optionalData, selections = listOf(-1))
+            ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
+            defaultClassifyRisk(anonymousAppRequester, null, optionalData, selections = listOf(-1))
         )
     }
 }

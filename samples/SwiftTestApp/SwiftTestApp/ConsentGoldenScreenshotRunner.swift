@@ -557,7 +557,24 @@ enum ConsentGoldenScreenshotRunner {
                 }
             }
 
-            // 4.2 trusted_requester_trusted_target_retained
+            // 4.2 trusted_requester_trusted_target_multiple_choices
+            do {
+                let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
+                let pd = try await eco.executeBorderCrossingEncryptionRequestMultipleChoices(
+                    intentToRetain: false,
+                    encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_CBP,
+                    encryptionTargetTrusted: true
+                )
+                try await runScenario(categoryDir: cat4, scenarioId: "trusted_requester_trusted_target_multiple_choices", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                    await s.showPickSolution(useCaseIndex: 0)
+                    try await s.capture("chooser")
+                    await s.selectSolution(useCaseIndex: 0, solutionIndex: 1)
+                    try await s.capture("main_switched")
+                }
+            }
+
+            // 4.3 trusted_requester_trusted_target_retained
             do {
                 let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
                 let pd = try await eco.executeBorderCrossingEncryptionRequest(
@@ -609,12 +626,7 @@ enum ConsentGoldenScreenshotRunner {
                 }
             }
 
-            // =====================================================================================
-            // Category 6: 06_high_risk
-            // =====================================================================================
-            let cat6 = "06_high_risk"
-
-            // 6.1 untrusted_requester_pii_requested
+            // 5.3 untrusted_requester_pii_requested
             do {
                 let pair = eco.unverifiedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_UNVERIFIED_LOUNGE)
                 let pd = try await eco.executeDcql(dcqlJson: """
@@ -634,7 +646,101 @@ enum ConsentGoldenScreenshotRunner {
                   ]
                 }
                 """)
-                try await runScenario(categoryDir: cat6, scenarioId: "untrusted_requester_pii_requested", pair: pair, presentmentData: pd) { s in
+                try await runScenario(categoryDir: cat5, scenarioId: "untrusted_requester_pii_requested", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                    await s.showRequesterInfo()
+                    try await s.capture("requester_info")
+                }
+            }
+
+            // 5.4 trusted_requester_untrusted_encryption_target
+            do {
+                let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
+                let pd = try await eco.executeBorderCrossingEncryptionRequest(
+                    intentToRetain: false,
+                    encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_UNVERIFIED_BROKER,
+                    encryptionTargetTrusted: false
+                )
+                try await runScenario(categoryDir: cat5, scenarioId: "trusted_requester_untrusted_encryption_target", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                    await s.showRequesterInfo()
+                    try await s.capture("requester_info")
+                }
+            }
+
+            // 5.5 anonymous_requester_trusted_target
+            do {
+                let pair = eco.anonymousProximityRequester()
+                let pd = try await eco.executeBorderCrossingEncryptedOnlyRequest(
+                    intentToRetain: false,
+                    encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_CBP,
+                    encryptionTargetTrusted: true
+                )
+                try await runScenario(categoryDir: cat5, scenarioId: "anonymous_requester_trusted_target", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                    await s.showRequesterInfo()
+                    try await s.capture("requester_info")
+                }
+            }
+
+            // 5.6 untrusted_requester_intent_to_retain
+            do {
+                let pair = eco.unverifiedWebRequester(origin: "https://age-check.utopia-gaming.example.com")
+                let pd = try await eco.executeMdocRequestWithPurposeHints(
+                    docType: DrivingLicense.shared.MDL_DOCTYPE,
+                    nameSpaces: [
+                        DrivingLicense.shared.MDL_NAMESPACE: [
+                            "age_over_21": KotlinBoolean(value: true),
+                            "portrait": KotlinBoolean(value: true)
+                        ]
+                    ],
+                    purposeHints: [:]
+                )
+                try await runScenario(categoryDir: cat5, scenarioId: "untrusted_requester_intent_to_retain", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                }
+            }
+
+            // 5.7 untrusted_requester_transaction_data
+            do {
+                let pair = eco.unverifiedWebRequester(origin: "https://pay.unverified-merchant.example.com")
+                let pd = try await eco.executePaymentCannedDcql(
+                    cannedRequestId: "payment_transaction_only_conf",
+                    payeeName: "Unverified Utopia Merchant",
+                    amount: 299.99,
+                    tipRequested: false
+                )
+                try await runScenario(categoryDir: cat5, scenarioId: "untrusted_requester_transaction_data", pair: pair, presentmentData: pd) { s in
+                    try await s.capture("main")
+                }
+            }
+
+            // =====================================================================================
+            // Category 6: 06_high_risk
+            // =====================================================================================
+            let cat6 = "06_high_risk"
+
+            // 6.1 anonymous_website_pii_requested
+            do {
+                let pair = eco.anonymousWebRequester(origin: "https://verify.unknown-portal.example.com")
+                let pd = try await eco.executeDcql(dcqlJson: """
+                {
+                  "credentials": [
+                    {
+                      "id": "mdl",
+                      "format": "mso_mdoc",
+                      "meta": { "doctype_value": "\(DrivingLicense.shared.MDL_DOCTYPE)" },
+                      "claims": [
+                        { "path": ["\(DrivingLicense.shared.MDL_NAMESPACE)", "given_name"] },
+                        { "path": ["\(DrivingLicense.shared.MDL_NAMESPACE)", "family_name"] },
+                        { "path": ["\(DrivingLicense.shared.MDL_NAMESPACE)", "birth_date"] },
+                        { "path": ["\(DrivingLicense.shared.MDL_NAMESPACE)", "portrait"] }
+                      ]
+                    }
+                  ]
+                }
+                """)
+                try await runScenario(categoryDir: cat6, scenarioId: "anonymous_website_pii_requested", pair: pair, presentmentData: pd) { s in
                     try await s.capture("main_waiting")
                     await s.completeCoolOff()
                     try await s.capture("main_ready")
@@ -677,39 +783,25 @@ enum ConsentGoldenScreenshotRunner {
                 }
             }
 
-            // 6.4 trusted_requester_untrusted_encryption_target
+            // 6.4 trusted_requester_anonymous_encryption_target
             do {
                 let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_AIRLINES)
                 let pd = try await eco.executeBorderCrossingEncryptionRequest(
                     intentToRetain: false,
                     encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_UNVERIFIED_BROKER,
-                    encryptionTargetTrusted: false
+                    encryptionTargetTrusted: false,
+                    includeRecipientCertificates: false
                 )
-                try await runScenario(categoryDir: cat6, scenarioId: "trusted_requester_untrusted_encryption_target", pair: pair, presentmentData: pd) { s in
+                try await runScenario(categoryDir: cat6, scenarioId: "trusted_requester_anonymous_encryption_target", pair: pair, presentmentData: pd) { s in
                     try await s.capture("main")
                     await s.showRequesterInfo()
                     try await s.capture("requester_info")
                 }
             }
 
-            // 6.5 anonymous_requester_trusted_target
+            // 6.5 anonymous_website_intent_to_retain
             do {
-                let pair = eco.anonymousProximityRequester()
-                let pd = try await eco.executeBorderCrossingEncryptedOnlyRequest(
-                    intentToRetain: false,
-                    encryptionTargetRpId: SwiftConsentGoldenEcosystem.companion.RP_CBP,
-                    encryptionTargetTrusted: true
-                )
-                try await runScenario(categoryDir: cat6, scenarioId: "anonymous_requester_trusted_target", pair: pair, presentmentData: pd) { s in
-                    try await s.capture("main")
-                    await s.showRequesterInfo()
-                    try await s.capture("requester_info")
-                }
-            }
-
-            // 6.6 untrusted_requester_intent_to_retain
-            do {
-                let pair = eco.unverifiedWebRequester(origin: "https://age-check.utopia-gaming.example.com")
+                let pair = eco.anonymousWebRequester(origin: "https://age-check.utopia-gaming.example.com")
                 let pd = try await eco.executeMdocRequestWithPurposeHints(
                     docType: DrivingLicense.shared.MDL_DOCTYPE,
                     nameSpaces: [
@@ -720,21 +812,21 @@ enum ConsentGoldenScreenshotRunner {
                     ],
                     purposeHints: [:]
                 )
-                try await runScenario(categoryDir: cat6, scenarioId: "untrusted_requester_intent_to_retain", pair: pair, presentmentData: pd) { s in
+                try await runScenario(categoryDir: cat6, scenarioId: "anonymous_website_intent_to_retain", pair: pair, presentmentData: pd) { s in
                     try await s.capture("main")
                 }
             }
 
-            // 6.7 untrusted_requester_transaction_data
+            // 6.6 anonymous_website_transaction_data
             do {
-                let pair = eco.unverifiedWebRequester(origin: "https://pay.unverified-merchant.example.com")
+                let pair = eco.anonymousWebRequester(origin: "https://pay.unverified-merchant.example.com")
                 let pd = try await eco.executePaymentCannedDcql(
                     cannedRequestId: "payment_transaction_only_conf",
                     payeeName: "Unverified Utopia Merchant",
                     amount: 299.99,
                     tipRequested: false
                 )
-                try await runScenario(categoryDir: cat6, scenarioId: "untrusted_requester_transaction_data", pair: pair, presentmentData: pd) { s in
+                try await runScenario(categoryDir: cat6, scenarioId: "anonymous_website_transaction_data", pair: pair, presentmentData: pd) { s in
                     try await s.capture("main")
                 }
             }
@@ -830,7 +922,7 @@ enum ConsentGoldenScreenshotRunner {
 
             // 8.3 high_risk_pii_requested
             do {
-                let pair = eco.unverifiedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_UNVERIFIED_LOUNGE)
+                let pair = eco.anonymousWebRequester(origin: "https://verify.unknown-portal.example.com")
                 let pd = try await eco.executeDcql(dcqlJson: """
                 {
                   "credentials": [

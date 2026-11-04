@@ -129,6 +129,7 @@ internal class ConsentGoldenEcosystem private constructor(
     val documentTypeRepository: DocumentTypeRepository,
     val transactionDataRendererRepository: TransactionDataRendererRepository,
     val documentStore: DocumentStore,
+    val twoPhotoIdsDocumentStore: DocumentStore,
     val mdlDoc: Document,
     val photoIdDoc: Document,
     val pidDoc: Document,
@@ -204,6 +205,14 @@ internal class ConsentGoldenEcosystem private constructor(
     }
 
     /**
+     * Builds an anonymous web [Requester] with no certificate chain.
+     */
+    fun anonymousWebRequester(
+        origin: String = "https://age-check.utopia-gaming.example.com",
+    ): Pair<Requester, TrustedRequesterIdentity?> =
+        Requester(origin = origin) to null
+
+    /**
      * Builds an untrusted Android application [Requester].
      */
     fun unverifiedAppRequester(appId: String): Pair<Requester, TrustedRequesterIdentity?> =
@@ -212,9 +221,10 @@ internal class ConsentGoldenEcosystem private constructor(
     private fun buildPresentmentSource(
         encryptionTargetRpId: String? = null,
         encryptionTargetTrusted: Boolean = true,
+        store: DocumentStore = documentStore,
     ): SimplePresentmentSource {
         return SimplePresentmentSource(
-            documentStore = documentStore,
+            documentStore = store,
             documentTypeRepository = documentTypeRepository,
             resolveTrustFn = { requester ->
                 val identity = requester.requesterIdentities.firstOrNull() ?: return@SimplePresentmentSource null
@@ -283,6 +293,8 @@ internal class ConsentGoldenEcosystem private constructor(
         intentToRetain: Boolean,
         encryptionTargetRpId: String,
         encryptionTargetTrusted: Boolean,
+        includeRecipientCertificates: Boolean = true,
+        multiplePhotoIds: Boolean = false,
     ): PresentmentData {
         val sessionTranscript = buildCborArray {
             add(Simple.NULL)
@@ -313,7 +325,11 @@ internal class ConsentGoldenEcosystem private constructor(
                 docRequestInfo = DocRequestInfo(
                     docResponseEncryption = EncryptionParameters.fromValues(
                         recipientPublicKey = encKey.publicKey as EcPublicKey,
-                        recipientCertificates = encKey.certChain.certificates,
+                        recipientCertificates = if (includeRecipientCertificates) {
+                            encKey.certChain.certificates
+                        } else {
+                            emptyList()
+                        },
                     )
                 ),
             )
@@ -332,6 +348,7 @@ internal class ConsentGoldenEcosystem private constructor(
         val source = buildPresentmentSource(
             encryptionTargetRpId = encryptionTargetRpId,
             encryptionTargetTrusted = encryptionTargetTrusted,
+            store = if (multiplePhotoIds) twoPhotoIdsDocumentStore else documentStore,
         )
         return deviceRequest.execute(
             presentmentSource = source,
@@ -905,10 +922,41 @@ internal class ConsentGoldenEcosystem private constructor(
                 encTargetTrustMetadata[cfg.id] = metadata
             }
 
+            val twoPhotoIdsStorage = DeterministicStorage()
+            val twoPhotoIdsSecureArea = SoftwareSecureArea.create(twoPhotoIdsStorage)
+            val twoPhotoIdsRepo = SecureAreaRepository.Builder()
+                .add(twoPhotoIdsSecureArea)
+                .build()
+            val twoPhotoIdsDocumentStore = buildDocumentStore(
+                storage = twoPhotoIdsStorage,
+                secureAreaRepository = twoPhotoIdsRepo,
+            ) {}
+            val twoPhotoIdsRng = Random(424243L)
+            val photoIdCardArt = readResourceBytes("/cards/card_utopia_photoid.png")
+            val photoIdTypeDisplay = if (lang == "en") "Photo ID" else photoIdDocType.displayName
+            for (docName in listOf("Erika's Photo ID", "Erika's Photo ID #2")) {
+                val doc = twoPhotoIdsDocumentStore.createDocument(
+                    displayName = docName,
+                    typeDisplayName = photoIdTypeDisplay,
+                    cardArt = photoIdCardArt,
+                )
+                photoIdDocType.createMdocCredentialWithSampleData(
+                    document = doc,
+                    secureArea = twoPhotoIdsSecureArea,
+                    createKeySettings = keySettings,
+                    dsKey = dsKey,
+                    signedAt = VALID_FROM,
+                    validFrom = VALID_FROM,
+                    validUntil = VALID_UNTIL,
+                    randomProvider = twoPhotoIdsRng,
+                )
+            }
+
             return ConsentGoldenEcosystem(
                 documentTypeRepository = documentTypeRepository,
                 transactionDataRendererRepository = transactionDataRendererRepository,
                 documentStore = documentStore,
+                twoPhotoIdsDocumentStore = twoPhotoIdsDocumentStore,
                 mdlDoc = mdlDoc,
                 photoIdDoc = photoIdDoc,
                 pidDoc = pidDoc,

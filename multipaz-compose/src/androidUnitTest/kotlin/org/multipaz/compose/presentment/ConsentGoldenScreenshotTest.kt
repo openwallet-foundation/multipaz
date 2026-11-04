@@ -576,7 +576,7 @@ class ConsentGoldenScreenshotTest {
                 title = "Unverified Proximity Reader Requesting Non-PII (Signed Certificate Not in Trust List)",
                 requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
                 protocolSummary = "mDL (age_over_21, portrait)",
-                riskBadge = "NORMAL",
+                riskBadge = "NORMAL (UNTRUSTED_REQUESTER)",
                 description = "A proximity reader presents a valid X.509 certificate chain whose root CA is not in the wallet's trust list, requesting only non-PII (age_over_21 and portrait). Because the user is in physical proximity and the relying party is already free to capture their likeness, no warning is shown (unlike over-the-Internet or app-to-app requests, which trigger a warning). The Requester Info page still shows 'Unverified requester' with the inspectable certificate chain.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
@@ -599,9 +599,9 @@ class ConsentGoldenScreenshotTest {
                 categoryDescription = cat1Desc,
                 scenarioId = "anonymous_proximity_reader_age_over_21",
                 title = "Anonymous Proximity Reader Requesting Non-PII (No Reader Certificate)",
-                requesterSummary = "Unknown Requester — Anonymous Proximity (ISO 18013-5)",
+                requesterSummary = "Anonymous Requester — Anonymous Proximity (ISO 18013-5)",
                 protocolSummary = "mDL (age_over_21, portrait)",
-                riskBadge = "NORMAL",
+                riskBadge = "NORMAL (ANONYMOUS_REQUESTER)",
                 description = "A proximity reader provides no reader authentication certificate at all while requesting only non-PII (age_over_21 and portrait). Because the user is in physical proximity and the relying party is already free to capture their likeness, no warning is shown (whereas an over-the-Internet or app-to-app request would show a warning). The Requester Info page displays 'Anonymous requester'.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
@@ -842,13 +842,13 @@ class ConsentGoldenScreenshotTest {
                 requesterSummary = "Utopia Airlines — Proximity (ISO 18013-5)",
                 protocolSummary = "(mDL + Boarding Pass) OR (Photo ID + Boarding Pass)",
                 riskBadge = "NORMAL",
-                description = "A single use-case whose options each pair an identity document with a boarding pass. The chooser displays compound multi-card radio options.",
+                description = "A single use-case whose options each pair an identity document with a boarding pass. The identity document card renders a chevron while the invariant boarding pass card does not; the chooser displays compound multi-card radio options.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
             ) {
                 capture("main", "Main prompt (2 credentials in 1 use-case)")
-                clickNodeWithText("Share something else")
+                clickNodeWithText("Erika's Driving License")
                 capture("chooser", "Compound solution chooser")
             }
         }
@@ -1018,7 +1018,38 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 4.2 trusted_requester_trusted_target_retained
+        // 4.2 trusted_requester_trusted_target_multiple_choices
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
+            val pd = eco.executeBorderCrossingEncryptionRequest(
+                intentToRetain = false,
+                encryptionTargetRpId = ConsentGoldenEcosystem.RP_CBP,
+                encryptionTargetTrusted = true,
+                multiplePhotoIds = true,
+            )
+            runScenario(
+                categoryDir = cat4Dir,
+                categoryTitle = cat4Title,
+                categoryDescription = cat4Desc,
+                scenarioId = "trusted_requester_trusted_target_multiple_choices",
+                title = "Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)",
+                requesterSummary = "Utopia Airlines -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
+                protocolSummary = "Photo ID (2 holder Photo IDs yielding 4 plain/encrypted combinations)",
+                riskBadge = "NORMAL",
+                description = "When the wallet holds both Erika's Photo ID and Erika's Photo ID #2, same-document combinations render as a single grouped card with an inline chevron, while mixed-document combinations (such as Erika's Photo ID for Utopia Airlines and Erika's Photo ID #2 for Utopia Border Protection) render as two separate document cards each with an inline chevron.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (Erika's Photo ID selected for both)")
+                clickNodeWithText("Erika's Photo ID")
+                capture("chooser", "Solution chooser (4 combinations across 2 Photo IDs)")
+                clickNodeWithTextAtIndex("Erika's Photo ID #2", index = 0)
+                capture("main_switched", "Main prompt (Erika's Photo ID + Erika's Photo ID #2 selected)")
+            }
+        }
+
+        // 4.3 trusted_requester_trusted_target_retained
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -1048,8 +1079,8 @@ class ConsentGoldenScreenshotTest {
         // Category 5: 05_warning_untrusted
         // =========================================================================================
         val cat5Dir = "05_warning_untrusted"
-        val cat5Title = "5. Warning (Yellow) — Untrusted Over-the-Internet & App-to-App Requests for Non-PII"
-        val cat5Desc = "Over-the-Internet and app-to-app relying parties not in any trust list requesting only low-sensitivity non-PII claims (age booleans + portrait, no PII, no retention, no transaction data). Unlike proximity requests (where the user is physically present and the relying party is free to capture their likeness), over-the-Internet and app-to-app requests render a top-anchored yellow warning box without a 5-second cool-off timer."
+        val cat5Title = "5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII"
+        val cat5Desc = "Requests triggering ConsentRiskLevel.WARNING, which renders a top-anchored yellow warning box without a 5-second cool-off timer. Includes over-the-Internet and app-to-app requests for non-PII, unverified requesters (who signed with a certificate not in the wallet's trust list) requesting PII, retention, or transaction data, unverified encryption targets with a certificate chain, and anonymous proximity readers requesting PII."
 
         // 5.1 unverified_website_age_over_18
         run {
@@ -1080,7 +1111,7 @@ class ConsentGoldenScreenshotTest {
                 requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
                 protocolSummary = "mDL (age_over_18, portrait)",
                 riskBadge = "WARNING (UNTRUSTED_REQUESTER)",
-                description = "An over-the-Internet website origin not in the wallet's trust list requests age_over_18 and portrait. Unlike a proximity request, an over-the-Internet request for non-PII triggers a WARNING: the headline displays the origin URL and the yellow warning box states 'Website is not in a trust list'.",
+                description = "An over-the-Internet website origin not in the wallet's trust list requests age_over_18 and portrait. Unlike a proximity request, an over-the-Internet request for non-PII triggers a WARNING: the headline displays the origin URL and the yellow warning box states that the website is unknown.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -1104,8 +1135,8 @@ class ConsentGoldenScreenshotTest {
                 title = "Unverified Local Android App Requesting Age Over 21",
                 requesterSummary = "Utopia Nightclub Scanner (org.utopia.nightclub.scanner) — App-to-app",
                 protocolSummary = "mDL (age_over_21, portrait)",
-                riskBadge = "WARNING (UNTRUSTED_REQUESTER)",
-                description = "An app-to-app request from a local Android application not in a trust list requesting age_over_21 and portrait. Unlike a proximity request, an app-to-app request for non-PII triggers a WARNING: the prompt resolves the app name and icon via PackageManager and displays 'Application is not in a trust list'.",
+                riskBadge = "WARNING (ANONYMOUS_REQUESTER)",
+                description = "An app-to-app request from a local Android application not in a trust list requesting age_over_21 and portrait. Unlike a proximity request, an app-to-app request for non-PII triggers a WARNING: the prompt resolves the app name and icon via PackageManager and displays an unknown application warning.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -1114,16 +1145,191 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
+        // 5.3 untrusted_requester_pii_requested
+        run {
+            val (req, trusted) = eco.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
+            val pd = eco.executeDcql(
+                """
+                {
+                  "credentials": [
+                    {
+                      "id": "mdl",
+                      "format": "mso_mdoc",
+                      "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                      "claims": [
+                        { "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] },
+                        { "path": ["${DrivingLicense.MDL_NAMESPACE}", "family_name"] },
+                        { "path": ["${DrivingLicense.MDL_NAMESPACE}", "birth_date"] },
+                        { "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] }
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "untrusted_requester_pii_requested",
+                title = "Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII)",
+                requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
+                protocolSummary = "mDL (given_name, family_name, birth_date, portrait)",
+                riskBadge = "WARNING (UNTRUSTED_REQUESTER, PII_REQUESTED)",
+                description = "An unverified verifier that signed the request with a certificate not in the wallet's trust list requests PII attributes. Because the verifier presented a certificate chain (or is in physical proximity), this is classified as WARNING rather than HIGH_RISK: a yellow warning box is anchored at the top without a 5-second cool-off timer.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (unverified reader requesting PII)")
+                clickMoreInformation()
+                capture("requester_info", "Requester info ('Unverified requester')")
+            }
+        }
+
+        // 5.4 trusted_requester_untrusted_encryption_target
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
+            val pd = eco.executeBorderCrossingEncryptionRequest(
+                intentToRetain = false,
+                encryptionTargetRpId = ConsentGoldenEcosystem.RP_UNVERIFIED_BROKER,
+                encryptionTargetTrusted = false,
+                includeRecipientCertificates = true,
+            )
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "trusted_requester_untrusted_encryption_target",
+                title = "Trusted Intermediary + Unverified Encryption Target (With Certificate)",
+                requesterSummary = "Utopia Airlines -> encrypted for Unverified Recipient — Proximity (ISO 18013-5)",
+                protocolSummary = "Photo ID (plain org.iso.23220.2 + encrypted datagroups to unverified certificate)",
+                riskBadge = "WARNING (UNTRUSTED_ENCRYPTION_TARGET)",
+                description = "Utopia Airlines is trusted, and the encryption recipient for the passport datagroups provided an X.509 certificate chain whose root CA is not in the wallet's trust list. Because the encryption target provided a certificate chain, this is classified as WARNING.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (unverified encryption target warning)")
+                clickMoreInformation()
+                capture("requester_info", "Requester info (verified requester + unverified target)")
+            }
+        }
+
+        // 5.5 anonymous_requester_trusted_target
+        run {
+            val (req, trusted) = eco.anonymousProximityRequester()
+            val pd = eco.executeBorderCrossingEncryptionRequest(
+                intentToRetain = false,
+                encryptionTargetRpId = ConsentGoldenEcosystem.RP_CBP,
+                encryptionTargetTrusted = true,
+            )
+            val encryptedOnlyPd = PresentmentData(
+                useCases = pd.useCases.map { uc ->
+                    uc.copy(
+                        solutions = uc.solutions.map { sol ->
+                            sol.copy(matches = sol.matches.filter { it.encryptionRequested })
+                        }
+                    )
+                }
+            )
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "anonymous_requester_trusted_target",
+                title = "Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target",
+                requesterSummary = "Anonymous Kiosk -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
+                protocolSummary = "Photo ID (HPKE-encrypted datagroups only)",
+                riskBadge = "WARNING (ANONYMOUS_REQUESTER, PII_REQUESTED)",
+                description = "An unauthenticated proximity airport kiosk forwards HPKE-encrypted passport datagroups to a verified Utopia Border Protection key. Because this is a proximity request, an anonymous reader requesting PII is classified as WARNING (and a wallet whose threat model accepts an untrusted intermediary forwarding encrypted claims to a trusted target could override classifyRiskFn to classify this as NORMAL).",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = encryptedOnlyPd,
+            ) {
+                capture("main", "Main prompt (anonymous proximity kiosk + trusted encryption target)")
+                clickMoreInformation()
+                capture("requester_info", "Requester info (anonymous requester + verified target)")
+            }
+        }
+
+        // 5.6 untrusted_requester_intent_to_retain
+        run {
+            val (req, trusted) = eco.unverifiedWebRequester("https://age-check.utopia-gaming.example.com")
+            val pd = eco.executeMdocRequestWithPurposeHints(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "age_over_21" to true,
+                        "portrait" to true,
+                    )
+                ),
+                purposeHints = emptyMap(),
+            )
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "untrusted_requester_intent_to_retain",
+                title = "Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait",
+                requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
+                protocolSummary = "mDL (age_over_21 & portrait with intentToRetain = true)",
+                riskBadge = "WARNING (UNTRUSTED_REQUESTER, INTENT_TO_RETAIN)",
+                description = "An unverified over-the-Internet website that signed the request with a certificate not in the wallet's trust list requests age_over_21 and portrait with intentToRetain = true, adding the INTENT_TO_RETAIN warning paragraph inside the yellow warning box.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (unverified requester retention warning)")
+            }
+        }
+
+        // 5.7 untrusted_requester_transaction_data
+        run {
+            val (req, trusted) = eco.unverifiedWebRequester("https://pay.unverified-merchant.example.com")
+            val canned = DigitalPaymentCredential.getDocumentType().cannedRequests.first {
+                it.id == "payment_transaction_only_conf"
+            }
+            val pd = eco.executeCannedDcql(
+                cannedRequest = canned,
+                transactionDataMap = mapOf(
+                    "cred1" to listOf(
+                        utopiaPaymentTransactionData(
+                            payeeName = "Unverified Utopia Merchant",
+                            amount = 299.99,
+                            tipRequested = false,
+                        )
+                    )
+                ),
+            )
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "untrusted_requester_transaction_data",
+                title = "Unverified Requester (With Certificate) Attaching Transaction Data",
+                requesterSummary = "https://pay.unverified-merchant.example.com — Unverified Over-the-Internet (ISO 18013-7)",
+                protocolSummary = "DigitalPaymentCredential + PaymentTransaction",
+                riskBadge = "WARNING (UNTRUSTED_REQUESTER, TRANSACTION_DATA)",
+                description = "An unverified website that signed the request with a certificate not in the wallet's trust list attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA at the WARNING level.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (unverified requester transaction warning)")
+            }
+        }
+
         // =========================================================================================
         // Category 6: 06_high_risk
         // =========================================================================================
         val cat6Dir = "06_high_risk"
         val cat6Title = "6. High-Risk (Red) & Cool-Off Safeguards"
-        val cat6Desc = "Requests triggering ConsentRiskLevel.HIGH_RISK due to untrusted PII/retention/transactions, over-broad/unusual claim combinations, mismatched purpose hints, or untrusted encryption targets. Enforces a 5-second cool-off timer on the Continue button."
+        val cat6Desc = "Requests triggering ConsentRiskLevel.HIGH_RISK due to anonymous remote/app requesters asking for PII, retention, or transaction data, over-broad/unusual claim combinations, mismatched purpose hints, or anonymous encryption targets with no certificate chain. Enforces a 5-second cool-off timer on the Continue button."
 
-        // 6.1 untrusted_requester_pii_requested
+        // 6.1 anonymous_website_pii_requested
         run {
-            val (req, trusted) = eco.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
+            val (req, trusted) = eco.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = eco.executeDcql(
                 """
                 {
@@ -1147,12 +1353,12 @@ class ConsentGoldenScreenshotTest {
                 categoryDir = cat6Dir,
                 categoryTitle = cat6Title,
                 categoryDescription = cat6Desc,
-                scenarioId = "untrusted_requester_pii_requested",
-                title = "Untrusted Requester Asking for Personally Identifiable Information (PII)",
-                requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
+                scenarioId = "anonymous_website_pii_requested",
+                title = "Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII)",
+                requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "mDL (given_name, family_name, birth_date, portrait)",
-                riskBadge = "HIGH_RISK (UNTRUSTED_REQUESTER, PII_REQUESTED)",
-                description = "An untrusted verifier requests PII attributes. A red danger box is anchored at the top and the primary button is disabled in the 'Wait' cool-off state for 5 seconds before transitioning to 'Continue'. The user can tap 'More information' to inspect the unverified requester details.",
+                riskBadge = "HIGH_RISK (ANONYMOUS_REQUESTER, PII_REQUESTED)",
+                description = "An anonymous over-the-Internet website (providing no X.509 signature certificate at all) requests PII attributes. A red danger box is anchored at the top and the primary button is disabled in the 'Wait' cool-off state for 5 seconds before transitioning to 'Continue'. The user can tap 'More information' to inspect the anonymous requester details.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -1161,7 +1367,7 @@ class ConsentGoldenScreenshotTest {
                 advanceCoolOffTimer()
                 capture("main_ready", "Main prompt ('Continue' enabled after 5s)")
                 clickMoreInformation()
-                capture("requester_info", "Requester info ('Unverified requester')")
+                capture("requester_info", "Requester info ('Anonymous requester')")
             }
         }
 
@@ -1227,80 +1433,38 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.4 trusted_requester_untrusted_encryption_target
+        // 6.4 trusted_requester_anonymous_encryption_target
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
                 intentToRetain = false,
                 encryptionTargetRpId = ConsentGoldenEcosystem.RP_UNVERIFIED_BROKER,
                 encryptionTargetTrusted = false,
+                includeRecipientCertificates = false,
             )
             runScenario(
                 categoryDir = cat6Dir,
                 categoryTitle = cat6Title,
                 categoryDescription = cat6Desc,
-                scenarioId = "trusted_requester_untrusted_encryption_target",
-                title = "Trusted Intermediary + Untrusted Encryption Target",
-                requesterSummary = "Utopia Airlines -> encrypted for Unverified Recipient — Proximity (ISO 18013-5)",
-                protocolSummary = "Photo ID (plain org.iso.23220.2 + encrypted datagroups to untrusted key)",
+                scenarioId = "trusted_requester_anonymous_encryption_target",
+                title = "Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain)",
+                requesterSummary = "Utopia Airlines -> encrypted for Anonymous Recipient — Proximity (ISO 18013-5)",
+                protocolSummary = "Photo ID (plain org.iso.23220.2 + encrypted datagroups to raw public key)",
                 riskBadge = "HIGH_RISK (UNTRUSTED_ENCRYPTION_TARGET)",
-                description = "Utopia Airlines is trusted, but the encryption recipient certificate for the passport datagroups is not in any trust list.",
+                description = "Utopia Airlines is trusted, but the encryption recipient for the passport datagroups provided only a raw public key with no X.509 certificate chain at all.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
             ) {
-                capture("main", "Main prompt (untrusted encryption target danger)")
+                capture("main", "Main prompt (anonymous encryption target danger)")
                 clickMoreInformation()
-                capture("requester_info", "Requester info (verified requester + unverified target)")
+                capture("requester_info", "Requester info (verified requester + anonymous target)")
             }
         }
 
-        // 6.5 anonymous_requester_trusted_target
+        // 6.5 anonymous_website_intent_to_retain
         run {
-            val (req, trusted) = eco.anonymousProximityRequester()
-            val pd = eco.executeBorderCrossingEncryptionRequest(
-                intentToRetain = false,
-                encryptionTargetRpId = ConsentGoldenEcosystem.RP_CBP,
-                encryptionTargetTrusted = true,
-            )
-            // Note: Even though the datagroups are encrypted for a trusted target (Utopia Border
-            // Protection), the anonymous intermediary still has knowledge of the transaction, so
-            // defaultClassifyRisk classifies this as HIGH_RISK (UNTRUSTED_REQUESTER, PII_REQUESTED).
-            // Like anything else, this is policy and a wallet could choose to classify this as
-            // ConsentRiskLevel.NORMAL if its threat model accepts an untrusted intermediary
-            // forwarding encrypted claims to a trusted encryption target.
-            val encryptedOnlyPd = PresentmentData(
-                useCases = pd.useCases.map { uc ->
-                    uc.copy(
-                        solutions = uc.solutions.map { sol ->
-                            sol.copy(matches = sol.matches.filter { it.encryptionRequested })
-                        }
-                    )
-                }
-            )
-            runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
-                scenarioId = "anonymous_requester_trusted_target",
-                title = "Anonymous Intermediary Kiosk + Trusted Encryption Target",
-                requesterSummary = "Anonymous Kiosk -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
-                protocolSummary = "Photo ID (HPKE-encrypted datagroups only)",
-                riskBadge = "HIGH_RISK (UNTRUSTED_REQUESTER, PII_REQUESTED)",
-                description = "An unauthenticated airport kiosk forwards HPKE-encrypted passport datagroups to a verified Utopia Border Protection key. Because the anonymous intermediary still has knowledge of the transaction, the default policy classifies this as HIGH_RISK (though a wallet whose threat model accepts an untrusted intermediary forwarding encrypted claims to a trusted target could override classifyRiskFn to classify this as NORMAL).",
-                requester = req,
-                trustedRequesterIdentity = trusted,
-                presentmentData = encryptedOnlyPd,
-            ) {
-                capture("main", "Main prompt (anonymous kiosk + trusted encryption target)")
-                clickMoreInformation()
-                capture("requester_info", "Requester info (anonymous requester + verified target)")
-            }
-        }
-
-        // 6.6 untrusted_requester_intent_to_retain
-        run {
-            val (req, trusted) = eco.unverifiedWebRequester("https://age-check.utopia-gaming.example.com")
+            val (req, trusted) = eco.anonymousWebRequester("https://age-check.utopia-gaming.example.com")
             val pd = eco.executeMdocRequestWithPurposeHints(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -1315,23 +1479,23 @@ class ConsentGoldenScreenshotTest {
                 categoryDir = cat6Dir,
                 categoryTitle = cat6Title,
                 categoryDescription = cat6Desc,
-                scenarioId = "untrusted_requester_intent_to_retain",
-                title = "Untrusted Over-the-Internet Requester Asking to Retain Portrait (intentToRetain = true)",
-                requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
+                scenarioId = "anonymous_website_intent_to_retain",
+                title = "Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait",
+                requesterSummary = "https://age-check.utopia-gaming.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "mDL (age_over_21 & portrait with intentToRetain = true)",
-                riskBadge = "HIGH_RISK (UNTRUSTED_REQUESTER, INTENT_TO_RETAIN)",
-                description = "An unverified over-the-Internet website requests age_over_21 and portrait with intentToRetain = true. For non-proximity requests, retaining a claim with sensitivity >= PORTRAIT_IMAGE escalates the prompt from WARNING to HIGH_RISK (whereas for proximity requests, INTENT_TO_RETAIN only triggers for sensitivity >= PII).",
+                riskBadge = "HIGH_RISK (ANONYMOUS_REQUESTER, INTENT_TO_RETAIN)",
+                description = "An anonymous over-the-Internet website (providing no X.509 signature certificate) requests age_over_21 and portrait with intentToRetain = true. For anonymous non-proximity requests, retaining a claim with sensitivity >= PORTRAIT_IMAGE escalates the prompt from WARNING to HIGH_RISK.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
             ) {
-                capture("main", "Main prompt (untrusted retention danger)")
+                capture("main", "Main prompt (anonymous website retention danger)")
             }
         }
 
-        // 6.6 untrusted_requester_transaction_data
+        // 6.6 anonymous_website_transaction_data
         run {
-            val (req, trusted) = eco.unverifiedWebRequester("https://pay.unverified-merchant.example.com")
+            val (req, trusted) = eco.anonymousWebRequester("https://pay.unverified-merchant.example.com")
             val canned = DigitalPaymentCredential.getDocumentType().cannedRequests.first {
                 it.id == "payment_transaction_only_conf"
             }
@@ -1351,17 +1515,17 @@ class ConsentGoldenScreenshotTest {
                 categoryDir = cat6Dir,
                 categoryTitle = cat6Title,
                 categoryDescription = cat6Desc,
-                scenarioId = "untrusted_requester_transaction_data",
-                title = "Untrusted Requester Attaching Transaction Data",
-                requesterSummary = "https://pay.unverified-merchant.example.com — Unverified Over-the-Internet (ISO 18013-7)",
+                scenarioId = "anonymous_website_transaction_data",
+                title = "Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data",
+                requesterSummary = "https://pay.unverified-merchant.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "DigitalPaymentCredential + PaymentTransaction",
-                riskBadge = "HIGH_RISK (UNTRUSTED_REQUESTER, TRANSACTION_DATA)",
-                description = "An untrusted website attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA.",
+                riskBadge = "HIGH_RISK (ANONYMOUS_REQUESTER, TRANSACTION_DATA)",
+                description = "An anonymous website (providing no X.509 signature certificate) attaches a payment transaction payload, triggering ConsentRiskReason.TRANSACTION_DATA at the HIGH_RISK level.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
             ) {
-                capture("main", "Main prompt (untrusted transaction danger)")
+                capture("main", "Main prompt (anonymous website transaction danger)")
             }
         }
 
@@ -1509,7 +1673,7 @@ class ConsentGoldenScreenshotTest {
 
         // 8.3 high_risk_pii_requested
         run {
-            val (req, trusted) = eco.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
+            val (req, trusted) = eco.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = eco.executeDcql(
                 """
                 {
@@ -1534,11 +1698,11 @@ class ConsentGoldenScreenshotTest {
                 categoryTitle = cat8Title,
                 categoryDescription = cat8Desc,
                 scenarioId = "high_risk_pii_requested",
-                title = "Dark Mode — High-Risk (Untrusted Reader Requesting PII)",
-                requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
+                title = "Dark Mode — High-Risk (Anonymous Website Requesting PII)",
+                requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "mDL (given_name, family_name, birth_date, portrait)",
                 riskBadge = "HIGH_RISK (Dark Theme)",
-                description = "Dark mode rendering of the red danger box (#4A1C1A fill / #B3261E border) and disabled 'Wait' cool-off button.",
+                description = "Dark mode rendering of the red danger box (#4A1C1A fill / #B3261E border) and disabled 'Wait' cool-off button for an anonymous website requesting PII.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -1703,7 +1867,7 @@ class ConsentGoldenScreenshotTest {
 
         // 9.3 danish_high_risk_pii_and_retention
         run {
-            val (req, trusted) = ecoDa.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
+            val (req, trusted) = ecoDa.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = ecoDa.executeDcql(
                 """
                 {
@@ -1728,11 +1892,11 @@ class ConsentGoldenScreenshotTest {
                 categoryTitle = cat9Title,
                 categoryDescription = cat9Desc,
                 scenarioId = "danish_high_risk_pii_and_retention",
-                title = "Danish (da-DK) — High-Risk Untrusted Reader Requesting PII & Retention",
-                requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
+                title = "Danish (da-DK) — High-Risk Anonymous Website Requesting PII & Retention",
+                requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "mDL (given_name, family_name, birth_date, portrait) retained",
                 riskBadge = "HIGH_RISK (da-DK)",
-                description = "Danish localization of the red high-risk warning card (with bullets for PII requested and intent to retain) and the 3-second 'Vent…' -> 'Fortsæt' cool-off button.",
+                description = "Danish localization of the red high-risk warning card (with bullets for PII requested and intent to retain) and the 5-second 'Vent…' -> 'Fortsæt' cool-off button.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -1859,7 +2023,7 @@ class ConsentGoldenScreenshotTest {
 
         // 9.6 arabic_rtl_high_risk_pii_and_retention
         run {
-            val (req, trusted) = ecoAr.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
+            val (req, trusted) = ecoAr.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = ecoAr.executeDcql(
                 """
                 {
@@ -1884,11 +2048,11 @@ class ConsentGoldenScreenshotTest {
                 categoryTitle = cat9Title,
                 categoryDescription = cat9Desc,
                 scenarioId = "arabic_rtl_high_risk_pii_and_retention",
-                title = "Arabic RTL (ar-SA) — High-Risk Untrusted Reader with RTL Cool-Off Progress Bar",
-                requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
+                title = "Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar",
+                requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
                 protocolSummary = "mDL (given_name, family_name, birth_date, portrait) retained",
                 riskBadge = "HIGH_RISK (ar-SA RTL)",
-                description = "Arabic RTL rendering of the red high-risk warning card, RTL button placement ('إلغاء' on the right, 'انتظر…' / 'متابعة' on the left), and the 3-second cool-off progress bar filling from right to left.",
+                description = "Arabic RTL rendering of the red high-risk warning card, RTL button placement ('إلغاء' on the right, 'انتظر…' / 'متابعة' on the left), and the 5-second cool-off progress bar filling from right to left.",
                 requester = req,
                 trustedRequesterIdentity = trusted,
                 presentmentData = pd,
@@ -2016,6 +2180,11 @@ class ConsentGoldenScreenshotTest {
 
         fun clickNodeWithText(text: String) {
             composeTestRule.onNodeWithText(text, substring = true).performScrollTo().performClick()
+            settleUi()
+        }
+
+        fun clickNodeWithTextAtIndex(text: String, index: Int) {
+            composeTestRule.onAllNodes(hasText(text, substring = true))[index].performScrollTo().performClick()
             settleUi()
         }
 

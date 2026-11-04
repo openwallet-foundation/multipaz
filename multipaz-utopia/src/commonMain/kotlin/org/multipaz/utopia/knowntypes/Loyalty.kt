@@ -10,6 +10,7 @@ import kotlinx.datetime.LocalDate
 import org.multipaz.utopia.localization.LocalizedStrings
 import org.multipaz.utopia.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 object Loyalty {
@@ -21,6 +22,12 @@ object Loyalty {
      */
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
+
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
 
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_LOYALTY_CARD))
             .addMdocDocumentType(LOYALTY_DOCTYPE)
@@ -35,7 +42,8 @@ object Loyalty {
                 mandatory = true,
                 mdocNamespace = LOYALTY_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.FAMILY_NAME.toDataItem()
+                sampleValue = SampleData.FAMILY_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -45,7 +53,8 @@ object Loyalty {
                 mandatory = true,
                 mdocNamespace = LOYALTY_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.GIVEN_NAME.toDataItem()
+                sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Picture,

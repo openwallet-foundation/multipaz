@@ -7,6 +7,9 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
 import org.multipaz.util.fromBase64Url
 import kotlinx.datetime.LocalDate
+import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.doctypes.localization.LocalizedStrings
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.PortraitEquivalenceRequest
 
@@ -24,7 +27,20 @@ object Aadhaar {
     /**
      * Build the Aadhaar Document Type.
      */
-    fun getDocumentType(): DocumentType {
+    fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
+        fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
+
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+
         return DocumentType.Builder("Aadhaar")
             .addMdocDocumentType(AADHAAR_DOCTYPE)
             .setSupportsPortraitImageEquivalence(AADHAAR_NAMESPACE, "resident_image")
@@ -89,7 +105,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.GIVEN_NAME.toDataItem()
+                sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -99,7 +116,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValue = SampleData.GIVEN_NAME.toDataItem()
+                sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Boolean,
@@ -173,7 +191,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Building 1".toDataItem()
+                sampleValue = "Building 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -183,7 +202,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Building 1".toDataItem()
+                sampleValue = "Building 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -193,7 +213,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Locality 1".toDataItem()
+                sampleValue = "Locality 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -203,7 +224,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Locality 1".toDataItem()
+                sampleValue = "Locality 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -213,7 +235,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Street 1".toDataItem()
+                sampleValue = "Street 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -223,7 +246,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Street 1".toDataItem()
+                sampleValue = "Street 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -233,7 +257,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Landmark 1".toDataItem()
+                sampleValue = "Landmark 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -243,7 +268,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Landmark 1".toDataItem()
+                sampleValue = "Landmark 1".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -253,7 +279,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "VTC".toDataItem()
+                sampleValue = "VTC".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -263,7 +290,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "VTC".toDataItem()
+                sampleValue = "VTC".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -273,7 +301,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Sub-District".toDataItem()
+                sampleValue = "Sub-District".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -283,7 +312,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "Sub-District".toDataItem()
+                sampleValue = "Sub-District".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -293,7 +323,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "District".toDataItem()
+                sampleValue = "District".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -303,7 +334,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "District".toDataItem()
+                sampleValue = "District".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -313,7 +345,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_STATE.toDataItem()
+                sampleValue = SampleData.RESIDENT_STATE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -323,7 +356,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_STATE.toDataItem()
+                sampleValue = SampleData.RESIDENT_STATE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -333,7 +367,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "PO Name".toDataItem()
+                sampleValue = "PO Name".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -343,7 +378,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = "PO Name".toDataItem()
+                sampleValue = "PO Name".toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -353,7 +389,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+                sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -363,7 +400,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
+                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -373,7 +411,8 @@ object Aadhaar {
                 mandatory = false,
                 mdocNamespace = AADHAAR_NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
+                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem(),
+                group = residentialAddressGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,

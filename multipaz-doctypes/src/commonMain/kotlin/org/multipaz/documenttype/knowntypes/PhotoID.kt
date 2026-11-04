@@ -10,6 +10,7 @@ import kotlinx.datetime.LocalDate
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.PortraitEquivalenceRequest
 
@@ -30,6 +31,28 @@ object PhotoID {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+        val placeOfBirthGroup = DocumentAttributeGroup(
+            identifier = "place_of_birth",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_PLACE_OF_BIRTH),
+            icon = Icon.PLACE
+        )
+        val passportDataGroup = DocumentAttributeGroup(
+            identifier = "passport_data",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_PASSPORT_DATA),
+            icon = Icon.LANGUAGE,
+            minClaimsToGroup = 1
+        )
+
         return with(DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_PHOTO_ID))) {
         addMdocDocumentType(PHOTO_ID_DOCTYPE)
         setSupportsPortraitImageEquivalence(ISO_23220_2_NAMESPACE, "portrait")
@@ -44,7 +67,8 @@ object PhotoID {
             mandatory = true,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = SampleData.FAMILY_NAME.toDataItem()
+            sampleValue = SampleData.FAMILY_NAME.toDataItem(),
+            group = nameGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -54,7 +78,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = SampleData.FAMILY_NAME.toDataItem()
+            sampleValue = SampleData.FAMILY_NAME.toDataItem(),
+            group = nameGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -64,7 +89,8 @@ object PhotoID {
             mandatory = true,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = SampleData.GIVEN_NAME.toDataItem()
+            sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+            group = nameGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -74,7 +100,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = SampleData.GIVEN_NAME.toDataItem()
+            sampleValue = SampleData.GIVEN_NAME.toDataItem(),
+            group = nameGroup
         )
         // Note, this is more complicated than mDL and EU PID, according to ISO/IEC 23220-2
         // clause "6.3.1.1.3 Date of birth as either uncertain or approximate, or both"
@@ -216,7 +243,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.BIRTH_PLACE.toDataItem()
+            sampleValue = SampleData.BIRTH_PLACE.toDataItem(),
+            group = placeOfBirthGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -236,7 +264,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
+            sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -246,7 +275,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_CITY.toDataItem()
+            sampleValue = SampleData.RESIDENT_CITY.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -256,7 +286,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+            sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -266,7 +297,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_COUNTRY.toDataItem()
+            sampleValue = SampleData.RESIDENT_COUNTRY.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -276,7 +308,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = null
+            sampleValue = null,
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
@@ -327,7 +360,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = null
+            sampleValue = null,
+            group = nameGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -337,7 +371,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = ISO_23220_2_NAMESPACE,
             icon = Icon.PERSON,
-            sampleValue = null
+            sampleValue = null,
+            group = nameGroup
         )
 
         // Data elements from ISO/IEC 23220-4 Table C.2 — Data elements specifically defined for PhotoID
@@ -360,7 +395,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = null
+            sampleValue = null,
+            group = placeOfBirthGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -370,7 +406,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = null
+            sampleValue = null,
+            group = placeOfBirthGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -380,7 +417,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = null
+            sampleValue = null,
+            group = placeOfBirthGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -400,7 +438,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_STREET.toDataItem()
+            sampleValue = SampleData.RESIDENT_STREET.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -410,7 +449,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_HOUSE_NUMBER.toDataItem()
+            sampleValue = SampleData.RESIDENT_HOUSE_NUMBER.toDataItem(),
+            group = residentialAddressGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -420,7 +460,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -430,7 +471,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -440,7 +482,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
@@ -450,7 +493,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = PHOTO_ID_NAMESPACE,
             icon = Icon.PLACE,
-            sampleValue = SampleData.RESIDENT_STATE.toDataItem()
+            sampleValue = SampleData.RESIDENT_STATE.toDataItem(),
+            group = residentialAddressGroup
         )
 
 
@@ -466,7 +510,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -476,7 +521,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem(),
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -486,7 +532,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem(),
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -496,7 +543,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem(),
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -506,7 +554,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem(),
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -516,7 +565,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -526,7 +576,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -536,7 +587,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -546,7 +598,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -556,7 +609,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -566,7 +620,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -576,7 +631,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -586,7 +642,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -596,7 +653,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -606,7 +664,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -616,7 +675,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -626,7 +686,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -636,7 +697,8 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = null,
+            group = passportDataGroup
         )
 
         // Finally for the sample requests.

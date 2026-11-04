@@ -109,6 +109,7 @@ data class GoldenRequesterPair(
 class SwiftConsentGoldenEcosystem private constructor(
     val documentTypeRepository: DocumentTypeRepository,
     val documentStore: DocumentStore,
+    val twoPhotoIdsDocumentStore: DocumentStore,
     val mdlDoc: Document,
     val photoIdDoc: Document,
     val pidDoc: Document,
@@ -188,15 +189,21 @@ class SwiftConsentGoldenEcosystem private constructor(
         )
     }
 
+    fun anonymousWebRequester(
+        origin: String = "https://age-check.utopia-gaming.example.com",
+    ): GoldenRequesterPair =
+        GoldenRequesterPair(requester = Requester(origin = origin), trustedRequesterIdentity = null)
+
     fun unverifiedAppRequester(appId: String): GoldenRequesterPair =
         GoldenRequesterPair(requester = Requester(appId = appId), trustedRequesterIdentity = null)
 
     private fun buildPresentmentSource(
         encryptionTargetRpId: String? = null,
         encryptionTargetTrusted: Boolean = true,
+        store: DocumentStore = documentStore,
     ): SimplePresentmentSource {
         return SimplePresentmentSource(
-            documentStore = documentStore,
+            documentStore = store,
             documentTypeRepository = documentTypeRepository,
             resolveTrustFn = { requester ->
                 val identity = requester.requesterIdentities.firstOrNull() ?: return@SimplePresentmentSource null
@@ -336,6 +343,44 @@ class SwiftConsentGoldenEcosystem private constructor(
         intentToRetain: Boolean,
         encryptionTargetRpId: String,
         encryptionTargetTrusted: Boolean,
+    ): PresentmentData = executeBorderCrossingEncryptionRequest(
+        intentToRetain = intentToRetain,
+        encryptionTargetRpId = encryptionTargetRpId,
+        encryptionTargetTrusted = encryptionTargetTrusted,
+        includeRecipientCertificates = true,
+    )
+
+    suspend fun executeBorderCrossingEncryptionRequestMultipleChoices(
+        intentToRetain: Boolean,
+        encryptionTargetRpId: String,
+        encryptionTargetTrusted: Boolean,
+    ): PresentmentData = executeBorderCrossingEncryptionRequest(
+        intentToRetain = intentToRetain,
+        encryptionTargetRpId = encryptionTargetRpId,
+        encryptionTargetTrusted = encryptionTargetTrusted,
+        includeRecipientCertificates = true,
+        multiplePhotoIds = true,
+    )
+
+    suspend fun executeBorderCrossingEncryptionRequest(
+        intentToRetain: Boolean,
+        encryptionTargetRpId: String,
+        encryptionTargetTrusted: Boolean,
+        includeRecipientCertificates: Boolean,
+    ): PresentmentData = executeBorderCrossingEncryptionRequest(
+        intentToRetain = intentToRetain,
+        encryptionTargetRpId = encryptionTargetRpId,
+        encryptionTargetTrusted = encryptionTargetTrusted,
+        includeRecipientCertificates = includeRecipientCertificates,
+        multiplePhotoIds = false,
+    )
+
+    private suspend fun executeBorderCrossingEncryptionRequest(
+        intentToRetain: Boolean,
+        encryptionTargetRpId: String,
+        encryptionTargetTrusted: Boolean,
+        includeRecipientCertificates: Boolean,
+        multiplePhotoIds: Boolean,
     ): PresentmentData {
         val sessionTranscript = buildCborArray {
             add(Simple.NULL)
@@ -366,7 +411,11 @@ class SwiftConsentGoldenEcosystem private constructor(
                 docRequestInfo = DocRequestInfo(
                     docResponseEncryption = EncryptionParameters.fromValues(
                         recipientPublicKey = encKey.publicKey as EcPublicKey,
-                        recipientCertificates = encKey.certChain.certificates,
+                        recipientCertificates = if (includeRecipientCertificates) {
+                            encKey.certChain.certificates
+                        } else {
+                            emptyList()
+                        },
                     )
                 ),
             )
@@ -385,6 +434,7 @@ class SwiftConsentGoldenEcosystem private constructor(
         val source = buildPresentmentSource(
             encryptionTargetRpId = encryptionTargetRpId,
             encryptionTargetTrusted = encryptionTargetTrusted,
+            store = if (multiplePhotoIds) twoPhotoIdsDocumentStore else documentStore,
         )
         return deviceRequest.execute(
             presentmentSource = source,
@@ -956,9 +1006,39 @@ class SwiftConsentGoldenEcosystem private constructor(
                 encTargetTrustMetadata[cfg.id] = metadata
             }
 
+            val twoPhotoIdsStorage = DeterministicStorage()
+            val twoPhotoIdsSecureArea = SoftwareSecureArea.create(twoPhotoIdsStorage)
+            val twoPhotoIdsRepo = SecureAreaRepository.Builder()
+                .add(twoPhotoIdsSecureArea)
+                .build()
+            val twoPhotoIdsDocumentStore = buildDocumentStore(
+                storage = twoPhotoIdsStorage,
+                secureAreaRepository = twoPhotoIdsRepo,
+            ) {}
+            val twoPhotoIdsRng = Random(424243L)
+            val photoIdCardArt = readResourceBytes("/cards/card_utopia_photoid.png")
+            for (docName in listOf("Erika's Photo ID", "Erika's Photo ID #2")) {
+                val doc = twoPhotoIdsDocumentStore.createDocument(
+                    displayName = docName,
+                    typeDisplayName = "Photo ID",
+                    cardArt = photoIdCardArt,
+                )
+                photoIdDocType.createMdocCredentialWithSampleData(
+                    document = doc,
+                    secureArea = twoPhotoIdsSecureArea,
+                    createKeySettings = keySettings,
+                    dsKey = dsKey,
+                    signedAt = VALID_FROM,
+                    validFrom = VALID_FROM,
+                    validUntil = VALID_UNTIL,
+                    randomProvider = twoPhotoIdsRng,
+                )
+            }
+
             return SwiftConsentGoldenEcosystem(
                 documentTypeRepository = documentTypeRepository,
                 documentStore = documentStore,
+                twoPhotoIdsDocumentStore = twoPhotoIdsDocumentStore,
                 mdlDoc = mdlDoc,
                 photoIdDoc = photoIdDoc,
                 pidDoc = pidDoc,
