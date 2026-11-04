@@ -160,12 +160,23 @@ class SdJwt private constructor(
                 throw SignatureVerificationException("Error validating issuer signature", e)
             }
         }
-        return processObject(
+        val referencedDisclosureStrings = mutableSetOf<String>()
+        val processedPayload = processObject(
             obj = jwtBody,
             hashToDisclosureString = hashToDisclosureString,
             path = mutableListOf(),
-            visitor = { path, value, disclosure -> }
+            visitor = { _, _, disclosure ->
+                if (disclosure != null && !referencedDisclosureStrings.add(disclosure)) {
+                    throw IllegalArgumentException("Disclosure referenced more than once")
+                }
+            }
         )
+        if (referencedDisclosureStrings.size != hashToDisclosureString.size) {
+            throw IllegalArgumentException(
+                "SD-JWT contains unreferenced disclosures (referenced ${referencedDisclosureStrings.size} of ${hashToDisclosureString.size})"
+            )
+        }
+        return processedPayload
     }
 
     /**
@@ -343,7 +354,7 @@ class SdJwt private constructor(
         for ((hash, disc) in parsedDisclosures) {
             if (hash !in referencedDigests) {
                 val label = disc.claimName ?: "<array-element>"
-                addWarning("Orphaned disclosure '$label' (digest $hash) is not referenced in the SD-JWT claims tree")
+                addError("Orphaned disclosure '$label' (digest $hash) is not referenced in the SD-JWT claims tree")
             }
         }
     }
@@ -716,7 +727,9 @@ class SdJwt private constructor(
             for (n in IntRange(1, splits.size - 2)) {
                 val disclosureString = splits[n]
                 val hash = Crypto.digest(digestAlg, disclosureString.encodeToByteArray()).toBase64Url()
-                htds.put(hash, disclosureString)
+                if (htds.put(hash, disclosureString) != null) {
+                    throw IllegalArgumentException("Duplicate disclosure in SD-JWT")
+                }
             }
             return SdJwt(
                 compactSerialization = compactSerialization,
