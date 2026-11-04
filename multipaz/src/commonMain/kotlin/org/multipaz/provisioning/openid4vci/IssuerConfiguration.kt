@@ -34,27 +34,41 @@ internal data class IssuerConfiguration(
         suspend fun get(
             url: String,
             httpClient: HttpClient,
-            clientPreferences: OpenID4VCIClientPreferences
+            clientPreferences: OpenID4VCIClientPreferences,
+            // TODO: Out-of-spec inline metadata from unmerged OpenID4VCI PR #476
+            //  (https://github.com/openid/OpenID4VCI/pull/476). Remove once standardized/no longer needed.
+            credentialIssuerMetadata: JsonObject? = null
         ): IssuerConfiguration {
-            cacheLock.withLock {
-                if (cachedClientPreferences === clientPreferences) {
-                    val issuerConfiguration = cachedIssuerConfiguration
-                    if (issuerConfiguration?.url == url) {
-                        return issuerConfiguration
+            if (credentialIssuerMetadata == null) {
+                cacheLock.withLock {
+                    if (cachedClientPreferences === clientPreferences) {
+                        val issuerConfiguration = cachedIssuerConfiguration
+                        if (issuerConfiguration?.url == url) {
+                            return issuerConfiguration
+                        }
                     }
                 }
             }
 
-            // Fetch issuer metadata
-            val issuerMetadataUrl = wellKnown(url, "openid-credential-issuer")
-            Logger.d(TAG, "Fetching issuer metadata from $issuerMetadataUrl")
-            val issuerMetadataRequest = httpClient.get(issuerMetadataUrl) {}
-            if (issuerMetadataRequest.status != HttpStatusCode.OK) {
-                throw IllegalStateException("Invalid issuer, no $issuerMetadataUrl")
+            val credentialMetadata = if (credentialIssuerMetadata != null) {
+                // TODO: Out-of-spec inline metadata from unmerged OpenID4VCI PR #476
+                //  (https://github.com/openid/OpenID4VCI/pull/476). Remove once standardized/no longer needed.
+                Logger.w(TAG, "Using out-of-spec inline credential_issuer_metadata (OpenID4VCI PR #476)")
+                Logger.dJson(TAG, "Using inline issuer metadata", credentialIssuerMetadata)
+                credentialIssuerMetadata
+            } else {
+                // Fetch issuer metadata
+                val issuerMetadataUrl = wellKnown(url, "openid-credential-issuer")
+                Logger.d(TAG, "Fetching issuer metadata from $issuerMetadataUrl")
+                val issuerMetadataRequest = httpClient.get(issuerMetadataUrl) {}
+                if (issuerMetadataRequest.status != HttpStatusCode.OK) {
+                    throw IllegalStateException("Invalid issuer, no $issuerMetadataUrl")
+                }
+                val credentialMetadataText = issuerMetadataRequest.readRawBytes().decodeToString()
+                val parsed = Json.parseToJsonElement(credentialMetadataText).jsonObject
+                Logger.dJson(TAG, "Received issuer metadata", parsed)
+                parsed
             }
-            val credentialMetadataText = issuerMetadataRequest.readRawBytes().decodeToString()
-            val credentialMetadata = Json.parseToJsonElement(credentialMetadataText).jsonObject
-            Logger.dJson(TAG, "Received issuer metadata", credentialMetadata)
 
             val authorizationServers = credentialMetadata.arrayOrNull("authorization_servers")
             val authorizationServerUrls =

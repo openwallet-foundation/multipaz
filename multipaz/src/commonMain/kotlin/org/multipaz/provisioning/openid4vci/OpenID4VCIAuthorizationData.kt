@@ -11,7 +11,7 @@ import org.multipaz.cbor.annotation.CborSerializable
 @CborSerializable(schemaHash = "tSadM4JcWvdA3nqneHBRndJAVEbWdmRFofbJYGqORLA")
 internal class OpenID4VCIAuthorizationData(
     val issuerUri: String,
-    val configurationId: String,
+    var configurationId: String,
     val secureAreaId: String,
     val authorizationServer: String?,
     var refreshToken: String? = null,
