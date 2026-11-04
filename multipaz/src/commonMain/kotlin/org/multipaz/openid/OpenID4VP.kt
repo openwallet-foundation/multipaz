@@ -437,7 +437,7 @@ object OpenID4VP {
             else -> throw IllegalStateException("Unexpected response_mode $responseModeText")
         }
 
-        val vpTokens = mutableMapOf<String, String>()
+        val vpTokens = mutableMapOf<String, MutableList<String>>()
         val dcqlQuery = DcqlQuery.fromJson(request["dcql_query"]!!.jsonObject)
         val transactionDataMap = request["transaction_data"]?.let { list ->
             if (list !is JsonArray) {
@@ -547,7 +547,7 @@ object OpenID4VP {
                     } else {
                         throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
                     }
-                    vpTokens[match.source.credentialQuery.id] = credentialResponse
+                    vpTokens.getOrPut(match.source.credentialQuery.id) { mutableListOf() }.add(credentialResponse)
                     credentialsPresented.add(match.credential)
                 }
             }
@@ -559,10 +559,9 @@ object OpenID4VP {
             Version.DRAFT_29 -> {
                 buildJsonObject {
                     putJsonObject("vp_token") {
-                        for ((dcqlId, response) in vpTokens) {
+                        for ((dcqlId, responses) in vpTokens) {
                             putJsonArray(dcqlId) {
-                                // For now we only support returning a single Verifiable Presentation per requested credential,
-                                add(response)
+                                responses.forEach { add(it) }
                             }
                         }
                     }
@@ -575,8 +574,14 @@ object OpenID4VP {
             Version.DRAFT_24 -> {
                 buildJsonObject {
                     putJsonObject("vp_token") {
-                        for ((dcqlId, response) in vpTokens) {
-                            put(dcqlId, response)
+                        for ((dcqlId, responses) in vpTokens) {
+                            if (responses.size == 1) {
+                                put(dcqlId, responses.first())
+                            } else {
+                                putJsonArray(dcqlId) {
+                                    responses.forEach { add(it) }
+                                }
+                            }
                         }
                     }
                     (request["state"] as? JsonPrimitive)?.let {

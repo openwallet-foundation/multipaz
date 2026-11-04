@@ -44,6 +44,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.cbor.toDataItemFullDate
+import org.multipaz.claim.MdocClaim
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
@@ -86,6 +87,7 @@ import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
+import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.RequesterHistory
 import org.multipaz.presentment.RequesterHistoryEntry
@@ -95,6 +97,7 @@ import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.request.Iso18013RequesterIdentity
+import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -130,6 +133,8 @@ internal class ConsentGoldenEcosystem private constructor(
     val transactionDataRendererRepository: TransactionDataRendererRepository,
     val documentStore: DocumentStore,
     val twoPhotoIdsDocumentStore: DocumentStore,
+    val fourMovieTicketsDocumentStore: DocumentStore,
+    val sixBoardingPassesDocumentStore: DocumentStore,
     val mdlDoc: Document,
     val photoIdDoc: Document,
     val pidDoc: Document,
@@ -391,6 +396,156 @@ internal class ConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+        )
+    }
+
+    /**
+     * Evaluates a multi-credential DCQL request (`multiple = true`) for 4 movie tickets to
+     * "Return to Utopia" against [fourMovieTicketsDocumentStore].
+     */
+    suspend fun executeFourMovieTicketsRequest(): PresentmentData {
+        val dcqlJson = """
+            {
+              "credentials": [
+                {
+                  "id": "movie_tickets",
+                  "format": "dc+sd-jwt",
+                  "multiple": true,
+                  "meta": {
+                    "vct_values": ["${UtopiaMovieTicket.MOVIE_TICKET_VCT}"]
+                  },
+                  "claims": [
+                    { "path": ["cinema"] },
+                    { "path": ["movie"] },
+                    { "path": ["show_date_time"] },
+                    { "path": ["theater_id"] },
+                    { "path": ["seat_id"] },
+                    { "path": ["ticket_id"] }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+        val query = DcqlQuery.fromJson(Json.parseToJsonElement(dcqlJson).jsonObject)
+        val source = buildPresentmentSource(store = fourMovieTicketsDocumentStore)
+        return query.execute(presentmentSource = source)
+    }
+
+    /**
+     * Evaluates an ISO 18013-5 `DeviceRequest` with `uniqueDocSetRequired = false` for boarding
+     * passes against [sixBoardingPassesDocumentStore] (3 passes for UT 815 and 3 passes for UT 516).
+     */
+    suspend fun executeSixBoardingPassesRequest(): PresentmentData {
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = UtopiaBoardingPass.BOARDING_PASS_DOCTYPE,
+                nameSpaces = mapOf(
+                    UtopiaBoardingPass.BOARDING_PASS_NS to mapOf(
+                        "passenger_name" to false,
+                        "flight_number" to false,
+                        "seat_number" to false,
+                        "departure_time" to false,
+                    )
+                ),
+                docRequestInfo = DocRequestInfo(
+                    uniqueDocSetRequired = false,
+                ),
+            )
+            setDeviceRequestInfo(
+                DeviceRequestInfo.fromValues(
+                    useCases = listOf(
+                        UseCase(
+                            mandatory = true,
+                            documentSets = listOf(DocumentSet(docRequestIds = listOf(0))),
+                            purposeHints = emptyMap(),
+                        )
+                    )
+                )
+            )
+        }
+        val source = buildPresentmentSource(store = sixBoardingPassesDocumentStore)
+        return deviceRequest.execute(
+            presentmentSource = source,
+            keyAgreementPossible = emptyList(),
+        )
+    }
+
+    /**
+     * Evaluates an ISO 18013-5 `DeviceRequest` with `uniqueDocSetRequired = false` and
+     * `flight_number` filtering via `DocRequestInfo` against [sixBoardingPassesDocumentStore],
+     * matching only the 3 boarding passes for flight [flightNumber].
+     */
+    suspend fun executeThreeBoardingPassesFilteredRequest(
+        flightNumber: String = "UT 815",
+    ): PresentmentData {
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = UtopiaBoardingPass.BOARDING_PASS_DOCTYPE,
+                nameSpaces = mapOf(
+                    UtopiaBoardingPass.BOARDING_PASS_NS to mapOf(
+                        "passenger_name" to false,
+                        "flight_number" to false,
+                        "seat_number" to false,
+                        "departure_time" to false,
+                    )
+                ),
+                docRequestInfo = DocRequestInfo(
+                    uniqueDocSetRequired = false,
+                    otherInfo = mapOf(
+                        "flight_number" to flightNumber.toDataItem(),
+                    ),
+                ),
+            )
+            setDeviceRequestInfo(
+                DeviceRequestInfo.fromValues(
+                    useCases = listOf(
+                        UseCase(
+                            mandatory = true,
+                            documentSets = listOf(DocumentSet(docRequestIds = listOf(0))),
+                            purposeHints = emptyMap(),
+                        )
+                    )
+                )
+            )
+        }
+        val source = buildPresentmentSource(store = sixBoardingPassesDocumentStore)
+        val rawData = deviceRequest.execute(
+            presentmentSource = source,
+            keyAgreementPossible = emptyList(),
+        )
+        return PresentmentData(
+            useCases = rawData.useCases.map { useCase ->
+                useCase.copy(
+                    solutions = useCase.solutions.filter { solution ->
+                        solution.matches.all { match ->
+                            val reqFlight = (match.source as? PresentmentCredentialMatchSourceIso18013)
+                                ?.docRequest
+                                ?.docRequestInfo
+                                ?.otherInfo
+                                ?.get("flight_number")
+                                ?.asTstr
+                            if (reqFlight == null) {
+                                true
+                            } else {
+                                val flightClaim = match.claims.entries.firstOrNull { (req, _) ->
+                                    (req as? MdocRequestedClaim)?.dataElementName == "flight_number"
+                                }?.value as? MdocClaim
+                                flightClaim?.value?.asTstr == reqFlight
+                            }
+                        }
+                    }
+                )
+            }
         )
     }
 
@@ -952,11 +1107,128 @@ internal class ConsentGoldenEcosystem private constructor(
                 )
             }
 
+            // Store with 4 movie tickets to one movie ("Return to Utopia", Seats G14–G17)
+            val fourTicketsStorage = DeterministicStorage()
+            val fourTicketsSecureArea = SoftwareSecureArea.create(fourTicketsStorage)
+            val fourTicketsRepo = SecureAreaRepository.Builder()
+                .add(fourTicketsSecureArea)
+                .build()
+            val fourMovieTicketsDocumentStore = buildDocumentStore(
+                storage = fourTicketsStorage,
+                secureAreaRepository = fourTicketsRepo,
+            ) {}
+            val fourTicketsRng = Random(424244L)
+            val cinemaCardArt = readResourceBytes("/cards/card_utopia_cinema.png")
+            val movieTicketTypeDisplay = if (lang == "en") "Movie Ticket" else movieTicketDocType.displayName
+            listOf(
+                "G14" to "UT-CIN-904812",
+                "G15" to "UT-CIN-904813",
+                "G16" to "UT-CIN-904814",
+                "G17" to "UT-CIN-904815",
+            ).forEach { (seat, ticketId) ->
+                val doc = fourMovieTicketsDocumentStore.createDocument(
+                    displayName = "Return to Utopia (Seat $seat)",
+                    typeDisplayName = movieTicketTypeDisplay,
+                    cardArt = cinemaCardArt,
+                )
+                createMovieTicketSdJwt(
+                    document = doc,
+                    dsKey = dsKey,
+                    randomProvider = fourTicketsRng,
+                    seatId = seat,
+                    ticketId = ticketId,
+                )
+            }
+
+            // Store with 6 boarding passes (3 for flight UT 815 and 3 for flight UT 516)
+            val sixPassesStorage = DeterministicStorage()
+            val sixPassesSecureArea = SoftwareSecureArea.create(sixPassesStorage)
+            val sixPassesRepo = SecureAreaRepository.Builder()
+                .add(sixPassesSecureArea)
+                .build()
+            val sixBoardingPassesDocumentStore = buildDocumentStore(
+                storage = sixPassesStorage,
+                secureAreaRepository = sixPassesRepo,
+            ) {}
+            val sixPassesRng = Random(424245L)
+            val boardingPassCardArt = readResourceBytes("/cards/card_utopia_boarding_pass.png")
+            val boardingPassTypeDisplay = if (lang == "en") "Boarding Pass" else boardingPassDocType.displayName
+            data class BoardingPassSpec(
+                val displayName: String,
+                val passengerName: String,
+                val flightNumber: String,
+                val seatNumber: String,
+                val departureTime: String,
+            )
+            listOf(
+                BoardingPassSpec(
+                    displayName = "Flight UT 815 (12A · Erika)",
+                    passengerName = "Erika Mustermann",
+                    flightNumber = "UT 815",
+                    seatNumber = "12A",
+                    departureTime = "2026-06-15T18:45:00Z",
+                ),
+                BoardingPassSpec(
+                    displayName = "Flight UT 815 (12B · Max)",
+                    passengerName = "Max Mustermann",
+                    flightNumber = "UT 815",
+                    seatNumber = "12B",
+                    departureTime = "2026-06-15T18:45:00Z",
+                ),
+                BoardingPassSpec(
+                    displayName = "Flight UT 815 (12C · Mia)",
+                    passengerName = "Mia Mustermann",
+                    flightNumber = "UT 815",
+                    seatNumber = "12C",
+                    departureTime = "2026-06-15T18:45:00Z",
+                ),
+                BoardingPassSpec(
+                    displayName = "Flight UT 516 (14A · Erika)",
+                    passengerName = "Erika Mustermann",
+                    flightNumber = "UT 516",
+                    seatNumber = "14A",
+                    departureTime = "2026-06-15T21:15:00Z",
+                ),
+                BoardingPassSpec(
+                    displayName = "Flight UT 516 (14B · Max)",
+                    passengerName = "Max Mustermann",
+                    flightNumber = "UT 516",
+                    seatNumber = "14B",
+                    departureTime = "2026-06-15T21:15:00Z",
+                ),
+                BoardingPassSpec(
+                    displayName = "Flight UT 516 (14C · Mia)",
+                    passengerName = "Mia Mustermann",
+                    flightNumber = "UT 516",
+                    seatNumber = "14C",
+                    departureTime = "2026-06-15T21:15:00Z",
+                ),
+            ).forEach { spec ->
+                val doc = sixBoardingPassesDocumentStore.createDocument(
+                    displayName = spec.displayName,
+                    typeDisplayName = boardingPassTypeDisplay,
+                    cardArt = boardingPassCardArt,
+                )
+                createBoardingPassMdoc(
+                    document = doc,
+                    secureArea = sixPassesSecureArea,
+                    createKeySettings = keySettings,
+                    dsKey = dsKey,
+                    randomProvider = sixPassesRng,
+                    passengerName = spec.passengerName,
+                    flightNumber = spec.flightNumber,
+                    seatNumber = spec.seatNumber,
+                    departureTime = spec.departureTime,
+                )
+            }
+
             return ConsentGoldenEcosystem(
                 documentTypeRepository = documentTypeRepository,
                 transactionDataRendererRepository = transactionDataRendererRepository,
                 documentStore = documentStore,
                 twoPhotoIdsDocumentStore = twoPhotoIdsDocumentStore,
+                fourMovieTicketsDocumentStore = fourMovieTicketsDocumentStore,
+                sixBoardingPassesDocumentStore = sixBoardingPassesDocumentStore,
                 mdlDoc = mdlDoc,
                 photoIdDoc = photoIdDoc,
                 pidDoc = pidDoc,
@@ -988,15 +1260,17 @@ internal class ConsentGoldenEcosystem private constructor(
             document: Document,
             dsKey: AsymmetricKey.X509Certified,
             randomProvider: Random,
+            seatId: String = "G14",
+            ticketId: String = "UT-CIN-904812",
         ): KeylessSdJwtVcCredential {
             val claims = buildJsonObject {
-                put("ticket_id", JsonPrimitive("UT-CIN-904812"))
+                put("ticket_id", JsonPrimitive(ticketId))
                 put("cinema", JsonPrimitive("Utopia Cinema Downtown"))
                 put("movie", JsonPrimitive("Return to Utopia"))
                 put("show_date_time", JsonPrimitive("2026-06-15T19:30:00Z"))
                 put("movie_rating", JsonPrimitive("PG-13"))
                 put("theater_id", JsonPrimitive("Auditorium 4 (IMAX)"))
-                put("seat_id", JsonPrimitive("G14"))
+                put("seat_id", JsonPrimitive(seatId))
                 put("parking_option", JsonPrimitive(true))
             }
             val credential = KeylessSdJwtVcCredential.create(
@@ -1068,14 +1342,18 @@ internal class ConsentGoldenEcosystem private constructor(
             createKeySettings: CreateKeySettings,
             dsKey: AsymmetricKey.X509Certified,
             randomProvider: Random,
+            passengerName: String = "Erika Mustermann",
+            flightNumber: String = "UT 815",
+            seatNumber: String = "12A",
+            departureTime: String = "2026-06-15T18:45:00Z",
         ): MdocCredential {
             val ns = UtopiaBoardingPass.BOARDING_PASS_NS
             val issuerNamespaces = buildIssuerNamespaces(randomProvider = randomProvider) {
                 addNamespace(ns) {
-                    addDataElement("passenger_name", "Erika Mustermann".toDataItem())
-                    addDataElement("flight_number", "UT 815".toDataItem())
-                    addDataElement("seat_number", "12A".toDataItem())
-                    addDataElement("departure_time", Instant.parse("2026-06-15T18:45:00Z").toDataItemDateTimeString())
+                    addDataElement("passenger_name", passengerName.toDataItem())
+                    addDataElement("flight_number", flightNumber.toDataItem())
+                    addDataElement("seat_number", seatNumber.toDataItem())
+                    addDataElement("departure_time", Instant.parse(departureTime).toDataItemDateTimeString())
                 }
             }
             return signMdocCredential(

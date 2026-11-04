@@ -107,9 +107,9 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity trust information for the requester, or `null` if untrusted.
  * @param presentmentData the combinations of credentials and claims that the user can select.
- * @param selections the selected solution index for each [PresentmentUseCase] in
- *   [PresentmentData.useCases], or `-1` for an omitted optional use-case. Defaults to selecting
- *   solution `0` for each use-case.
+ * @param selections the selected solution indices for each [PresentmentUseCase] in
+ *   [PresentmentData.useCases], or an empty list for an omitted optional use-case. Defaults to
+ *   [PresentmentData.defaultSelections].
  * @param purposes the classified [PresentmentPurpose]s for [selections]. Defaults to
  *   `defaultClassifyPurposes(requester, trustedRequesterIdentity, presentmentData, selections)`.
  * @return the evaluated [ConsentRiskAssessment].
@@ -118,7 +118,7 @@ fun defaultClassifyRisk(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     presentmentData: PresentmentData,
-    selections: List<Int> = presentmentData.useCases.map { if (it.solutions.isNotEmpty()) 0 else -1 },
+    selections: List<List<Int>> = presentmentData.defaultSelections(),
     purposes: Set<PresentmentPurpose> = defaultClassifyPurposes(
         requester = requester,
         trustedRequesterIdentity = trustedRequesterIdentity,
@@ -132,12 +132,14 @@ fun defaultClassifyRisk(
 
     var anySelectedUseCase = false
     presentmentData.useCases.forEachIndexed { index, useCase ->
-        val selectionIndex = selections[index]
-        if (selectionIndex < 0) {
+        val selectedIndices = selections[index]
+        if (selectedIndices.isEmpty()) {
             require(useCase.optional) { "Cannot omit non-optional use-case at index $index" }
         } else {
-            require(selectionIndex < useCase.solutions.size) {
-                "Out-of-bounds solution index $selectionIndex for use-case at index $index"
+            for (selectionIndex in selectedIndices) {
+                require(selectionIndex in useCase.solutions.indices) {
+                    "Out-of-bounds solution index $selectionIndex for use-case at index $index"
+                }
             }
             anySelectedUseCase = true
         }

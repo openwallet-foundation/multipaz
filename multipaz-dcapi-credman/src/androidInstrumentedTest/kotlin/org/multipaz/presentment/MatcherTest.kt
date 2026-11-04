@@ -6218,4 +6218,100 @@ class MatcherTest {
         )
         Assert.assertEquals("", matcherResult)
     }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_multiple() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "multiple": true,
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    Given names: Erika
+                  SetEntry set_index 1
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_uniqueDocSetRequired_false() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                harness.provisionMdoc(
+                    displayName = "mDL 2",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Max"),
+                            "age_over_21" to true.toDataItem(),
+                        )
+                    )
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "multiple": true,
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "given_name"] }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                  SetEntry set_index 1
+                    cred_id 0 org-iso-mdoc __mDL 2__
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
 }

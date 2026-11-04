@@ -14,6 +14,7 @@ import org.multipaz.request.RequestedClaim
  * @property mdocDocType the ISO mdoc doctype or `null` if format isn't `mso_mdoc`.
  * @property vctValues the array of Verifiable Credential Types or `null` if format isn't `dc+sd-jwt`.
  * @property issuerIdentifiers the list of Authority Key Identifiers from `trusted_authorities` or empty.
+ * @property multiple whether multiple credentials may be returned for this query.
  * @property claims a list of claims being requested.
  * @property claimSets a list of claim sets.
  */
@@ -21,6 +22,7 @@ data class DcqlCredentialQuery(
     val id: String,
     val format: String,
     val meta: JsonObject,
+    val multiple: Boolean = false,
 
     // from meta
     val mdocDocType: String? = null,

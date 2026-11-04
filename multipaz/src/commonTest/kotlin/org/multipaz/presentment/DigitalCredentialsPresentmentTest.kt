@@ -344,24 +344,29 @@ class DigitalCredentialsPresentmentTest {
                         val matchingIndex = useCase.solutions.indexOfFirst { solution ->
                             solution.matches.any { it.credential.document == targetDoc }
                         }
-                        if (matchingIndex != -1) matchingIndex else 0
+                        if (matchingIndex != -1) listOf(matchingIndex) else listOf(0)
                     } else {
-                        0
+                        listOf(0)
                     }
                 } else {
-                    if (useCase.solutions.isNotEmpty()) 0 else -1
+                    when {
+                        useCase.solutions.isEmpty() -> emptyList()
+                        useCase.allowMultiple -> useCase.solutions.indices.toList()
+                        else -> listOf(0)
+                    }
                 }
             }
             val userInput = mutableMapOf<PresentmentCredentialMatch, Map<String, TransactionUserInput>>()
             presentmentData.useCases.forEachIndexed { index, useCase ->
-                val selection = selections[index]
-                if (selection >= 0 && selection < useCase.solutions.size) {
-                    for (match in useCase.solutions[selection].matches) {
-                        val tip = tipPercentByCredential[match.credential] ?: tipPercent
-                        if (tip != null) {
-                            userInput[match] = mapOf(
-                                PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
-                            )
+                for (selection in selections[index]) {
+                    if (selection in useCase.solutions.indices) {
+                        for (match in useCase.solutions[selection].matches) {
+                            val tip = tipPercentByCredential[match.credential] ?: tipPercent
+                            if (tip != null) {
+                                userInput[match] = mapOf(
+                                    PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
+                                )
+                            }
                         }
                     }
                 }

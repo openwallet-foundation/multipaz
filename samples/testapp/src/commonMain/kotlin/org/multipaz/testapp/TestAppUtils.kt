@@ -132,6 +132,7 @@ object TestAppUtils {
         handover: DataItem,
         signRequest: Boolean = true,
         issuerIdentifiers: List<ByteString> = emptyList(),
+        uniqueDocSetRequired: Boolean = true,
     ): VerificationSession {
         val requestDefinition = when (request) {
             is SingleDocumentCannedRequest -> if (requestSdJwtVc) {
@@ -175,6 +176,7 @@ object TestAppUtils {
             eReaderKey = eReaderKey,
             handover = handover,
             documentTypeRepository = app.documentTypeRepository,
+            uniqueDocSetRequired = uniqueDocSetRequired,
         )
     }
 

@@ -391,7 +391,8 @@ data class DcqlQuery(
                 useCases.add(
                     PresentmentUseCase(
                         optional = false,
-                        solutions = solutions
+                        solutions = solutions,
+                        allowMultiple = response.credentialQuery.multiple
                     )
                 )
             }
@@ -434,10 +435,14 @@ data class DcqlQuery(
                     )
                 }
                 if (solutions.isNotEmpty()) {
+                    val allowMultiple = csq.options.any { option ->
+                        option.credentialIds.any { credentialQueryIdToResponse[it]?.credentialQuery?.multiple == true }
+                    }
                     useCases.add(
                         PresentmentUseCase(
                             optional = !csq.required,
-                            solutions = solutions
+                            solutions = solutions,
+                            allowMultiple = allowMultiple
                         )
                     )
                 }
@@ -563,9 +568,9 @@ data class DcqlQuery(
                     }
                 }
 
+                val multiple = c["multiple"]?.jsonPrimitive?.boolean ?: false
                 /*
                  * TODO: add support for
-                 * - multiple
                  * - require_cryptographic_holder_binding
                  */
                 dcqlCredentialQueries.add(
@@ -573,6 +578,7 @@ data class DcqlQuery(
                         id = id,
                         format = format,
                         meta = meta,
+                        multiple = multiple,
                         mdocDocType = mdocDocType,
                         vctValues = vctValues,
                         issuerIdentifiers = issuerIdentifiers,
@@ -621,6 +627,9 @@ private fun DcqlCredentialQuery.toJson(): JsonObject = buildJsonObject {
     put("id", id)
     put("format", format)
     put("meta", meta)
+    if (multiple) {
+        put("multiple", true)
+    }
     if (issuerIdentifiers.isNotEmpty()) {
         putJsonArray("trusted_authorities") {
             addJsonObject {

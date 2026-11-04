@@ -55,20 +55,18 @@ internal object ConsentGoldenCatalogGenerator {
         appendLine()
         for ((catDir, items) in byCategory) {
             val first = items.first()
-            val anchor = first.categoryTitle.lowercase()
-                .replace(Regex("[^a-z0-9 ]"), "")
-                .trim()
-                .replace(Regex("\\s+"), "-")
-            appendLine("- **[${first.categoryTitle}](#$anchor)** (`$catDir` — ${items.size} scenarios)")
+            appendLine("- **[${first.categoryTitle}](#$catDir)** (`$catDir` — ${items.size} scenarios)")
             for (scenario in items) {
                 appendLine("  - [${scenario.title}](#${scenario.scenarioId})")
             }
         }
         appendLine()
 
-        for ((_, items) in byCategory) {
+        for ((catDir, items) in byCategory) {
             val first = items.first()
             appendLine("---")
+            appendLine()
+            appendLine("<a id=\"$catDir\"></a>")
             appendLine()
             appendLine("## ${first.categoryTitle}")
             appendLine()

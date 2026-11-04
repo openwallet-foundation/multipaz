@@ -53,6 +53,7 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -387,25 +388,7 @@ fun Consent(
     }
 
     val initialSelections = remember(presentmentData, preselectedDocuments) {
-        presentmentData.useCases.map { useCase ->
-            if (preselectedDocuments.isEmpty()) {
-                if (useCase.solutions.isNotEmpty()) 0 else -1
-            } else {
-                val preselectedSet = preselectedDocuments.toSet()
-                val matchingIndex = useCase.solutions.indexOfFirst { solution ->
-                    solution.matches.isNotEmpty() && solution.matches.all {
-                        it.credential.document in preselectedSet
-                    }
-                }
-                if (matchingIndex != -1) {
-                    matchingIndex
-                } else if (useCase.optional) {
-                    -1
-                } else {
-                    if (useCase.solutions.isNotEmpty()) 0 else -1
-                }
-            }
-        }
+        presentmentData.defaultSelections(preselectedDocuments)
     }
 
     var selections by remember(initialSelections) { mutableStateOf(initialSelections) }
@@ -617,8 +600,8 @@ fun Consent(
                     if (useCase != null) {
                         DocumentDetailsPage(
                             useCase = useCase,
-                            selectionIndex = selections[target.useCaseIndex],
-                            matchIndex = target.matchIndex,
+                            selectionIndices = selections[target.useCaseIndex],
+                            matchIndices = target.matchIndices,
                             requester = requester,
                             requesterDisplayData = requesterDisplayData,
                             appInfo = appInfo,
@@ -653,15 +636,17 @@ fun Consent(
                 if (useCase != null) {
                     PickSolutionPage(
                         useCase = useCase,
-                        currentSolutionIndex = selections[activeUseCaseIndex],
+                        currentSolutionIndices = selections[activeUseCaseIndex],
                         onBackClicked = {
                             navController.navigateUp()
                         },
-                        onSolutionSelected = { solutionIndex ->
+                        onSolutionsSelected = { solutionIndices, navigateBack ->
                             val newList = selections.toMutableList()
-                            newList[activeUseCaseIndex] = solutionIndex
+                            newList[activeUseCaseIndex] = solutionIndices
                             selections = newList
-                            navController.navigateUp()
+                            if (navigateBack) {
+                                navController.navigateUp()
+                            }
                         }
                     )
                 }
@@ -1392,10 +1377,10 @@ private data class RequesterDisplayData(
     val disclaimer: String? = null
 )
 
-/** Identifies the use-case and match index that the document details page shows. */
+/** Identifies the use-case and match indices that the document details page shows. */
 private data class DocumentDetailsTarget(
     val useCaseIndex: Int,
-    val matchIndex: Int,
+    val matchIndices: List<Int>,
 )
 
 private fun PresentmentCredentialMatch.resolveTypeDisplayName(): String =
@@ -1410,28 +1395,32 @@ private fun PresentmentCredentialMatch.resolveTypeDisplayName(): String =
         }
 
 /**
- * A page inside the consent prompt showing the selected credential along with all requested
+ * A page inside the consent prompt showing the selected credential(s) along with all requested
  * claims and their actual values.
  */
 @Composable
 private fun DocumentDetailsPage(
     useCase: PresentmentUseCase,
-    selectionIndex: Int,
-    matchIndex: Int,
+    selectionIndices: List<Int>,
+    matchIndices: List<Int>,
     requester: Requester,
     requesterDisplayData: RequesterDisplayData,
     appInfo: ApplicationInfo?,
     onBackClicked: () -> Unit,
 ) {
-    val isSelected = selectionIndex >= 0
-    val solutionIndexToShow = if (isSelected) selectionIndex else 0
-    val solution = useCase.solutions.getOrNull(solutionIndexToShow)
-    val targetMatch = solution?.matches?.getOrNull(matchIndex) ?: solution?.matches?.firstOrNull()
-    val group = if (solution != null && targetMatch != null) {
-        groupMatchesByDocument(solution.matches)
-            .firstOrNull { it.document.identifier == targetMatch.credential.document.identifier }
+    val isSelected = selectionIndices.isNotEmpty()
+    val solutionIndicesToShow = if (isSelected) selectionIndices else listOf(0)
+    val allMatches = solutionIndicesToShow.flatMap { idx ->
+        useCase.solutions.getOrNull(idx)?.matches.orEmpty()
+    }
+    val allGroups = groupMatchesByDocument(allMatches)
+    val targetDocIds = matchIndices
+        .mapNotNull { allMatches.getOrNull(it)?.credential?.document?.identifier }
+        .toSet()
+    val groupsToShow = if (targetDocIds.isNotEmpty()) {
+        allGroups.filter { it.document.identifier in targetDocIds }
     } else {
-        null
+        listOfNotNull(allGroups.firstOrNull())
     }
 
     Column {
@@ -1456,66 +1445,68 @@ private fun DocumentDetailsPage(
                 .padding(top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (group != null && isSelected) {
-                SegmentedItemContainer(
-                    index = 0,
-                    count = 1,
-                ) {
-                    CredentialViewer(
-                        credential = group.credential,
-                        showChevron = false,
-                        onChevronClicked = {}
-                    )
-                }
-
-                for (section in group.claimSections) {
-                    val sectionHeader = calcSharedWithText(
-                        requester = requester,
-                        requesterDisplayData = requesterDisplayData,
-                        appInfo = appInfo,
-                        storesData = section.storesData,
-                        encryptionRequested = section.encryptionRequested,
-                        encryptionTargetTrustMetadata = section.encryptionTargetTrustMetadata
-                    )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
+            if (isSelected) {
+                for (group in groupsToShow) {
+                    SegmentedItemContainer(
+                        index = 0,
+                        count = 1,
                     ) {
-                        Text(
-                            modifier = Modifier.padding(bottom = 8.dp),
-                            text = sectionHeader,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        CredentialViewer(
+                            credential = group.credential,
+                            showChevron = false,
+                            onChevronClicked = {}
                         )
-                        section.claims.forEachIndexed { claimIndex, claim ->
-                            val icon = claim.attribute?.icon ?: Icon.PERSON
-                            SegmentedItemContainer(
-                                index = claimIndex,
-                                count = section.claims.size,
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.Start),
-                                    verticalAlignment = Alignment.CenterVertically
+                    }
+
+                    for (section in group.claimSections) {
+                        val sectionHeader = calcSharedWithText(
+                            requester = requester,
+                            requesterDisplayData = requesterDisplayData,
+                            appInfo = appInfo,
+                            storesData = section.storesData,
+                            encryptionRequested = section.encryptionRequested,
+                            encryptionTargetTrustMetadata = section.encryptionTargetTrustMetadata
+                        )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
+                        ) {
+                            Text(
+                                modifier = Modifier.padding(bottom = 8.dp),
+                                text = sectionHeader,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            section.claims.forEachIndexed { claimIndex, claim ->
+                                val icon = claim.attribute?.icon ?: Icon.PERSON
+                                SegmentedItemContainer(
+                                    index = claimIndex,
+                                    count = section.claims.size,
                                 ) {
-                                    Icon(
-                                        imageVector = icon.getOutlinedImageVector(),
-                                        contentDescription = stringResource(
-                                            Res.string.credential_presentment_data_element_icon_description
-                                        )
-                                    )
-                                    Column(
-                                        modifier = Modifier.weight(1.0f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.Start),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = claim.displayName,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                        Icon(
+                                            imageVector = icon.getOutlinedImageVector(),
+                                            contentDescription = stringResource(
+                                                Res.string.credential_presentment_data_element_icon_description
+                                            )
                                         )
-                                        RenderClaimValue(
-                                            claim = claim,
-                                            imageSize = 100.dp,
-                                        )
+                                        Column(
+                                            modifier = Modifier.weight(1.0f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = claim.displayName,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            RenderClaimValue(
+                                                claim = claim,
+                                                imageSize = 100.dp,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1594,7 +1585,7 @@ private fun ConsentPage(
     appInfo: ApplicationInfo?,
     imageLoader: ImageLoader?,
     presentmentData: PresentmentData,
-    selections: List<Int>,
+    selections: List<List<Int>>,
     riskAssessment: ConsentRiskAssessment,
     purposes: Set<PresentmentPurpose>,
     scrollState: ScrollState,
@@ -1639,10 +1630,8 @@ private fun ConsentPage(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val hasEncryptionTargetPrivacyPolicy = presentmentData.useCases.indices.any { index ->
-                    val selIndex = selections.getOrElse(index) { -1 }
-                    if (selIndex < 0) {
-                        false
-                    } else {
+                    val selIndices = selections.getOrElse(index) { emptyList() }
+                    selIndices.any { selIndex ->
                         val solution = presentmentData.useCases[index].solutions.getOrNull(selIndex)
                         solution?.matches?.any { match ->
                             match.encryptionRequested &&
@@ -1738,7 +1727,7 @@ private fun ConsentPage(
                     UseCaseViewer(
                         useCaseIndex = index,
                         useCase = useCase,
-                        selectionIndex = selections[index],
+                        selectionIndices = selections[index],
                         requester = requester,
                         trustedRequesterIdentity = trustedRequesterIdentity,
                         requesterDisplayData = requesterDisplayData,
@@ -1788,7 +1777,7 @@ private fun ConsentPage(
 private fun UseCaseViewer(
     useCaseIndex: Int,
     useCase: PresentmentUseCase,
-    selectionIndex: Int,
+    selectionIndices: List<Int>,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     requesterDisplayData: RequesterDisplayData,
@@ -1802,22 +1791,35 @@ private fun UseCaseViewer(
     onNavigateToPickSolution: () -> Unit,
     bottomContent: (@Composable () -> Unit)? = null,
 ) {
-    val isSelected = selectionIndex >= 0
-    val solutionIndexToShow = if (isSelected) selectionIndex else 0
-    val solution = useCase.solutions.getOrNull(solutionIndexToShow)
+    val isSelected = selectionIndices.isNotEmpty()
+    val selectedMatches = remember(useCase, selectionIndices) {
+        if (isSelected) {
+            selectionIndices.flatMap { useCase.solutions.getOrNull(it)?.matches.orEmpty() }
+        } else {
+            useCase.solutions.firstOrNull()?.matches.orEmpty()
+        }
+    }
 
-    if (solution != null) {
-        val documentGroups = remember(solution) { groupMatchesByDocument(solution.matches) }
+    if (selectedMatches.isNotEmpty()) {
+        val documentGroups = remember(selectedMatches) { groupMatchesByDocument(selectedMatches) }
+        val stackedGroups = remember(documentGroups, selectionIndices) {
+            stackDocumentGroups(
+                documentGroups = documentGroups,
+                stackCompatibleGroups = isSelected && selectionIndices.size > 1,
+            )
+        }
         val switchableDocIds = remember(useCase, documentGroups) {
             switchableDocumentIds(useCase, documentGroups)
         }
         val totalSegments = (if (!isSelected) {
             documentGroups.size
         } else {
-            documentGroups.sumOf { group ->
+            stackedGroups.sumOf { stackedGroup ->
                 var segments = 1
-                if (group.claimSections.isNotEmpty()) segments += 1
-                segments += group.matches.count { it.transactionData.isNotEmpty() }
+                if (stackedGroup.claimSections.isNotEmpty()) segments += 1
+                segments += stackedGroup.groups.sumOf { group ->
+                    group.matches.count { it.transactionData.isNotEmpty() }
+                }
                 segments
             }
         }) + if (bottomContent != null) 1 else 0
@@ -1829,8 +1831,8 @@ private fun UseCaseViewer(
             Column(
                 verticalArrangement = Arrangement.spacedBy(SEGMENT_GAP)
             ) {
-                documentGroups.forEachIndexed { groupIndex, group ->
-                    if (!isSelected) {
+                if (!isSelected) {
+                    documentGroups.forEachIndexed { groupIndex, group ->
                         val segmentIdx = currentSegmentIndex++
                         SegmentedItemContainer(
                             index = segmentIdx,
@@ -1842,27 +1844,39 @@ private fun UseCaseViewer(
                                 onChevronClicked = onNavigateToPickSolution
                             )
                         }
-                    } else {
-                        val canSwitchOnCredential = group.document.identifier in switchableDocIds
+                    }
+                } else {
+                    stackedGroups.forEach { stackedGroup ->
+                        val canSwitchOnCredential = stackedGroup.groups.any {
+                            it.document.identifier in switchableDocIds
+                        }
                         val credSegmentIdx = currentSegmentIndex++
                         SegmentedItemContainer(
                             index = credSegmentIdx,
                             count = totalSegments,
                         ) {
-                            CredentialViewer(
-                                credential = group.credential,
-                                showChevron = canSwitchOnCredential,
-                                onChevronClicked = onNavigateToPickSolution
-                            )
+                            if (stackedGroup.groups.size == 1) {
+                                CredentialViewer(
+                                    credential = stackedGroup.firstGroup.credential,
+                                    showChevron = canSwitchOnCredential,
+                                    onChevronClicked = onNavigateToPickSolution
+                                )
+                            } else {
+                                StackedCredentialViewer(
+                                    credentials = stackedGroup.groups.map { it.credential },
+                                    showChevron = canSwitchOnCredential,
+                                    onChevronClicked = onNavigateToPickSolution
+                                )
+                            }
                         }
 
-                        if (group.claimSections.isNotEmpty()) {
+                        if (stackedGroup.claimSections.isNotEmpty()) {
                             val claimsSegmentIdx = currentSegmentIndex++
                             val onViewDetails = {
                                 onShowDocumentDetails(
                                     DocumentDetailsTarget(
                                         useCaseIndex = useCaseIndex,
-                                        matchIndex = group.firstMatchIndex,
+                                        matchIndices = stackedGroup.groups.map { it.firstMatchIndex },
                                     )
                                 )
                             }
@@ -1873,11 +1887,11 @@ private fun UseCaseViewer(
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    group.claimSections.forEachIndexed { sectionIndex, section ->
+                                    stackedGroup.claimSections.forEachIndexed { sectionIndex, section ->
                                         if (sectionIndex > 0) {
                                             Spacer(modifier = Modifier.height(8.dp))
                                         }
-                                        val isLastSection = (sectionIndex == group.claimSections.lastIndex)
+                                        val isLastSection = (sectionIndex == stackedGroup.claimSections.lastIndex)
                                         val headerText = calcSharedWithText(
                                             requester = requester,
                                             requesterDisplayData = requesterDisplayData,
@@ -1897,8 +1911,11 @@ private fun UseCaseViewer(
                             }
                         }
 
-                        val hasClaims = group.claimSections.isNotEmpty()
-                        for (txMatch in group.matches.filter { it.transactionData.isNotEmpty() }) {
+                        val hasClaims = stackedGroup.claimSections.isNotEmpty()
+                        val txMatches = stackedGroup.groups
+                            .flatMap { it.matches }
+                            .filter { it.transactionData.isNotEmpty() }
+                        for (txMatch in txMatches) {
                             val txSegmentIdx = currentSegmentIndex++
                             SegmentedItemContainer(
                                 index = txSegmentIdx,
@@ -2322,9 +2339,9 @@ private fun calcSharedWithTextWithoutEncryption(
 @Composable
 private fun PickSolutionPage(
     useCase: PresentmentUseCase,
-    currentSolutionIndex: Int,
+    currentSolutionIndices: List<Int>,
     onBackClicked: () -> Unit,
-    onSolutionSelected: (Int) -> Unit
+    onSolutionsSelected: (List<Int>, navigateBack: Boolean) -> Unit
 ) {
     val scrollState = rememberScrollState()
     Column(
@@ -2354,12 +2371,26 @@ private fun PickSolutionPage(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             useCase.solutions.forEachIndexed { index, solution ->
-                val isSelectedSolution = (index == currentSolutionIndex)
+                val isSelectedSolution = index in currentSolutionIndices
+                val canUncheck = useCase.optional || currentSolutionIndices.size > 1
+                val onRowClicked = {
+                    if (useCase.allowMultiple) {
+                        if (isSelectedSolution) {
+                            if (canUncheck) {
+                                onSolutionsSelected(currentSolutionIndices.filter { it != index }, false)
+                            }
+                        } else {
+                            onSolutionsSelected((currentSolutionIndices + index).sorted(), false)
+                        }
+                    } else {
+                        onSolutionsSelected(listOf(index), true)
+                    }
+                }
                 SegmentedItemContainer(
                     index = 0,
                     count = 1,
                     selected = isSelectedSolution,
-                    modifier = Modifier.clickable { onSolutionSelected(index) }
+                    modifier = Modifier.clickable { onRowClicked() }
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2379,16 +2410,24 @@ private fun PickSolutionPage(
                                 )
                             }
                         }
-                        RadioButton(
-                            selected = isSelectedSolution,
-                            onClick = null,
-                        )
+                        if (useCase.allowMultiple) {
+                            Checkbox(
+                                checked = isSelectedSolution,
+                                onCheckedChange = null,
+                                enabled = !isSelectedSolution || canUncheck,
+                            )
+                        } else {
+                            RadioButton(
+                                selected = isSelectedSolution,
+                                onClick = null,
+                            )
+                        }
                     }
                 }
             }
 
             if (useCase.optional) {
-                val isNotSharingSelected = currentSolutionIndex < 0
+                val isNotSharingSelected = currentSolutionIndices.isEmpty()
                 val fallbackTypeName = useCase.solutions.firstOrNull()
                     ?.let { groupMatchesByDocument(it.matches) }
                     ?.joinToString(", ") { it.matches.first().resolveTypeDisplayName() }
@@ -2397,7 +2436,9 @@ private fun PickSolutionPage(
                     index = 0,
                     count = 1,
                     selected = isNotSharingSelected,
-                    modifier = Modifier.clickable { onSolutionSelected(-1) }
+                    modifier = Modifier.clickable {
+                        onSolutionsSelected(emptyList(), !useCase.allowMultiple)
+                    }
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2428,13 +2469,68 @@ private fun PickSolutionPage(
                                 )
                             }
                         }
-                        RadioButton(
-                            selected = isNotSharingSelected,
-                            onClick = null,
-                        )
+                        if (useCase.allowMultiple) {
+                            Checkbox(
+                                checked = isNotSharingSelected,
+                                onCheckedChange = null,
+                            )
+                        } else {
+                            RadioButton(
+                                selected = isNotSharingSelected,
+                                onClick = null,
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StackedCredentialViewer(
+    modifier: Modifier = Modifier,
+    credentials: List<Credential>,
+    showChevron: Boolean,
+    onChevronClicked: () -> Unit,
+) {
+    val boxShape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (showChevron) {
+                    Modifier
+                        .clip(boxShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, boxShape)
+                        .clickable { onChevronClicked() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                } else {
+                    Modifier
+                }
+            ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1.0f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            credentials.forEach { credential ->
+                CredentialViewer(
+                    modifier = Modifier.fillMaxWidth(),
+                    credential = credential,
+                    showChevron = false,
+                    onChevronClicked = {},
+                )
+            }
+        }
+        if (showChevron) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

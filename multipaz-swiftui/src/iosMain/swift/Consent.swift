@@ -5,14 +5,14 @@ public typealias ClassifyPurposesSwiftFn = (
     _ requester: Requester,
     _ trustedRequesterIdentity: TrustedRequesterIdentity?,
     _ presentmentData: PresentmentData,
-    _ selections: [KotlinInt]
+    _ selections: [[KotlinInt]]
 ) -> Set<PresentmentPurpose>
 
 public typealias ClassifyRiskSwiftFn = (
     _ requester: Requester,
     _ trustedRequesterIdentity: TrustedRequesterIdentity?,
     _ presentmentData: PresentmentData,
-    _ selections: [KotlinInt],
+    _ selections: [[KotlinInt]],
     _ purposes: Set<PresentmentPurpose>
 ) -> ConsentRiskAssessment
 
@@ -1494,7 +1494,7 @@ public struct Consent: View {
             requester: requester,
             trustedRequesterIdentity: trustedRequesterIdentity
         )
-        let kotlinSelections = selections.map { KotlinInt(int: Int32($0)) }
+        let kotlinSelections = selections.map { $0 >= 0 ? [KotlinInt(int: Int32($0))] : [] }
         let purposes: Set<PresentmentPurpose> = selections.isEmpty
             ? Set()
             : classifyPurposesFn(requester, trustedRequesterIdentity, presentmentData, kotlinSelections)
@@ -2448,7 +2448,7 @@ private struct ConsentMain: View {
                 onScrollDown: scrollDown,
                 onConfirm: {
                     onConfirm(presentmentData.toPresentmentSelection(
-                        selections: selections.map { KotlinInt(int: Int32($0)) },
+                        selections: selections.map { $0 >= 0 ? [KotlinInt(int: Int32($0))] : [] },
                         transactionUserInput: transactionUserInput
                     ))
                 },
