@@ -3,13 +3,19 @@ package org.multipaz.mdoc.response
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborMap
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cose.CoseSign1
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
@@ -24,6 +30,7 @@ import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -157,35 +164,74 @@ data class DeviceResponse internal constructor(
             )
         }
         otherDocuments.forEach { otherDocument ->
-            val transactionData = if (deviceRequest == null) {
+            val docRequestId = if (deviceRequest == null) {
+                -1
+            } else if (deviceRequest.docRequests.size == 1) {
+                0
+            } else {
+                findDocRequestId(documentTypeRepository, otherDocument)
+            }
+            val docRequest = if (deviceRequest != null && docRequestId >= 0) {
+                deviceRequest.docRequests[docRequestId]
+            } else {
+                null
+            }
+            val transactionData = if (docRequest == null) {
                 emptyList()
             } else {
-                val docRequestId = if (deviceRequest.docRequests.size == 1) {
-                    0
-                } else {
-                    findDocRequestId(documentTypeRepository, otherDocument)
-                }
-                if (docRequestId < 0) {
-                    emptyList()
-                } else {
-                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
-                        documentTypeRepository!!
-                    )
-                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
-                        try {
-                            val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                                otherDocument.data.toByteArray().zlibInflate().decodeToString()
-                            )
-                            allTx.filter { sdJwtKb.jwtBody.containsKey(it.type.kbJwtResponseClaimName) }
-                        } catch (e: Exception) {
-                            allTx
-                        }
-                    } else {
+                val allTx = docRequest.getTransactionData(
+                    documentTypeRepository!!
+                )
+                if (docRequest.docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
+                    try {
+                        val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                            otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                        )
+                        allTx.filter { sdJwtKb.jwtBody.containsKey(it.type.kbJwtResponseClaimName) }
+                    } catch (e: Exception) {
                         allTx
                     }
+                } else {
+                    allTx
                 }
             }
-            otherDocument.verify(sessionTranscript, eReaderKey, transactionData, atTime)
+            val expectedAudience = if (deviceRequest == null) {
+                null
+            } else if (deviceRequest.readerAuthAll_.isNotEmpty()) {
+                val listOfReaderAuthAll = buildCborArray {
+                    deviceRequest.readerAuthAll_.forEach {
+                        add(it.toDataItem())
+                    }
+                }
+                Crypto.digest(
+                    algorithm = Algorithm.SHA256,
+                    message = Cbor.encode(
+                        Tagged(
+                            tagNumber = Tagged.ENCODED_CBOR,
+                            taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
+                        )
+                    )
+                ).toBase64Url()
+            } else if (docRequest?.readerAuth_ != null) {
+                Crypto.digest(
+                    algorithm = Algorithm.SHA256,
+                    message = Cbor.encode(
+                        Tagged(
+                            tagNumber = Tagged.ENCODED_CBOR,
+                            taggedItem = Bstr(Cbor.encode(docRequest.readerAuth_.toDataItem()))
+                        )
+                    )
+                ).toBase64Url()
+            } else {
+                "none"
+            }
+            otherDocument.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = eReaderKey,
+                transactionData = transactionData,
+                atTime = atTime,
+                expectedAudience = expectedAudience
+            )
         }
     }
 

@@ -45,10 +45,17 @@ sealed class QueryData {
                     "dc+sd-jwt" -> {
                         val vctArray = meta["vct_values"] as? JsonArray
                             ?: throw IllegalArgumentException("'meta.vct_values' is missing or invalid in credential query '$id'")
-                        SdJwtQueryData(id, multiple, vctArray.map {
-                            (it as? JsonPrimitive)?.content
-                                ?: throw IllegalArgumentException("'meta.vct_values' is not an array of string in credential query '$id'")
-                        })
+                        val requireCryptographicHolderBinding =
+                            (credential["require_cryptographic_holder_binding"] as? JsonPrimitive)?.booleanOrNull ?: true
+                        SdJwtQueryData(
+                            id = id,
+                            multiple = multiple,
+                            vct = vctArray.map {
+                                (it as? JsonPrimitive)?.content
+                                    ?: throw IllegalArgumentException("'meta.vct_values' is not an array of string in credential query '$id'")
+                            },
+                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                        )
                     }
                     "mso_mdoc", "mso_mdoc_zk" -> {
                         val docType = (meta["doctype_value"] as? JsonPrimitive)?.content

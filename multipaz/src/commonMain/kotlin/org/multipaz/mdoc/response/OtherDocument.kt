@@ -1,6 +1,7 @@
 package org.multipaz.mdoc.response
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -34,6 +35,8 @@ data class OtherDocument(
      */
     lateinit var transactionData: List<TransactionData<*>>
 
+    internal var expectedAudience: String? = null
+
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
         put("data", data.toByteArray())
@@ -44,13 +47,15 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        expectedAudience: String? = null,
     ) {
         when (docFormat) {
             "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
-                atTime = atTime
+                atTime = atTime,
+                expectedAudience = expectedAudience
             )
         }
     }
@@ -60,6 +65,7 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        expectedAudience: String? = null,
     ) {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())
 
@@ -78,8 +84,7 @@ data class OtherDocument(
                 expectedNonce == nonce
             },
             checkAudience = { audience ->
-                // TODO: check audience when DeviceResponse.verify() takes a DeviceRequest.
-                true
+                expectedAudience == null || expectedAudience == audience
             },
             checkCreationTime = { creationTime ->
                 val drift = (atTime - creationTime).absoluteValue
@@ -97,6 +102,7 @@ data class OtherDocument(
             throw IllegalStateException("SD-JWT is not valid anymore")
         }
         this.transactionData = transactionData
+        this.expectedAudience = expectedAudience ?: sdJwtKb.jwtBody["aud"]?.jsonPrimitive?.content
     }
 
     companion object {

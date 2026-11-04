@@ -93,7 +93,7 @@ data class DeviceRequest private constructor(
     val version: String,
     val docRequests: List<DocRequest>,
     val deviceRequestInfo: DeviceRequestInfo?,
-    private val readerAuthAll_: List<CoseSign1>
+    internal val readerAuthAll_: List<CoseSign1>
 ) {
     internal var readerAuthAllVerified: Boolean = false
 

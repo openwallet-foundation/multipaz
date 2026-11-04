@@ -9,6 +9,7 @@ data class SdJwtQueryData(
     override val id: String,
     override val multiple: Boolean,
     val vct: List<String>,
+    val requireCryptographicHolderBinding: Boolean = true,
 ): QueryData() {
     companion object
 }
