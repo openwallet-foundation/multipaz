@@ -207,7 +207,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
             JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().publicKey)
             val clientId = (info.claimsSet["client_id"] as? JsonPrimitive)?.content
                 ?: throw IllegalArgumentException("'client_id' is not given in the request")
-            requesterIdentities.add(OpenID4VPRequesterIdentity(info.x5c, clientId))
+            requesterIdentities.add(OpenID4VPRequesterIdentity.fromSignedRequest(info.x5c, clientId))
             info.x5c.validate()
             info.claimsSet
         } else if (multisignedRequest.containsKey("signatures")) {
@@ -227,7 +227,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
                 JsonWebSignature.verify("$header.$payload.$signature", x5c.certificates.first().publicKey)
                 val clientId = (headerObj["client_id"] as? JsonPrimitive)?.content
                     ?: throw IllegalArgumentException("'client_id' is not given in the request")
-                requesterIdentities.add(OpenID4VPRequesterIdentity(x5c, clientId))
+                requesterIdentities.add(OpenID4VPRequesterIdentity.fromSignedRequest(x5c, clientId))
                 x5c.validate()
             }
             Json.parseToJsonElement(payload.fromBase64Url().decodeToString()).jsonObject

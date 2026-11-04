@@ -162,7 +162,7 @@ suspend fun uriSchemePresentment(
         reqJwt = reqJwtBytes.decodeToString()
         val info = JsonWebSignature.getInfo(reqJwt)
         val requestObject = info.claimsSet
-        val requesterIdentity = OpenID4VPRequesterIdentity(
+        val requesterIdentity = OpenID4VPRequesterIdentity.fromSignedRequest(
             certChain = info.x5c!!,
             clientId = requestObject["client_id"]!!.jsonPrimitive.content
         )
