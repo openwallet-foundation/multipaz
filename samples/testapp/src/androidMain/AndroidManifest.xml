@@ -171,7 +171,6 @@
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
             android:theme="@style/NavigationActivityTheme"
-            android:launchMode="singleInstance"
             android:excludeFromRecents="true">
             <intent-filter>
                 <action android:name="androidx.credentials.registry.provider.action.CREATE_CREDENTIAL" />

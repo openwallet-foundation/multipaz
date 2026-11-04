@@ -1,23 +1,26 @@
 package org.multipaz.testapp
 
+import android.content.Intent
 import org.multipaz.compose.digitalcredentials.CredentialManagerProvisioningActivity
-import org.multipaz.prompt.PromptModel
+import org.multipaz.digitalcredentials.CredmanCredentialOffer
 
-class TestAppCredentialManagerProvisioningActivity: CredentialManagerProvisioningActivity() {
-    override suspend fun getSettings(promptModel: PromptModel): Settings {
+class TestAppCredentialManagerProvisioningActivity : CredentialManagerProvisioningActivity() {
+    override suspend fun getPrivilegedAllowList(): String {
+        return assets.open("privilegedUserAgents.json").use { it.readBytes() }.decodeToString()
+    }
+
+    override suspend fun handleCredentialOffer(
+        origin: String,
+        offer: CredmanCredentialOffer,
+    ): Result {
         val app = App.getInstance()
         app.initialize()
-
-        val privilegedAllowList = assets.open("privilegedUserAgents.json").use { it.readBytes() }.decodeToString()
-
-        return Settings(
-            provisioningModel = app.createProvisioningModel(promptModel),
-            clientPreferences = app.provisioningSupport.getOpenID4VCIClientPreferences(),
-            backend = app.provisioningSupport.getOpenID4VCIBackend(),
-            waitForRedirectLinkInvocation = { state ->
-                app.provisioningSupport.waitForAppLinkInvocation(state)
-            },
-            privilegedAllowList = privilegedAllowList,
-        )
+        val mainIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(mainIntent)
+        val document = app.handleCredentialOffer(offer.offerUri)
+            ?: return Result.Canceled("Credential not provisioned")
+        return Result.Success(returnToCallingApp = true)
     }
 }

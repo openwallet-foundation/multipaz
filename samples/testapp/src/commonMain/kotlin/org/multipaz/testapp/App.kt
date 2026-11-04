@@ -235,9 +235,14 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var readerTrustManager: CompositeTrustManager
 
 
+    private data class CredentialOfferRequest(
+        val offerUri: String,
+        val result: CompletableDeferred<Document?>? = null,
+    )
+
     private lateinit var provisioningModel: ProvisioningModel
 
-    private val credentialOffers = Channel<String>()
+    private val credentialOffers = Channel<CredentialOfferRequest>()
 
     private val mpzPassesToImport = Channel<ByteString>()
 
@@ -245,8 +250,7 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val documentsToView = Channel<String>()
 
-    lateinit var provisioningSupport: ProvisioningSupport
-        private set
+    private lateinit var provisioningSupport: ProvisioningSupport
 
     lateinit var zkSystemRepository: ZkSystemRepository
     private val initLock = Mutex()
@@ -498,23 +502,8 @@ class App private constructor (val promptModel: PromptModel) {
 
 
     private suspend fun provisioningModelInit() {
-        provisioningModel = createProvisioningModel(promptModel)
-        provisioningSupport = ProvisioningSupport(
-            storage = TestAppConfiguration.storage,
-            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
-        )
-        provisioningSupport.init()
-    }
-
-    /**
-     * Creates a [ProvisioningModel] using [promptModel] for its UI.
-     *
-     * This is also used for provisioning credentials offered through the W3C Digital Credentials API, which
-     * happens in another activity on Android.
-     */
-    suspend fun createProvisioningModel(promptModel: PromptModel): ProvisioningModel {
         val secureArea = Platform.getSecureArea(TestAppConfiguration.storage)
-        return ProvisioningModel(
+        provisioningModel = ProvisioningModel(
             documentProvisioningHandler = DocumentProvisioningHandler(
                 documentStore = documentStore,
                 secureArea = secureArea,
@@ -526,6 +515,11 @@ class App private constructor (val promptModel: PromptModel) {
             authorizationSecureArea = secureArea,
             eventLogger = eventLogger
         )
+        provisioningSupport = ProvisioningSupport(
+            storage = TestAppConfiguration.storage,
+            secureArea = secureArea,
+        )
+        provisioningSupport.init()
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -996,7 +990,7 @@ class App private constructor (val promptModel: PromptModel) {
             val queryIndex = url.indexOf('?')
             if (queryIndex >= 0) {
                 CoroutineScope(Dispatchers.Default).launch {
-                    credentialOffers.send(url)
+                    credentialOffers.send(CredentialOfferRequest(url))
                 }
             }
         } else if (
@@ -1012,6 +1006,12 @@ class App private constructor (val promptModel: PromptModel) {
         } else {
             Logger.e(TAG, "Unhandled URL: '$url'")
         }
+    }
+
+    suspend fun handleCredentialOffer(offerUri: String): Document? {
+        val result = CompletableDeferred<Document?>()
+        credentialOffers.send(CredentialOfferRequest(offerUri, result))
+        return result.await()
     }
 
     fun cancelAllPendingAppLinks() {
@@ -1111,14 +1111,19 @@ class App private constructor (val promptModel: PromptModel) {
                 .build()
         }
 
+        val pendingCredentialOfferResult = remember { mutableStateOf<CompletableDeferred<Document?>?>(null) }
+
         LaunchedEffect(true) {
             while (true) {
-                val credentialOffer = credentialOffers.receive()
+                val request = credentialOffers.receive()
                 if (provisioningModel.isActive) {
                     Logger.e(TAG, "Provisioning is already in progress")
+                    request.result?.complete(null)
                 } else {
+                    pendingCredentialOfferResult.value?.complete(null)
+                    pendingCredentialOfferResult.value = request.result
                     provisioningModel.launchOpenID4VCIProvisioning(
-                        offerUri = credentialOffer,
+                        offerUri = request.offerUri,
                         clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
                         backend = provisioningSupport.getOpenID4VCIBackend()
                     )
@@ -1183,6 +1188,8 @@ class App private constructor (val promptModel: PromptModel) {
                     if (document != null && isNewlyIssued) {
                         navController.navigate(DocumentViewerDestination(document.identifier))
                     }
+                    pendingCredentialOfferResult.value?.complete(document)
+                    pendingCredentialOfferResult.value = null
                 },
                 issuerUrl = provisioningIssuerUrl.value,
                 clientPreferences = CompletableDeferred(provisioningSupport.getOpenID4VCIClientPreferences()),
