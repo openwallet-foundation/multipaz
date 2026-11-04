@@ -8,9 +8,11 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.readRawBytes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
+import io.ktor.http.content.TextContent
 import io.ktor.http.parameters
 import io.ktor.http.protocolWithAuthority
 import io.ktor.http.takeFrom
@@ -260,10 +262,43 @@ class ProvisioningClientTest {
         )
     }
 
+    @Test
+    fun credentialEndpointRejectsMismatchedScopeConfigurationId() {
+        Assert.assertThrows(IllegalStateException::class.java) {
+            runWithAuthorizationCode(
+                offer = OFFER_PAYMENT,
+                credentialFormat = CredentialFormat.Mdoc(DigitalPaymentCredential.CARD_DOCTYPE),
+                serverArgs = arrayOf(
+                    "-param", "base_url=http://localhost",
+                    "-param", "database_engine=ephemeral",
+                    "-param", "use_scopes=true"
+                ),
+                overrideCredentialConfigurationId = "mDL"
+            )
+        }
+    }
+
+    @Test
+    fun credentialEndpointRejectsMismatchedAuthorizedConfigurationIdWithinSameScope() {
+        Assert.assertThrows(IllegalStateException::class.java) {
+            runWithAuthorizationCode(
+                offer = OFFER_PAYMENT,
+                credentialFormat = CredentialFormat.Mdoc(DigitalPaymentCredential.CARD_DOCTYPE),
+                serverArgs = arrayOf(
+                    "-param", "base_url=http://localhost",
+                    "-param", "database_engine=ephemeral",
+                    "-param", "use_scopes=false"
+                ),
+                overrideCredentialConfigurationId = "payment_sca_sd_jwt"
+            )
+        }
+    }
+
     fun runWithAuthorizationCode(
         offer: String,
         credentialFormat: CredentialFormat,
         serverArgs: Array<String>,
+        overrideCredentialConfigurationId: String? = null,
         extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
         val configuration = ServerConfiguration(serverArgs)
@@ -277,6 +312,26 @@ class ProvisioningClientTest {
         val httpClient = createClient {
             followRedirects = false
             install(credentialRequestRecorder)
+            if (overrideCredentialConfigurationId != null) {
+                install(createClientPlugin("CredentialConfigurationIdOverrider") {
+                    transformRequestBody { request, content, _ ->
+                        if (request.url.pathSegments.lastOrNull() == "credential" && content is String) {
+                            val mutated = buildJsonObject {
+                                for ((k, v) in Json.parseToJsonElement(content).jsonObject) {
+                                    if (k == "credential_configuration_id") {
+                                        put(k, overrideCredentialConfigurationId)
+                                    } else {
+                                        put(k, v)
+                                    }
+                                }
+                            }.toString()
+                            TextContent(mutated, ContentType.Application.Json)
+                        } else {
+                            null
+                        }
+                    }
+                })
+            }
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {

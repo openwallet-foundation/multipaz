@@ -103,9 +103,20 @@ suspend fun credential(call: ApplicationCall) {
             throw InvalidRequestException(
                 "both 'credential_configuration_id' and 'credential_identifier' are specified")
         }
-        registry.byId[credentialConfigurationId]
+        if (state.configurationId != null && credentialConfigurationId != state.configurationId) {
+            throw InvalidRequestException(
+                "credential_configuration_id '$credentialConfigurationId' does not match authorized configuration '${state.configurationId}'"
+            )
+        }
+        val candidate = registry.byId[credentialConfigurationId]
             ?: throw ServerException("unknown_credential_configuration",
                 "credential_configuration_id '$credentialConfigurationId' is not known")
+        if (candidate.scope != state.scope) {
+            throw InvalidRequestException(
+                "credential_configuration_id '$credentialConfigurationId' is not authorized for scope '${state.scope}'"
+            )
+        }
+        candidate
     } else if (credentialIdentifier != null) {
         // We do not (yet) use credential_identifier
         throw ServerException("unknown_credential_identifier",
@@ -114,8 +125,20 @@ suspend fun credential(call: ApplicationCall) {
         // Legacy, we should throw an error in the future
         Logger.e(TAG, "Neither 'credential_configuration_id' nor 'credential_identifier' in credential request")
         val format = CredentialFormat.fromJson(json)
-        registry.byId.values.find { factory ->
-            (format == null || factory.format == format) && factory.scope == state.scope
+        if (state.configurationId != null) {
+            val candidate = registry.byId[state.configurationId]
+            if (candidate != null &&
+                (format == null || candidate.format == format) &&
+                candidate.scope == state.scope
+            ) {
+                candidate
+            } else {
+                null
+            }
+        } else {
+            registry.byId.values.find { factory ->
+                (format == null || factory.format == format) && factory.scope == state.scope
+            }
         }
     }
 
