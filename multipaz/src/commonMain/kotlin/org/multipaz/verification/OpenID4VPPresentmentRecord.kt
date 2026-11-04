@@ -2,7 +2,9 @@ package org.multipaz.verification
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,6 +31,7 @@ class OpenID4VPPresentmentRecord(
     val vpToken: String,
     val vpRequest: String,
     val mdocSessionTranscript: DataItem?,
+    val expectedAudience: String? = null,
 ): PresentmentRecord() {
     override suspend fun verifyNonce(nonce: ByteString) {
         val vpNonce = Json.parseToJsonElement(vpRequest)
@@ -47,6 +50,15 @@ class OpenID4VPPresentmentRecord(
         val transactionDataMap = getTransactionData(request, documentTypeRepository)
         val nonce = request["nonce"]!!.jsonPrimitive.content
         val queryData = QueryData.fromDcql(request["dcql_query"]!!.jsonObject)
+        val audience = expectedAudience ?: run {
+            val responseMode = (request["response_mode"] as? JsonPrimitive)?.content
+            val expectedOrigins = request["expected_origins"] as? JsonArray
+            if (responseMode != null && responseMode.startsWith("dc_api") && !expectedOrigins.isNullOrEmpty()) {
+                "origin:${expectedOrigins.first().jsonPrimitive.content}"
+            } else {
+                (request["client_id"] as? JsonPrimitive)?.content
+            }
+        }
         return VerificationUtil.verifyOpenID4VPResponse(
             now = atTime,
             vpToken = Json.parseToJsonElement(vpToken).jsonObject,
@@ -55,7 +67,8 @@ class OpenID4VPPresentmentRecord(
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             transactionDataMap = transactionDataMap,
-            queryData = queryData.associateBy { it.id!! }
+            queryData = queryData.associateBy { it.id!! },
+            expectedAudience = audience,
         )
     }
 

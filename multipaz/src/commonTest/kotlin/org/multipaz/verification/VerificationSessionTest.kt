@@ -4,14 +4,20 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -27,20 +33,30 @@ import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.OtherDocument
+import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.presentment.mdocPresentment
 import org.multipaz.request.OpenID4VPRequesterIdentity
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibDeflate
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 
 class VerificationSessionTest {
     private val harness = DocumentStoreTestHarness()
@@ -633,6 +649,180 @@ class VerificationSessionTest {
             preselectedDocuments = preselectedDocuments,
             source = harness.presentmentSource,
         )
+    }
+
+    @Test
+    fun testSdJwtHolderBindingValidityAndAudienceChecks() = runTest {
+        setup()
+        val now = Clock.System.now()
+        val holderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderKey = AsymmetricKey.anonymous(holderPrivateKey, Algorithm.ESP256)
+        val credential = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject { put("given_name", "Erika") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        )
+        val nonce = "test-nonce-1"
+        val validPresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ).compactSerialization
+
+        fun buildRequest(extraQueryFields: String = ""): String = """
+            {
+              "client_id": "$CLIENT_ID",
+              "nonce": "$nonce",
+              "response_uri": "https://$DNS_NAME/post",
+              "dcql_query": {
+                "credentials": [{
+                  "id": "pid",
+                  "format": "dc+sd-jwt",
+                  "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+                  "claims": [{ "path": ["given_name"] }]
+                  $extraQueryFields
+                }]
+              }
+            }
+        """.trimIndent()
+
+        fun buildRecord(presentation: String, request: String = buildRequest()): OpenID4VPPresentmentRecord {
+            val vpToken = buildJsonObject {
+                putJsonArray("pid") { add(presentation) }
+            }.toString()
+            return OpenID4VPPresentmentRecord(vpToken, request, null)
+        }
+
+        // Control: valid presentation passes
+        val verified = buildRecord(validPresentation).verify(atTime = now)
+        assertEquals(1, verified.size)
+
+        // 1. Stripped KB-JWT must be rejected (both default and explicit require_cryptographic_holder_binding)
+        val kbStripped = validPresentation.substring(0, validPresentation.lastIndexOf('~') + 1)
+        assertFailsWith<IllegalStateException> {
+            buildRecord(kbStripped, buildRequest()).verify(atTime = now)
+        }
+        assertFailsWith<IllegalStateException> {
+            buildRecord(kbStripped, buildRequest(""", "require_cryptographic_holder_binding": true""")).verify(atTime = now)
+        }
+        // Even with require_cryptographic_holder_binding: false, a credential containing `cnf` must reject stripped KB-JWT
+        assertFailsWith<IllegalStateException> {
+            buildRecord(kbStripped, buildRequest(""", "require_cryptographic_holder_binding": false""")).verify(atTime = now)
+        }
+
+        // 2. Expired or not-yet-valid credential must be rejected
+        val futureTime = now + 20.days
+        val futurePresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = futureTime,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            buildRecord(futurePresentation).verify(atTime = futureTime)
+        }
+        val pastTime = now - 5.days
+        val pastPresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = pastTime,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            buildRecord(pastPresentation).verify(atTime = pastTime)
+        }
+
+        // 3. Wrong audience or stale KB-JWT creationTime must be rejected
+        val wrongAudiencePresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = "x509_san_dns:other-verifier.example",
+            creationTime = now,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            buildRecord(wrongAudiencePresentation).verify(atTime = now)
+        }
+        val staleKbPresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now - 10.minutes,
+        ).compactSerialization
+        assertFailsWith<IllegalStateException> {
+            buildRecord(staleKbPresentation).verify(atTime = now)
+        }
+    }
+
+    @Test
+    fun testOtherDocumentSdJwtAudienceCheckInDeviceResponse() = runTest {
+        setup()
+        val now = Clock.System.now()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val sessionTranscriptBytes = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(Cbor.encode(sessionTranscript))
+        )
+        val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
+
+        val holderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderKey = AsymmetricKey.anonymous(holderPrivateKey, Algorithm.ESP256)
+        val credential = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject { put("given_name", "Erika") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        )
+        // Presentation created for an unsigned request (aud = "none")
+        val unsignedPresentation = credential.present(
+            signingKey = holderKey,
+            nonce = expectedNonce,
+            audience = "none",
+            creationTime = now,
+        ).compactSerialization
+
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString(unsignedPresentation.encodeToByteArray().zlibDeflate())
+                )
+            )
+        }
+        val signedDeviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("given_name" to false)),
+            )
+            addReaderAuthAll(readerIdentity.key)
+        }
+
+        // Replaying an aud="none" OtherDocument against a signed DeviceRequest must fail
+        val drParsed = DeviceResponse.fromDataItem(deviceResponse.toDataItem())
+        assertFailsWith<IllegalStateException> {
+            drParsed.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = signedDeviceRequest,
+                documentTypeRepository = harness.documentTypeRepository,
+                atTime = now,
+            )
+        }
     }
 
     private companion object {

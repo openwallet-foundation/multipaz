@@ -14,6 +14,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -65,6 +66,8 @@ import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 private const val TAG = "VerificationUtil"
@@ -926,22 +929,26 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
-        queryData: Map<String, QueryData>
+        queryData: Map<String, QueryData>,
+        expectedAudience: String? = null,
     ): List<VerifiedPresentation> {
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
         for ((credId, credValue) in vpToken.entries) {
             val creds = credValue as? JsonArray ?: JsonArray(listOf(credValue))
             val transactionData = transactionDataMap[credId] ?: listOf()
+            val credQueryData = queryData[credId]
             for (cred in creds) {
                 val credBase64 = cred.jsonPrimitive.content
-                val isSdJwt = queryData.let { it[credId] is SdJwtQueryData }
-                if (isSdJwt) {
+                if (credQueryData is SdJwtQueryData) {
                     val sdjwtVerifiedPresentations = verifySdJwtPresentation(
                         compactSerialization = credBase64,
                         nonce = nonce,
                         documentTypeRepository = documentTypeRepository,
                         transactionData = transactionData,
-                        identifier = credId
+                        identifier = credId,
+                        now = now,
+                        expectedAudience = expectedAudience,
+                        requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
                     )
                     verifiedPresentations.add(sdjwtVerifiedPresentations)
                 } else {
@@ -968,6 +975,12 @@ object VerificationUtil {
      * @param compactSerialization the compact serialization of the SD-JWT or SD-JWT+KB.
      * @param nonce the nonce used in the request.
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param transactionData transaction data associated with the credential query.
+     * @param identifier optional VP token credential query identifier.
+     * @param now the time at which to evaluate credential and KB-JWT validity.
+     * @param expectedAudience the expected KB-JWT `aud` claim value.
+     * @param requireCryptographicHolderBinding whether a Key Binding JWT is required even if the
+     *  credential does not contain a `cnf` claim.
      * @return a [VerifiedPresentation] instance.
      */
     suspend fun verifySdJwtPresentation(
@@ -975,7 +988,10 @@ object VerificationUtil {
         nonce: String,
         documentTypeRepository: DocumentTypeRepository?,
         transactionData: List<TransactionData<*>>,
-        identifier: String? = null
+        identifier: String? = null,
+        now: Instant = Clock.System.now(),
+        expectedAudience: String? = null,
+        requireCryptographicHolderBinding: Boolean = true,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
             Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
@@ -984,14 +1000,30 @@ object VerificationUtil {
             Pair(sdJwtKb.sdJwt, sdJwtKb)
         }
 
+        if (sdJwtKb == null) {
+            if (sdJwt.jwtBody.containsKey("cnf")) {
+                throw IllegalStateException("`cnf` claim present in SD-JWT, but no Key Binding JWT was provided")
+            }
+            if (requireCryptographicHolderBinding) {
+                throw IllegalStateException(
+                    "Cryptographic holder binding is required, but no Key Binding JWT was provided"
+                )
+            }
+        }
+
         val issuerCertChain = sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")
         val processedPayload = if (sdJwtKb != null) {
             sdJwtKb.verify(
                 issuerKey = issuerCertChain.certificates.first().ecPublicKey,
                 checkNonce = { nonceInCredential -> nonceInCredential == nonce },
-                checkAudience = { true }, // TODO
-                checkCreationTime = { true },
+                checkAudience = { audienceInCredential ->
+                    expectedAudience != null && audienceInCredential == expectedAudience
+                },
+                checkCreationTime = { creationTime ->
+                    val drift = (now - creationTime).absoluteValue
+                    drift < 5.minutes
+                },
                 transactionData = transactionData
             )
         } else {
@@ -1001,9 +1033,15 @@ object VerificationUtil {
         }
 
         val vct = processedPayload["vct"]!!.jsonPrimitive.content
-        val validFrom = processedPayload["nbf"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
-        val validUntil = processedPayload["exp"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
-        val signedAt = processedPayload["iat"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
+        val validFrom = processedPayload["nbf"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
+        val validUntil = processedPayload["exp"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
+        val signedAt = processedPayload["iat"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
+        if (validFrom != null && now < validFrom) {
+            throw IllegalStateException("SD-JWT is not yet valid")
+        }
+        if (validUntil != null && now > validUntil) {
+            throw IllegalStateException("SD-JWT is not valid anymore")
+        }
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
 
         val claims = mutableListOf<JsonClaim>()
@@ -1095,6 +1133,7 @@ object VerificationUtil {
             atTime = now
         )
         return createVerifiedPresentationList(
+            now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
@@ -1128,6 +1167,7 @@ object VerificationUtil {
             atTime = now
         )
         return createVerifiedPresentationList(
+            now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
@@ -1137,6 +1177,7 @@ object VerificationUtil {
     }
 
     private suspend fun createVerifiedPresentationList(
+        now: Instant,
         deviceResponse: DeviceResponse,
         sessionTranscript: DataItem,
         documentTypeRepository: DocumentTypeRepository?,
@@ -1290,7 +1331,9 @@ object VerificationUtil {
                     compactSerialization = sdJwtKbCompactSerialization,
                     nonce = nonce.toBase64Url(),
                     documentTypeRepository = documentTypeRepository,
-                    transactionData = document.transactionData
+                    transactionData = document.transactionData,
+                    now = now,
+                    expectedAudience = document.expectedAudience,
                 )
             )
         }
