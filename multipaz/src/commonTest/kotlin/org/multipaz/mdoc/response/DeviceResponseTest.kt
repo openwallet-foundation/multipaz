@@ -67,6 +67,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -1271,6 +1272,15 @@ class DeviceResponseTest {
             atTime = mdlTimeValidityBegin
         )
         assertEquals(drParsed, deviceResponse)
+
+        @Suppress("DEPRECATION")
+        val legacyDoc = DeviceResponseParser(
+            encodedDeviceResponse,
+            Cbor.encode(sessionTranscript)
+        ).parse().documents.single()
+        assertTrue(legacyDoc.deviceSignedAuthenticated)
+        assertEquals("foo", legacyDoc.getDeviceEntryString("com.example.device", "device_element_1"))
+        assertEquals(42L, legacyDoc.getDeviceEntryNumber("com.example.device", "device_element_2"))
     }
 
     @Test
@@ -1308,6 +1318,13 @@ class DeviceResponseTest {
             sessionTranscript = sessionTranscript,
             atTime = mdlTimeValidityBegin
         )
+        @Suppress("DEPRECATION")
+        val legacyDoc = DeviceResponseParser(
+            Cbor.encode(deviceResponse.toDataItem()),
+            Cbor.encode(sessionTranscript)
+        ).parse().documents.single()
+        assertTrue(legacyDoc.deviceSignedAuthenticated)
+        assertEquals("foo", legacyDoc.getDeviceEntryString("com.example.device", "device_element_1"))
     }
 
     @Test
@@ -1346,6 +1363,13 @@ class DeviceResponseTest {
             "Device-signed data element 'device_element_1' in namespace 'com.example.device' is not authorized by MSO",
             error.message
         )
+        @Suppress("DEPRECATION")
+        val legacyDoc = DeviceResponseParser(
+            Cbor.encode(deviceResponse.toDataItem()),
+            Cbor.encode(sessionTranscript)
+        ).parse().documents.single()
+        assertFalse(legacyDoc.deviceSignedAuthenticated)
+        assertTrue(legacyDoc.deviceNamespaces.isEmpty())
     }
 
     @Test
@@ -1387,6 +1411,13 @@ class DeviceResponseTest {
             "Device-signed data element 'device_element_1' in namespace 'com.example.device' is not authorized by MSO",
             error.message
         )
+        @Suppress("DEPRECATION")
+        val legacyDoc = DeviceResponseParser(
+            Cbor.encode(deviceResponse.toDataItem()),
+            Cbor.encode(sessionTranscript)
+        ).parse().documents.single()
+        assertFalse(legacyDoc.deviceSignedAuthenticated)
+        assertTrue(legacyDoc.deviceNamespaces.isEmpty())
     }
 
     @Test
@@ -1430,6 +1461,13 @@ class DeviceResponseTest {
             "Device-signed data element 'device_element_2' in namespace 'com.example.device' is not authorized by MSO",
             error.message
         )
+        @Suppress("DEPRECATION")
+        val legacyDoc = DeviceResponseParser(
+            Cbor.encode(deviceResponse.toDataItem()),
+            Cbor.encode(sessionTranscript)
+        ).parse().documents.single()
+        assertFalse(legacyDoc.deviceSignedAuthenticated)
+        assertTrue(legacyDoc.deviceNamespaces.isEmpty())
     }
 
     @Test

@@ -127,13 +127,14 @@ class DeviceResponseParser(
          */
         lateinit var version: String
 
-        // Returns the DeviceKey from the MSO
+        // Returns the parsed MobileSecurityObject from the MSO
         //
+        @Suppress("DEPRECATION")
         suspend private fun parseIssuerSigned(
             expectedDocType: String,
             issuerSigned: DataItem,
             builder: Document.Builder
-        ): EcPublicKey {
+        ): MobileSecurityObjectParser.MobileSecurityObject {
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
 
             // 18013-5 clause "9.1.2.4 Signing method and structure for MSO" guarantees
@@ -193,7 +194,6 @@ class DeviceResponseParser(
             for (nameSpaceName in nameSpaceNames) {
                 digestMapping[nameSpaceName] = parsedMso.getDigestIDs(nameSpaceName)
             }
-            val deviceKey = parsedMso.deviceKey
 
             // nameSpaces may be absent...
             val nameSpaces = issuerSigned.getOrNull("nameSpaces")
@@ -235,17 +235,19 @@ class DeviceResponseParser(
                     }
                 }
             }
-            return deviceKey
+            return parsedMso
         }
 
+        @Suppress("DEPRECATION")
         private suspend fun parseDeviceSigned(
             deviceSigned: DataItem,
             docType: String,
             encodedSessionTranscript: ByteArray,
-            deviceKey: EcPublicKey,
+            parsedMso: MobileSecurityObjectParser.MobileSecurityObject,
             eReaderKey: AsymmetricKey?,
             builder: Document.Builder
         ) {
+            val deviceKey = parsedMso.deviceKey
             val nameSpacesBytes = deviceSigned["nameSpaces"]
             val nameSpaces = nameSpacesBytes.asTaggedEncodedCbor
             val deviceAuth = deviceSigned["deviceAuth"]
@@ -258,7 +260,7 @@ class DeviceResponseParser(
             val deviceAuthenticationBytes = Cbor.encode(
                 Tagged(24, Bstr(Cbor.encode(deviceAuthentication)))
             )
-            val deviceSignedAuthenticated: Boolean
+            var deviceSignedAuthenticated: Boolean
             val deviceSignature = deviceAuth.getOrNull("deviceSignature")
             if (deviceSignature != null) {
                 val deviceSignatureCoseSign1 = deviceSignature.asCoseSign1
@@ -319,16 +321,28 @@ class DeviceResponseParser(
                     )
                 }
             }
-            builder.setDeviceSignedAuthenticated(deviceSignedAuthenticated)
             for (nameSpaceDataItem in nameSpaces.asMap.keys) {
                 val nameSpace = nameSpaceDataItem.asTstr
                 val innerMap = nameSpaces[nameSpaceDataItem]
                 for (elementNameDataItem in innerMap.asMap.keys) {
                     val elementName = elementNameDataItem.asTstr
+                    val authorizedByNamespace =
+                        parsedMso.deviceKeyAuthorizedNameSpaces?.contains(nameSpace) == true
+                    val authorizedByElement =
+                        parsedMso.deviceKeyAuthorizedDataElements?.get(nameSpace)?.contains(elementName) == true
+                    if (!authorizedByNamespace && !authorizedByElement) {
+                        Logger.w(
+                            TAG,
+                            "Device-signed data element '$elementName' in namespace '$nameSpace' is not authorized by MSO"
+                        )
+                        deviceSignedAuthenticated = false
+                        continue
+                    }
                     val elementValue = innerMap[elementNameDataItem]
                     builder.addDeviceEntry(nameSpace, elementName, Cbor.encode(elementValue))
                 }
             }
+            builder.setDeviceSignedAuthenticated(deviceSignedAuthenticated)
         }
 
         internal suspend fun parse(
@@ -347,14 +361,14 @@ class DeviceResponseParser(
                     val docType = documentItem["docType"].asTstr
                     val builder = Document.Builder(docType)
                     val issuerSignedItem = documentItem["issuerSigned"]
-                    val deviceKey = parseIssuerSigned(docType, issuerSignedItem, builder)
-                    builder.setDeviceKey(deviceKey)
+                    val parsedMso = parseIssuerSigned(docType, issuerSignedItem, builder)
+                    builder.setDeviceKey(parsedMso.deviceKey)
                     val deviceSigned = documentItem["deviceSigned"]
                     parseDeviceSigned(
                         deviceSigned,
                         docType,
                         encodedSessionTranscript,
-                        deviceKey,
+                        parsedMso,
                         eReaderKey,
                         builder
                     )
@@ -429,7 +443,8 @@ class DeviceResponseParser(
          *
          *
          * This returns `true` only if the returned device-signed data was properly
-         * MACed or signed by a `DeviceKey` in the MSO.
+         * MACed or signed by a `DeviceKey` in the MSO and all device-signed data elements
+         * are authorized by `keyAuthorizations` in the MSO's `DeviceKeyInfo`.
          *
          * @return whether the `DeviceSigned` data was authenticated.
          */
