@@ -384,4 +384,51 @@ class TestSingleSdJwtVcQuery {
             ).prettyPrint().trim()
         )
     }
+
+    @Test
+    fun singlePidQueryMatchesOtherVcts() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionSdJwtVc(
+            displayName = "my-PID-DE-Erika",
+            vct = "urn:eudi:pid:de:1",
+            otherVcts = listOf(EUPersonalID.EUPID_VCT),
+            data = listOf(
+                "given_name" to JsonPrimitive("Erika"),
+                "family_name" to JsonPrimitive("Mustermann"),
+                "address" to buildJsonObject {
+                    put("country", JsonPrimitive("DE"))
+                    put("street_address", JsonPrimitive("Heidestraße 17"))
+                }
+            )
+        )
+        assertEquals(
+            """
+                useCases:
+                  useCase:
+                    optional: false
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-DE-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Heidestraße 17
+            """.trimIndent().trim(),
+            singlePidQuery().execute(
+                presentmentSource = harness.presentmentSource
+            ).prettyPrint().trim()
+        )
+    }
 }

@@ -732,7 +732,8 @@ data class DeviceRequest private constructor(
                 }
                 "dc+sd-jwt" -> {
                     document.getCertifiedCredentials().find {
-                        it is KeyBoundSdJwtVcCredential && it.vct == docRequest.docType
+                        it is KeyBoundSdJwtVcCredential &&
+                            (it.vct == docRequest.docType || it.otherVcts.contains(docRequest.docType))
                     }
                 }
                 else -> null

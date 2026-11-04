@@ -338,6 +338,7 @@ object OpenID4VP {
     @Throws(
         AuthenticationFailedException::class,
         CancellationException::class,
+        Exception::class,
         IllegalStateException::class,
         PresentmentCanceledException::class,
         PresentmentCannotSatisfyRequestException::class,

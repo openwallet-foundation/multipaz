@@ -1,9 +1,9 @@
 import SwiftUI
 
-extension Document {
-    /// Renders card art for a ``Document``.
+extension MultipazDocument {
+    /// Renders card art for a ``MultipazDocument``.
     ///
-    /// If no card art is set then fallback card art will be generated which will include ``Document.displayName`` and ``Document.typeDisplayName``
+    /// If no card art is set then fallback card art will be generated which will include ``MultipazDocument.displayName`` and ``MultipazDocument.typeDisplayName``
     /// on top of a generic base image.
     ///
     /// - Returns: A ``UIImage``.

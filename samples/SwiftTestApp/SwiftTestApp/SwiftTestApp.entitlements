@@ -15,6 +15,12 @@
 		<string>eu.europa.ec.eudi.pid.1</string>
 		<string>eu.europa.ec.av.1</string>
 	</array>
+	<!-- TODO: Enable once Apple Developer Portal supports provisioning profiles with verifiable-credential-types
+	<key>com.apple.developer.identity-document-services.document-provider.verifiable-credential-types</key>
+	<array>
+		<string>urn:eudi:pid:1</string>
+	</array>
+	-->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>$(SWIFT_TESTAPP_APP_GROUP_ID)</string>

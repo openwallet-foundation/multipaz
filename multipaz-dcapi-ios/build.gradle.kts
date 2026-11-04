@@ -6,6 +6,7 @@ plugins {
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+val xcodeDeveloperPath: String by rootProject.extra
 
 kotlin {
     jvmToolchain(21)
@@ -28,7 +29,7 @@ kotlin {
         }
         it.binaries.all {
             linkerOpts(
-                "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
+                "-L${xcodeDeveloperPath}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                 "-Wl,-rpath,/usr/lib/swift",
                 "-lsqlite3"
             )

@@ -22,6 +22,7 @@ plugins {
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+val xcodeDeveloperPath: String by rootProject.extra
 
 val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
 
@@ -82,6 +83,7 @@ kotlin {
                 val SwiftBridge by cinterops.creating {
                     definitionFile.set(project.file("nativeInterop/cinterop/SwiftBridge-$platform.def"))
                     includeDirs.headerFilterOnly("$rootDir/multipaz/SwiftBridge/build/Release-$platform/include")
+                    extraOpts("-linker-option", "-L${xcodeDeveloperPath}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/")
 
                     val interopTask = tasks[interopProcessingTaskName]
                     val capitalizedPlatform = platform.replaceFirstChar {
@@ -91,12 +93,28 @@ kotlin {
                     interopTask.dependsOn(":multipaz:SwiftBridge:build${capitalizedPlatform}")
                     interopTask.inputs.file("$rootDir/multipaz/SwiftBridge/build/Release-$platform/include/SwiftBridge/SwiftBridge-Swift.h")
                     interopTask.inputs.file("$rootDir/multipaz/SwiftBridge/build/Release-$platform/libSwiftBridge.a")
+                    val allBuildDirs = rootProject.subprojects.map { subproject ->
+                        subproject.layout.buildDirectory.dir("kotlin-native-ic-cache")
+                    }
+                    interopTask.doLast {
+                        // Kotlin/Native's static compiler cache records hash=0.0 for unpacked
+                        // directory cinterop klibs and does not automatically invalidate cached
+                        // static archives when SwiftBridge.swift changes.
+                        allBuildDirs.forEach { dirProvider ->
+                            val icCacheDir = dirProvider.get().asFile
+                            if (icCacheDir.exists()) {
+                                icCacheDir.walkTopDown()
+                                    .filter { it.isDirectory && it.name.endsWith("multipaz-cinterop-SwiftBridge-cache") }
+                                    .forEach { it.deleteRecursively() }
+                            }
+                        }
+                    }
                 }
 
                 it.binaries.all {
                     // Linker options required to link to the library.
                     linkerOpts(
-                        "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
+                        "-L${xcodeDeveloperPath}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                         "-L$rootDir/multipaz/SwiftBridge/build/Release-${platform}/",
                         "-lSwiftBridge",
                         "-Wl,-rpath,/usr/lib/swift",

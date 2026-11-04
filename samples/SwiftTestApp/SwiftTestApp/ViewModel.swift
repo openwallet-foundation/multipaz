@@ -263,6 +263,9 @@ class ViewModel {
                 "org.iso.18013.5.1.mDL",
                 "org.iso.23220.photoid.1",
             ])
+            try! await documentStore.setIosSdJwtVcTypes(value: [
+                "urn:eudi:pid:1",
+            ])
             do {
                 try await dcApi.register(
                     documentStore: documentStore,
@@ -299,7 +302,7 @@ class ViewModel {
     }
     
     // For testing of the badge rendering, always add a badge with the document name
-    func getBadges(document: Document) async -> [DocumentBadge] {
+    func getBadges(document: MultipazDocument) async -> [DocumentBadge] {
         let displayName = document.displayName ?? "Unknown Document"
         let hash = displayName.hashValue
         let red = (hash >> 16) & 0xFF

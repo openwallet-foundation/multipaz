@@ -9,6 +9,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
@@ -140,5 +141,65 @@ abstract class PresentmentSource(
      * Gets the [FaceMatcher] to use for face matching during presentment, or `null` if face matching is not available.
      */
     open fun getFaceMatcher(): FaceMatcher? = null
+
+    /**
+     * Returns a [PresentmentSource] that delegates all operations to this instance except
+     * [showConsentPrompt], which is handled by [showConsentPromptFn].
+     *
+     * @param showConsentPromptFn the function to use for showing the consent prompt.
+     * @return a new [PresentmentSource] overriding [showConsentPrompt].
+     */
+    fun withShowConsentPrompt(
+        showConsentPromptFn: ShowConsentPromptFn
+    ): PresentmentSource = object : PresentmentSource(
+        documentStore = documentStore,
+        documentTypeRepository = documentTypeRepository,
+        zkSystemRepository = zkSystemRepository,
+        eventLogger = eventLogger,
+        requesterHistory = requesterHistory,
+    ) {
+        override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? =
+            this@PresentmentSource.resolveTrust(requester)
+
+        override suspend fun showConsentPrompt(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+            presentmentData: PresentmentData,
+            preselectedDocuments: List<Document>,
+            onDocumentsInFocus: (documents: List<Document>) -> Unit
+        ): PresentmentSelection? = showConsentPromptFn(
+            requester,
+            trustedRequesterIdentity,
+            presentmentData,
+            preselectedDocuments,
+            onDocumentsInFocus
+        )
+
+        override suspend fun selectCredential(
+            document: Document,
+            requestedClaims: List<RequestedClaim>,
+            keyAgreementPossible: List<EcCurve>,
+            credential: Credential?,
+        ): Credential? = this@PresentmentSource.selectCredential(
+            document = document,
+            requestedClaims = requestedClaims,
+            keyAgreementPossible = keyAgreementPossible,
+            credential = credential,
+        )
+
+        override suspend fun getBadges(document: Document): List<DocumentBadge> =
+            this@PresentmentSource.getBadges(document)
+
+        override suspend fun getFaceMatchingMode(
+            credential: Credential,
+            requesterIdentities: List<RequesterIdentity>,
+        ): FaceMatchingMode = this@PresentmentSource.getFaceMatchingMode(
+            credential = credential,
+            requesterIdentities = requesterIdentities,
+        )
+
+        override fun getFaceMatcher(): FaceMatcher? =
+            this@PresentmentSource.getFaceMatcher()
+    }
 }
 

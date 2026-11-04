@@ -57,14 +57,14 @@ extension Requester: @unchecked Sendable {}
 extension TrustMetadata: @unchecked Sendable {}
 extension TrustedRequesterIdentity: @unchecked Sendable {}
 extension RequesterHistoryEntry: @unchecked Sendable {}
-extension Document: @unchecked Sendable {}
+extension MultipazDocument: @unchecked Sendable {}
 extension PresentmentSource: @unchecked Sendable {}
 extension DocumentTypeRepository: @unchecked Sendable {}
 extension PresentmentSelection: @unchecked Sendable {}
 extension Tags: @unchecked Sendable {}
 extension Tags.Editor: @unchecked Sendable {}
 extension PassphraseEvaluation: @unchecked Sendable {}
-extension Document.Editor: @unchecked Sendable {}
+extension MultipazDocument.Editor: @unchecked Sendable {}
 extension DocumentProvisioningSettings: @unchecked Sendable {}
 extension CredentialMetadata: @unchecked Sendable {}
 extension ProvisioningMetadata: @unchecked Sendable {}

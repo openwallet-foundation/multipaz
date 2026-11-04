@@ -40,6 +40,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         std::string documentId = "";
         std::string mdocDoctype = "";
         std::string vcVct = "";
+        std::vector<std::string> vcOtherVcts;
         std::vector<std::string> docProtocols = topProtocols;
         std::vector<std::vector<uint8_t>> issuerIdentifiers;
         std::vector<std::vector<uint8_t>> readerIdentifiers;
@@ -163,6 +164,16 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             documentId = sdjwt->get("documentId")->asTstr()->value();
             vcVct = sdjwt->get("vct")->asTstr()->value();
 
+            const auto& otherVctsPtr = sdjwt->get("otherVcts");
+            if (otherVctsPtr != nullptr && otherVctsPtr->asArray() != nullptr) {
+                auto arr = otherVctsPtr->asArray();
+                for (auto it = arr->begin(); it != arr->end(); ++it) {
+                    if ((*it)->asTstr() != nullptr) {
+                        vcOtherVcts.push_back((*it)->asTstr()->value());
+                    }
+                }
+            }
+
             const auto& omitClaimsPtr = sdjwt->get("omitClaims");
             if (omitClaimsPtr != nullptr && omitClaimsPtr->asBool() != nullptr) {
                 omitClaims = omitClaimsPtr->asBool()->value();
@@ -219,6 +230,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 documentId,
                 mdocDoctype,
                 vcVct,
+                vcOtherVcts,
                 docProtocols,
                 issuerIdentifiers,
                 readerIdentifiers,

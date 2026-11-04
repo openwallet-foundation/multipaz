@@ -91,6 +91,7 @@ import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.document.setIosMdocDoctypes
+import org.multipaz.document.setIosSdJwtVcTypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.eventlogger.SimpleEventLogger
@@ -899,6 +900,11 @@ class App private constructor (val promptModel: PromptModel) {
                     "eu.europa.ec.eudi.pid.1",
                     "org.iso.18013.5.1.mDL",
                     "org.iso.23220.photoid.1",
+                )
+            )
+            documentStore.setIosSdJwtVcTypes(
+                listOf(
+                    "urn:eudi:pid:1",
                 )
             )
             try {

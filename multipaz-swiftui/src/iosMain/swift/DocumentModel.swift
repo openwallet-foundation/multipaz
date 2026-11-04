@@ -17,13 +17,13 @@ public struct CredentialInfo: Hashable {
     public let keyInvalidated: Bool
 }
 
-/// A structure with information about a ``Document``.
+/// A structure with information about a ``MultipazDocument``.
 public struct DocumentInfo: Hashable, CardInfo {
     /// A unique identifier for the document.
     public var identifier: String { document.identifier }
 
-    /// A reference to the ``Document`` this information is about.
-    public let document: Document
+    /// A reference to the ``MultipazDocument`` this information is about.
+    public let document: MultipazDocument
     
     /// Card art for the document.
     public let cardArt: UIImage
@@ -62,7 +62,7 @@ public class DocumentModel {
     let documentTypeRepository: DocumentTypeRepository?
     let documentOrderKey: String
     let badgeFunction: @Sendable (
-        _ document: Document
+        _ document: MultipazDocument
     ) async -> [DocumentBadge]
 
     /**
@@ -79,7 +79,7 @@ public class DocumentModel {
         documentTypeRepository: DocumentTypeRepository?,
         documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
         badgeFunction: @escaping @Sendable (
-            _ document: Document
+            _ document: MultipazDocument
         ) async -> [DocumentBadge] = { document in [] }
     ) async throws {
         self.documentTypeRepository = documentTypeRepository
@@ -157,7 +157,7 @@ public class DocumentModel {
             } else if sb != nil {
                 return false
             }
-            return Document.Comparator.shared.compare(a: a.document, b: b.document) < 0
+            return MultipazDocument.Comparator.shared.compare(a: a.document, b: b.document) < 0
         }
     }
 
@@ -227,7 +227,7 @@ public class DocumentModel {
         try await setDocumentOrder(documentOrder: currentOrder)
     }
 
-    private func getDocumentInfo(_ document: Document) async throws -> DocumentInfo {
+    private func getDocumentInfo(_ document: MultipazDocument) async throws -> DocumentInfo {
         var credentialInfos: [CredentialInfo] = []
         for credential in try await document.getCredentials() {
             await credentialInfos.append(try getCredentialInfo(credential))

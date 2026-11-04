@@ -210,12 +210,18 @@ class DocumentStoreTest {
             }
         }
 
-        // Test DocumentStore iOS mdoc doctypes tag
+        // Test DocumentStore iOS mdoc doctypes and SD-JWT VC types tags
         assertNull(documentStore.getIosMdocDoctypes())
+        assertNull(documentStore.getIosSdJwtVcTypes())
         documentStore.setIosMdocDoctypes(listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"))
+        documentStore.setIosSdJwtVcTypes(listOf("urn:eudi:pid:1"))
         assertEquals(
             listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
             documentStore.getIosMdocDoctypes()
+        )
+        assertEquals(
+            listOf("urn:eudi:pid:1"),
+            documentStore.getIosSdJwtVcTypes()
         )
 
         // Check persistence across reload
@@ -232,10 +238,16 @@ class DocumentStoreTest {
             listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
             documentStore2.getIosMdocDoctypes()
         )
+        assertEquals(
+            listOf("urn:eudi:pid:1"),
+            documentStore2.getIosSdJwtVcTypes()
+        )
 
         // Test clearing tags
         documentStore2.setIosMdocDoctypes(null)
+        documentStore2.setIosSdJwtVcTypes(null)
         assertNull(documentStore2.getIosMdocDoctypes())
+        assertNull(documentStore2.getIosSdJwtVcTypes())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

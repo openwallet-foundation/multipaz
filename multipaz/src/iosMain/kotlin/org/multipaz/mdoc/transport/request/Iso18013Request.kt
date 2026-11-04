@@ -1,11 +1,13 @@
 package org.multipaz.mdoc.transport.request
 
+import kotlin.coroutines.cancellation.CancellationException
 import org.multipaz.cbor.Simple
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.request.RequesterIdentity
@@ -23,7 +25,9 @@ data class Iso18013Request(
      *   its private key is using one of the given curves.
      * @param requesterIdentities additional identities of the requester used for matching reader identifiers, if any.
      * @return the resulting [PresentmentData] if the query was successful.
+     * @throws Iso18015ResponseException if it's not possible to satisfy the query.
      */
+    @Throws(Iso18015ResponseException::class, Exception::class, CancellationException::class)
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),

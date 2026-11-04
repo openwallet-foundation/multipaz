@@ -13,13 +13,16 @@ import org.multipaz.DocRegInfo
 import org.multipaz.SwiftBridge
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.getIosMdocDoctypes
+import org.multipaz.document.getIosSdJwtVcTypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.toByteArray
 import org.multipaz.util.toKotlinError
 import org.multipaz.util.toNSData
 import platform.Foundation.NSData
+import platform.Foundation.NSError
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -64,9 +67,15 @@ class DigitalCredentialsIos private constructor() : DigitalCredentials {
 
     override val requestAvailable: Boolean = false
 
-    override val supportedProtocols: Set<String> = setOf(
-        "org-iso-mdoc",
-    )
+    @OptIn(ExperimentalForeignApi::class)
+    override val supportedProtocols: Set<String> = buildSet {
+        add("org-iso-mdoc")
+        if (SwiftBridge.docRegIsOpenID4VPSupported()) {
+            add("openid4vp-v1-unsigned")
+            add("openid4vp-v1-signed")
+            add("openid4vp-v1-multisigned")
+        }
+    }
 
     private val registerLock = Mutex()
 
@@ -109,6 +118,16 @@ private suspend fun getAuthorizationState(): DigitalCredentialsAuthorizationStat
     }
 }
 
+private data class WantedRegistration(
+    val registrationId: String,
+    val documentId: String,
+    val displayName: String,
+    val credentialFormat: String,
+    val documentTypes: List<String>,
+    val readerAkis: List<ByteString>,
+    val issuerAkis: List<ByteString>,
+)
+
 // Called with lock held
 @OptIn(ExperimentalForeignApi::class)
 private suspend fun updateOsCredentialManagerUnlocked(
@@ -119,24 +138,86 @@ private suspend fun updateOsCredentialManagerUnlocked(
 ) {
     Logger.i(TAG, "Updating OS Credential Manager (forceRegistration=$forceRegistration)")
 
-    val iosMdocDoctypes = documentStore.getIosMdocDoctypes()?.toSet()
-    if (iosMdocDoctypes == null) {
-        Logger.w(
-            TAG,
-            "documentStore.getIosMdocDoctypes() is not set. All ISO mdoc credentials will be registered. " +
-            "Please use documentStore.setIosMdocDoctypes() to configure the doctypes declared in your iOS manifest."
-        )
+    val hasMdocProtocol = selectedProtocols.contains("org-iso-mdoc")
+    val hasOpenID4VPProtocol = selectedProtocols.any { it.startsWith("openid4vp") } &&
+        SwiftBridge.docRegIsOpenID4VPSupported()
+
+    val iosMdocDoctypes = if (hasMdocProtocol || hasOpenID4VPProtocol) {
+        val types = documentStore.getIosMdocDoctypes()?.toSet()
+        if (types == null) {
+            Logger.w(
+                TAG,
+                "documentStore.getIosMdocDoctypes() is not set. All ISO mdoc credentials will be registered. " +
+                "Please use documentStore.setIosMdocDoctypes() to configure the doctypes declared in your iOS manifest."
+            )
+        }
+        types
+    } else {
+        emptySet()
     }
 
-    // First figure out which documents we want to be registered...
-    val docIdsWant = mutableSetOf<String>()
-    if (selectedProtocols.contains("org-iso-mdoc")) {
+    val iosSdJwtVcTypes = if (hasOpenID4VPProtocol) {
+        val types = documentStore.getIosSdJwtVcTypes()?.toSet()
+        if (types == null) {
+            Logger.w(
+                TAG,
+                "documentStore.getIosSdJwtVcTypes() is not set. All IETF SD-JWT VC credentials will be registered. " +
+                "Please use documentStore.setIosSdJwtVcTypes() to configure the vct values declared in your iOS manifest."
+            )
+        }
+        types
+    } else {
+        emptySet()
+    }
+
+    // First figure out which credentials we want to be registered...
+    val wantedByRegId = mutableMapOf<String, WantedRegistration>()
+    if (hasMdocProtocol || hasOpenID4VPProtocol) {
         val documents = documentStore.listDocuments()
         for (document in documents) {
+            val displayName = document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
             val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
             if (mdocCredential != null) {
                 if (iosMdocDoctypes == null || iosMdocDoctypes.contains(mdocCredential.docType)) {
-                    docIdsWant.add(document.identifier)
+                    val regId = "mdoc:${document.identifier}"
+                    val issuerAkis = mdocCredential.issuerCertChain.certificates
+                        .mapNotNull { it.authorityKeyIdentifier?.let { aki -> ByteString(aki) } }
+                    wantedByRegId[regId] = WantedRegistration(
+                        registrationId = regId,
+                        documentId = document.identifier,
+                        displayName = displayName,
+                        credentialFormat = "mso_mdoc",
+                        documentTypes = listOf(mdocCredential.docType),
+                        readerAkis = document.readerIdentifiers,
+                        issuerAkis = issuerAkis,
+                    )
+                }
+            }
+            if (hasOpenID4VPProtocol) {
+                val sdJwtCredential = document.getCertifiedCredentials()
+                    .find { it is SdJwtVcCredential } as SdJwtVcCredential?
+                if (sdJwtCredential != null) {
+                    val allVcts = listOf(sdJwtCredential.vct) + sdJwtCredential.otherVcts
+                    val vctsToRegister = if (iosSdJwtVcTypes == null) {
+                        allVcts
+                    } else {
+                        allVcts.filter { iosSdJwtVcTypes.contains(it) }
+                    }
+                    if (vctsToRegister.isNotEmpty()) {
+                        val regId = "sdjwt:${document.identifier}"
+                        val issuerAkis = sdJwtCredential.getIssuerCertChain()?.certificates
+                            ?.mapNotNull { it.authorityKeyIdentifier?.let { aki -> ByteString(aki) } }
+                            ?: emptyList()
+                        wantedByRegId[regId] = WantedRegistration(
+                            registrationId = regId,
+                            documentId = document.identifier,
+                            displayName = displayName,
+                            credentialFormat = "dc+sd-jwt",
+                            documentTypes = vctsToRegister,
+                            readerAkis = document.readerIdentifiers,
+                            issuerAkis = issuerAkis,
+                        )
+                    }
                 }
             }
         }
@@ -166,119 +247,113 @@ private suspend fun updateOsCredentialManagerUnlocked(
     val durationMs = (timeEnd - timeStart).inWholeMilliseconds
     Logger.i(TAG, "Fetched ${registrationsHave.size} OS registrations in $durationMs ms")
 
-    val regHaveByDocId = registrationsHave.associateBy { it.documentIdentifier() }
+    val regHaveByRegId = registrationsHave.associateBy { it.documentIdentifier() }
 
     // ... and then calculate what we need to register and unregister
-    val docIdsToRegister = mutableSetOf<String>()
-    for (docId in docIdsWant) {
+    val registrationsToAdd = mutableListOf<WantedRegistration>()
+    for ((regId, wanted) in wantedByRegId) {
         if (forceRegistration) {
-            docIdsToRegister.add(docId)
+            registrationsToAdd.add(wanted)
             continue
         }
-        val reg = regHaveByDocId[docId]
+        val reg = regHaveByRegId[regId]
         if (reg == null) {
-            docIdsToRegister.add(docId)
+            registrationsToAdd.add(wanted)
             continue
         }
-        val document = documentStore.lookupDocument(docId)
-        if (document == null) {
-            docIdsToRegister.add(docId)
-            continue
-        }
-        val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
-        if (mdocCredential == null) {
-            docIdsToRegister.add(docId)
-            continue
-        }
-        if (reg.documentType() != mdocCredential.docType) {
-            docIdsToRegister.add(docId)
+        if (reg.credentialFormat() != wanted.credentialFormat || reg.documentTypes() != wanted.documentTypes) {
+            registrationsToAdd.add(wanted)
             continue
         }
         val registeredReaderAkis = (reg.supportedAuthorityKeyIdentifiers() as List<NSData>)
             .map { ByteString(it.toByteArray()) }
             .toSet()
-        val wantedReaderAkis = document.readerIdentifiers.toSet()
-        if (registeredReaderAkis != wantedReaderAkis) {
-            docIdsToRegister.add(docId)
+        if (registeredReaderAkis != wanted.readerAkis.toSet()) {
+            registrationsToAdd.add(wanted)
             continue
         }
         val registeredIssuerAkis = (reg.supportedIssuerAuthorityKeyIdentifiers() as List<NSData>)
             .map { ByteString(it.toByteArray()) }
             .toSet()
-        val wantedIssuerAkis = mdocCredential.issuerCertChain.certificates
-            .mapNotNull { it.authorityKeyIdentifier?.let { aki -> ByteString(aki) } }
-            .toSet()
-        if (registeredIssuerAkis.isNotEmpty() && registeredIssuerAkis != wantedIssuerAkis) {
-            docIdsToRegister.add(docId)
+        if (registeredIssuerAkis != wanted.issuerAkis.toSet()) {
+            registrationsToAdd.add(wanted)
             continue
         }
     }
 
-    val docIdsHaveSet = regHaveByDocId.keys
-    val docIdsToUnregister = docIdsHaveSet.minus(docIdsWant)
+    val regIdsHaveSet = regHaveByRegId.keys
+    val regIdsToUnregister = regIdsHaveSet.minus(wantedByRegId.keys)
 
-    if (docIdsToRegister.isEmpty() && docIdsToUnregister.isEmpty()) {
+    if (registrationsToAdd.isEmpty() && regIdsToUnregister.isEmpty()) {
         Logger.i(TAG, "No changes to iOS Digital Credentials registrations")
         return
     }
 
-    for (docId in docIdsToRegister) {
-        val document = documentStore.lookupDocument(docId)
-        if (document == null) {
-            Logger.w(TAG, "Error finding document for documentId $docId")
-            continue
-        }
-        val displayName = document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
-        val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
-        if (mdocCredential != null) {
-            val issuerIdentifiers = mdocCredential.issuerCertChain.certificates
-                .mapNotNull { it.authorityKeyIdentifier }
-            suspendCoroutine<Unit> { continuation ->
-                SwiftBridge.docRegAdd(
-                    document.identifier,
-                    mdocCredential.docType,
-                    document.readerIdentifiers.map { it.toNSData() },
-                    issuerIdentifiers.map { it.toNSData() },
-                    null
-                ) { success, error ->
-                    // Matching on the error like this is a little bit of a hack but it does work...
-                    if (error != null) {
-                        if (error.domain.toString() == "IdentityDocumentServices.IdentityDocumentProviderRegistrationStore.RegistrationError" &&
-                            error.code.toInt() == 2) {
-                            Logger.w(TAG, "Ignoring registration error .noAuth for credential " +
-                                    "with docType ${mdocCredential.docType} - did you add it to the entitlement file?")
-                            continuation.resume(Unit)
-                        } else {
-                            continuation.resumeWithException(
-                                IllegalStateException("Credential registration failed", error.toKotlinError())
-                            )
-                        }
-                    } else {
-                        Logger.i(
-                            TAG, "Registered document with docId ${document.identifier} ('$displayName')" +
-                                    " and docType ${mdocCredential.docType}"
+    for (wanted in registrationsToAdd) {
+        val readerNsData = wanted.readerAkis.map { it.toNSData() }
+        val issuerNsData = wanted.issuerAkis.map { it.toNSData() }
+        suspendCoroutine<Unit> { continuation ->
+            val completion: (Boolean, NSError?) -> Unit = { _, error ->
+                // Matching on the error like this is a little bit of a hack but it does work...
+                if (error != null) {
+                    if (error.domain.toString() == "IdentityDocumentServices.IdentityDocumentProviderRegistrationStore.RegistrationError" &&
+                        error.code.toInt() == 2) {
+                        Logger.w(
+                            TAG,
+                            "Ignoring registration error .noAuth for ${wanted.credentialFormat} credential " +
+                                "with types ${wanted.documentTypes} - did you add it to the entitlement file?"
                         )
                         continuation.resume(Unit)
+                    } else {
+                        continuation.resumeWithException(
+                            IllegalStateException("Credential registration failed", error.toKotlinError())
+                        )
                     }
+                } else {
+                    Logger.i(
+                        TAG,
+                        "Registered ${wanted.credentialFormat} credential for docId ${wanted.documentId} " +
+                            "('${wanted.displayName}') with types ${wanted.documentTypes}"
+                    )
+                    continuation.resume(Unit)
                 }
+            }
+            if (wanted.credentialFormat == "mso_mdoc") {
+                SwiftBridge.docRegAdd(
+                    wanted.registrationId,
+                    wanted.documentTypes.first(),
+                    readerNsData,
+                    issuerNsData,
+                    null,
+                    completion
+                )
+            } else {
+                SwiftBridge.docRegAddVerifiableCredential(
+                    wanted.registrationId,
+                    wanted.documentTypes,
+                    readerNsData,
+                    issuerNsData,
+                    null,
+                    completion
+                )
             }
         }
     }
 
-    for (docId in docIdsToUnregister) {
+    for (regId in regIdsToUnregister) {
+        val docId = regId.substringAfter(":", regId)
         val document = documentStore.lookupDocument(docId)
         val displayName = document?.displayName ?: document?.typeDisplayName ?: "Unnamed Document"
         suspendCoroutine<Unit> { continuation ->
             SwiftBridge.docRegRemove(
-                docId
-            ) { success, error ->
-                // Matching on the error like this is a little bit of a hack but it does work...
+                regId
+            ) { _, error ->
                 if (error != null) {
                     continuation.resumeWithException(
-                        IllegalStateException("Credential registration failed", error.toKotlinError())
+                        IllegalStateException("Credential unregistration failed", error.toKotlinError())
                     )
                 } else {
-                    Logger.i(TAG, "Unregistered document with docId $docId ('$displayName')")
+                    Logger.i(TAG, "Unregistered credential $regId ('$displayName')")
                     continuation.resume(Unit)
                 }
             }

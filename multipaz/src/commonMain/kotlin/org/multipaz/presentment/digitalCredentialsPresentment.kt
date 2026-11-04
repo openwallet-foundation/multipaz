@@ -68,6 +68,7 @@ private const val TAG = "digitalCredentialsPresentment"
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,
@@ -123,6 +124,7 @@ suspend fun digitalCredentialsPresentment(
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,

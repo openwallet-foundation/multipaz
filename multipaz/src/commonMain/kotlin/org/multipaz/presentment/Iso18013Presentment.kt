@@ -512,6 +512,7 @@ private class Iso18013PresentmentSession(
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
@@ -581,6 +582,7 @@ suspend fun Iso18013Presentment(
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,

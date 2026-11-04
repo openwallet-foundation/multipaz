@@ -142,6 +142,42 @@ class KeyBoundSdJwtVcCredentialTest {
         }
     }
 
+    @Test
+    fun testOtherVctsSerialization() = runTest {
+        val document = documentStore.createDocument()
+        val kbCred = KeyBoundSdJwtVcCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "kb_domain",
+            secureArea = secureArea,
+            vct = "urn:eudi:pid:de:1",
+            createKeySettings = CreateKeySettings(),
+            otherVcts = listOf("urn:eudi:pid:1", "urn:eudi:pid:0"),
+        )
+        val keylessCred = KeylessSdJwtVcCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "keyless_domain",
+            vct = "urn:eudi:pid:de:1",
+            otherVcts = listOf("urn:eudi:pid:1"),
+        )
+        assertEquals("urn:eudi:pid:de:1", kbCred.vct)
+        assertEquals(listOf("urn:eudi:pid:1", "urn:eudi:pid:0"), kbCred.otherVcts)
+        assertEquals("urn:eudi:pid:de:1", keylessCred.vct)
+        assertEquals(listOf("urn:eudi:pid:1"), keylessCred.otherVcts)
+
+        // Re-open DocumentStore against the same storage to verify CBOR deserialization
+        val reloadedStore = buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
+        val reloadedDoc = reloadedStore.lookupDocument(document.identifier)!!
+        val reloadedKbCred = reloadedDoc.getCredentials().filterIsInstance<KeyBoundSdJwtVcCredential>().single()
+        val reloadedKeylessCred = reloadedDoc.getCredentials().filterIsInstance<KeylessSdJwtVcCredential>().single()
+
+        assertEquals("urn:eudi:pid:de:1", reloadedKbCred.vct)
+        assertEquals(listOf("urn:eudi:pid:1", "urn:eudi:pid:0"), reloadedKbCred.otherVcts)
+        assertEquals("urn:eudi:pid:de:1", reloadedKeylessCred.vct)
+        assertEquals(listOf("urn:eudi:pid:1"), reloadedKeylessCred.otherVcts)
+    }
+
     /**
      * A test implementation of [SecureArea] that records the parameters passed to
      * [SecureArea.batchCreateKey].
