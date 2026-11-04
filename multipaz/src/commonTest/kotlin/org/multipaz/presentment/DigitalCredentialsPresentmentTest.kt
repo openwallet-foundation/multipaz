@@ -2297,6 +2297,82 @@ class DigitalCredentialsPresentmentTest {
         )
     }
 
+    // Signs an OpenID4VP 1.0 request with one signature per client ID, all with certificates for DNS_NAME, and
+    // checks that it is rejected, as some client ID is not a dNSName subject alternative name of its certificate.
+    private suspend fun testClientIdNotMatchingCertificateIsRejected(clientIds: List<String>) {
+        val readerRootCerts = documentStoreTestHarness.readerRootKey.certChain.certificates
+        val verifierIdentities = clientIds.map { clientId ->
+            val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val cert = MdocUtil.generateReaderCertificate(
+                readerRootKey = documentStoreTestHarness.readerRootKey,
+                readerKey = key.publicKey,
+                subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = DNS_NAME,
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = readerRootCerts.first().validityNotBefore,
+                validUntil = readerRootCerts.first().validityNotAfter
+            )
+            VerifierIdentity(
+                AsymmetricKey.X509CertifiedExplicit(
+                    privateKey = key,
+                    certChain = X509CertChain(listOf(cert) + readerRootCerts)
+                ),
+                clientId
+            )
+        }
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = "test-nonce",
+            responseEncryptionKey = null,
+            verifierIdentities = verifierIdentities,
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = Json.decodeFromString(
+                JsonObject.serializer(),
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "age_over_21"] }
+                          ]
+                      }]
+                    }
+                """.trimIndent()
+            ),
+            jsonTransactionData = emptyList()
+        )
+        val source = SimplePresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+            showConsentPromptFn = ::promptModelSilentConsent,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            digitalCredentialsPresentment(
+                protocol = if (clientIds.size == 1) "openid4vp-v1-signed" else "openid4vp-v1-multisigned",
+                data = request,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = source,
+            )
+        }
+    }
+
+    @Test
+    fun test_OID4VP_signedClientIdNotMatchingCertificate() = runTestWithSetup {
+        testClientIdNotMatchingCertificateIsRejected(listOf("x509_san_dns:impersonated.example"))
+    }
+
+    @Test
+    fun test_OID4VP_multisignedClientIdNotMatchingCertificate() = runTestWithSetup {
+        testClientIdNotMatchingCertificateIsRejected(listOf(CLIENT_ID, "x509_san_dns:impersonated.example"))
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun test_digitalCredentialsPresentmentOutcomes() = runTestWithSetup {

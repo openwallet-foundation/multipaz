@@ -187,6 +187,25 @@ data class X509Cert(
         }
 
     /**
+     * The `dNSName` entries of the subject alternative name (OID 2.5.29.17), or the empty list if the extension
+     * is not present.
+     */
+    val subjectAlternativeNameDnsNames: List<String>
+        get() {
+            val extVal = getExtensionValue(OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid) ?: return emptyList()
+            val seq = ASN1.decode(extVal) as ASN1Sequence
+            // GeneralName ::= CHOICE { ..., dNSName [2] IA5String, ... }
+            //
+            // Note: tags in GeneralName are IMPLICIT b/c its definition appear in the implicitly tagged ASN.1
+            // module, see RFC 5280 Appendix A.2.
+            //
+            return seq.elements
+                .filterIsInstance<ASN1TaggedObject>()
+                .filter { it.cls == ASN1TagClass.CONTEXT_SPECIFIC && it.tag == 2 }
+                .map { it.content.decodeToString() }
+        }
+
+    /**
      * The key usage (OID 2.5.29.15) or the empty set if not present.
      */
     val keyUsage: Set<X509KeyUsage>
