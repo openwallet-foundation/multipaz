@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.TransactionData
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.toBase64Url
@@ -26,6 +27,8 @@ import kotlin.time.Instant
  * @property vpRequest raw OpenID4VP request (extracted from signed JWT enveloped if needed).
  * @property mdocSessionTranscript CBOR `SessionTranscript` used for mdoc device authentication;
  *     required when any credential uses `mso_mdoc` format.
+ * @property expectedAudience the expected Key Binding JWT `aud` claim value, or `null` to derive
+ *     it from [vpRequest].
  */
 class OpenID4VPPresentmentRecord(
     val vpToken: String,
@@ -49,7 +52,9 @@ class OpenID4VPPresentmentRecord(
         val request = Json.parseToJsonElement(vpRequest).jsonObject
         val transactionDataMap = getTransactionData(request, documentTypeRepository)
         val nonce = request["nonce"]!!.jsonPrimitive.content
-        val queryData = QueryData.fromDcql(request["dcql_query"]!!.jsonObject)
+        val dcqlJson = request["dcql_query"]!!.jsonObject
+        val queryData = QueryData.fromDcql(dcqlJson)
+        val dcqlQuery = DcqlQuery.fromJson(dcqlJson)
         val audience = expectedAudience ?: run {
             val responseMode = (request["response_mode"] as? JsonPrimitive)?.content
             val expectedOrigins = request["expected_origins"] as? JsonArray
@@ -69,6 +74,7 @@ class OpenID4VPPresentmentRecord(
             transactionDataMap = transactionDataMap,
             queryData = queryData.associateBy { it.id!! },
             expectedAudience = audience,
+            dcqlQuery = dcqlQuery,
         )
     }
 

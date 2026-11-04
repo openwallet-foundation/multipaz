@@ -4,6 +4,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -37,6 +38,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.generateAllPaths
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.VerifiedPresentation
 import kotlin.coroutines.cancellation.CancellationException
 
 private data class QueryResponse(
@@ -453,6 +455,60 @@ data class DcqlQuery(
         )
     }
 
+    /**
+     * Verifies that [presentationsByQueryId] satisfies all constraints of this DCQL query:
+     * - Every returned query ID exists in [credentialQueries].
+     * - Every returned query ID has at least one presentation, and at most one when `multiple` is `false`.
+     * - Every presentation matches its [DcqlCredentialQuery]'s format, type (`vct` or `docType`), and
+     *   requested `claims` / `claim_sets`.
+     * - All required credentials (or required [credentialSetQueries] options) are fulfilled.
+     *
+     * @throws IllegalStateException if any constraint is violated.
+     */
+    fun checkResponseSatisfiesQuery(
+        presentationsByQueryId: Map<String, List<VerifiedPresentation>>,
+        enforceClaimConstraints: Boolean = true,
+    ) {
+        val queryById = credentialQueries.associateBy { it.id }
+        for ((queryId, presentations) in presentationsByQueryId) {
+            val credQuery = queryById[queryId]
+                ?: throw IllegalStateException("Unknown credential query id '$queryId'")
+            if (presentations.isEmpty()) {
+                throw IllegalStateException("Empty presentation list for credential query '$queryId'")
+            }
+            if (!credQuery.multiple && presentations.size > 1) {
+                throw IllegalStateException(
+                    "Multiple presentations (${presentations.size}) returned for credential query '$queryId' with multiple=false"
+                )
+            }
+            if (enforceClaimConstraints) {
+                for (presentation in presentations) {
+                    credQuery.checkPresentationMatches(presentation)
+                }
+            }
+        }
+        if (credentialSetQueries.isEmpty()) {
+            for (credQuery in credentialQueries) {
+                if (presentationsByQueryId[credQuery.id].isNullOrEmpty()) {
+                    throw IllegalStateException(
+                        "Required credential query '${credQuery.id}' was not fulfilled"
+                    )
+                }
+            }
+        } else {
+            for (csq in credentialSetQueries) {
+                if (csq.required) {
+                    val satisfied = csq.options.any { option ->
+                        option.credentialIds.all { !presentationsByQueryId[it].isNullOrEmpty() }
+                    }
+                    if (!satisfied) {
+                        throw IllegalStateException("Required credential_set was not fulfilled")
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "DcqlQuery"
 
@@ -568,11 +624,9 @@ data class DcqlQuery(
                     }
                 }
 
-                val multiple = c["multiple"]?.jsonPrimitive?.boolean ?: false
-                /*
-                 * TODO: add support for
-                 * - require_cryptographic_holder_binding
-                 */
+                val multiple = c["multiple"]?.jsonPrimitive?.booleanOrNull ?: false
+                val requireCryptographicHolderBinding =
+                    c["require_cryptographic_holder_binding"]?.jsonPrimitive?.booleanOrNull ?: true
                 dcqlCredentialQueries.add(
                     DcqlCredentialQuery(
                         id = id,
@@ -584,7 +638,8 @@ data class DcqlQuery(
                         issuerIdentifiers = issuerIdentifiers,
                         claims = dcqlClaims,
                         claimSets = dcqlClaimSets,
-                        claimIdToClaim = dcqlClaimIdToClaim
+                        claimIdToClaim = dcqlClaimIdToClaim,
+                        requireCryptographicHolderBinding = requireCryptographicHolderBinding,
                     )
                 )
             }

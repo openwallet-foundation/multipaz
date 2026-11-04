@@ -53,6 +53,7 @@ import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -919,6 +920,9 @@ object VerificationUtil {
      *  for that credential
      * @param queryData maps credential id in the query to information about the credential query
      *  in the request.
+     * @param expectedAudience the expected Key Binding JWT `aud` claim value.
+     * @param dcqlQuery the parsed [DcqlQuery] from the request to enforce claim and credential-set
+     *  constraints, or `null`.
      * @return a list of [VerifiedPresentation], one for each credential in the response.
      */
     suspend fun verifyOpenID4VPResponse(
@@ -931,38 +935,87 @@ object VerificationUtil {
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
         queryData: Map<String, QueryData>,
         expectedAudience: String? = null,
+        dcqlQuery: DcqlQuery? = null,
     ): List<VerifiedPresentation> {
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
+        val presentationsByQueryId = mutableMapOf<String, MutableList<VerifiedPresentation>>()
         for ((credId, credValue) in vpToken.entries) {
-            val creds = credValue as? JsonArray ?: JsonArray(listOf(credValue))
-            val transactionData = transactionDataMap[credId] ?: listOf()
             val credQueryData = queryData[credId]
+                ?: throw IllegalStateException("Unknown credential query id '$credId' in vp_token")
+            val creds = credValue as? JsonArray ?: JsonArray(listOf(credValue))
+            if (creds.isEmpty()) {
+                throw IllegalStateException("Empty presentation list for credential query '$credId' in vp_token")
+            }
+            if (!credQueryData.multiple && creds.size > 1) {
+                throw IllegalStateException(
+                    "Multiple presentations (${creds.size}) returned for credential query '$credId' with multiple=false"
+                )
+            }
+            val transactionData = transactionDataMap[credId] ?: listOf()
+            val queryPresentations = presentationsByQueryId.getOrPut(credId) { mutableListOf() }
             for (cred in creds) {
                 val credBase64 = cred.jsonPrimitive.content
-                if (credQueryData is SdJwtQueryData) {
-                    val sdjwtVerifiedPresentations = verifySdJwtPresentation(
-                        compactSerialization = credBase64,
-                        nonce = nonce,
-                        documentTypeRepository = documentTypeRepository,
-                        transactionData = transactionData,
-                        identifier = credId,
-                        now = now,
-                        expectedAudience = expectedAudience,
-                        requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
-                    )
-                    verifiedPresentations.add(sdjwtVerifiedPresentations)
-                } else {
-                    val mdocVerifiedPresentations = verifySingleDocMdocDeviceResponse(
-                        now = now,
-                        deviceResponse = Cbor.decode(credBase64.fromBase64Url()),
-                        sessionTranscript = sessionTranscript!!,
-                        documentTypeRepository = documentTypeRepository,
-                        zkSystemRepository = zkSystemRepository,
-                        transactionData = transactionData,
-                        vpTokenIdentifier = credId
-                    )
-                    check(mdocVerifiedPresentations.size == 1)
-                    verifiedPresentations.addAll(mdocVerifiedPresentations)
+                when (credQueryData) {
+                    is SdJwtQueryData -> {
+                        val sdjwtVerifiedPresentation = verifySdJwtPresentation(
+                            compactSerialization = credBase64,
+                            nonce = nonce,
+                            documentTypeRepository = documentTypeRepository,
+                            transactionData = transactionData,
+                            identifier = credId,
+                            now = now,
+                            expectedAudience = expectedAudience,
+                            requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
+                        ) as JsonVerifiedPresentation
+                        if (sdjwtVerifiedPresentation.vct !in credQueryData.vct) {
+                            throw IllegalStateException(
+                                "Presented SD-JWT vct '${sdjwtVerifiedPresentation.vct}' is not in allowed vct_values ${credQueryData.vct} for query '$credId'"
+                            )
+                        }
+                        verifiedPresentations.add(sdjwtVerifiedPresentation)
+                        queryPresentations.add(sdjwtVerifiedPresentation)
+                    }
+                    is MdocQueryData -> {
+                        val mdocVerifiedPresentations = verifySingleDocMdocDeviceResponse(
+                            now = now,
+                            deviceResponse = Cbor.decode(credBase64.fromBase64Url()),
+                            sessionTranscript = sessionTranscript!!,
+                            documentTypeRepository = documentTypeRepository,
+                            zkSystemRepository = zkSystemRepository,
+                            transactionData = transactionData,
+                            vpTokenIdentifier = credId
+                        )
+                        check(mdocVerifiedPresentations.size == 1)
+                        val mdocPresentation = mdocVerifiedPresentations.single() as MdocVerifiedPresentation
+                        if (mdocPresentation.docType != credQueryData.docType) {
+                            throw IllegalStateException(
+                                "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '${credQueryData.docType}' for query '$credId'"
+                            )
+                        }
+                        if (dcqlQuery == null) {
+                            val allClaims = mdocPresentation.issuerSignedClaims + mdocPresentation.deviceSignedClaims
+                            for (ns in credQueryData.namespaces) {
+                                for (claim in ns.claims) {
+                                    if (allClaims.none { it.namespaceName == ns.namespace && it.dataElementName == claim.name }) {
+                                        throw IllegalStateException(
+                                            "Missing requested mdoc claim '${ns.namespace}.${claim.name}' for query '$credId'"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        verifiedPresentations.add(mdocPresentation)
+                        queryPresentations.add(mdocPresentation)
+                    }
+                }
+            }
+        }
+        if (dcqlQuery != null) {
+            dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
+        } else {
+            for (queryId in queryData.keys) {
+                if (presentationsByQueryId[queryId].isNullOrEmpty()) {
+                    throw IllegalStateException("Required credential query '$queryId' was not fulfilled")
                 }
             }
         }
