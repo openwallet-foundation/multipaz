@@ -223,6 +223,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         std::string docFormat = "mso_mdoc";
         std::map<std::string, std::vector<std::string>> dataElementIdentifierMapping;
         std::vector<std::vector<uint8_t>> issuerIdentifiers;
+        bool multiple = false;
 
         const auto& requestInfoItem = itemsRequestMap->get("requestInfo");
         if (requestInfoItem) {
@@ -234,6 +235,13 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 const auto& docFormatItem = riMap->get("docFormat");
                 if (docFormatItem && docFormatItem->asTstr()) {
                     docFormat = docFormatItem->asTstr()->value();
+                }
+
+                if (!isVersion10) {
+                    const auto& uniqueDocSetRequiredItem = riMap->get("uniqueDocSetRequired");
+                    if (uniqueDocSetRequiredItem && uniqueDocSetRequiredItem->asBool()) {
+                        multiple = !uniqueDocSetRequiredItem->asBool()->value();
+                    }
                 }
 
                 const auto& issuerIdentifiersItem = riMap->get("issuerIdentifiers");
@@ -446,7 +454,8 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 readerAuthAkis,
                 dcqlClaims,
                 claimSets,
-                isVersion10
+                isVersion10,
+                multiple
         ));
     }
 

@@ -651,7 +651,8 @@ data class DeviceRequest private constructor(
             useCases.add(
                 PresentmentUseCase(
                     optional = false,
-                    solutions = solutions
+                    solutions = solutions,
+                    allowMultiple = result.docRequest.docRequestInfo?.uniqueDocSetRequired == false
                 )
             )
         } else {
@@ -693,6 +694,12 @@ data class DeviceRequest private constructor(
                 }
 
                 if (solutions.isNotEmpty()) {
+                    val allowMultiple = useCase.documentSets.any { documentSet ->
+                        documentSet.docRequestIds.any { id ->
+                            id in docRequests.indices &&
+                                docRequests[id].docRequestInfo?.uniqueDocSetRequired == false
+                        }
+                    }
                     useCases.add(
                         PresentmentUseCase(
                             optional = !useCase.mandatory,
@@ -702,7 +709,8 @@ data class DeviceRequest private constructor(
                                     controllerId = controllerId,
                                     purposeHintCode = purposeHintCode
                                 )
-                            }
+                            },
+                            allowMultiple = allowMultiple
                         )
                     )
                 }
@@ -1292,6 +1300,9 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
             }
         }
 
+        if (docRequest.docRequestInfo?.uniqueDocSetRequired == false) {
+            put("multiple", true)
+        }
         if (!docRequest.docRequestInfo?.issuerIdentifiers.isNullOrEmpty()) {
             putJsonArray("trusted_authorities") {
                 addJsonObject {
@@ -1758,8 +1769,10 @@ internal fun deviceRequestAddQueries(
         val docRequestInfo = if (alternativeDataElements.isNotEmpty()
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()
-            || credQuery.issuerIdentifiers.isNotEmpty()) {
+            || credQuery.issuerIdentifiers.isNotEmpty()
+            || credQuery.multiple) {
             DocRequestInfo(
+                uniqueDocSetRequired = if (credQuery.multiple) false else null,
                 alternativeDataElements = alternativeDataElements,
                 zkRequest = zkRequest,
                 docFormat = if (credQuery.format == "dc+sd-jwt") "dc+sd-jwt" else null,

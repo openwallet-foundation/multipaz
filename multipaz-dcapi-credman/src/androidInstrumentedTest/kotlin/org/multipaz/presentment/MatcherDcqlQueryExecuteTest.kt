@@ -967,4 +967,158 @@ class MatcherDcqlQueryExecuteTest {
             matchWildcardNoResultDump
         )
     }
+
+    @Test
+    fun test_OpenID4VP_sdjwt_multiple() = runTest {
+        val withoutCredentialSetsDump = testExecuteDcqlQuery(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "multiple": true,
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                DcqlResponse
+                  CredentialSet
+                    optional false
+                    options
+                      option
+                        members
+                          member
+                            matches
+                              match
+                                credential EU PID
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given names
+                                    value Erika
+                          member
+                            matches
+                              match
+                                credential EU PID 2
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given names
+                                    value Max
+            """.trimIndent().trim() + "\n",
+            withoutCredentialSetsDump
+        )
+
+        val withCredentialSetsDump = testExecuteDcqlQuery(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "multiple": true,
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            ["mdl", "pid"]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                DcqlResponse
+                  CredentialSet
+                    optional false
+                    options
+                      option
+                        members
+                          member
+                            matches
+                              match
+                                credential mDL
+                                claims
+                                  claim
+                                    claimName org.iso.18013.5.1.given_name
+                                    displayName Given names
+                                    value Erika
+                          member
+                            matches
+                              match
+                                credential EU PID
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given names
+                                    value Erika
+                          member
+                            matches
+                              match
+                                credential EU PID 2
+                                claims
+                                  claim
+                                    claimName given_name
+                                    displayName Given names
+                                    value Max
+            """.trimIndent().trim() + "\n",
+            withCredentialSetsDump
+        )
+    }
 }

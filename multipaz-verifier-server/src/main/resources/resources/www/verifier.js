@@ -51,6 +51,19 @@ async function onLoad() {
                 selected !== 'uri_scheme_openid4vp_29'
             )
 
+            const openid4vp_multiple_checkbox = document.getElementById("openid4vp-multiple")
+            if (openid4vp_multiple_checkbox) {
+                openid4vp_multiple_checkbox.hidden = (
+                    selected !== 'w3c_dc_openid4vp_24' &&
+                    selected !== 'w3c_dc_openid4vp_29' &&
+                    selected !== 'w3c_dc_openid4vp_29_and_mdoc_api' &&
+                    selected !== 'w3c_dc_openid4vp_24_and_mdoc_api' &&
+                    selected !== 'w3c_dc_mdoc_api_and_openid4vp_29' &&
+                    selected !== 'w3c_dc_mdoc_api_and_openid4vp_24' &&
+                    selected !== 'uri_scheme_openid4vp_29'
+                )
+            }
+
             const scheme = document.getElementById("scheme-form")
             scheme.hidden = (
                 selected !== 'uri_scheme_openid4vp_29'
@@ -59,6 +72,10 @@ async function onLoad() {
             const devicerequest_version_form = document.getElementById("devicerequest-version-form")
             if (devicerequest_version_form) {
                 devicerequest_version_form.hidden = !isAnnexAOrC(selected)
+            }
+            const unique_doc_set_required_form = document.getElementById("unique-doc-set-required-form")
+            if (unique_doc_set_required_form) {
+                unique_doc_set_required_form.hidden = !isAnnexAOrC(selected)
             }
         }
     })
@@ -973,9 +990,26 @@ function updateProtocolOptions(mdocOrVc) {
         selectedProtocol !== 'uri_scheme_openid4vp_29'
     )
 
+    const openid4vp_multiple_checkbox = document.getElementById("openid4vp-multiple")
+    if (openid4vp_multiple_checkbox) {
+        openid4vp_multiple_checkbox.hidden = (
+            selectedProtocol !== 'w3c_dc_openid4vp_24' &&
+            selectedProtocol !== 'w3c_dc_openid4vp_29' &&
+            selectedProtocol !== 'w3c_dc_openid4vp_29_and_mdoc_api' &&
+            selectedProtocol !== 'w3c_dc_openid4vp_24_and_mdoc_api' &&
+            selectedProtocol !== 'w3c_dc_mdoc_api_and_openid4vp_29' &&
+            selectedProtocol !== 'w3c_dc_mdoc_api_and_openid4vp_24' &&
+            selectedProtocol !== 'uri_scheme_openid4vp_29'
+        )
+    }
+
     const devicerequest_version_form = document.getElementById("devicerequest-version-form")
     if (devicerequest_version_form) {
         devicerequest_version_form.hidden = !isAnnexAOrC(selectedProtocol)
+    }
+    const unique_doc_set_required_form = document.getElementById("unique-doc-set-required-form")
+    if (unique_doc_set_required_form) {
+        unique_doc_set_required_form.hidden = !isAnnexAOrC(selectedProtocol)
     }
 }
 
@@ -1020,6 +1054,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
     console.log('requestDocument, format=' + format + ' docType=' + docType + ' requestId=' + requestId + ' protocol=' + selectedProtocol)
     var issuerIdentifiers = document.getElementById("issuer-identifiers-input")?.value || ""
     var deviceRequestVersion = document.getElementById("devicerequest-version-select")?.value || "1.1"
+    var uniqueDocSetRequired = document.getElementById("unique-doc-set-required-input")?.checked ?? true
+    var multiple = document.getElementById("openid4vp-multiple-input")?.checked ?? false
     if (selectedProtocol === 'uri_scheme_openid4vp_29') {
         if (document.getElementById("scheme-input").value === "") {
             alert("You must specify a non-empty scheme")
@@ -1041,7 +1077,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                 scheme: document.getElementById("scheme-input").value,
                 signRequest: true, // OpenID4VP 1.0 w/ URI scheme requires signed request
                 encryptResponse: encryptResponse,
-                issuerIdentifiers: issuerIdentifiers
+                issuerIdentifiers: issuerIdentifiers,
+                multiple: multiple
             }
         )
         window.location = response.uri
@@ -1058,7 +1095,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                 origin: location.origin,
                 host: location.host,
                 issuerIdentifiers: issuerIdentifiers,
-                deviceRequestVersion: deviceRequestVersion
+                deviceRequestVersion: deviceRequestVersion,
+                uniqueDocSetRequired: uniqueDocSetRequired
             }
         )
         window.location = response.uri
@@ -1093,7 +1131,9 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                     signRequest: signRequest,
                     encryptResponse: encryptResponse,
                     issuerIdentifiers: issuerIdentifiers,
-                    deviceRequestVersion: deviceRequestVersion
+                    deviceRequestVersion: deviceRequestVersion,
+                    uniqueDocSetRequired: uniqueDocSetRequired,
+                    multiple: multiple
                 }
             )
             console.log(response)

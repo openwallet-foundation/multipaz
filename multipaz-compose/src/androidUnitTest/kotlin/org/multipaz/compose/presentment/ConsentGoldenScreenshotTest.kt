@@ -981,6 +981,94 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
+        // 3.4 four_movie_tickets_multiple
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_CINEMA)
+            val pd = eco.executeFourMovieTicketsRequest()
+            runScenario(
+                categoryDir = cat3Dir,
+                categoryTitle = cat3Title,
+                categoryDescription = cat3Desc,
+                scenarioId = "four_movie_tickets_multiple",
+                title = "Four Movie Tickets to One Movie (multiple = true)",
+                requesterSummary = "Utopia Cinema — Proximity (OpenID4VP DCQL)",
+                protocolSummary = "UtopiaMovieTicket (multiple = true, 4 matching tickets)",
+                riskBadge = "NORMAL",
+                description = "A cinema ticket scanner requests movie tickets with multiple = true. All four tickets to 'Return to Utopia' (Seats G14–G17) are selected by default and rendered as stacked credential cards sharing a single claims section. The chooser uses checkboxes so individual tickets can be toggled on or off.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main_all_selected", "Main prompt (all 4 movie tickets selected & stacked)")
+                clickViewDetails()
+                capture("doc_details", "Details page showing all 4 movie tickets and their claim values")
+                clickBack()
+                clickNodeWithText("Return to Utopia (Seat G14)")
+                capture("chooser_all_checked", "Multi-select chooser with all 4 movie tickets checked")
+                clickNodeWithText("Return to Utopia (Seat G17)")
+                capture("chooser_three_checked", "Multi-select chooser after unchecking Seat G17")
+                clickBack()
+                capture("main_three_selected", "Main prompt (3 movie tickets selected & stacked)")
+            }
+        }
+
+        // 3.5 six_boarding_passes_two_flights
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
+            val pd = eco.executeSixBoardingPassesRequest()
+            runScenario(
+                categoryDir = cat3Dir,
+                categoryTitle = cat3Title,
+                categoryDescription = cat3Desc,
+                scenarioId = "six_boarding_passes_two_flights",
+                title = "Family Boarding Passes Across Two Flights: UT 815 & UT 516 (uniqueDocSetRequired = false)",
+                requesterSummary = "Utopia Airlines — Proximity (ISO 18013-5)",
+                protocolSummary = "UtopiaBoardingPass (uniqueDocSetRequired = false, 3x UT 815 + 3x UT 516)",
+                riskBadge = "NORMAL",
+                description = "An airline gate reader sets uniqueDocSetRequired = false to accept multiple family boarding passes in one tap. The wallet holds three boarding passes for flight UT 815 and three boarding passes for flight UT 516; all six are initially selected and stacked, and the traveler can open the multi-select chooser to uncheck the three UT 516 passes so only the three UT 815 passes are shared. To select only boarding passes for the flight at that gate automatically, the wallet can filter using information embedded by the reader in DocRequestInfo, as demonstrated in the following three_boarding_passes_with_filtering scenario.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main_all_six_selected", "Main prompt (all 6 boarding passes selected & stacked)")
+                clickNodeWithText("Flight UT 815 (12A · Erika)")
+                capture("chooser_all_six_checked", "Multi-select chooser with all 6 boarding passes checked")
+                clickNodeWithText("Flight UT 516 (14A · Erika)")
+                clickNodeWithText("Flight UT 516 (14B · Max)")
+                clickNodeWithText("Flight UT 516 (14C · Mia)")
+                capture("chooser_ut815_only", "Multi-select chooser with only the 3 UT 815 boarding passes checked")
+                clickBack()
+                capture("main_ut815_selected", "Main prompt (3 UT 815 boarding passes selected & stacked)")
+            }
+        }
+
+        // 3.6 three_boarding_passes_with_filtering
+        run {
+            val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
+            val pd = eco.executeThreeBoardingPassesFilteredRequest()
+            runScenario(
+                categoryDir = cat3Dir,
+                categoryTitle = cat3Title,
+                categoryDescription = cat3Desc,
+                scenarioId = "three_boarding_passes_with_filtering",
+                title = "Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false)",
+                requesterSummary = "Utopia Airlines — Proximity (ISO 18013-5)",
+                protocolSummary = "UtopiaBoardingPass (uniqueDocSetRequired = false, DocRequestInfo flight_number = UT 815)",
+                riskBadge = "NORMAL",
+                description = "The same wallet holding six boarding passes across flights UT 815 and UT 516, matched to flight UT 815 using the flight number embedded by the reader in DocRequestInfo. Only the three boarding passes for flight UT 815 are matched, selected by default, and stacked.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main prompt (3 UT 815 boarding passes matched & stacked)")
+                clickViewDetails()
+                capture("doc_details", "Details page showing the 3 matched UT 815 boarding passes")
+                clickBack()
+                clickNodeWithText("Flight UT 815 (12A · Erika)")
+                capture("chooser", "Multi-select chooser with the 3 matched UT 815 boarding passes")
+            }
+        }
+
         // =========================================================================================
         // Category 4: 04_encryption
         // =========================================================================================
@@ -1549,9 +1637,12 @@ class ConsentGoldenScreenshotTest {
             val strictRetentionRiskFn: ClassifyRiskFn = { r, t, data, sels, purposes ->
                 val base = defaultClassifyRisk(r, t, data, sels, purposes)
                 val retainsAny = data.useCases.indices.any { idx ->
-                    val solIdx = sels.getOrElse(idx) { -1 }
-                    solIdx >= 0 && data.useCases[idx].solutions[solIdx].matches.any { match ->
-                        match.claims.keys.any { (it as? MdocRequestedClaim)?.intentToRetain == true }
+                    val solIndices = sels.getOrElse(idx) { emptyList() }
+                    solIndices.any { solIdx ->
+                        solIdx in data.useCases[idx].solutions.indices &&
+                            data.useCases[idx].solutions[solIdx].matches.any { match ->
+                                match.claims.keys.any { (it as? MdocRequestedClaim)?.intentToRetain == true }
+                            }
                     }
                 }
                 if (base.level == ConsentRiskLevel.NORMAL && retainsAny) {

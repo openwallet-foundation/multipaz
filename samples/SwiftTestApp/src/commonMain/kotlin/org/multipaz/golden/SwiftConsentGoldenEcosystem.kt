@@ -594,14 +594,17 @@ class SwiftConsentGoldenEcosystem private constructor(
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
             presentmentData: PresentmentData,
-            selections: List<Int>,
+            selections: List<List<Int>>,
             purposes: Set<PresentmentPurpose>,
         ): ConsentRiskAssessment {
             val base = defaultClassifyRisk(requester, trustedRequesterIdentity, presentmentData, selections, purposes)
             val retainsAny = presentmentData.useCases.indices.any { idx ->
-                val solIdx = selections.getOrElse(idx) { -1 }
-                solIdx >= 0 && presentmentData.useCases[idx].solutions[solIdx].matches.any { match ->
-                    match.claims.keys.any { (it as? MdocRequestedClaim)?.intentToRetain == true }
+                val solIndices = selections.getOrElse(idx) { emptyList() }
+                solIndices.any { solIdx ->
+                    solIdx in presentmentData.useCases[idx].solutions.indices &&
+                        presentmentData.useCases[idx].solutions[solIdx].matches.any { match ->
+                            match.claims.keys.any { (it as? MdocRequestedClaim)?.intentToRetain == true }
+                        }
                 }
             }
             return if (base.level == ConsentRiskLevel.NORMAL && retainsAny) {
@@ -618,7 +621,7 @@ class SwiftConsentGoldenEcosystem private constructor(
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
             presentmentData: PresentmentData,
-            selections: List<Int>,
+            selections: List<List<Int>>,
             purposes: Set<PresentmentPurpose>,
         ): ConsentRiskAssessment {
             return if (requester.appId == APP_WALLET_VERIFIER) {

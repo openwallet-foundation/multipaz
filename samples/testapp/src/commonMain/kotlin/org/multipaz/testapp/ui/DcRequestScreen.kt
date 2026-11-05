@@ -1,9 +1,12 @@
 package org.multipaz.testapp.ui
 
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -12,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -297,6 +301,44 @@ fun DcRequestScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
         }
+        if (protocolSelected.value.requestTypes.contains(VerificationSession.RequestType.DC_ISO_18013)) {
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = app.settingsModel.dcRequestUniqueDocSetRequired.collectAsState().value,
+                        onCheckedChange = { value ->
+                            app.settingsModel.dcRequestUniqueDocSetRequired.value = value
+                        },
+                    )
+                    Text(
+                        text = "UniqueDocSetRequired",
+                    )
+                }
+            }
+        }
+        if (protocolSelected.value.requestTypes.contains(VerificationSession.RequestType.DC_OPENID4VP) ||
+            protocolSelected.value.requestTypes.contains(VerificationSession.RequestType.DC_OPENID4VP_DRAFT_24)
+        ) {
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = app.settingsModel.dcRequestMultiple.collectAsState().value,
+                        onCheckedChange = { value ->
+                            app.settingsModel.dcRequestMultiple.value = value
+                        },
+                    )
+                    Text(
+                        text = "multiple",
+                    )
+                }
+            }
+        }
         item {
             TextButton(
                 onClick = {
@@ -308,6 +350,8 @@ fun DcRequestScreen(
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
                                 issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
+                                uniqueDocSetRequired = app.settingsModel.dcRequestUniqueDocSetRequired.value,
+                                multiple = app.settingsModel.dcRequestMultiple.value,
                                 showResponse = showResponse
                             )
                         } catch (error: Exception) {
@@ -329,6 +373,8 @@ private suspend fun doDcRequestFlow(
     protocol: RequestProtocol,
     format: CredentialFormat,
     issuerIdentifiers: List<ByteString> = emptyList(),
+    uniqueDocSetRequired: Boolean = true,
+    multiple: Boolean = false,
     showResponse: (
         vpToken: JsonObject?,
         deviceResponse: DataItem?,
@@ -409,6 +455,8 @@ private suspend fun doDcRequestFlow(
             }
         },
         documentTypeRepository = app.documentTypeRepository,
+        uniqueDocSetRequired = uniqueDocSetRequired,
+        multiple = multiple,
     )
 
     val dcRequestObject = session.getDcRequest()

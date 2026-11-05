@@ -13,7 +13,7 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
 
 ## Categories
 
-- **[1. Normal — Single-Credential Requests](#1-normal-singlecredential-requests)** (`01_normal_single` — 10 scenarios)
+- **[1. Normal — Single-Credential Requests](#01_normal_single)** (`01_normal_single` — 10 scenarios)
   - [Age Verification (First-Time Share)](#age_verification_first_time)
   - [Age Verification (Returning User History)](#age_verification_returning_user)
   - [Age Over 21 Over-the-Internet (EU Age Verification Credential)](#age_over_21_eu_av_over_the_internet)
@@ -24,20 +24,23 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Movie Ticket Verification (SD-JWT VC)](#movie_ticket_sdjwt)
   - [Unverified Proximity Reader Requesting Non-PII (Signed Certificate Not in Trust List)](#unverified_proximity_reader_age_over_21)
   - [Anonymous Proximity Reader Requesting Non-PII (No Reader Certificate)](#anonymous_proximity_reader_age_over_21)
-- **[2. Transactions — Built-In & Custom Transaction Renderers](#2-transactions-builtin-custom-transaction-renderers)** (`02_transactions` — 4 scenarios)
+- **[2. Transactions — Built-In & Custom Transaction Renderers](#02_transactions)** (`02_transactions` — 4 scenarios)
   - [Payment Transaction with Card Claims & Card Switcher](#payment_with_claims)
   - [Payment Confirmation Only (Zero Attribute Claims)](#payment_confirmation_only)
   - [Transit Fare Selection (Custom Interactive Transaction Renderer)](#transit_fare_custom_renderer)
   - [AP2 Payment Mandate Delegation (Summary + Signed Mandate Details)](#ap2_payment_delegate)
-- **[3. Multi-Credential & Optional Combinations](#3-multicredential-optional-combinations)** (`03_multi_credential` — 3 scenarios)
+- **[3. Multi-Credential & Optional Combinations](#03_multi_credential)** (`03_multi_credential` — 6 scenarios)
   - [Compound Solution: ID + Boarding Pass in a Single Use-Case](#mdl_and_boarding_pass_single_use_case)
   - [Alternative Credential Types: mDL OR Boarding Pass](#mdl_or_boarding_pass)
   - [Mandatory mDL + Optional Loyalty Card (Opting Out)](#mandatory_mdl_and_optional_loyalty)
-- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#4-claimlevel-encryption-intermediary-encryption-target)** (`04_encryption` — 3 scenarios)
+  - [Four Movie Tickets to One Movie (multiple = true)](#four_movie_tickets_multiple)
+  - [Family Boarding Passes Across Two Flights: UT 815 & UT 516 (uniqueDocSetRequired = false)](#six_boarding_passes_two_flights)
+  - [Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false)](#three_boarding_passes_with_filtering)
+- **[4. Claim-Level Encryption (Intermediary + Encryption Target)](#04_encryption)** (`04_encryption` — 3 scenarios)
   - [Trusted Intermediary + Trusted Encryption Target (Transient)](#trusted_requester_trusted_target)
   - [Trusted Intermediary + Trusted Encryption Target (Multiple Matching Documents)](#trusted_requester_trusted_target_multiple_choices)
   - [Trusted Intermediary + Trusted Encryption Target (Retained)](#trusted_requester_trusted_target_retained)
-- **[5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII](#5-warning-yellow-unverified-requesters-unverified-encryption-targets-proximity-anonymous-pii)** (`05_warning_untrusted` — 7 scenarios)
+- **[5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII](#05_warning_untrusted)** (`05_warning_untrusted` — 7 scenarios)
   - [Unverified Website Requesting Age Over 18](#unverified_website_age_over_18)
   - [Unverified Local Android App Requesting Age Over 21](#unverified_app_age_over_21)
   - [Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII)](#untrusted_requester_pii_requested)
@@ -45,22 +48,22 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target](#anonymous_requester_trusted_target)
   - [Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait](#untrusted_requester_intent_to_retain)
   - [Unverified Requester (With Certificate) Attaching Transaction Data](#untrusted_requester_transaction_data)
-- **[6. High-Risk (Red) & Cool-Off Safeguards](#6-highrisk-red-cooloff-safeguards)** (`06_high_risk` — 6 scenarios)
+- **[6. High-Risk (Red) & Cool-Off Safeguards](#06_high_risk)** (`06_high_risk` — 6 scenarios)
   - [Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII)](#anonymous_website_pii_requested)
   - [Trusted Requester Making an Over-Broad / Unusual Request (Scroll + Cool-Off)](#trusted_requester_unusual_overbroad)
   - [Trusted Requester with Mismatched ISO 18013-5 Purpose Hint](#trusted_requester_mismatched_purpose_hint)
   - [Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain)](#trusted_requester_anonymous_encryption_target)
   - [Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait](#anonymous_website_intent_to_retain)
   - [Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data](#anonymous_website_transaction_data)
-- **[7. Custom Risk & Purpose Classification Callbacks](#7-custom-risk-purpose-classification-callbacks)** (`07_custom_policy` — 2 scenarios)
+- **[7. Custom Risk & Purpose Classification Callbacks](#07_custom_policy)** (`07_custom_policy` — 2 scenarios)
   - [Custom Policy: Elevate Trusted RP Data Retention to WARNING](#custom_warning_for_trusted_rp_retaining_data)
   - [Custom Policy: Allowlist First-Party Verifier App as NORMAL](#custom_normal_for_allowlisted_first_party_app)
-- **[8. Dark Theme Coverage](#8-dark-theme-coverage)** (`08_dark_mode` — 4 scenarios)
+- **[8. Dark Theme Coverage](#08_dark_mode)** (`08_dark_mode` — 4 scenarios)
   - [Dark Mode — Normal Age Verification](#normal_age_verification)
   - [Dark Mode — Warning (Untrusted Over-the-Internet Requester)](#warning_untrusted_website)
   - [Dark Mode — High-Risk (Anonymous Website Requesting PII)](#high_risk_pii_requested)
   - [Dark Mode — Requester Info Page with Encryption Target](#requester_info_with_encryption_target)
-- **[9. Localization — Danish & Right-to-Left (Arabic)](#9-localization-danish-righttoleft-arabic)** (`09_localization` — 6 scenarios)
+- **[9. Localization — Danish & Right-to-Left (Arabic)](#09_localization)** (`09_localization` — 6 scenarios)
   - [Danish (da-DK) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain](#danish_normal_with_subpages)
   - [Danish (da-DK) — Payment Transaction with Tip Selector](#danish_payment_with_tip)
   - [Danish (da-DK) — High-Risk Anonymous Website Requesting PII & Retention](#danish_high_risk_pii_and_retention)
@@ -69,6 +72,8 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar](#arabic_rtl_high_risk_pii_and_retention)
 
 ---
+
+<a id="01_normal_single"></a>
 
 ## 1. Normal — Single-Credential Requests
 
@@ -226,6 +231,8 @@ A proximity reader provides no reader authentication certificate at all while re
 
 ---
 
+<a id="02_transactions"></a>
+
 ## 2. Transactions — Built-In & Custom Transaction Renderers
 
 Requests attaching transaction data payloads, including built-in SCA payment rendering and custom Compose transaction renderers.
@@ -292,6 +299,8 @@ Delegating payment authority via an Agent Payments Protocol (AP2) intent mandate
 
 ---
 
+<a id="03_multi_credential"></a>
+
 ## 3. Multi-Credential & Optional Combinations
 
 Multi-credential requests exercising compound solutions, alternative credential types, and optional use-cases.
@@ -341,7 +350,51 @@ Two separate use-cases (driving privileges + identity verification, and loyalty 
 | **Compose** | <img src="03_multi_credential/mandatory_mdl_and_optional_loyalty__main_both_selected.png" alt="Compose: Mandatory mDL + Optional Loyalty Card (Opting Out) - Main prompt (both selected)" width="260" /> | <img src="03_multi_credential/mandatory_mdl_and_optional_loyalty__chooser_optional.png" alt="Compose: Mandatory mDL + Optional Loyalty Card (Opting Out) - Optional credential chooser ('Don't share anything')" width="260" /> | <img src="03_multi_credential/mandatory_mdl_and_optional_loyalty__main_optional_omitted.png" alt="Compose: Mandatory mDL + Optional Loyalty Card (Opting Out) - Main prompt ('Don't share anything' selected)" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/03_multi_credential/mandatory_mdl_and_optional_loyalty__main_both_selected.png" alt="SwiftUI: Mandatory mDL + Optional Loyalty Card (Opting Out) - Main prompt (both selected)" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/03_multi_credential/mandatory_mdl_and_optional_loyalty__chooser_optional.png" alt="SwiftUI: Mandatory mDL + Optional Loyalty Card (Opting Out) - Optional credential chooser ('Don't share anything')" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/03_multi_credential/mandatory_mdl_and_optional_loyalty__main_optional_omitted.png" alt="SwiftUI: Mandatory mDL + Optional Loyalty Card (Opting Out) - Main prompt ('Don't share anything' selected)" width="260" /> |
 
+<a id="four_movie_tickets_multiple"></a>
+
+### `four_movie_tickets_multiple` — Four Movie Tickets to One Movie (multiple = true)
+
+- **Relying Party:** Utopia Cinema — Proximity (OpenID4VP DCQL)
+- **Protocol / Credentials:** UtopiaMovieTicket (multiple = true, 4 matching tickets)
+- **Risk Assessment:** `NORMAL`
+
+A cinema ticket scanner requests movie tickets with multiple = true. All four tickets to 'Return to Utopia' (Seats G14–G17) are selected by default and rendered as stacked credential cards sharing a single claims section. The chooser uses checkboxes so individual tickets can be toggled on or off.
+
+| `main_all_selected` — Main prompt (all 4 movie tickets selected & stacked) | `doc_details` — Details page showing all 4 movie tickets and their claim values | `chooser_all_checked` — Multi-select chooser with all 4 movie tickets checked | `chooser_three_checked` — Multi-select chooser after unchecking Seat G17 | `main_three_selected` — Main prompt (3 movie tickets selected & stacked) |
+| :---: | :---: | :---: | :---: | :---: |
+| <img src="03_multi_credential/four_movie_tickets_multiple__main_all_selected.png" alt="Compose: Four Movie Tickets to One Movie (multiple = true) - Main prompt (all 4 movie tickets selected &amp; stacked)" width="260" /> | <img src="03_multi_credential/four_movie_tickets_multiple__doc_details.png" alt="Compose: Four Movie Tickets to One Movie (multiple = true) - Details page showing all 4 movie tickets and their claim values" width="260" /> | <img src="03_multi_credential/four_movie_tickets_multiple__chooser_all_checked.png" alt="Compose: Four Movie Tickets to One Movie (multiple = true) - Multi-select chooser with all 4 movie tickets checked" width="260" /> | <img src="03_multi_credential/four_movie_tickets_multiple__chooser_three_checked.png" alt="Compose: Four Movie Tickets to One Movie (multiple = true) - Multi-select chooser after unchecking Seat G17" width="260" /> | <img src="03_multi_credential/four_movie_tickets_multiple__main_three_selected.png" alt="Compose: Four Movie Tickets to One Movie (multiple = true) - Main prompt (3 movie tickets selected &amp; stacked)" width="260" /> |
+
+<a id="six_boarding_passes_two_flights"></a>
+
+### `six_boarding_passes_two_flights` — Family Boarding Passes Across Two Flights: UT 815 & UT 516 (uniqueDocSetRequired = false)
+
+- **Relying Party:** Utopia Airlines — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** UtopiaBoardingPass (uniqueDocSetRequired = false, 3x UT 815 + 3x UT 516)
+- **Risk Assessment:** `NORMAL`
+
+An airline gate reader sets uniqueDocSetRequired = false to accept multiple family boarding passes in one tap. The wallet holds three boarding passes for flight UT 815 and three boarding passes for flight UT 516; all six are initially selected and stacked, and the traveler can open the multi-select chooser to uncheck the three UT 516 passes so only the three UT 815 passes are shared. To select only boarding passes for the flight at that gate automatically, the wallet can filter using information embedded by the reader in DocRequestInfo, as demonstrated in the following three_boarding_passes_with_filtering scenario.
+
+| `main_all_six_selected` — Main prompt (all 6 boarding passes selected & stacked) | `chooser_all_six_checked` — Multi-select chooser with all 6 boarding passes checked | `chooser_ut815_only` — Multi-select chooser with only the 3 UT 815 boarding passes checked | `main_ut815_selected` — Main prompt (3 UT 815 boarding passes selected & stacked) |
+| :---: | :---: | :---: | :---: |
+| <img src="03_multi_credential/six_boarding_passes_two_flights__main_all_six_selected.png" alt="Compose: Family Boarding Passes Across Two Flights: UT 815 &amp; UT 516 (uniqueDocSetRequired = false) - Main prompt (all 6 boarding passes selected &amp; stacked)" width="260" /> | <img src="03_multi_credential/six_boarding_passes_two_flights__chooser_all_six_checked.png" alt="Compose: Family Boarding Passes Across Two Flights: UT 815 &amp; UT 516 (uniqueDocSetRequired = false) - Multi-select chooser with all 6 boarding passes checked" width="260" /> | <img src="03_multi_credential/six_boarding_passes_two_flights__chooser_ut815_only.png" alt="Compose: Family Boarding Passes Across Two Flights: UT 815 &amp; UT 516 (uniqueDocSetRequired = false) - Multi-select chooser with only the 3 UT 815 boarding passes checked" width="260" /> | <img src="03_multi_credential/six_boarding_passes_two_flights__main_ut815_selected.png" alt="Compose: Family Boarding Passes Across Two Flights: UT 815 &amp; UT 516 (uniqueDocSetRequired = false) - Main prompt (3 UT 815 boarding passes selected &amp; stacked)" width="260" /> |
+
+<a id="three_boarding_passes_with_filtering"></a>
+
+### `three_boarding_passes_with_filtering` — Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false)
+
+- **Relying Party:** Utopia Airlines — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** UtopiaBoardingPass (uniqueDocSetRequired = false, DocRequestInfo flight_number = UT 815)
+- **Risk Assessment:** `NORMAL`
+
+The same wallet holding six boarding passes across flights UT 815 and UT 516, matched to flight UT 815 using the flight number embedded by the reader in DocRequestInfo. Only the three boarding passes for flight UT 815 are matched, selected by default, and stacked.
+
+| `main` — Main prompt (3 UT 815 boarding passes matched & stacked) | `doc_details` — Details page showing the 3 matched UT 815 boarding passes | `chooser` — Multi-select chooser with the 3 matched UT 815 boarding passes |
+| :---: | :---: | :---: |
+| <img src="03_multi_credential/three_boarding_passes_with_filtering__main.png" alt="Compose: Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false) - Main prompt (3 UT 815 boarding passes matched &amp; stacked)" width="260" /> | <img src="03_multi_credential/three_boarding_passes_with_filtering__doc_details.png" alt="Compose: Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false) - Details page showing the 3 matched UT 815 boarding passes" width="260" /> | <img src="03_multi_credential/three_boarding_passes_with_filtering__chooser.png" alt="Compose: Family Boarding Passes Filtered by Flight Number in DocRequestInfo (uniqueDocSetRequired = false) - Multi-select chooser with the 3 matched UT 815 boarding passes" width="260" /> |
+
 ---
+
+<a id="04_encryption"></a>
 
 ## 4. Claim-Level Encryption (Intermediary + Encryption Target)
 
@@ -393,6 +446,8 @@ Same border-crossing flow with intentToRetain = true, changing the encrypted sec
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/04_encryption/trusted_requester_trusted_target_retained__main.png" alt="SwiftUI: Trusted Intermediary + Trusted Encryption Target (Retained) - Main prompt (encrypted &amp; stored)" width="260" /> |
 
 ---
+
+<a id="05_warning_untrusted"></a>
 
 ## 5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII
 
@@ -505,6 +560,8 @@ An unverified website that signed the request with a certificate not in the wall
 
 ---
 
+<a id="06_high_risk"></a>
+
 ## 6. High-Risk (Red) & Cool-Off Safeguards
 
 Requests triggering ConsentRiskLevel.HIGH_RISK due to anonymous remote/app requesters asking for PII, retention, or transaction data, over-broad/unusual claim combinations, mismatched purpose hints, or anonymous encryption targets with no certificate chain. Enforces a 5-second cool-off timer on the Continue button.
@@ -601,6 +658,8 @@ An anonymous website (providing no X.509 signature certificate) attaches a payme
 
 ---
 
+<a id="07_custom_policy"></a>
+
 ## 7. Custom Risk & Purpose Classification Callbacks
 
 Demonstrates overriding classifyPurposesFn and classifyRiskFn on Consent to enforce custom wallet security policies.
@@ -636,6 +695,8 @@ A wallet overrides classifyRiskFn to treat its companion first-party verifier ap
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/07_custom_policy/custom_normal_for_allowlisted_first_party_app__main.png" alt="SwiftUI: Custom Policy: Allowlist First-Party Verifier App as NORMAL - Main prompt (allowlisted app as NORMAL)" width="260" /> |
 
 ---
+
+<a id="08_dark_mode"></a>
 
 ## 8. Dark Theme Coverage
 
@@ -702,6 +763,8 @@ Dark mode rendering of the Requester Info sub-page showing verified requester an
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/08_dark_mode/requester_info_with_encryption_target__requester_info.png" alt="SwiftUI: Dark Mode — Requester Info Page with Encryption Target - Requester info page (Dark mode)" width="260" /> |
 
 ---
+
+<a id="09_localization"></a>
 
 ## 9. Localization — Danish & Right-to-Left (Arabic)
 

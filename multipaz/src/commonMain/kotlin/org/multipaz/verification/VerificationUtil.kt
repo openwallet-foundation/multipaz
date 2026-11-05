@@ -733,6 +733,48 @@ object VerificationUtil {
     }
 
     /**
+     * Injects `"multiple": true` into each credential in a DCQL query if [multiple] is `true` and
+     * the credential does not already specify `"multiple"`.
+     *
+     * @param dcql the DCQL query.
+     * @param multiple whether to inject `"multiple": true`.
+     * @return the updated DCQL query, or [dcql] unchanged if [multiple] is `false`.
+     */
+    fun injectMultipleIntoDcql(
+        dcql: JsonObject,
+        multiple: Boolean
+    ): JsonObject {
+        if (!multiple) {
+            return dcql
+        }
+        val credentialsArray = dcql["credentials"]?.jsonArray ?: return dcql
+        val newCredentials = buildJsonArray {
+            for (cred in credentialsArray) {
+                val credObj = cred.jsonObject
+                if (credObj.containsKey("multiple")) {
+                    add(credObj)
+                } else {
+                    addJsonObject {
+                        for ((k, v) in credObj) {
+                            put(k, v)
+                        }
+                        put("multiple", true)
+                    }
+                }
+            }
+        }
+        return buildJsonObject {
+            for ((k, v) in dcql) {
+                if (k == "credentials") {
+                    put("credentials", newCredentials)
+                } else {
+                    put(k, v)
+                }
+            }
+        }
+    }
+
+    /**
      * Decrypts a W3C Digital Credentials response.
      *
      * @param response the W3C Digital Credentials API response.
@@ -1298,7 +1340,9 @@ object VerificationUtil {
         deviceEngagement: ByteString? = null,
         handover: DataItem? = null,
         eReaderKey: EcPrivateKey? = null,
-        state: String? = null
+        state: String? = null,
+        uniqueDocSetRequired: Boolean = true,
+        multiple: Boolean = false
     ): VerificationSession {
         val encryptionPrivateKey = if (encryptResponse) {
             Crypto.createEcPrivateKey(EcCurve.P256)
@@ -1306,6 +1350,8 @@ object VerificationUtil {
             null
         }
         val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
+        val openIDDcqlJson = injectMultipleIntoDcql(dcqlJson, multiple)
+        val iso18013DcqlJson = injectMultipleIntoDcql(dcqlJson, !uniqueDocSetRequired)
         val nonceStr = nonce.toByteArray().toBase64Url()
 
         val docRequestTransactions = if (transactionData.isNullOrEmpty()) {
@@ -1331,7 +1377,7 @@ object VerificationUtil {
             verifierIdentities: List<VerifierIdentity>
         ): String = OpenID4VP.generateRequest(
             version = version,
-            dcqlQuery = dcqlJson,
+            dcqlQuery = openIDDcqlJson,
             jsonTransactionData = transactionData ?: emptyList(),
             nonce = nonceStr,
             state = state,
@@ -1347,7 +1393,7 @@ object VerificationUtil {
             sessionTranscript: DataItem
         ): DataItem = buildDeviceRequestFromDcql(
             sessionTranscript = sessionTranscript,
-            dcql = dcqlJson,
+            dcql = iso18013DcqlJson,
             transactions = docRequestTransactions?.value ?: emptyMap()
         ) {
             verifierIdentities.forEach { addReaderAuthAll(it.key) }

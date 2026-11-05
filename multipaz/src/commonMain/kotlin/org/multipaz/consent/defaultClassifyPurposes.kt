@@ -99,16 +99,16 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity trust information for the requester, or `null` if untrusted.
  * @param presentmentData the combinations of credentials and claims that the user can select.
- * @param selections the selected solution index for each [PresentmentUseCase] in
- *   [PresentmentData.useCases], or `-1` for an omitted optional use-case. Defaults to selecting
- *   solution `0` for each use-case.
+ * @param selections the selected solution indices for each [PresentmentUseCase] in
+ *   [PresentmentData.useCases], or an empty list for an omitted optional use-case. Defaults to
+ *   [PresentmentData.defaultSelections].
  * @return the set of [PresentmentPurpose]s in enum declaration order, or an empty set if unknown.
  */
 fun defaultClassifyPurposes(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     presentmentData: PresentmentData,
-    selections: List<Int> = presentmentData.useCases.map { if (it.solutions.isNotEmpty()) 0 else -1 },
+    selections: List<List<Int>> = presentmentData.defaultSelections(),
 ): Set<PresentmentPurpose> = presentmentData.classifyPurposes(selections)
 
 private const val ISO_18013_PURPOSE_CONTROLLER_ID = "org.iso.jtc1.sc17"
@@ -490,30 +490,32 @@ internal fun PresentmentUseCase.classifyPurposes(solutionIndex: Int = 0): Set<Pr
  * Returns an empty set if no use-cases are selected or if any selected use-case has an unknown
  * or unaccounted-for purpose (`useCase.classifyPurposes(selectionIndex).isEmpty()`).
  *
- * @param selections the selected solution index for each [PresentmentUseCase] in [PresentmentData.useCases],
- *   or `-1` for an omitted optional use-case. Defaults to selecting solution `0` for each use-case.
+ * @param selections the selected solution indices for each [PresentmentUseCase] in [PresentmentData.useCases],
+ *   or an empty list for an omitted optional use-case. Defaults to [PresentmentData.defaultSelections].
  * @return the set of [PresentmentPurpose]s in enum declaration order, or an empty set if unknown.
  */
 internal fun PresentmentData.classifyPurposes(
-    selections: List<Int> = useCases.map { if (it.solutions.isNotEmpty()) 0 else -1 }
+    selections: List<List<Int>> = defaultSelections()
 ): Set<PresentmentPurpose> {
     require(selections.size == useCases.size) {
         "Expected selections length (${selections.size}) to match useCases length (${useCases.size})"
     }
     val combined = mutableSetOf<PresentmentPurpose>()
     useCases.forEachIndexed { index, useCase ->
-        val selectionIndex = selections[index]
-        if (selectionIndex < 0) {
+        val selectedIndices = selections[index]
+        if (selectedIndices.isEmpty()) {
             require(useCase.optional) { "Cannot omit non-optional use-case at index $index" }
         } else {
-            require(selectionIndex < useCase.solutions.size) {
-                "Out-of-bounds solution index $selectionIndex for use-case at index $index"
+            for (selectionIndex in selectedIndices) {
+                require(selectionIndex in useCase.solutions.indices) {
+                    "Out-of-bounds solution index $selectionIndex for use-case at index $index"
+                }
+                val useCasePurposes = useCase.classifyPurposes(selectionIndex)
+                if (useCasePurposes.isEmpty()) {
+                    return emptySet()
+                }
+                combined.addAll(useCasePurposes)
             }
-            val useCasePurposes = useCase.classifyPurposes(selectionIndex)
-            if (useCasePurposes.isEmpty()) {
-                return emptySet()
-            }
-            combined.addAll(useCasePurposes)
         }
     }
     return combined.sortedBy { it.ordinal }.toSet()

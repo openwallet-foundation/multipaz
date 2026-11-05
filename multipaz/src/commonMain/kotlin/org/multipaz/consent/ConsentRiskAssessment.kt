@@ -103,7 +103,7 @@ typealias ClassifyPurposesFn = (
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     presentmentData: PresentmentData,
-    selections: List<Int>,
+    selections: List<List<Int>>,
 ) -> Set<PresentmentPurpose>
 
 /**
@@ -114,7 +114,7 @@ typealias ClassifyRiskFn = (
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     presentmentData: PresentmentData,
-    selections: List<Int>,
+    selections: List<List<Int>>,
     purposes: Set<PresentmentPurpose>,
 ) -> ConsentRiskAssessment
 

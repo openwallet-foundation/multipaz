@@ -119,6 +119,9 @@ internal fun PresentmentUseCase.print(pp: PrettyPrinter) {
     pp.append("useCase:")
     pp.pushIndent()
     pp.append("optional: $optional")
+    if (allowMultiple) {
+        pp.append("allowMultiple: true")
+    }
     if (purposeHints.isNotEmpty()) {
         pp.append("purposeHints:")
         pp.pushIndent()

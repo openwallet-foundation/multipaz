@@ -50,6 +50,7 @@ struct DcqlCredentialQuery {
     std::vector<DcqlClaimSet> claimSets;
 
     bool lenientClaimMatching = false;
+    bool multiple = false;
 
     DcqlCredentialQuery(
             std::string id_,
@@ -60,11 +61,12 @@ struct DcqlCredentialQuery {
             std::vector<std::vector<uint8_t>> readerAuthAkis_,
             std::vector<DcqlRequestedClaim> requestedClaims_,
             std::vector<DcqlClaimSet> claimSets_,
-            bool lenientClaimMatching_ = false
+            bool lenientClaimMatching_ = false,
+            bool multiple_ = false
     ) : id(id_), format(format_), mdocDocType(mdocDocType_), vctValues(vctValues_),
         issuerIdentifiers(issuerIdentifiers_), readerAuthAkis(readerAuthAkis_),
         requestedClaims(requestedClaims_), claimSets(claimSets_),
-        lenientClaimMatching(lenientClaimMatching_) {}
+        lenientClaimMatching(lenientClaimMatching_), multiple(multiple_) {}
 
     DcqlRequestedClaim* findRequestedClaim(const std::string& claimId);
 };

@@ -509,7 +509,7 @@ class ConsentRiskLevelTest {
             defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, trustedEncData)
         )
 
-        // 6. Optional use-case omitted (selections = listOf(-1)):
+        // 6. Optional use-case omitted (selections = listOf(emptyList())):
         // Trusted or Proximity -> NORMAL; Untrusted Web/App -> WARNING (UNTRUSTED_REQUESTER)
         val optionalReq = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("session"); add("transcript") },
@@ -535,19 +535,19 @@ class ConsentRiskLevelTest {
         val optionalData = optionalReq.execute(presentmentSource = env.presentmentSource)
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
-            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, optionalData, selections = listOf(-1))
+            defaultClassifyRisk(anonymousProximityRequester, env.trustedIdentity, optionalData, selections = listOf(emptyList()))
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.NORMAL, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
-            defaultClassifyRisk(anonymousProximityRequester, null, optionalData, selections = listOf(-1))
+            defaultClassifyRisk(anonymousProximityRequester, null, optionalData, selections = listOf(emptyList()))
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
-            defaultClassifyRisk(anonymousWebRequester, null, optionalData, selections = listOf(-1))
+            defaultClassifyRisk(anonymousWebRequester, null, optionalData, selections = listOf(emptyList()))
         )
         assertEquals(
             ConsentRiskAssessment(ConsentRiskLevel.WARNING, setOf(ConsentRiskReason.ANONYMOUS_REQUESTER)),
-            defaultClassifyRisk(anonymousAppRequester, null, optionalData, selections = listOf(-1))
+            defaultClassifyRisk(anonymousAppRequester, null, optionalData, selections = listOf(emptyList()))
         )
     }
 }

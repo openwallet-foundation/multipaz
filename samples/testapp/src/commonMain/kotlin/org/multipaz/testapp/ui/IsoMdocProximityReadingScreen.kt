@@ -343,6 +343,7 @@ fun IsoMdocProximityReadingScreen(
                                 },
                                 signRequest = app.settingsModel.signRequest.value,
                                 issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
+                                uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
                             )
                             if (readerMostRecentDeviceResponse.value != null) {
                                 val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
@@ -463,6 +464,7 @@ fun IsoMdocProximityReadingScreen(
                                         deviceEngagement = deviceEngagement.value!!,
                                         requestSdJwtVc = requestSelected.value.requestSdJwtVc,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
+                                        uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
                                     )
                                     readerSession.value = session
                                     readerMostRecentDeviceResponse.value = byteArrayOf()
@@ -722,6 +724,7 @@ fun IsoMdocProximityReadingScreen(
                                         },
                                         signRequest = app.settingsModel.signRequest.value,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
+                                        uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
                                     )
                                     if (readerMostRecentDeviceResponse.value != null) {
                                         scanResult
@@ -819,6 +822,22 @@ fun IsoMdocProximityReadingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
+                            checked = app.settingsModel.readerUniqueDocSetRequired.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerUniqueDocSetRequired.value = value
+                            },
+                        )
+                        Text(
+                            text = "UniqueDocSetRequired",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
                             checked = app.settingsModel.signRequest.collectAsState().value,
                             onCheckedChange = { value ->
                                 app.settingsModel.signRequest.value = value
@@ -891,6 +910,7 @@ private suspend fun doReaderFlow(
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     signRequest: Boolean,
     issuerIdentifiers: List<ByteString> = emptyList(),
+    uniqueDocSetRequired: Boolean = true,
 ) {
     Logger.iCbor(TAG, "DeviceEngagement", encodedDeviceEngagement.toByteArray())
     val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement.toByteArray()))
@@ -953,6 +973,7 @@ private suspend fun doReaderFlow(
                         eReaderKey = eReaderKey.value!!,
                         signRequest = signRequest,
                         issuerIdentifiers = issuerIdentifiers,
+                        uniqueDocSetRequired = uniqueDocSetRequired,
                     )
                 }
             )
@@ -981,6 +1002,7 @@ private suspend fun doReaderFlow(
         eReaderKey = eReaderKey.value!!,
         signRequest = signRequest,
         issuerIdentifiers = issuerIdentifiers,
+        uniqueDocSetRequired = uniqueDocSetRequired,
     )
 }
 
@@ -1005,6 +1027,7 @@ private suspend fun doReaderFlowWithTransport(
     eReaderKey: EcPrivateKey,
     signRequest: Boolean,
     issuerIdentifiers: List<ByteString> = emptyList(),
+    uniqueDocSetRequired: Boolean = true,
 ) {
     readerTransport.value = transport
     val session = TestAppUtils.createProximityVerificationSession(
@@ -1016,6 +1039,7 @@ private suspend fun doReaderFlowWithTransport(
         signRequest = signRequest,
         requestSdJwtVc = selectedRequest.value.requestSdJwtVc,
         issuerIdentifiers = issuerIdentifiers,
+        uniqueDocSetRequired = uniqueDocSetRequired,
     )
     readerSession.value = session
     val proximityRequest = session.find<VerificationSession.Iso18013ProximityRequest>()

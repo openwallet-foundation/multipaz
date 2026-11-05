@@ -129,7 +129,7 @@ internal fun switchableDocumentIds(
     useCase: PresentmentUseCase,
     documentGroups: List<DocumentMatchGroup>,
 ): Set<String> {
-    if (useCase.optional) {
+    if (useCase.optional || (useCase.allowMultiple && useCase.solutions.size > 1)) {
         return documentGroups.mapTo(mutableSetOf()) { it.document.identifier }
     }
     if (useCase.solutions.size <= 1) {
@@ -146,6 +146,63 @@ internal fun switchableDocumentIds(
     return varyingIds.ifEmpty {
         documentGroups.mapTo(mutableSetOf()) { it.document.identifier }
     }
+}
+
+/**
+ * One or more [DocumentMatchGroup]s that can be rendered together as stacked credential cards
+ * sharing a single claims section when their displayed claim sections match and they have no
+ * transaction data.
+ */
+internal data class StackedDocumentMatchGroup(
+    val groups: List<DocumentMatchGroup>,
+) {
+    val firstGroup: DocumentMatchGroup get() = groups.first()
+    val claimSections: List<ClaimSection> get() = firstGroup.claimSections
+}
+
+private data class ClaimSectionSignature(
+    val storesData: Boolean,
+    val encryptionRequested: Boolean,
+    val encryptionTargetCertificationChain: X509CertChain?,
+    val encryptionTargetTrustMetadata: TrustMetadata?,
+    val displayClaims: List<DisplayClaim>,
+)
+
+private fun ClaimSection.toSignature() = ClaimSectionSignature(
+    storesData = storesData,
+    encryptionRequested = encryptionRequested,
+    encryptionTargetCertificationChain = encryptionTargetCertificationChain,
+    encryptionTargetTrustMetadata = encryptionTargetTrustMetadata,
+    displayClaims = displayClaims,
+)
+
+/**
+ * Merges consecutive compatible [DocumentMatchGroup]s into [StackedDocumentMatchGroup]s when
+ * [stackCompatibleGroups] is `true` (e.g. when multiple solutions are selected for a use-case).
+ */
+internal fun stackDocumentGroups(
+    documentGroups: List<DocumentMatchGroup>,
+    stackCompatibleGroups: Boolean,
+): List<StackedDocumentMatchGroup> {
+    if (!stackCompatibleGroups || documentGroups.size <= 1) {
+        return documentGroups.map { StackedDocumentMatchGroup(listOf(it)) }
+    }
+    val result = mutableListOf<StackedDocumentMatchGroup>()
+    for (group in documentGroups) {
+        val hasTx = group.matches.any { it.transactionData.isNotEmpty() }
+        val sig = group.claimSections.map { it.toSignature() }
+        val last = result.lastOrNull()
+        val canMergeWithLast = last != null &&
+            !hasTx &&
+            last.groups.none { g -> g.matches.any { it.transactionData.isNotEmpty() } } &&
+            last.claimSections.map { it.toSignature() } == sig
+        if (canMergeWithLast) {
+            result[result.lastIndex] = StackedDocumentMatchGroup(last.groups + group)
+        } else {
+            result.add(StackedDocumentMatchGroup(listOf(group)))
+        }
+    }
+    return result
 }
 
 private fun buildClaimSections(
