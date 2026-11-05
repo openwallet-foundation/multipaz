@@ -31,7 +31,8 @@ class IssuanceMatcherTest {
     private val creationOptions = buildCredmanCreationOptions(
         title = "Multipaz",
         subtitle = "Save to Multipaz",
-        icon = byteArrayOf(1, 2, 3, 4)
+        icon = byteArrayOf(1, 2, 3, 4),
+        protocols = setOf("openid4vci-v1"),
     )
 
     private fun run(request: String, options: ByteArray = creationOptions): String =
@@ -48,28 +49,51 @@ class IssuanceMatcherTest {
 
     @Test
     fun matchesCredentialOffer() {
-        for (protocol in CredmanCredentialOffer.SUPPORTED_PROTOCOLS) {
-            assertEquals(
-                expectedEntry,
-                run("""{"requests": [{"protocol": "$protocol", "data": $offer}]}"""),
-                protocol
-            )
-        }
+        assertEquals(
+            expectedEntry,
+            run("""{"requests": [{"protocol": "openid4vci-v1", "data": $offer}]}"""),
+        )
     }
 
     @Test
     fun matchesOnlyOnce() {
+        val multiProtocolOptions = buildCredmanCreationOptions(
+            title = "Multipaz",
+            subtitle = "Save to Multipaz",
+            icon = byteArrayOf(1, 2, 3, 4),
+            protocols = setOf("openid4vci-v1", "openid4vci"),
+        )
         assertEquals(
             expectedEntry,
-            run("""
-                {
-                  "requests": [
-                    {"protocol": "openid4vp-v1-unsigned", "data": {}},
-                    {"protocol": "openid4vci-v1", "data": $offer},
-                    {"protocol": "openid4vci", "data": $offer}
-                  ]
-                }
-            """.trimIndent())
+            run(
+                """
+                    {
+                      "requests": [
+                        {"protocol": "openid4vp-v1-unsigned", "data": {}},
+                        {"protocol": "openid4vci-v1", "data": $offer},
+                        {"protocol": "openid4vci", "data": $offer}
+                      ]
+                    }
+                """.trimIndent(),
+                multiProtocolOptions,
+            )
+        )
+    }
+
+    @Test
+    fun noMatchWhenUnregisteredWithEmptyProtocols() {
+        val emptyProtocolOptions = buildCredmanCreationOptions(
+            title = "Multipaz",
+            subtitle = "Save to Multipaz",
+            icon = byteArrayOf(1, 2, 3, 4),
+            protocols = emptySet(),
+        )
+        assertEquals(
+            "",
+            run(
+                """{"requests": [{"protocol": "openid4vci-v1", "data": $offer}]}""",
+                emptyProtocolOptions,
+            )
         )
     }
 
@@ -77,6 +101,7 @@ class IssuanceMatcherTest {
     fun noMatchWithoutCredentialOffer() {
         for (request in listOf(
             """{"requests": [{"protocol": "openid4vp-v1-unsigned", "data": $offer}]}""",
+            """{"requests": [{"protocol": "openid4vci", "data": $offer}]}""",
             """{"requests": [{"protocol": "openid4vci-v1"}]}""",
             """{"requests": [{"protocol": "openid4vci-v1", "data": "not an object"}]}""",
             """{"requests": [{"protocol": "openid4vci-v1", "data": {"credential_issuer": "https://a.example.com"}}]}""",
@@ -102,7 +127,12 @@ class IssuanceMatcherTest {
             """.trimIndent(),
             run(
                 """{"requests": [{"protocol": "openid4vci-v1", "data": $offer}]}""",
-                buildCredmanCreationOptions(title = "Multipaz", subtitle = null, icon = null)
+                buildCredmanCreationOptions(
+                    title = "Multipaz",
+                    subtitle = null,
+                    icon = null,
+                    protocols = setOf("openid4vci-v1"),
+                )
             )
         )
     }
@@ -116,5 +146,7 @@ class IssuanceMatcherTest {
         assertEquals("", run(request, Cbor.encode(Tstr("Multipaz"))))
         // No title
         assertEquals("", run(request, Cbor.encode(buildCborMap { put("subtitle", "Save to Multipaz") })))
+        // No protocols
+        assertEquals("", run(request, Cbor.encode(buildCborMap { put("title", "Multipaz") })))
     }
 }

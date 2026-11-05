@@ -2,8 +2,6 @@ package org.multipaz.testapp
 
 import android.content.ComponentName
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.net.Uri
@@ -19,18 +17,15 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.coroutineScope
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.multipaz.applinks.AppLinksCheck
 import org.multipaz.context.initializeApplication
-import org.multipaz.digitalcredentials.registerForCredmanCredentialOffers
 import org.multipaz.nfc.handleUsbDeviceAttached
 import org.multipaz.testapp.TestAppConfiguration.ACTION_VIEW_DOCUMENT
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.util.Logger
-import java.io.ByteArrayOutputStream
 
 class MainActivity : FragmentActivity() {
 
@@ -68,7 +63,6 @@ class MainActivity : FragmentActivity() {
                 app.Content()
             }
             handleIntent(intent)
-            registerForCredentialOffers()
             val appLinksSetupIsValid = AppLinksCheck.checkAppLinksServerSetup(
                 applicationContext,
                 ProvisioningSupport.APP_LINK_SERVER,
@@ -81,30 +75,6 @@ class MainActivity : FragmentActivity() {
                     Toast.LENGTH_LONG
                 ).show()
             }
-        }
-    }
-
-    private suspend fun registerForCredentialOffers() {
-        try {
-            registerForCredmanCredentialOffers(
-                title = TestAppConfiguration.appName,
-                subtitle = null,
-                icon = applicationIconPng(),
-            )
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Logger.w(TAG, "Error registering for credential offers with W3C DC API", e)
-        }
-    }
-
-    private fun applicationIconPng(): ByteArray {
-        val drawable = applicationInfo.loadIcon(packageManager)
-        val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
-        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
-        drawable.draw(Canvas(bitmap))
-        return ByteArrayOutputStream().use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-            stream.toByteArray()
         }
     }
 

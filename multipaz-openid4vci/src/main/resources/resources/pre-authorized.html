@@ -4,10 +4,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="style.css" />
     <title>Pre-authorized credential offer</title>
+    <script>
+        async function offerCredential() {
+            if (!navigator.credentials || !navigator.credentials.create) {
+                alert("Digital Credentials API is not available.");
+                return;
+            }
+            try {
+                const offerUri = "$offer";
+                const offerJson = new URL(offerUri).searchParams.get("credential_offer");
+                await navigator.credentials.create({
+                    digital: {
+                        requests: [
+                            {
+                                protocol: "openid4vci-v1",
+                                data: JSON.parse(offerJson)
+                            }
+                        ]
+                    }
+                });
+            } catch (err) {
+                alert(err);
+            }
+        }
+    </script>
 </head>
 <body>
 <div id="main">
     <h3>Pre-authorized credential offer</h3>
+    <p><button onclick="offerCredential()">Credential offer</button></p>
     <p><a href="$offer">Credential offer using custom url schema</a></p>
     <img class="qr" style="image-rendering: pixelated" src="qr?q=$encodedOffer"/>
     <p>$txCode</p>

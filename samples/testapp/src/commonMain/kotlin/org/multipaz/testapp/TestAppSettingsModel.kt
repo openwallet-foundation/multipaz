@@ -179,6 +179,7 @@ class TestAppSettingsModel private constructor(
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials?.supportedProtocols ?: emptySet())
+        bind(dcApiCreateProtocols, "dcApiCreateProtocols", TestAppConfiguration.supportedCreateProtocols)
         bind(dcRequestIssuerIdentifiers, "dcRequestIssuerIdentifiers", "")
         bind(dcRequestLastSelectedRequestId, "dcRequestLastSelectedRequestId", null)
         bind(dcRequestUniqueDocSetRequired, "dcRequestUniqueDocSetRequired", true)
@@ -230,6 +231,7 @@ class TestAppSettingsModel private constructor(
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
+    val dcApiCreateProtocols = MutableStateFlow<Set<String>>(emptySet())
     val dcRequestIssuerIdentifiers = MutableStateFlow<String>("")
     val dcRequestLastSelectedRequestId = MutableStateFlow<String?>(null)
     val dcRequestUniqueDocSetRequired = MutableStateFlow<Boolean>(true)

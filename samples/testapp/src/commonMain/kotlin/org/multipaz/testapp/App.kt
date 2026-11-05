@@ -236,14 +236,9 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var readerTrustManager: CompositeTrustManager
 
 
-    private data class CredentialOfferRequest(
-        val offerUri: String,
-        val result: CompletableDeferred<Document?>? = null,
-    )
-
     private lateinit var provisioningModel: ProvisioningModel
 
-    private val credentialOffers = Channel<CredentialOfferRequest>()
+    private val credentialOffers = Channel<String>()
 
     private val mpzPassesToImport = Channel<ByteString>()
 
@@ -251,7 +246,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val documentsToView = Channel<String>()
 
-    private lateinit var provisioningSupport: ProvisioningSupport
+    lateinit var provisioningSupport: ProvisioningSupport
+        private set
 
     lateinit var zkSystemRepository: ZkSystemRepository
     private val initLock = Mutex()
@@ -503,8 +499,23 @@ class App private constructor (val promptModel: PromptModel) {
 
 
     private suspend fun provisioningModelInit() {
+        provisioningModel = createProvisioningModel(promptModel)
+        provisioningSupport = ProvisioningSupport(
+            storage = TestAppConfiguration.storage,
+            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
+        )
+        provisioningSupport.init()
+    }
+
+    /**
+     * Creates a [ProvisioningModel] using [promptModel] for its UI.
+     *
+     * This is also used for provisioning credentials offered through the W3C Digital Credentials API, which
+     * happens in another activity on Android.
+     */
+    suspend fun createProvisioningModel(promptModel: PromptModel): ProvisioningModel {
         val secureArea = Platform.getSecureArea(TestAppConfiguration.storage)
-        provisioningModel = ProvisioningModel(
+        return ProvisioningModel(
             documentProvisioningHandler = DocumentProvisioningHandler(
                 documentStore = documentStore,
                 secureArea = secureArea,
@@ -516,11 +527,6 @@ class App private constructor (val promptModel: PromptModel) {
             authorizationSecureArea = secureArea,
             eventLogger = eventLogger
         )
-        provisioningSupport = ProvisioningSupport(
-            storage = TestAppConfiguration.storage,
-            secureArea = secureArea,
-        )
-        provisioningSupport.init()
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -956,6 +962,33 @@ class App private constructor (val promptModel: PromptModel) {
                     }
             }
         }
+
+        if (TestAppConfiguration.supportedCreateProtocols.isNotEmpty()) {
+            try {
+                TestAppConfiguration.registerForCredentialOffers(
+                    protocols = settingsModel.dcApiCreateProtocols.value
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error registering for credential offers with W3C DC API", e)
+            }
+
+            CoroutineScope(Dispatchers.Default).launch {
+                settingsModel.dcApiCreateProtocols
+                    .drop(1) // drop initial value, we just registered above.
+                    .collect { protocols ->
+                        Logger.i(TAG, "DC create protocols changed: $protocols")
+                        try {
+                            TestAppConfiguration.registerForCredentialOffers(
+                                protocols = protocols
+                            )
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            Logger.w(TAG, "Error registering for credential offers with W3C DC API", e)
+                        }
+                    }
+            }
+        }
     }
     
     lateinit var eventLogger: SimpleEventLogger
@@ -996,7 +1029,7 @@ class App private constructor (val promptModel: PromptModel) {
             val queryIndex = url.indexOf('?')
             if (queryIndex >= 0) {
                 CoroutineScope(Dispatchers.Default).launch {
-                    credentialOffers.send(CredentialOfferRequest(url))
+                    credentialOffers.send(url)
                 }
             }
         } else if (
@@ -1012,12 +1045,6 @@ class App private constructor (val promptModel: PromptModel) {
         } else {
             Logger.e(TAG, "Unhandled URL: '$url'")
         }
-    }
-
-    suspend fun handleCredentialOffer(offerUri: String): Document? {
-        val result = CompletableDeferred<Document?>()
-        credentialOffers.send(CredentialOfferRequest(offerUri, result))
-        return result.await()
     }
 
     fun cancelAllPendingAppLinks() {
@@ -1117,19 +1144,14 @@ class App private constructor (val promptModel: PromptModel) {
                 .build()
         }
 
-        val pendingCredentialOfferResult = remember { mutableStateOf<CompletableDeferred<Document?>?>(null) }
-
         LaunchedEffect(true) {
             while (true) {
-                val request = credentialOffers.receive()
+                val credentialOffer = credentialOffers.receive()
                 if (provisioningModel.isActive) {
                     Logger.e(TAG, "Provisioning is already in progress")
-                    request.result?.complete(null)
                 } else {
-                    pendingCredentialOfferResult.value?.complete(null)
-                    pendingCredentialOfferResult.value = request.result
                     provisioningModel.launchOpenID4VCIProvisioning(
-                        offerUri = request.offerUri,
+                        offerUri = credentialOffer,
                         clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
                         backend = provisioningSupport.getOpenID4VCIBackend()
                     )
@@ -1194,8 +1216,6 @@ class App private constructor (val promptModel: PromptModel) {
                     if (document != null && isNewlyIssued) {
                         navController.navigate(DocumentViewerDestination(document.identifier))
                     }
-                    pendingCredentialOfferResult.value?.complete(document)
-                    pendingCredentialOfferResult.value = null
                 },
                 issuerUrl = provisioningIssuerUrl.value,
                 clientPreferences = CompletableDeferred(provisioningSupport.getOpenID4VCIClientPreferences()),

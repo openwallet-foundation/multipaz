@@ -288,6 +288,34 @@ fun SettingsScreen(
         }
 
         item {
+            SettingHeadline("Digital Credentials create() API options")
+        }
+        if (TestAppConfiguration.supportedCreateProtocols.isNotEmpty()) {
+            for (protocol in TestAppConfiguration.supportedCreateProtocols.sorted()) {
+                item {
+                    SettingToggle(
+                        title = "Protocol: $protocol",
+                        isChecked = app.settingsModel.dcApiCreateProtocols.collectAsState().value.contains(protocol),
+                        onCheckedChange = {
+                            val mutableSet = app.settingsModel.dcApiCreateProtocols.value.toMutableSet()
+                            if (it) mutableSet.add(protocol) else mutableSet.remove(protocol)
+                            app.settingsModel.dcApiCreateProtocols.value = mutableSet
+                        },
+                    )
+                }
+            }
+        } else {
+            item {
+                WarningCard {
+                    Text(
+                        "Digital Credentials create() API is not supported on " +
+                            TestAppConfiguration.platform.displayName
+                    )
+                }
+            }
+        }
+
+        item {
             HorizontalDivider(
                 modifier = Modifier.padding(8.dp)
             )

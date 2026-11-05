@@ -1,6 +1,5 @@
 package org.multipaz.compose.digitalcredentials
 
-import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.credentials.CreateDigitalCredentialRequest
@@ -29,9 +28,7 @@ import org.multipaz.util.Logger
  * Applications should subclass this, register for credential offers with
  * [org.multipaz.digitalcredentials.registerForCredmanCredentialOffers], and declare the activity in their
  * manifest with an intent filter for the `androidx.credentials.registry.provider.action.CREATE_CREDENTIAL`
- * action and a transparent/translucent theme. The activity should use the default launch mode (not
- * `singleInstance`) so that it runs in the calling application's task and can bring that task back to
- * the front when provisioning completes.
+ * action.
  */
 abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
     companion object {
@@ -47,14 +44,8 @@ abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
     sealed class Result {
         /**
          * Provisioning succeeded and a response should be returned to the calling application.
-         *
-         * @property returnToCallingApp if `true`, brings the calling application's task (e.g. the
-         *   browser) back to the front before finishing. If `false`, leaves the wallet application
-         *   in the front.
          */
-        data class Success(
-            val returnToCallingApp: Boolean = true,
-        ) : Result()
+        data object Success : Result()
 
         /**
          * Provisioning was canceled by the user.
@@ -87,8 +78,8 @@ abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
     /**
      * Must be implemented by the application to handle a [CredmanCredentialOffer] from [origin].
      *
-     * Implementations typically launch the application's main activity to run the provisioning flow
-     * and suspend until provisioning (including any completion animations) has finished.
+     * Implementations should run the provisioning flow and suspend until provisioning (including
+     * any completion animations) has finished.
      *
      * @param origin the origin of the calling application or website.
      * @param offer the credential offer extracted from the request.
@@ -107,16 +98,6 @@ abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
 
         lifecycleScope.launch {
             processRequest()
-        }
-    }
-
-    override fun onRestart() {
-        super.onRestart()
-        if (!finished) {
-            finishWithException(
-                exception = CreateCredentialCancellationException("Provisioning canceled"),
-                returnToCallingApp = false
-            )
         }
     }
 
@@ -139,39 +120,27 @@ abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
             val offer = CredmanCredentialOffer.fromRequest(json)
                 ?: throw IllegalArgumentException("No supported credential offer in request")
             when (val result = handleCredentialOffer(origin, offer)) {
-                is Result.Success -> finishWithResponse(offer, result.returnToCallingApp)
+                is Result.Success -> finishWithResponse(offer)
                 is Result.Canceled -> finishWithException(
-                    exception = CreateCredentialCancellationException(result.message),
-                    returnToCallingApp = true
+                    CreateCredentialCancellationException(result.message)
                 )
                 is Result.Error -> finishWithException(
-                    exception = CreateCredentialUnknownException(result.message),
-                    returnToCallingApp = true
+                    CreateCredentialUnknownException(result.message)
                 )
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Logger.e(TAG, "Error processing request", e)
-            finishWithException(CreateCredentialUnknownException(e.message), returnToCallingApp = true)
+            finishWithException(CreateCredentialUnknownException(e.message))
         }
     }
 
-    private fun moveTaskToFront() {
-        getSystemService(ActivityManager::class.java).moveTaskToFront(taskId, 0)
-    }
-
     @OptIn(ExperimentalDigitalCredentialApi::class)
-    private fun finishWithResponse(
-        offer: CredmanCredentialOffer,
-        returnToCallingApp: Boolean,
-    ) {
+    private fun finishWithResponse(offer: CredmanCredentialOffer) {
         if (finished) {
             return
         }
         finished = true
-        if (returnToCallingApp) {
-            moveTaskToFront()
-        }
         val resultData = Intent()
         PendingIntentHandler.setCreateCredentialResponse(
             resultData,
@@ -181,17 +150,11 @@ abstract class CredentialManagerProvisioningActivity : FragmentActivity() {
         finish()
     }
 
-    private fun finishWithException(
-        exception: CreateCredentialException,
-        returnToCallingApp: Boolean,
-    ) {
+    private fun finishWithException(exception: CreateCredentialException) {
         if (finished) {
             return
         }
         finished = true
-        if (returnToCallingApp) {
-            moveTaskToFront()
-        }
         val resultData = Intent()
         PendingIntentHandler.setCreateCredentialException(resultData, exception)
         setResult(RESULT_OK, resultData)
