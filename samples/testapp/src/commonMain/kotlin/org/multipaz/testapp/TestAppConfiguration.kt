@@ -48,6 +48,10 @@ expect object TestAppConfiguration {
 
     suspend fun getDigitalCredentials(): DigitalCredentials?
 
+    val supportedCreateProtocols: Set<String>
+
+    suspend fun registerForCredentialOffers(protocols: Set<String>)
+
     fun getAndroidCredmanOmitClaims(document: Document): Boolean
 
     suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean)

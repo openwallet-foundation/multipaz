@@ -61,6 +61,12 @@ actual object TestAppConfiguration {
         return null
     }
 
+    actual val supportedCreateProtocols: Set<String> = emptySet()
+
+    actual suspend fun registerForCredentialOffers(protocols: Set<String>) {
+        // Nothing to do.
+    }
+
     actual fun getAndroidCredmanOmitClaims(document: Document): Boolean {
         return false
     }

@@ -63,11 +63,6 @@ async function displayCredentialConfig(configId) {
     let title = document.createElement("h3");
     title.textContent = "Authorization Code Flow";
     item.appendChild(title);
-    let p1 = document.createElement("p");
-    item.appendChild(p1);
-    let a = document.createElement("a");
-    p1.appendChild(a);
-    a.textContent = "Credential offer using custom url schema"
     let url = location.href.substring(0, location.href.lastIndexOf("/"));
     let offer = {
         credential_issuer: url,
@@ -76,6 +71,36 @@ async function displayCredentialConfig(configId) {
             authorization_code:{}
         }
     };
+    let p0 = document.createElement("p");
+    item.appendChild(p0);
+    let offerButton = document.createElement("button");
+    offerButton.textContent = "Credential offer";
+    offerButton.onclick = async function() {
+        if (!navigator.credentials || !navigator.credentials.create) {
+            alert("Digital Credentials API is not available.");
+            return;
+        }
+        try {
+            await navigator.credentials.create({
+                digital: {
+                    requests: [
+                        {
+                            protocol: "openid4vci-v1",
+                            data: offer
+                        }
+                    ]
+                }
+            });
+        } catch (err) {
+            alert(err);
+        }
+    };
+    p0.appendChild(offerButton);
+    let p1 = document.createElement("p");
+    item.appendChild(p1);
+    let a = document.createElement("a");
+    p1.appendChild(a);
+    a.textContent = "Credential offer using custom url schema"
     let href = urlSchema + "://?credential_offer=" + encodeURIComponent(JSON.stringify(offer));
     a.href = href;
     let p2 = document.createElement("p");

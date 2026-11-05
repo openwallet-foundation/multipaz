@@ -126,6 +126,32 @@ async function generateOffer(base, request) {
             let display = response.display[0];
             credentialTitle.textContent = display.name;
             offers.appendChild(credentialTitle);
+            let buttonPara = document.createElement("p");
+            offers.appendChild(buttonPara);
+            let credentialButton = document.createElement("button");
+            credentialButton.textContent = "Credential offer";
+            credentialButton.onclick = async function() {
+                if (!navigator.credentials || !navigator.credentials.create) {
+                    alert("Digital Credentials API is not available.");
+                    return;
+                }
+                try {
+                    let offerJson = new URL(response.offer).searchParams.get("credential_offer");
+                    await navigator.credentials.create({
+                        digital: {
+                            requests: [
+                                {
+                                    protocol: "openid4vci-v1",
+                                    data: JSON.parse(offerJson)
+                                }
+                            ]
+                        }
+                    });
+                } catch (err) {
+                    alert(err);
+                }
+            };
+            buttonPara.appendChild(credentialButton);
             let credentialPara = document.createElement("p")
             offers.appendChild(credentialPara);
             let credentialLink = document.createElement("a")

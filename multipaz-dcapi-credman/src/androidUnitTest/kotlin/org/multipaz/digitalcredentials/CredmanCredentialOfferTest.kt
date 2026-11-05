@@ -1,12 +1,12 @@
 package org.multipaz.digitalcredentials
 
-import io.ktor.http.Url
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -28,7 +28,7 @@ class CredmanCredentialOfferTest {
     """.trimIndent())
 
     @Test
-    fun findsOfferForSupportedProtocol() {
+    fun findsOffer() {
         val request = json("""
             {
               "requests": [
@@ -41,14 +41,6 @@ class CredmanCredentialOfferTest {
             CredmanCredentialOffer(protocol = "openid4vci-v1", offer = offer),
             CredmanCredentialOffer.fromRequest(request)
         )
-    }
-
-    @Test
-    fun acceptsAllProtocolVariants() {
-        for (protocol in CredmanCredentialOffer.SUPPORTED_PROTOCOLS) {
-            val request = json("""{"requests": [{"protocol": "$protocol", "data": $offer}]}""")
-            assertEquals(protocol, CredmanCredentialOffer.fromRequest(request)?.protocol)
-        }
     }
 
     @Test
@@ -69,41 +61,37 @@ class CredmanCredentialOfferTest {
             }
         """.trimIndent())
         assertNull(CredmanCredentialOffer.fromRequest(request))
-    }
-
-    @Test
-    fun noOfferWithoutSupportedProtocol() {
-        assertNull(CredmanCredentialOffer.fromRequest(json("""{"requests": [{"protocol": "foo", "data": $offer}]}""")))
         assertNull(CredmanCredentialOffer.fromRequest(json("""{"requests": "not an array"}""")))
         assertNull(CredmanCredentialOffer.fromRequest(json("""{}""")))
     }
 
     @Test
-    fun offerUriContainsOffer() {
-        val uri = CredmanCredentialOffer(protocol = "openid4vci-v1", offer = offer).offerUri
-        val url = Url(uri)
-        assertEquals("openid-credential-offer", url.protocol.name)
-        assertEquals(offer, json(url.parameters["credential_offer"]!!))
-    }
-
-    @Test
     fun responseEchoesProtocol() {
         assertEquals(
-            json("""{"protocol": "openid4vci", "data": {}}"""),
-            CredmanCredentialOffer(protocol = "openid4vci", offer = offer).buildResponse()
+            json("""{"protocol": "openid4vci-v1", "data": {}}"""),
+            CredmanCredentialOffer(protocol = "openid4vci-v1", offer = offer).buildResponse()
         )
     }
 
     @Test
     fun creationOptions() {
-        val options = Cbor.decode(buildCredmanCreationOptions("Wallet", "Save to Wallet", byteArrayOf(1, 2, 3)))
+        val options = Cbor.decode(
+            buildCredmanCreationOptions(
+                title = "Wallet",
+                subtitle = "Save to Wallet",
+                icon = byteArrayOf(1, 2, 3),
+                protocols = setOf("openid4vci-v1"),
+            )
+        )
         assertEquals(Tstr("Wallet"), options["title"])
         assertEquals(Tstr("Save to Wallet"), options["subtitle"])
         assertEquals(Bstr(byteArrayOf(1, 2, 3)), options["icon"])
+        assertEquals(buildCborArray { add("openid4vci-v1") }, options["protocols"])
 
-        val minimal = Cbor.decode(buildCredmanCreationOptions("Wallet", null, null))
+        val minimal = Cbor.decode(buildCredmanCreationOptions("Wallet", null, null, emptySet()))
         assertEquals(Tstr("Wallet"), minimal["title"])
         assertNull(minimal.getOrNull("subtitle"))
         assertNull(minimal.getOrNull("icon"))
+        assertEquals(buildCborArray {}, minimal["protocols"])
     }
 }
