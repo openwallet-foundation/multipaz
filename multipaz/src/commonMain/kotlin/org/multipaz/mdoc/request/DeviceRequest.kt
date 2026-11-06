@@ -197,9 +197,9 @@ data class DeviceRequest private constructor(
 
     /**
      * Compares two [DeviceRequest] instances and checks if they are similar in structure,
-     * including signing structure (protected headers and unprotected header keys), ignoring
-     * session-transcript-dependent signatures and ephemeral differences (such as certificate
-     * chains when the reader uses single-use keys).
+     * including signing structure (protected headers, unprotected headers, and certificate
+     * chain except for single-use leaf certificate rotation under the same CA), ignoring
+     * session-transcript-dependent signatures.
      *
      * This is used to check if two requests from different sessions (either 18013-5 proximity
      * or 18013-7 Annex A or C) are the same.
@@ -220,8 +220,68 @@ data class DeviceRequest private constructor(
         for (i in readerAuthAll_.indices) {
             val auth1 = readerAuthAll_[i]
             val auth2 = otherDeviceRequest.readerAuthAll_[i]
-            if (auth1.protectedHeaders != auth2.protectedHeaders) return false
-            if (auth1.unprotectedHeaders.keys != auth2.unprotectedHeaders.keys) return false
+            if (!auth1.isReaderAuthStructurallyEquivalent(auth2)) return false
+        }
+        return true
+    }
+
+    internal suspend fun isSameAuthenticatedReader(
+        otherDeviceRequest: DeviceRequest,
+        source: PresentmentSource,
+    ): Boolean {
+        if (!isStructurallyEquivalent(otherDeviceRequest)) {
+            return false
+        }
+        suspend fun checkChainPair(
+            chain1: X509CertChain?,
+            chain2: X509CertChain?,
+        ): Boolean {
+            if (chain1 == chain2) {
+                return true
+            }
+            if (chain1 == null || chain2 == null) {
+                return false
+            }
+            if (chain1.certificates.size > 1) {
+                try {
+                    chain1.validate()
+                    chain2.validate()
+                } catch (_: Exception) {
+                    return false
+                }
+            }
+            val trust1 = source.resolveTrust(
+                Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(certChain = chain1)))
+            )
+            val trust2 = source.resolveTrust(
+                Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(certChain = chain2)))
+            )
+            if ((trust1 != null) != (trust2 != null)) {
+                return false
+            }
+            if (trust1 != null && trust2 != null && trust1.trustMetadata != trust2.trustMetadata) {
+                return false
+            }
+            if (chain1.certificates.size <= 1 && trust1 == null) {
+                return false
+            }
+            return true
+        }
+
+        for (i in docRequests.indices) {
+            if (!checkChainPair(docRequests[i].readerAuthCertChain, otherDeviceRequest.docRequests[i].readerAuthCertChain)) {
+                return false
+            }
+        }
+        val x5chainLabel = Cose.COSE_LABEL_X5CHAIN.toCoseLabel
+        for (i in readerAuthAll_.indices) {
+            val chain1 = (readerAuthAll_[i].protectedHeaders[x5chainLabel]
+                ?: readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
+            val chain2 = (otherDeviceRequest.readerAuthAll_[i].protectedHeaders[x5chainLabel]
+                ?: otherDeviceRequest.readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
+            if (!checkChainPair(chain1, chain2)) {
+                return false
+            }
         }
         return true
     }

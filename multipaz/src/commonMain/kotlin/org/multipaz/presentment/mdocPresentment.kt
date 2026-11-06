@@ -287,12 +287,14 @@ suspend fun mdocPresentmentGenerateResponse(
         ) {
         for (match in selection.matches) {
             match.source as PresentmentCredentialMatchSourceIso18013
-            val zkRequested = match.source.docRequest.docRequestInfo?.zkRequest != null
+            val docRequest = deviceRequest.docRequests.getOrNull(match.source.docRequest.docRequestId)
+                ?: match.source.docRequest
+            val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
             var zkSystemMatch: ZkSystem? = null
             var zkSystemSpec: ZkSystemSpec? = null
             if (zkRequested) {
-                val requesterSupportedZkSpecs = match.source.docRequest.docRequestInfo.zkRequest.systemSpecs
+                val requesterSupportedZkSpecs = docRequest.docRequestInfo.zkRequest.systemSpecs
                 val zkSystemRepository = source.zkSystemRepository
                 if (zkSystemRepository != null) {
                     // Find the first ZK System that the requester supports and matches the document
@@ -319,7 +321,7 @@ suspend fun mdocPresentmentGenerateResponse(
             }
 
             // The session transcript to use depends on whether the response is to be encrypted
-            val sessionTranscriptToUse = match.source.docRequest.docRequestInfo?.docResponseEncryption?.let {
+            val sessionTranscriptToUse = docRequest.docRequestInfo?.docResponseEncryption?.let {
                 buildCborArray {
                     add(sessionTranscript.asArray[0])
                     add(Tagged(
@@ -350,19 +352,19 @@ suspend fun mdocPresentmentGenerateResponse(
                             document = document,
                             sessionTranscript = sessionTranscriptToUse
                         )
-                        match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                        docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = match.source.docRequest.docRequestId
+                                docRequestId = docRequest.docRequestId
                             ) {
                                 addZkDocument(zkDocument)
                             }
                         } ?: addZkDocument(zkDocument)
                     } else {
-                        match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                        docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = match.source.docRequest.docRequestId
+                                docRequestId = docRequest.docRequestId
                             ) {
                                 addDocument(document)
                             }
@@ -390,13 +392,13 @@ suspend fun mdocPresentmentGenerateResponse(
                                 )
                             )
                         ).toBase64Url()
-                    } else if (match.source.docRequest.readerAuth != null) {
+                    } else if (docRequest.readerAuth != null) {
                         Crypto.digest(
                             algorithm = Algorithm.SHA256,
                             message = Cbor.encode(
                                 Tagged(
                                     tagNumber = Tagged.ENCODED_CBOR,
-                                    taggedItem = Bstr(Cbor.encode(match.source.docRequest.readerAuth!!.toDataItem()))
+                                    taggedItem = Bstr(Cbor.encode(docRequest.readerAuth!!.toDataItem()))
                                 )
                             )
                         ).toBase64Url()
@@ -409,7 +411,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         check(requestedClaim.namespaceName == "_") {
                             "Expected _ for namespace, got ${requestedClaim.namespaceName}"
                         }
-                        val path = match.source.docRequest.docRequestInfo?.dataElementIdentifierMapping[requestedClaim.dataElementName]
+                        val path = docRequest.docRequestInfo?.dataElementIdentifierMapping[requestedClaim.dataElementName]
                         check(path != null) {
                             "No path for data element ${requestedClaim.dataElementName}"
                         }
@@ -419,7 +421,7 @@ suspend fun mdocPresentmentGenerateResponse(
                     val transactionResponse = processTransactions(
                         credential = match.credential,
                         transactionData = match.transactionData,
-                        docRequestId = match.source.docRequest.docRequestId,
+                        docRequestId = docRequest.docRequestId,
                         transactionUserInput = match.transactionUserInput
                     )
                     val sdJwtKb = filteredSdJwtVc.present(
@@ -443,10 +445,10 @@ suspend fun mdocPresentmentGenerateResponse(
                         docFormat = "dc+sd-jwt",
                         data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
                     )
-                    match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                    docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                         addEncryptedDocuments(
                             encryptionParameters = encryptionParameters,
-                            docRequestId = match.source.docRequest.docRequestId
+                            docRequestId = docRequest.docRequestId
                         ) {
                             addOtherDocument(otherDocument)
                         }

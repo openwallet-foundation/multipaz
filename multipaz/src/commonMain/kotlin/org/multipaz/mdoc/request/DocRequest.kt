@@ -79,8 +79,7 @@ data class DocRequest internal constructor(
         if (docRequestInfo != otherDocRequest.docRequestInfo) return false
         if ((readerAuth_ != null) != (otherDocRequest.readerAuth_ != null)) return false
         if (readerAuth_ != null && otherDocRequest.readerAuth_ != null) {
-            if (readerAuth_.protectedHeaders != otherDocRequest.readerAuth_.protectedHeaders) return false
-            if (readerAuth_.unprotectedHeaders.keys != otherDocRequest.readerAuth_.unprotectedHeaders.keys) return false
+            if (!readerAuth_.isReaderAuthStructurallyEquivalent(otherDocRequest.readerAuth_)) return false
         }
         return true
     }
@@ -175,4 +174,33 @@ data class DocRequest internal constructor(
             )
         }
     }
+}
+
+internal fun CoseSign1.isReaderAuthStructurallyEquivalent(other: CoseSign1): Boolean {
+    val x5chainLabel = Cose.COSE_LABEL_X5CHAIN.toCoseLabel
+    if (protectedHeaders.minus(x5chainLabel) != other.protectedHeaders.minus(x5chainLabel)) return false
+    if (unprotectedHeaders.minus(x5chainLabel) != other.unprotectedHeaders.minus(x5chainLabel)) return false
+    if ((x5chainLabel in protectedHeaders) != (x5chainLabel in other.protectedHeaders)) return false
+    if ((x5chainLabel in unprotectedHeaders) != (x5chainLabel in other.unprotectedHeaders)) return false
+
+    val certChain1 = (protectedHeaders[x5chainLabel] ?: unprotectedHeaders[x5chainLabel])?.asX509CertChain
+    val certChain2 = (other.protectedHeaders[x5chainLabel] ?: other.unprotectedHeaders[x5chainLabel])?.asX509CertChain
+    if ((certChain1 != null) != (certChain2 != null)) return false
+    if (certChain1 != null && certChain2 != null) {
+        val certs1 = certChain1.certificates
+        val certs2 = certChain2.certificates
+        if (certs1.size != certs2.size || certs1.isEmpty()) return false
+        if (certs1.drop(1) != certs2.drop(1)) return false
+        val leaf1 = certs1[0]
+        val leaf2 = certs2[0]
+        if (leaf1 != leaf2) {
+            // Single-use leaf keys must still be issued by the same CA (not self-signed)
+            // and identify the same reader subject.
+            if (leaf1.subject == leaf1.issuer || leaf2.subject == leaf2.issuer) return false
+            if (leaf1.issuer != leaf2.issuer) return false
+            if (leaf1.subject != leaf2.subject) return false
+            if (!leaf1.authorityKeyIdentifier.contentEquals(leaf2.authorityKeyIdentifier)) return false
+        }
+    }
+    return true
 }

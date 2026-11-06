@@ -179,49 +179,62 @@ private class Iso18013PresentmentSession(
         }
     }
 
-    private fun updateSessionForLatestEngagement(currentParams: EngagementParams) {
+    private suspend fun updateSessionForLatestEngagement(
+        currentParams: EngagementParams,
+        currentDeviceRequest: DeviceRequest,
+    ): DeviceRequest {
         val latestParams = engagementParams.value
-        if (latestParams != currentParams) {
-            if (latestParams.eDeviceKey !== currentParams.eDeviceKey) {
-                currentParams.eDeviceKey.close()
-            }
-            val latestEDeviceKey = latestParams.eDeviceKey
-            val latestDeviceEngagement = latestParams.deviceEngagement
-            val latestHandover = latestParams.handover
-            val matchingLatestEReaderKey = latestParams.eReaderKey?.takeIf { it.curve == latestEDeviceKey.curve }
-            val latestEReaderKey = matchingLatestEReaderKey ?: activeEReaderKey!!.publicKey
-            val encodedCoseKeyToUse = matchingLatestEReaderKey?.let { Cbor.encode(it.toCoseKey().toDataItem()) }
-                ?: activeEReaderKey!!.encodedCoseKey
-            activeEReaderKey = EReaderKey(latestEReaderKey, encodedCoseKeyToUse)
-
-            sessionTranscript = buildCborArray {
-                add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(latestDeviceEngagement))))
-                add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCoseKeyToUse)))
-                add(latestHandover)
-            }
-            lastSessionTranscript = sessionTranscript
-            sessionEncryption?.close()
-            sessionEncryption = SessionEncryption(
-                role = MdocRole.MDOC,
-                eSelfKey = latestEDeviceKey.duplicate(),
-                remotePublicKey = latestEReaderKey,
-                encodedSessionTranscript = Cbor.encode(sessionTranscript),
-                insertSequenceNumbers = insertSequenceNumbers
-            ).apply {
-                if (insertSequenceNumbers) {
-                    setEncryptionCounters(
-                        decryptedCounter = 2,
-                        encryptedCounter = 1,
-                        nextSequenceNumber = 1
-                    )
-                } else {
-                    setEncryptionCounters(
-                        decryptedCounter = 2,
-                        encryptedCounter = 1
-                    )
-                }
-            }
+        val retapMessage = (transport as? NfcCceTransportMdoc)?.consumeLastRetapMessage()
+        if (latestParams == currentParams && retapMessage == null) {
+            return currentDeviceRequest
         }
+        if (latestParams.eDeviceKey !== currentParams.eDeviceKey) {
+            currentParams.eDeviceKey.close()
+        }
+        val latestEDeviceKey = latestParams.eDeviceKey
+        val latestDeviceEngagement = latestParams.deviceEngagement
+        val latestHandover = latestParams.handover
+        val matchingLatestEReaderKey = latestParams.eReaderKey?.takeIf { it.curve == latestEDeviceKey.curve }
+        val resolvedEReaderKey = matchingLatestEReaderKey?.let {
+            EReaderKey(it, Cbor.encode(it.toCoseKey().toDataItem()))
+        } ?: retapMessage?.let {
+            SessionEncryption.getEReaderKey(it.toByteArray())
+        } ?: activeEReaderKey!!
+        activeEReaderKey = resolvedEReaderKey
+
+        sessionTranscript = buildCborArray {
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(latestDeviceEngagement))))
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(resolvedEReaderKey.encodedCoseKey)))
+            add(latestHandover)
+        }
+        lastSessionTranscript = sessionTranscript
+        sessionEncryption?.close()
+        val newSessionEncryption = SessionEncryption(
+            role = MdocRole.MDOC,
+            eSelfKey = latestEDeviceKey.duplicate(),
+            remotePublicKey = resolvedEReaderKey.publicKey,
+            encodedSessionTranscript = Cbor.encode(sessionTranscript),
+            insertSequenceNumbers = insertSequenceNumbers
+        )
+        sessionEncryption = newSessionEncryption
+
+        if (retapMessage == null) {
+            throw IllegalStateException("Expected SessionEstablishment message on NFC re-tap")
+        }
+        val (encodedRetapRequest, status) = newSessionEncryption.decryptMessage(retapMessage.toByteArray())
+        if (status == Constants.SESSION_DATA_STATUS_SESSION_TERMINATION || encodedRetapRequest == null) {
+            throw IllegalStateException("No DeviceRequest in message from reader on NFC re-tap")
+        }
+        val retapDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedRetapRequest))
+        lastDeviceRequest = retapDeviceRequest
+        retapDeviceRequest.verifyReaderAuthentication(sessionTranscript)
+        if (!retapDeviceRequest.isSameAuthenticatedReader(currentDeviceRequest, source)) {
+            throw IllegalStateException(
+                "DeviceRequest on NFC re-tap is not equivalent or not from the same authenticated reader"
+            )
+        }
+        onDeviceRequest(retapDeviceRequest)
+        return retapDeviceRequest
     }
 
     private suspend fun finalizeSession() {
@@ -403,7 +416,7 @@ private class Iso18013PresentmentSession(
                     }
                 }
 
-                updateSessionForLatestEngagement(currentParams)
+                val effectiveDeviceRequest = updateSessionForLatestEngagement(currentParams, deviceRequest)
                 val sessionTranscriptToUse = sessionTranscript
                 val sessionEncryptionToUse = sessionEncryption!!
 
@@ -411,7 +424,7 @@ private class Iso18013PresentmentSession(
                 val responseObject = withContext(keyUnlockDataProvider) {
                     mdocPresentmentGenerateResponse(
                         selection = selection,
-                        deviceRequest = deviceRequest,
+                        deviceRequest = effectiveDeviceRequest,
                         eReaderKey = activeEReaderKey!!.publicKey,
                         sessionTranscript = sessionTranscriptToUse,
                         source = source,
@@ -439,7 +452,7 @@ private class Iso18013PresentmentSession(
                 completedExchanges.add(
                     CompletedProximityExchange(
                         presentmentData = responseObject.eventData,
-                        request = deviceRequest.toDataItem(),
+                        request = effectiveDeviceRequest.toDataItem(),
                         response = responseObject.deviceResponse.toDataItem(),
                         sessionTranscript = sessionTranscriptToUse,
                     )

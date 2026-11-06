@@ -1382,6 +1382,7 @@ class MdocNfcServiceTest {
     private suspend fun prepareReaderSession(
         handoverResult: MdocReaderNfcHandoverResult,
         dataElements: List<String>,
+        readerKey: AsymmetricKey.X509Compatible? = null,
     ): ReaderSession {
         val eReaderKey = handoverResult.eReaderKey ?: Crypto.createEcPrivateKey(EcCurve.P256)
         val deviceEngagementItem = Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
@@ -1404,7 +1405,8 @@ class MdocNfcServiceTest {
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
                     DrivingLicense.MDL_NAMESPACE to dataElements.associateWith { false }
-                )
+                ),
+                readerKey = readerKey,
             )
         }
         val encryptedDeviceRequest = sessionEncryption.encryptMessage(
@@ -1679,6 +1681,152 @@ class MdocNfcServiceTest {
                     assertEquals(MdocTransport.State.CLOSED, killedHybridTransport.state.value)
                     assertNull(MdocNfcCceService.cceTransport)
 
+                    assertEquals(1, fixture.consentPromptCalls)
+                    assertEquals(1, fixture.biometricPromptCalls)
+                    readerTransport2.close()
+                } finally {
+                    service2.stop()
+                }
+            } finally {
+                fixture.close()
+            }
+        }
+    }
+
+    /**
+     * Verifies that in the NFCv2 double-tap flow, if the wallet is tapped on a different reader
+     * on the second tap even when requesting the exact same data elements, [MdocNfcCceService]
+     * rejects the request, terminates the session without sending credential data, and does not
+     * reuse the prior reader's consent.
+     */
+    @Test
+    fun nfcV2ServiceDoubleTapDifferentReaderKillsSession() = runTest {
+        withContext(Dispatchers.Default) {
+            val fixture = createDoubleTapFixture(this)
+            val presentmentModel = PresentmentModel()
+
+            val now = kotlin.time.Clock.System.now()
+            val validFrom = now - 1.days
+            val validUntil = now + 30.days
+
+            suspend fun createReaderSigningKey(
+                rootCn: String,
+                readerCn: String,
+                serial: Long,
+            ): AsymmetricKey.X509CertifiedExplicit {
+                val rootPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+                val rootCert = MdocUtil.generateReaderRootCertificate(
+                    readerRootKey = AsymmetricKey.anonymous(rootPriv, Algorithm.ES256),
+                    subject = X500Name.fromName("CN=$rootCn"),
+                    serial = ASN1Integer(serial),
+                    validFrom = validFrom,
+                    validUntil = validUntil,
+                    crlUrl = "https://example.com/crl",
+                )
+                val readerPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+                val readerCert = MdocUtil.generateReaderCertificate(
+                    readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootPriv),
+                    readerKey = readerPriv.publicKey,
+                    subject = X500Name.fromName("CN=$readerCn"),
+                    dnsName = null,
+                    serial = ASN1Integer(serial + 1),
+                    validFrom = validFrom,
+                    validUntil = validUntil,
+                )
+                return AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(readerCert, rootCert)),
+                    privateKey = readerPriv,
+                )
+            }
+
+            val readerKeyA = createReaderSigningKey("Reader A Root CA", "Reader A", 10L)
+            val readerKeyB = createReaderSigningKey("Reader B Root CA", "Reader B", 20L)
+
+            fun buildSettings() = MdocNfcCceService.Settings(
+                source = fixture.source,
+                promptModel = fixture.promptModel,
+                presentmentModel = presentmentModel,
+                launchUi = null,
+                sessionEncryptionCurve = EcCurve.P256,
+                onlyAllowNfc = true,
+                handoverPreferredOrder = emptyList(),
+                transportOptions = MdocTransportOptions(),
+            )
+
+            val tag1 = ServiceLoopbackIsoTag()
+            val service1 = createNfcV2Service(tag1) { buildSettings() }
+            tag1.service = service1
+            service1.start()
+
+            try {
+                // 1. Tap 1: Reader A requests given_name
+                val handover1 = mdocReaderNfcHandover(
+                    tag = tag1,
+                    negotiatedHandoverConnectionMethods = emptyList(),
+                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                )
+                assertNotNull(handover1)
+                val readerSession1 = prepareReaderSession(handover1, listOf("given_name"), readerKey = readerKeyA)
+                val readerTransport1 = createReaderTransport(tag1)
+                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
+
+                withTimeout(5.seconds) { fixture.consentPromptShown.await() }
+                assertEquals(PresentmentModel.State.WaitingForUserInput, presentmentModel.state.value)
+
+                // 2. Pull phone away from Reader A
+                tag1.deactivate(NfcDeactivationReason.LINK_LOSS)
+                service1.stop()
+                readerTransport1.close()
+                withTimeout(5.seconds) {
+                    presentmentModel.isNfcConnected.first { !it }
+                }
+
+                // 3. User approves consent and auth for Reader A while out of NFC field
+                fixture.approveConsent.complete(Unit)
+                withTimeout(5.seconds) { fixture.biometricPromptShown.await() }
+                fixture.approveBiometric.complete(Unit)
+                withTimeout(5.seconds) {
+                    presentmentModel.state.first { it == PresentmentModel.State.Sending }
+                }
+
+                // 4. Tap 2 on recreated service2: DIFFERENT Reader B requests the exact same dataElement (given_name)
+                val tag2 = ServiceLoopbackIsoTag()
+                val service2 = createNfcV2Service(tag2) { buildSettings() }
+                tag2.service = service2
+                service2.start()
+
+                try {
+                    val handover2 = mdocReaderNfcHandover(
+                        tag = tag2,
+                        negotiatedHandoverConnectionMethods = emptyList(),
+                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                    )
+                    assertNotNull(handover2)
+                    val readerSession2 = prepareReaderSession(handover2, listOf("given_name"), readerKey = readerKeyB)
+                    assertFalse(readerSession2.deviceRequest.isStructurallyEquivalent(readerSession1.deviceRequest))
+
+                    val readerTransport2 = createReaderTransport(tag2)
+                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
+
+                    // 5. Verify no credential data is returned to Reader B; Reader B receives session termination status
+                    val responseMessage = withTimeout(5.seconds) {
+                        readerTransport2.waitForMessage()
+                    }
+                    val (encodedDeviceResponse, status) = readerSession2.sessionEncryption.decryptMessage(responseMessage)
+                    assertNull(encodedDeviceResponse)
+                    assertEquals(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION, status)
+
+                    val completedState = withTimeout(5.seconds) {
+                        presentmentModel.state.first { it is PresentmentModel.State.Completed }
+                    } as PresentmentModel.State.Completed
+                    assertIs<PresentmentCanceledException>(completedState.error)
+
+                    MdocNfcPresentmentService.transactionJob?.let { job ->
+                        withTimeout(5.seconds) { job.join() }
+                    }
+                    assertNull(MdocNfcCceService.cceTransport)
                     assertEquals(1, fixture.consentPromptCalls)
                     assertEquals(1, fixture.biometricPromptCalls)
                     readerTransport2.close()

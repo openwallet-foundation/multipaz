@@ -123,7 +123,18 @@ class NfcCceTransportMdoc(
     val isNfcOnly: Boolean
         get() = !expectTransport && transport == null && closedSecondaryStats == null
 
-    private var responsePending = false
+    @Volatile
+    internal var isResponsePending = false
+        private set
+
+    @Volatile
+    private var lastRetapMessage: ByteString? = null
+
+    internal fun consumeLastRetapMessage(): ByteString? {
+        val msg = lastRetapMessage
+        lastRetapMessage = null
+        return msg
+    }
 
     @Volatile
     internal var numNfcReTaps: Int = 0
@@ -133,7 +144,7 @@ class NfcCceTransportMdoc(
      * Marks that a response is pending transmission for the current request.
      */
     fun markResponsePending() {
-        responsePending = true
+        isResponsePending = true
     }
 
     /**
@@ -152,11 +163,13 @@ class NfcCceTransportMdoc(
                 }
             }
         }
-        _isNfcConnected.value = true
-        if (responsePending) {
+        if (isResponsePending) {
+            lastRetapMessage = message
+            _isNfcConnected.value = true
             Logger.i(TAG, "Ignoring reader message of ${message.size} bytes received on re-tap while response is pending")
             return
         }
+        _isNfcConnected.value = true
         conveyMessage(message, true)
     }
 
@@ -390,7 +403,8 @@ class NfcCceTransportMdoc(
     }
 
     override suspend fun sendMessage(message: ByteArray) {
-        responsePending = false
+        isResponsePending = false
+        lastRetapMessage = null
         mutex.withLock {
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }

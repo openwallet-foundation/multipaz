@@ -286,8 +286,12 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
             },
             onMessageReceived = { message ->
                 if (cceTransport?.isNfcOnly == true) {
-                    try {
-                        activeEngagementParamsFlow?.value?.let { current ->
+                    val current = activeEngagementParamsFlow?.value
+                    if (current != null) {
+                        val currentActiveRequest = activeDeviceRequest
+                        val isWaitingForRetapResponse =
+                            currentActiveRequest != null && cceTransport?.isResponsePending == true
+                        try {
                             val readerPublicKey = current.eReaderKey
                                 ?: SessionEncryption.getEReaderKey(message.toByteArray()).publicKey
                             val updatedParams = if (current.eReaderKey == null) {
@@ -297,7 +301,6 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                             }
                             activeEngagementParamsFlow?.value = updatedParams
 
-                            val currentActiveRequest = activeDeviceRequest
                             if (currentActiveRequest != null) {
                                 val sessionTranscript = buildCborArray {
                                     add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(updatedParams.deviceEngagement))))
@@ -314,10 +317,11 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                     val (encodedDeviceRequest, _) = sessionEncryption.decryptMessage(message.toByteArray())
                                     if (encodedDeviceRequest != null) {
                                         val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
-                                        if (!newDeviceRequest.isStructurallyEquivalent(currentActiveRequest)) {
+                                        newDeviceRequest.verifyReaderAuthentication(sessionTranscript)
+                                        if (!newDeviceRequest.isSameAuthenticatedReader(currentActiveRequest, settings.source)) {
                                             Logger.iCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
                                             Logger.iCbor(TAG, "New request", newDeviceRequest.toDataItem())
-                                            Logger.w(TAG, "Incoming DeviceRequest is NOT structurally equivalent to active request. Killing old session.")
+                                            Logger.w(TAG, "Incoming DeviceRequest is NOT equivalent to active request. Killing old session.")
                                             transactionJob?.cancel()
                                             activeDeviceRequest = null
                                             cceTransport = null
@@ -332,13 +336,46 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                             return@MdocNfcCceEngagementHelper
                                         } else {
                                             Logger.i(TAG, "Incoming DeviceRequest IS structurally equivalent to active request.")
+                                            activeDeviceRequest = newDeviceRequest
                                         }
+                                    } else if (isWaitingForRetapResponse) {
+                                        Logger.w(TAG, "Incoming message on re-tap contained no DeviceRequest. Killing old session.")
+                                        transactionJob?.cancel()
+                                        activeDeviceRequest = null
+                                        cceTransport = null
+                                        activeEngagement?.sendMessage(
+                                            ByteString(
+                                                sessionEncryption.encryptMessage(
+                                                    messagePlaintext = null,
+                                                    statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+                                                )
+                                            )
+                                        )
+                                        return@MdocNfcCceEngagementHelper
                                     }
                                 }
                             }
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            if (isWaitingForRetapResponse) {
+                                Logger.w(TAG, "Failed to decrypt or verify DeviceRequest on re-tap. Killing old session.", e)
+                                transactionJob?.cancel()
+                                activeDeviceRequest = null
+                                cceTransport = null
+                                activeEngagement?.sendMessage(
+                                    ByteString(
+                                        Cbor.encode(
+                                            buildCborMap {
+                                                put("status", Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                                                put("seq", 1)
+                                            }
+                                        )
+                                    )
+                                )
+                                return@MdocNfcCceEngagementHelper
+                            }
+                            // Not a SessionEstablishment message or decryption failed, ignore
                         }
-                    } catch (_: Exception) {
-                        // Not a SessionEstablishment message or decryption failed, ignore
                     }
                 }
                 cceTransport?.onMessageReceivedViaNfc(message)
