@@ -1,7 +1,6 @@
 package org.multipaz.mdoc.response
 
 import kotlinx.io.bytestring.ByteString
-import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -35,7 +34,15 @@ data class OtherDocument(
      */
     lateinit var transactionData: List<TransactionData<*>>
 
-    internal var expectedAudience: String? = null
+    private var _expectedAudience: String? = null
+
+    /**
+     * The expected audience value that was verified against the Key Binding JWT's `aud` claim,
+     * or `null` if [DeviceResponse.verify] (or [EncryptedDocuments.decrypt]) has not been called
+     * yet or if [docFormat] is not `"dc+sd-jwt"`.
+     */
+    val expectedAudience: String?
+        get() = _expectedAudience
 
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
@@ -47,8 +54,9 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        expectedAudience: String? = null,
+        expectedAudience: String?,
     ) {
+        _expectedAudience = null
         when (docFormat) {
             "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
@@ -65,7 +73,7 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        expectedAudience: String? = null,
+        expectedAudience: String?,
     ) {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())
 
@@ -84,7 +92,7 @@ data class OtherDocument(
                 expectedNonce == nonce
             },
             checkAudience = { audience ->
-                expectedAudience == null || expectedAudience == audience
+                expectedAudience != null && expectedAudience == audience
             },
             checkCreationTime = { creationTime ->
                 val drift = (atTime - creationTime).absoluteValue
@@ -98,11 +106,11 @@ data class OtherDocument(
         if (atTime < validFrom) {
             throw IllegalStateException("SD-JWT is not yet valid")
         }
-        if (atTime > validUntil) {
+        if (atTime >= validUntil) {
             throw IllegalStateException("SD-JWT is not valid anymore")
         }
         this.transactionData = transactionData
-        this.expectedAudience = expectedAudience ?: sdJwtKb.jwtBody["aud"]?.jsonPrimitive?.content
+        this._expectedAudience = expectedAudience
     }
 
     companion object {

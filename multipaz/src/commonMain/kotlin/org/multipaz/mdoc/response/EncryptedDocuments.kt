@@ -2,6 +2,7 @@ package org.multipaz.mdoc.response
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -15,10 +16,13 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -48,10 +52,12 @@ data class EncryptedDocuments internal constructor(
      * integrity of the returned documents.
      *
      * @param recipientPrivateKey the private key used for decryption.
-     * @param encryptionParameters the same [EncryptionParameters] as transferred in the [org.multipaz.mdoc.request.DeviceRequest].
+     * @param encryptionParameters the same [EncryptionParameters] as transferred in the [DeviceRequest].
      * @param sessionTranscript the session transcript.
      * @param transactionDataList list of transaction for each document in this [EncryptedDocuments]
      * @param atTime the point in time for validating whether returned documents are valid.
+     * @param deviceRequest the [DeviceRequest] to which this response is given; required when
+     *   decrypting `dc+sd-jwt` documents in [EncryptedDocumentsPlaintext.otherDocuments].
      * @return a [EncryptedDocumentsPlaintext].
      */
     suspend fun decrypt(
@@ -59,7 +65,8 @@ data class EncryptedDocuments internal constructor(
         encryptionParameters: EncryptionParameters,
         sessionTranscript: DataItem,
         transactionDataList: List<List<TransactionData<*>>> = emptyList(),
-        atTime: Instant = Clock.System.now()
+        atTime: Instant = Clock.System.now(),
+        deviceRequest: DeviceRequest? = null,
     ): EncryptedDocumentsPlaintext {
         val encSessionTranscript = buildCborArray {
             add(sessionTranscript.asArray[0])
@@ -81,8 +88,30 @@ data class EncryptedDocuments internal constructor(
         )
         val encDocsPt = EncryptedDocumentsPlaintext.fromDataItem(Cbor.decode(plaintext))
 
+        val docRequest = if (deviceRequest != null) {
+            val req = deviceRequest.docRequests.getOrNull(docRequestId)
+                ?: throw IllegalStateException("Invalid docRequestId $docRequestId for DeviceRequest")
+            if (deviceRequest.docRequests.any { it.docRequestInfo?.docResponseEncryption != null } &&
+                req.docRequestInfo?.docResponseEncryption != encryptionParameters
+            ) {
+                throw IllegalStateException("EncryptionParameters do not match DocRequest at index $docRequestId")
+            }
+            req
+        } else {
+            null
+        }
         encDocsPt.documents.forEachIndexed { index, document ->
             try {
+                if (docRequest != null) {
+                    if ((docRequest.docRequestInfo?.docFormat ?: "mso_mdoc") != "mso_mdoc") {
+                        throw IllegalStateException("DocRequest at index $docRequestId is not an mso_mdoc request")
+                    }
+                    if (document.docType != docRequest.docType) {
+                        throw IllegalStateException(
+                            "Document docType '${document.docType}' does not match DocRequest docType '${docRequest.docType}'"
+                        )
+                    }
+                }
                 val transactionData = if (index < transactionDataList.size) {
                     transactionDataList[index]
                 } else {
@@ -94,14 +123,34 @@ data class EncryptedDocuments internal constructor(
                 throw IllegalStateException("Error verifying document $index in decrypted DeviceResponse", e)
             }
         }
+        val expectedAudience = deviceRequest?.getExpectedOtherDocumentAudience(docRequest)
         encDocsPt.otherDocuments.forEachIndexed { index, document ->
             try {
+                if (docRequest != null && document.docFormat == "dc+sd-jwt") {
+                    if (docRequest.docRequestInfo?.docFormat != "dc+sd-jwt") {
+                        throw IllegalStateException("DocRequest at index $docRequestId is not a dc+sd-jwt request")
+                    }
+                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                        document.data.toByteArray().zlibInflate().decodeToString()
+                    )
+                    val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
+                        ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
+                    if (vct != docRequest.docType &&
+                        deviceRequest?.docRequests?.any {
+                            it.docRequestInfo?.docFormat == "dc+sd-jwt" && it.docType == vct
+                        } == true
+                    ) {
+                        throw IllegalStateException(
+                            "OtherDocument vct '$vct' does not match DocRequest docType '${docRequest.docType}'"
+                        )
+                    }
+                }
                 val transactionData = if (index < transactionDataList.size) {
                     transactionDataList[index]
                 } else {
                     emptyList()
                 }
-                document.verify(encSessionTranscript, null, transactionData, atTime)
+                document.verify(encSessionTranscript, null, transactionData, atTime, expectedAudience)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying otherDocument $index in decrypted DeviceResponse", e)

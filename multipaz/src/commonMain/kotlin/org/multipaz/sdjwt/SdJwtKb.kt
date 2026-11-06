@@ -18,6 +18,7 @@ import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toNumericDateInstant
 
 
 /**
@@ -96,7 +97,8 @@ class SdJwtKb private constructor(
         if (!checkAudience(jwtBody["aud"]!!.jsonPrimitive.content)) {
             throw IllegalStateException("Failed verification of audience")
         }
-        val creationTime = Instant.fromEpochSeconds(jwtBody["iat"]!!.jsonPrimitive.content.toLong())
+        val creationTime = jwtBody["iat"]?.toNumericDateInstant("iat")
+            ?: throw IllegalStateException("Missing 'iat' claim in KB-JWT")
         if (!checkCreationTime(creationTime)) {
             throw IllegalStateException("Failed verification of creationTime")
         }

@@ -3,19 +3,13 @@ package org.multipaz.mdoc.response
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
-import org.multipaz.cbor.Bstr
-import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborMap
-import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cose.CoseSign1
-import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
@@ -30,7 +24,6 @@ import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -108,10 +101,10 @@ data class DeviceResponse internal constructor(
      *
      * @param sessionTranscript the session transcript to use.
      * @param eReaderKey the ephemeral reader key or `null` if not using session encryption.
-     * @param deviceRequest optional request to which this response is given; optional if no
-     *   transaction data was sent in the request
+     * @param deviceRequest the request to which this response is given; required when verifying
+     *   `dc+sd-jwt` documents in [otherDocuments] or when transaction data was sent in the request.
      * @param documentTypeRepository repository that contains all known transaction types; must
-     *   be given if [deviceRequest] is given
+     *   be given if [deviceRequest] is given and contains transaction data.
      * @param atTime the point in time for validating whether returned documents are valid.
      * @param rejectIfValidUntilAfterNotAfter if true, rejects the MSO if its `validUntil` date exceeds
      *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
@@ -128,20 +121,31 @@ data class DeviceResponse internal constructor(
         rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         numTimesVerifyCalled += 1
+        if (deviceRequest != null &&
+            deviceRequest.docRequests.any { it.hasTransactionData() } &&
+            documentTypeRepository == null
+        ) {
+            throw IllegalStateException(
+                "documentTypeRepository is required when DeviceRequest contains transaction data"
+            )
+        }
         documents_.forEach { document ->
             val transactionData = if (deviceRequest == null) {
                 emptyList()
             } else {
-                val docRequestId = if (deviceRequest.docRequests.size == 1) {
-                    0
-                } else {
-                    findDocRequestId(documentTypeRepository, document)
-                }
+                val docRequestId = findDocRequestId(deviceRequest, documentTypeRepository, document)
                 if (docRequestId < 0) {
+                    if (deviceRequest.docRequests.any { it.hasTransactionData() }) {
+                        throw IllegalStateException(
+                            "Cannot resolve DocRequest for document with docType '${document.docType}'"
+                        )
+                    }
+                    emptyList()
+                } else if (documentTypeRepository == null) {
                     emptyList()
                 } else {
                     val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
-                        documentTypeRepository!!
+                        documentTypeRepository
                     )
                     val returnedTxIdentifiers = document.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys
                     if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
@@ -166,21 +170,22 @@ data class DeviceResponse internal constructor(
         otherDocuments.forEach { otherDocument ->
             val docRequestId = if (deviceRequest == null) {
                 -1
-            } else if (deviceRequest.docRequests.size == 1) {
-                0
             } else {
-                findDocRequestId(documentTypeRepository, otherDocument)
+                findDocRequestId(deviceRequest, documentTypeRepository, otherDocument)
             }
-            val docRequest = if (deviceRequest != null && docRequestId >= 0) {
+            val docRequest = if (deviceRequest != null && docRequestId in deviceRequest.docRequests.indices) {
                 deviceRequest.docRequests[docRequestId]
             } else {
                 null
             }
-            val transactionData = if (docRequest == null) {
+            if (deviceRequest != null && docRequest == null && deviceRequest.docRequests.any { it.hasTransactionData() }) {
+                throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
+            }
+            val transactionData = if (docRequest == null || documentTypeRepository == null) {
                 emptyList()
             } else {
                 val allTx = docRequest.getTransactionData(
-                    documentTypeRepository!!
+                    documentTypeRepository
                 )
                 if (docRequest.docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
                     try {
@@ -195,36 +200,7 @@ data class DeviceResponse internal constructor(
                     allTx
                 }
             }
-            val expectedAudience = if (deviceRequest == null) {
-                null
-            } else if (deviceRequest.readerAuthAll_.isNotEmpty()) {
-                val listOfReaderAuthAll = buildCborArray {
-                    deviceRequest.readerAuthAll_.forEach {
-                        add(it.toDataItem())
-                    }
-                }
-                Crypto.digest(
-                    algorithm = Algorithm.SHA256,
-                    message = Cbor.encode(
-                        Tagged(
-                            tagNumber = Tagged.ENCODED_CBOR,
-                            taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
-                        )
-                    )
-                ).toBase64Url()
-            } else if (docRequest?.readerAuth_ != null) {
-                Crypto.digest(
-                    algorithm = Algorithm.SHA256,
-                    message = Cbor.encode(
-                        Tagged(
-                            tagNumber = Tagged.ENCODED_CBOR,
-                            taggedItem = Bstr(Cbor.encode(docRequest.readerAuth_.toDataItem()))
-                        )
-                    )
-                ).toBase64Url()
-            } else {
-                "none"
-            }
+            val expectedAudience = deviceRequest?.getExpectedOtherDocumentAudience(docRequest)
             otherDocument.verify(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
@@ -315,52 +291,141 @@ data class DeviceResponse internal constructor(
     }
 
     private fun findDocRequestId(
+        deviceRequest: DeviceRequest,
         documentTypeRepository: DocumentTypeRepository?,
         doc: MdocDocument
     ): Int {
-        if (documentTypeRepository == null) {
-            return -1
-        }
-        var docRequestId: ULong? = null
-        val data = doc.deviceNamespaces.data
-        for (transactionType in documentTypeRepository.transactionTypes) {
-            val transactionItem = data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.identifier) ?: continue
-            val transactionDocRequestId = transactionItem.getOrNull("docRequestId") as? Uint
-                ?: throw IllegalStateException(
-                    "'docRequestId' is missing or invalid for transaction '${transactionType.identifier}'")
-            if (docRequestId == null) {
-                docRequestId = transactionDocRequestId.value
-            } else if (docRequestId != transactionDocRequestId.value) {
-                throw IllegalStateException("inconsistent 'docRequestId' values")
+        if (documentTypeRepository != null) {
+            var docRequestId: ULong? = null
+            val presentTransactionIds = mutableListOf<String>()
+            val data = doc.deviceNamespaces.data
+            for (transactionType in documentTypeRepository.transactionTypes) {
+                val transactionItem =
+                    data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.identifier) ?: continue
+                presentTransactionIds.add(transactionType.identifier)
+                val transactionDocRequestId = transactionItem.getOrNull("docRequestId") as? Uint
+                    ?: throw IllegalStateException(
+                        "'docRequestId' is missing or invalid for transaction '${transactionType.identifier}'"
+                    )
+                if (docRequestId == null) {
+                    docRequestId = transactionDocRequestId.value
+                } else if (docRequestId != transactionDocRequestId.value) {
+                    throw IllegalStateException("inconsistent 'docRequestId' values")
+                }
+            }
+            if (docRequestId != null) {
+                val id = docRequestId.toInt()
+                if (docRequestId != id.toULong() || id !in deviceRequest.docRequests.indices) {
+                    throw IllegalStateException("Invalid 'docRequestId' value $docRequestId")
+                }
+                val req = deviceRequest.docRequests[id]
+                if ((req.docRequestInfo?.docFormat ?: "mso_mdoc") != "mso_mdoc" || req.docType != doc.docType) {
+                    throw IllegalStateException(
+                        "DocRequest at index $id does not match document with docType '${doc.docType}'"
+                    )
+                }
+                val requestedTxIds = req.getTransactionData(documentTypeRepository).map { it.type.identifier }.toSet()
+                for (txId in presentTransactionIds) {
+                    if (txId !in requestedTxIds) {
+                        throw IllegalStateException("Transaction '$txId' was not requested in DocRequest $id")
+                    }
+                }
+                return id
             }
         }
-        return docRequestId?.toInt() ?: -1
+        val matchingIndices = deviceRequest.docRequests.indices.filter { index ->
+            val req = deviceRequest.docRequests[index]
+            req.docType == doc.docType && (req.docRequestInfo?.docFormat ?: "mso_mdoc") == "mso_mdoc"
+        }
+        if (matchingIndices.size == 1) {
+            return matchingIndices.single()
+        }
+        if (matchingIndices.isNotEmpty() && matchingIndices.none { deviceRequest.docRequests[it].hasTransactionData() }) {
+            return matchingIndices.first()
+        }
+        return -1
     }
 
     private suspend fun findDocRequestId(
+        deviceRequest: DeviceRequest,
         documentTypeRepository: DocumentTypeRepository?,
         doc: OtherDocument
     ): Int {
-        if (documentTypeRepository == null || doc.docFormat != "dc+sd-jwt") {
+        if (doc.docFormat != "dc+sd-jwt") {
             return -1
         }
-        var docRequestId: Int? = null
-        val sdJwtBody =  SdJwtKb.fromCompactSerialization(
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(
             compactSerialization = doc.data.toByteArray().zlibInflate().decodeToString()
-        ).jwtBody
-        for (transactionType in documentTypeRepository.transactionTypes) {
-            val transactionResponse = sdJwtBody[transactionType.kbJwtResponseClaimName] ?: continue
-            val transactionDocRequestId =
-                ((transactionResponse as? JsonObject)?.get("doc_request_id") as? JsonPrimitive)?.intOrNull
-                    ?: throw IllegalStateException(
-                        "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'")
-            if (docRequestId == null) {
-                docRequestId = transactionDocRequestId
-            } else if(docRequestId != transactionDocRequestId) {
-                throw IllegalStateException("inconsistent 'doc_request_id' values")
+        )
+        val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content ?: return -1
+        if (documentTypeRepository != null) {
+            var docRequestId: Int? = null
+            val presentTransactionIds = mutableListOf<String>()
+            val sdJwtBody = sdJwtKb.jwtBody
+            for (transactionType in documentTypeRepository.transactionTypes) {
+                val transactionResponse = sdJwtBody[transactionType.kbJwtResponseClaimName] ?: continue
+                presentTransactionIds.add(transactionType.identifier)
+                val transactionDocRequestId =
+                    ((transactionResponse as? JsonObject)?.get("doc_request_id") as? JsonPrimitive)?.intOrNull
+                        ?: throw IllegalStateException(
+                            "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'"
+                        )
+                if (docRequestId == null) {
+                    docRequestId = transactionDocRequestId
+                } else if (docRequestId != transactionDocRequestId) {
+                    throw IllegalStateException("inconsistent 'doc_request_id' values")
+                }
+            }
+            if (docRequestId != null) {
+                if (docRequestId !in deviceRequest.docRequests.indices) {
+                    throw IllegalStateException("Invalid 'doc_request_id' value $docRequestId")
+                }
+                val req = deviceRequest.docRequests[docRequestId]
+                if (req.docRequestInfo?.docFormat != "dc+sd-jwt") {
+                    throw IllegalStateException("DocRequest at index $docRequestId is not a dc+sd-jwt request")
+                }
+                val requestedTxIds = req.getTransactionData(documentTypeRepository).map { it.type.identifier }.toSet()
+                for (txId in presentTransactionIds) {
+                    if (txId !in requestedTxIds) {
+                        throw IllegalStateException(
+                            "Transaction '$txId' was not requested in DocRequest $docRequestId"
+                        )
+                    }
+                }
+                if (vct != req.docType &&
+                    deviceRequest.docRequests.any {
+                        it.docRequestInfo?.docFormat == "dc+sd-jwt" && it.docType == vct
+                    }
+                ) {
+                    throw IllegalStateException(
+                        "OtherDocument vct '$vct' does not match DocRequest at index $docRequestId"
+                    )
+                }
+                return docRequestId
             }
         }
-        return docRequestId ?: -1
+        val sdJwtIndices = deviceRequest.docRequests.indices.filter { index ->
+            deviceRequest.docRequests[index].docRequestInfo?.docFormat == "dc+sd-jwt"
+        }
+        if (sdJwtIndices.isEmpty()) {
+            return -1
+        }
+        val vctMatchingIndices = sdJwtIndices.filter { index ->
+            deviceRequest.docRequests[index].docType == vct
+        }
+        val candidates = vctMatchingIndices.ifEmpty { sdJwtIndices }
+        if (candidates.size == 1) {
+            return candidates.single()
+        }
+        if (candidates.none { deviceRequest.docRequests[it].hasTransactionData() }) {
+            val audiences = candidates.map { index ->
+                deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[index])
+            }.distinct()
+            if (audiences.size == 1) {
+                return candidates.first()
+            }
+        }
+        return -1
     }
 
     companion object {

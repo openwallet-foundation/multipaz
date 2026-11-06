@@ -17,7 +17,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -43,6 +42,7 @@ import org.multipaz.sdjwt.DisclosureUtil.toClaimDisclosure
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toNumericDateInstant
 import kotlin.collections.iterator
 import kotlin.random.Random
 import kotlin.time.Duration
@@ -109,17 +109,17 @@ class SdJwt private constructor(
 
     /** The value of the `iat` claim in the issuer-signed JWT, if present. */
     val issuedAt: Instant? by lazy {
-        jwtBody["iat"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it, 0) }
+        jwtBody["iat"]?.toNumericDateInstant("iat")
     }
 
     /** The value of the `nbf` claim in the issuer-signed JWT, if present. */
     val validFrom: Instant? by lazy {
-        jwtBody["nbf"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it, 0) }
+        jwtBody["nbf"]?.toNumericDateInstant("nbf")
     }
 
     /** The value of the `exp` claim in the issuer-signed JWT, if present. */
     val validUntil: Instant? by lazy {
-        jwtBody["exp"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it, 0) }
+        jwtBody["exp"]?.toNumericDateInstant("exp")
     }
 
     /** The value of the `cnf` claim in the issuer-signed JWT, if present. */

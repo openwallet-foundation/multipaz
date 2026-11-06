@@ -9,9 +9,13 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -19,7 +23,9 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
@@ -32,9 +38,14 @@ import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
@@ -42,7 +53,10 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
+import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.EncryptionParameters
+import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
@@ -60,6 +74,8 @@ import org.multipaz.util.fromHex
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibDeflate
 import org.multipaz.util.zlibInflate
+import org.multipaz.verification.VerificationUtil
+import org.multipaz.webtoken.buildJwt
 import kotlin.experimental.xor
 import kotlin.random.Random
 import kotlin.test.BeforeTest
@@ -1141,6 +1157,23 @@ class DeviceResponseTest {
         assertEquals(0, drParsed.zkDocuments.size)
         assertEquals(1, drParsed.encryptedDocuments.size)
 
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+
         // Check that EncryptedDocuments.decrypt() verifies the decrypted documents
         assertEquals(
             "Failed verification of creationTime",
@@ -1149,7 +1182,8 @@ class DeviceResponseTest {
                     recipientPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
                     encryptionParameters = encryptionParameters,
                     sessionTranscript = sessionTranscript,
-                    atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC)
+                    atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
+                    deviceRequest = deviceRequest,
                 )
             }.cause!!.message
         )
@@ -1158,7 +1192,8 @@ class DeviceResponseTest {
             recipientPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
             encryptionParameters = encryptionParameters,
             sessionTranscript = sessionTranscript,
-            atTime = euPidTimeSigned
+            atTime = euPidTimeSigned,
+            deviceRequest = deviceRequest,
         )
         assertEquals(0, encDocs.documents.size)
         assertEquals(0, encDocs.zkDocuments.size)
@@ -1229,6 +1264,807 @@ class DeviceResponseTest {
         assertEquals(1, drParsed.otherDocuments.size)
         assertEquals("xyz123-abc", drParsed.otherDocuments[0].docFormat)
         assertContentEquals(byteArrayOf(1, 2, 3), drParsed.otherDocuments[0].data.toByteArray().zlibInflate())
+    }
+
+    private suspend fun arbitraryAudienceOtherDocument(
+        sessionTranscript: DataItem,
+        audience: String = "arbitrary-reader.example"
+    ): OtherDocument {
+        val taggedTranscript = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(Cbor.encode(sessionTranscript))
+        )
+        val sdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val presentation = sdJwt.present(
+            signingKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = euPidCredential.alias,
+                secureArea = euPidCredential.secureArea,
+                keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias),
+            ),
+            nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(taggedTranscript)).toBase64Url(),
+            audience = audience,
+            creationTime = euPidTimeSigned,
+        ).compactSerialization
+        return OtherDocument(
+            docFormat = "dc+sd-jwt",
+            data = ByteString(presentation.encodeToByteArray().zlibDeflate())
+        )
+    }
+
+    private suspend fun otherDocumentAudienceFixture(): Pair<DeviceResponse, DataItem> {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript)
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(otherDocument)
+        }
+        return Pair(DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(response.toDataItem()))), sessionTranscript)
+    }
+
+    @Test
+    fun otherDocumentArbitraryAudienceRejectedWithoutRequest() = runTest {
+        val (response, sessionTranscript) = otherDocumentAudienceFixture()
+        val error = assertFailsWith<IllegalStateException> {
+            response.verify(sessionTranscript = sessionTranscript, atTime = euPidTimeSigned)
+        }
+        assertEquals("Failed verification of audience", error.message)
+    }
+
+    private fun unsignedOtherDocumentRequest(sessionTranscript: DataItem) =
+        buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+
+    @Test
+    fun otherDocumentArbitraryAudienceRejectedWithRequest() = runTest {
+        val (response, sessionTranscript) = otherDocumentAudienceFixture()
+        val request = unsignedOtherDocumentRequest(sessionTranscript)
+        val error = assertFailsWith<IllegalStateException> {
+            response.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = request,
+                documentTypeRepository = DocumentTypeRepository(),
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals("Failed verification of audience", error.message)
+    }
+
+    @Test
+    fun sdJwtExpiredFloatExpIsRejected() = runTest {
+        provisionDocuments()
+        val original = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned - 2.days).epochSeconds)
+                put("exp", (euPidTimeSigned - 1.days).epochSeconds.toDouble() + 0.5)
+            }
+        )
+        assertEquals(
+            Instant.fromEpochMilliseconds((euPidTimeSigned - 1.days).toEpochMilliseconds() + 500),
+            sdJwt.validUntil
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifySdJwtPresentation(
+                compactSerialization = sdJwt.compactSerialization,
+                nonce = "unused",
+                documentTypeRepository = null,
+                transactionData = emptyList(),
+                now = euPidTimeSigned,
+                expectedAudience = null,
+                requireCryptographicHolderBinding = false
+            )
+        }
+        assertEquals("SD-JWT is not valid anymore", error.message)
+    }
+
+    @Test
+    fun verifyMdocDeviceResponseRejectsWithoutRequest() = runTest {
+        val (response, sessionTranscript) = otherDocumentAudienceFixture()
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifyMdocDeviceResponse(
+                now = euPidTimeSigned,
+                deviceResponse = response.toDataItem(),
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                documentTypeRepository = null,
+                zkSystemRepository = null,
+                request = null
+            )
+        }
+        assertEquals("Failed verification of audience", error.message)
+    }
+
+    @Test
+    fun verifyMdocDeviceResponseRejectsDifferentRequestedAudience() = runTest {
+        val (response, sessionTranscript) = otherDocumentAudienceFixture()
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifyMdocDeviceResponse(
+                now = euPidTimeSigned,
+                deviceResponse = response.toDataItem(),
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                documentTypeRepository = DocumentTypeRepository(),
+                zkSystemRepository = null,
+                request = unsignedOtherDocumentRequest(sessionTranscript)
+            )
+        }
+        assertEquals("Failed verification of audience", error.message)
+    }
+
+    @Test
+    fun encryptedOtherDocumentValidatesAudienceAgainstRequest() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
+        val encryptedSessionTranscript = buildCborArray {
+            add(sessionTranscript.asArray[0])
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
+            add(sessionTranscript.asArray[2])
+        }
+        val otherDocument = arbitraryAudienceOtherDocument(encryptedSessionTranscript)
+        val encryptedBuilder = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestId = 0
+        )
+        encryptedBuilder.addOtherDocument(otherDocument)
+        val encrypted = encryptedBuilder.build()
+        val request = unsignedOtherDocumentRequest(sessionTranscript)
+
+        val errorWithoutRequest = assertFailsWith<IllegalStateException> {
+            encrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals("Failed verification of audience", errorWithoutRequest.cause?.message)
+
+        val errorWithRequest = assertFailsWith<IllegalStateException> {
+            encrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = request
+            )
+        }
+        assertEquals("Failed verification of audience", errorWithRequest.cause?.message)
+    }
+
+    @Test
+    fun sdJwtFutureFloatNbfIsRejected() = runTest {
+        provisionDocuments()
+        val original = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned + 1.days).epochSeconds.toDouble() + 0.25)
+                put("exp", (euPidTimeSigned + 2.days).epochSeconds)
+            }
+        )
+        assertEquals(
+            Instant.fromEpochMilliseconds((euPidTimeSigned + 1.days).toEpochMilliseconds() + 250),
+            sdJwt.validFrom
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifySdJwtPresentation(
+                compactSerialization = sdJwt.compactSerialization,
+                nonce = "unused",
+                documentTypeRepository = null,
+                transactionData = emptyList(),
+                now = euPidTimeSigned,
+                expectedAudience = null,
+                requireCryptographicHolderBinding = false
+            )
+        }
+        assertEquals("SD-JWT is not yet valid", error.message)
+    }
+
+    @Test
+    fun sdJwtExpiredIntegerExpIsRejected() = runTest {
+        provisionDocuments()
+        val original = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned - 2.days).epochSeconds)
+                put("exp", (euPidTimeSigned - 1.days).epochSeconds)
+            }
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifySdJwtPresentation(
+                compactSerialization = sdJwt.compactSerialization,
+                nonce = "unused",
+                documentTypeRepository = null,
+                transactionData = emptyList(),
+                now = euPidTimeSigned,
+                expectedAudience = null,
+                requireCryptographicHolderBinding = false
+            )
+        }
+        assertEquals("SD-JWT is not valid anymore", error.message)
+    }
+
+    @Test
+    fun sdJwtFutureIntegerNbfIsRejected() = runTest {
+        provisionDocuments()
+        val original = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned + 1.days).epochSeconds)
+                put("exp", (euPidTimeSigned + 2.days).epochSeconds)
+            }
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifySdJwtPresentation(
+                compactSerialization = sdJwt.compactSerialization,
+                nonce = "unused",
+                documentTypeRepository = null,
+                transactionData = emptyList(),
+                now = euPidTimeSigned,
+                expectedAudience = null,
+                requireCryptographicHolderBinding = false
+            )
+        }
+        assertEquals("SD-JWT is not yet valid", error.message)
+    }
+
+    private object TestTxType : TransactionType<String>(
+        displayName = "Test Transaction",
+        identifier = "com.example.test_tx",
+        kbJwtResponseClaimName = "test_tx_response",
+    ) {
+        override fun serializeIso18013Request(payload: String): DataItem = buildCborMap {
+            put("nonce", payload)
+        }
+
+        override fun parseIso18013Request(dataItem: DataItem): String =
+            dataItem.asMap[Tstr("nonce")]!!.asTstr
+    }
+
+    @Test
+    fun verifyRejectsTransactionRequestWhenRepositoryIsNull() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(otherDocument)
+        }
+        val requestWithTx = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf(
+                    "_" to mapOf("sdjwtvc_given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    ),
+                    transactionData = TransactionsInfo(
+                        data = mapOf(
+                            TestTxType.identifier to TestTxType.serializeIso18013Request("tx-nonce")
+                        )
+                    )
+                )
+            )
+        }
+        val error = assertFailsWith<IllegalStateException> {
+            response.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = requestWithTx,
+                documentTypeRepository = null,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals(
+            "documentTypeRepository is required when DeviceRequest contains transaction data",
+            error.message
+        )
+    }
+
+    @Test
+    fun otherDocumentRejectsOutOfRangeDocRequestIdUnderReaderAuthAll() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.AnonymousExplicit(readerRootKey),
+            subject = X500Name.fromName("CN=Test Reader Root"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = euPidTimeValidityBegin,
+            validUntil = euPidTimeValidityEnd,
+            crlUrl = "https://verifier.example.com/crl"
+        )
+        val readerKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerRootCert)),
+                privateKey = readerRootKey
+            ),
+            readerKey = readerKeyPrivate.publicKey,
+            subject = X500Name.fromName("CN=Test Reader"),
+            dnsName = null,
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = euPidTimeValidityBegin,
+            validUntil = euPidTimeValidityEnd,
+            extensions = emptyList()
+        )
+        val readerKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerCert, readerRootCert)),
+            privateKey = readerKeyPrivate
+        )
+        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf(
+                    "_" to mapOf("sdjwtvc_given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    ),
+                    transactionData = TransactionsInfo(
+                        data = mapOf(
+                            TestTxType.identifier to TestTxType.serializeIso18013Request("tx-nonce")
+                        )
+                    )
+                )
+            )
+            addReaderAuthAll(readerKey)
+        }
+        val listOfReaderAuthAll = buildCborArray {
+            request.readerAuthAll.forEach { add(it.toDataItem()) }
+        }
+        val readerAuthAllAudience = Crypto.digest(
+            algorithm = Algorithm.SHA256,
+            message = Cbor.encode(
+                Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(listOfReaderAuthAll)))
+            )
+        ).toBase64Url()
+        val taggedTranscript = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(sessionTranscript)))
+        val nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(taggedTranscript)).toBase64Url()
+        val sdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdHash = Crypto.digest(sdJwt.digestAlg, sdJwt.compactSerialization.encodeToByteArray()).toBase64Url()
+        val kbSigningKey = AsymmetricKey.AnonymousSecureAreaBased(
+            alias = euPidCredential.alias,
+            secureArea = euPidCredential.secureArea,
+            keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias),
+        )
+        val kbJwt = buildJwt(
+            type = "kb+jwt",
+            key = kbSigningKey,
+            creationTime = euPidTimeSigned
+        ) {
+            put("nonce", nonce)
+            put("aud", readerAuthAllAudience)
+            put("sd_hash", sdHash)
+            putJsonObject(TestTxType.kbJwtResponseClaimName) {
+                put("doc_request_id", 99)
+            }
+        }
+        val otherDocument = OtherDocument(
+            docFormat = "dc+sd-jwt",
+            data = ByteString((sdJwt.compactSerialization + kbJwt).encodeToByteArray().zlibDeflate())
+        )
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(otherDocument)
+        }
+        val repo = DocumentTypeRepository().apply { addTransactionType(TestTxType) }
+        val error = assertFailsWith<IllegalStateException> {
+            response.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = request,
+                documentTypeRepository = repo,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals("Invalid 'doc_request_id' value 99", error.message)
+
+        // Also verify that an in-range doc_request_id pointing to an mso_mdoc DocRequest (index 0)
+        // is rejected rather than bypassing transaction verification.
+        val kbJwtIndex0 = buildJwt(
+            type = "kb+jwt",
+            key = kbSigningKey,
+            creationTime = euPidTimeSigned
+        ) {
+            put("nonce", nonce)
+            put("aud", readerAuthAllAudience)
+            put("sd_hash", sdHash)
+            putJsonObject(TestTxType.kbJwtResponseClaimName) {
+                put("doc_request_id", 0)
+            }
+        }
+        val responseIndex0 = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString((sdJwt.compactSerialization + kbJwtIndex0).encodeToByteArray().zlibDeflate())
+                )
+            )
+        }
+        val errorIndex0 = assertFailsWith<IllegalStateException> {
+            responseIndex0.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = request,
+                documentTypeRepository = repo,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals("DocRequest at index 0 is not a dc+sd-jwt request", errorIndex0.message)
+    }
+
+    @Test
+    fun otherDocumentDuplicateVctUnderReaderAuthAllWithoutTransactionsPasses() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.AnonymousExplicit(readerRootKey),
+            subject = X500Name.fromName("CN=Test Reader Root"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = euPidTimeValidityBegin,
+            validUntil = euPidTimeValidityEnd,
+            crlUrl = "https://verifier.example.com/crl"
+        )
+        val readerKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerRootCert)),
+                privateKey = readerRootKey
+            ),
+            readerKey = readerKeyPrivate.publicKey,
+            subject = X500Name.fromName("CN=Test Reader"),
+            dnsName = null,
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = euPidTimeValidityBegin,
+            validUntil = euPidTimeValidityEnd,
+            extensions = emptyList()
+        )
+        val readerKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerCert, readerRootCert)),
+            privateKey = readerKeyPrivate
+        )
+        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_family_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_family_name" to buildJsonArray { add(JsonPrimitive("family_name")) }
+                    )
+                )
+            )
+            addReaderAuthAll(readerKey)
+        }
+        val listOfReaderAuthAll = buildCborArray {
+            request.readerAuthAll.forEach { add(it.toDataItem()) }
+        }
+        val readerAuthAllAudience = Crypto.digest(
+            algorithm = Algorithm.SHA256,
+            message = Cbor.encode(
+                Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(listOfReaderAuthAll)))
+            )
+        ).toBase64Url()
+        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = readerAuthAllAudience)
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(otherDocument)
+        }
+        response.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = request,
+            atTime = euPidTimeSigned
+        )
+        assertEquals(readerAuthAllAudience, response.otherDocuments.single().expectedAudience)
+
+        // Verify that a subsequent failed verification resets expectedAudience to null
+        assertFailsWith<IllegalStateException> {
+            response.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = null,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals(null, response.otherDocuments.single().expectedAudience)
+    }
+
+    @Test
+    fun otherDocumentVctFallbackRejectsDefaultMdocDocFormat() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(otherDocument)
+        }
+        val requestWithDefaultDocFormat = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = null,
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+        val error = assertFailsWith<IllegalStateException> {
+            response.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = requestWithDefaultDocFormat,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals("Failed verification of audience", error.message)
+    }
+
+    @Test
+    fun encryptedOtherDocumentRejectsOutOfRangeOrMismatchedDocRequestId() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
+        val encryptedSessionTranscript = buildCborArray {
+            add(sessionTranscript.asArray[0])
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
+            add(sessionTranscript.asArray[2])
+        }
+        val otherDocument = arbitraryAudienceOtherDocument(encryptedSessionTranscript, audience = "none")
+        val outOfRangeEncrypted = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestId = 5
+        ).apply { addOtherDocument(otherDocument) }.build()
+
+        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+        val outOfRangeError = assertFailsWith<IllegalStateException> {
+            outOfRangeEncrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = request
+            )
+        }
+        assertEquals("Invalid docRequestId 5 for DeviceRequest", outOfRangeError.message)
+
+        val mismatchedEncrypted = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestId = 0
+        ).apply { addOtherDocument(otherDocument) }.build()
+        val mismatchedError = assertFailsWith<IllegalStateException> {
+            mismatchedEncrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = request
+            )
+        }
+        assertEquals("DocRequest at index 0 is not a dc+sd-jwt request", mismatchedError.cause?.message)
+
+        // Verify that a credential selected via otherVcts (where wire vct != docRequest.docType)
+        // is accepted by decrypt() when docRequestId points to the matching dc+sd-jwt request,
+        // and rejected if EncryptionParameters do not match docResponseEncryption.
+        val otherRecipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val otherEncryptionParameters = EncryptionParameters.fromValues(otherRecipientKey.publicKey)
+        val requestWithOtherVctAndEncryption = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = "urn:eudi:pid:base:1",
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    docResponseEncryption = encryptionParameters,
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+            addDocRequest(
+                docType = "urn:eudi:pid:base:1",
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    docResponseEncryption = otherEncryptionParameters,
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+        val validOtherVctEncrypted = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestId = 0
+        ).apply { addOtherDocument(otherDocument) }.build()
+        val decrypted = validOtherVctEncrypted.decrypt(
+            recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+            encryptionParameters = encryptionParameters,
+            sessionTranscript = sessionTranscript,
+            atTime = euPidTimeSigned,
+            deviceRequest = requestWithOtherVctAndEncryption
+        )
+        assertEquals(1, decrypted.otherDocuments.size)
+        assertEquals("none", decrypted.otherDocuments.single().expectedAudience)
+
+        val wrongEncryptionParamsDocRequestId = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestId = 1
+        ).apply { addOtherDocument(otherDocument) }.build()
+        val wrongEncryptionParamsError = assertFailsWith<IllegalStateException> {
+            wrongEncryptionParamsDocRequestId.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = requestWithOtherVctAndEncryption
+            )
+        }
+        assertEquals(
+            "EncryptionParameters do not match DocRequest at index 1",
+            wrongEncryptionParamsError.message
+        )
+    }
+
+    @Test
+    fun sdJwtRejectsExactExpirationAndMalformedNumericDate() = runTest {
+        provisionDocuments()
+        val original = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val exactExpSdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned - 1.days).epochSeconds)
+                put("exp", euPidTimeSigned.epochSeconds)
+            }
+        )
+        val exactExpError = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifySdJwtPresentation(
+                compactSerialization = exactExpSdJwt.compactSerialization,
+                nonce = "unused",
+                documentTypeRepository = null,
+                transactionData = emptyList(),
+                now = euPidTimeSigned,
+                expectedAudience = null,
+                requireCryptographicHolderBinding = false
+            )
+        }
+        assertEquals("SD-JWT is not valid anymore", exactExpError.message)
+
+        val nullExpSdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(original.x5c!!, euPidDsKey),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Synthetic") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.invalid")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned - 1.days).epochSeconds)
+                put("exp", JsonNull)
+            }
+        )
+        assertEquals(
+            "Invalid 'exp' claim: expected JSON number, got null",
+            assertFailsWith<IllegalStateException> { nullExpSdJwt.validUntil }.message
+        )
     }
 
     @Test

@@ -14,7 +14,6 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -62,6 +61,7 @@ import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toNumericDateInstant
 import org.multipaz.util.zlibInflate
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -922,7 +922,7 @@ object VerificationUtil {
      *  in the request.
      * @param expectedAudience the expected Key Binding JWT `aud` claim value.
      * @param dcqlQuery the parsed [DcqlQuery] from the request to enforce claim and credential-set
-     *  constraints, or `null`.
+     *  constraints.
      * @return a list of [VerifiedPresentation], one for each credential in the response.
      */
     suspend fun verifyOpenID4VPResponse(
@@ -934,8 +934,8 @@ object VerificationUtil {
         zkSystemRepository: ZkSystemRepository?,
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
         queryData: Map<String, QueryData>,
-        expectedAudience: String? = null,
-        dcqlQuery: DcqlQuery? = null,
+        expectedAudience: String?,
+        dcqlQuery: DcqlQuery,
     ): List<VerifiedPresentation> {
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
         val presentationsByQueryId = mutableMapOf<String, MutableList<VerifiedPresentation>>()
@@ -992,33 +992,13 @@ object VerificationUtil {
                                 "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '${credQueryData.docType}' for query '$credId'"
                             )
                         }
-                        if (dcqlQuery == null) {
-                            val allClaims = mdocPresentation.issuerSignedClaims + mdocPresentation.deviceSignedClaims
-                            for (ns in credQueryData.namespaces) {
-                                for (claim in ns.claims) {
-                                    if (allClaims.none { it.namespaceName == ns.namespace && it.dataElementName == claim.name }) {
-                                        throw IllegalStateException(
-                                            "Missing requested mdoc claim '${ns.namespace}.${claim.name}' for query '$credId'"
-                                        )
-                                    }
-                                }
-                            }
-                        }
                         verifiedPresentations.add(mdocPresentation)
                         queryPresentations.add(mdocPresentation)
                     }
                 }
             }
         }
-        if (dcqlQuery != null) {
-            dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
-        } else {
-            for (queryId in queryData.keys) {
-                if (presentationsByQueryId[queryId].isNullOrEmpty()) {
-                    throw IllegalStateException("Required credential query '$queryId' was not fulfilled")
-                }
-            }
-        }
+        dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
         return verifiedPresentations
     }
 
@@ -1043,7 +1023,7 @@ object VerificationUtil {
         transactionData: List<TransactionData<*>>,
         identifier: String? = null,
         now: Instant = Clock.System.now(),
-        expectedAudience: String? = null,
+        expectedAudience: String?,
         requireCryptographicHolderBinding: Boolean = true,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
@@ -1086,13 +1066,13 @@ object VerificationUtil {
         }
 
         val vct = processedPayload["vct"]!!.jsonPrimitive.content
-        val validFrom = processedPayload["nbf"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
-        val validUntil = processedPayload["exp"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
-        val signedAt = processedPayload["iat"]?.jsonPrimitive?.longOrNull?.let { Instant.fromEpochSeconds(it) }
+        val validFrom = processedPayload["nbf"]?.toNumericDateInstant("nbf")
+        val validUntil = processedPayload["exp"]?.toNumericDateInstant("exp")
+        val signedAt = processedPayload["iat"]?.toNumericDateInstant("iat")
         if (validFrom != null && now < validFrom) {
             throw IllegalStateException("SD-JWT is not yet valid")
         }
-        if (validUntil != null && now > validUntil) {
+        if (validUntil != null && now >= validUntil) {
             throw IllegalStateException("SD-JWT is not valid anymore")
         }
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
@@ -1165,7 +1145,8 @@ object VerificationUtil {
      * @param eReaderKey the ephemeral reader key, if 18013-5 session encryption is used.
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @param zkSystemRepository a [ZkSystemRepository] used for verifying ZKP proofs or `null`.
-     * @param request request that produced this response, only required for transaction processing
+     * @param request request that produced this response, required if the response contains
+     *  `dc+sd-jwt` `OtherDocument`s or if transaction data was sent in the request.
      * @return a list of [VerifiedPresentation], one for each document in the response.
      */
     suspend fun verifyMdocDeviceResponse(

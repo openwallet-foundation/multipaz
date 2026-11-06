@@ -94,6 +94,21 @@ data class DocRequest internal constructor(
         }
     }
 
+    internal fun hasTransactionData(): Boolean {
+        if (docRequestInfo?.transactionData?.data?.isNotEmpty() == true) {
+            return true
+        }
+        if (nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.isNotEmpty() == true) {
+            return true
+        }
+        return docRequestInfo?.alternativeDataElements?.any { altSet ->
+            altSet.requestedElement.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE ||
+                altSet.alternativeElementSets.any { elementRefs ->
+                    elementRefs.any { it.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE }
+                }
+        } == true
+    }
+
     /**
      * Returns parsed transaction data associated with this document request that was
      * requested by data elements.

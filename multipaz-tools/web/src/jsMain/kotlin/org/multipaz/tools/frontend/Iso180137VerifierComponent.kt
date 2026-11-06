@@ -873,7 +873,8 @@ val Iso180137VerifierComponent: FC<Props> = FC {
             var vErr = ""
             try {
                 devRespObj.verify(
-                    sessionTranscript = dcResponse.sessionTranscript
+                    sessionTranscript = dcResponse.sessionTranscript,
+                    deviceRequest = generatedDevReqDataItem?.let { DeviceRequest.fromDataItem(it) }
                 )
             } catch (e: Throwable) {
                 vErr = e.message ?: e.toString()

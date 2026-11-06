@@ -36,6 +36,7 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
@@ -223,6 +224,40 @@ data class DeviceRequest private constructor(
             if (auth1.unprotectedHeaders.keys != auth2.unprotectedHeaders.keys) return false
         }
         return true
+    }
+
+    internal suspend fun getExpectedOtherDocumentAudience(docRequest: DocRequest?): String? {
+        if (docRequest == null) {
+            return null
+        }
+        return if (readerAuthAll_.isNotEmpty()) {
+            val listOfReaderAuthAll = buildCborArray {
+                readerAuthAll_.forEach {
+                    add(it.toDataItem())
+                }
+            }
+            Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
+                    )
+                )
+            ).toBase64Url()
+        } else if (docRequest.readerAuth_ != null) {
+            Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(docRequest.readerAuth_.toDataItem()))
+                    )
+                )
+            ).toBase64Url()
+        } else {
+            "none"
+        }
     }
 
     /**

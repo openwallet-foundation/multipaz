@@ -99,7 +99,9 @@ import java.net.URLEncoder
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 private const val TAG = "VerifierServlet"
 
@@ -207,12 +209,12 @@ private data class OpenID4VPResultData(
 )
 
 @Serializable
-private data class ResultPage(
+internal data class ResultPage(
     val lines: List<ResultLine>
 )
 
 @Serializable
-private data class ResultLine(
+internal data class ResultLine(
     val key: String,
     val value: String
 )
@@ -239,6 +241,8 @@ data class Session(
     var deviceResponses: MutableList<ByteArray> = mutableListOf(),
     var verifiablePresentations: MutableList<String> = mutableListOf(),
     var sessionTranscript: ByteArray? = null,
+    var deviceRequest: ByteArray? = null,
+    var offeredDcProtocols: List<String> = emptyList(),
     var responseWasEncrypted: Boolean = false,
     var readerEngagementEncodedBase64: String? = null,
     var annexAMessageCounter: Int = 0,
@@ -310,7 +314,7 @@ private data class DCBeginRawDcqlRequest(
 )
 
 @Serializable
-private data class DCBeginResponse(
+internal data class DCBeginResponse(
     val sessionId: String,
     val dcRequestProtocol: String,
     val dcRequestString: String,
@@ -586,6 +590,15 @@ private suspend fun handleDcBegin(
             )
         }
         Logger.i(TAG, "beginResponse: $beginResponse")
+        session.offeredDcProtocols = listOfNotNull(
+            beginResponse.dcRequestProtocol.takeIf { it.isNotEmpty() },
+            beginResponse.dcRequestProtocol2?.takeIf { it.isNotEmpty() }
+        )
+        verifierSessionTable.update(
+            key = sessionId,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        )
         val json = Json { ignoreUnknownKeys = true }
         call.respondText(
             contentType = ContentType.Application.Json,
@@ -672,16 +685,23 @@ private suspend fun handleDcBeginRawDcql(
             responseUri = null
         )
         Logger.i(TAG, "dcRequestString: $dcRequestString")
+        val dcRequestProtocol = when (version) {
+            OpenID4VP.Version.DRAFT_24 -> "openid4vp"
+            OpenID4VP.Version.DRAFT_29 -> {
+                if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
+            }
+        }
+        session.offeredDcProtocols = listOf(dcRequestProtocol)
+        verifierSessionTable.update(
+            key = sessionId,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        )
         val json = Json { ignoreUnknownKeys = true }
         val responseString = json.encodeToString(
             DCBeginResponse(
                 sessionId = sessionId,
-                dcRequestProtocol = when (version) {
-                    OpenID4VP.Version.DRAFT_24 -> "openidvp"
-                    OpenID4VP.Version.DRAFT_29 -> {
-                        if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
-                    }
-                },
+                dcRequestProtocol = dcRequestProtocol,
                 dcRequestString = dcRequestString,
                 dcRequestProtocol2 = null,
                 dcRequestString2 = null
@@ -748,28 +768,7 @@ private suspend fun handleDcGetData(
     val encodedSession = verifierSessionTable.get(request.sessionId)
         ?: throw InvalidRequestException("No session for sessionId ${request.sessionId}")
     Session.fromCbor(encodedSession.toByteArray()).use { session ->
-        //Logger.i(TAG, "Data received from WC3 DC API: protocol=${request.credentialProtocol} data=${request.credentialResponse}")
-
-        when (request.credentialProtocol) {
-            "openid4vp" -> handleDcGetDataOpenID4VP(24, session, request.credentialResponse)
-            "openid4vp-v1-signed", "openid4vp-v1-unsigned" -> handleDcGetDataOpenID4VP(29, session, request.credentialResponse)
-            "org-iso-mdoc" -> handleDcGetDataMdocApi(session, request.credentialResponse)
-            else -> throw IllegalArgumentException("unsupported protocol ${request.credentialProtocol}")
-        }
-
-        val pages = mutableListOf<ResultPage>()
-        if (session.deviceResponses.size > 0) {
-            pages.addAll(handleGetDataMdoc(session, request.credentialProtocol))
-        }
-
-        if (session.verifiablePresentations.size > 0) {
-            val clientIdToUse = if (session.signRequest) {
-                "x509_san_dns:${session.host}"
-            } else {
-                "web-origin:${session.origin}"
-            }
-            pages.addAll(handleGetDataSdJwt(session, request.credentialProtocol, clientIdToUse))
-        }
+        val pages = processDcGetData(session, request.credentialProtocol, request.credentialResponse)
 
         val json = Json { ignoreUnknownKeys = true }
         call.respondText(
@@ -777,6 +776,42 @@ private suspend fun handleDcGetData(
             text = json.encodeToString(OpenID4VPResultData(pages))
         )
     }
+}
+
+internal suspend fun processDcGetData(
+    session: Session,
+    credentialProtocol: String,
+    credentialResponse: String
+): List<ResultPage> {
+    if (session.offeredDcProtocols.isNotEmpty() && credentialProtocol !in session.offeredDcProtocols) {
+        throw IllegalArgumentException(
+            "Credential protocol '$credentialProtocol' was not offered in session"
+        )
+    }
+    when (credentialProtocol) {
+        "openid4vp" -> handleDcGetDataOpenID4VP(24, session, credentialResponse)
+        "openid4vp-v1-signed", "openid4vp-v1-unsigned" -> handleDcGetDataOpenID4VP(29, session, credentialResponse)
+        "org-iso-mdoc" -> handleDcGetDataMdocApi(session, credentialResponse)
+        else -> throw IllegalArgumentException("unsupported protocol $credentialProtocol")
+    }
+
+    val pages = mutableListOf<ResultPage>()
+    if (session.deviceResponses.size > 0) {
+        pages.addAll(handleGetDataMdoc(session, credentialProtocol))
+    }
+
+    if (session.verifiablePresentations.size > 0) {
+        val clientIdToUse = when (credentialProtocol) {
+            "openid4vp-v1-signed", "openid4vp-v1-unsigned" -> "origin:${session.origin}"
+            else -> if (session.signRequest) {
+                "x509_san_dns:${session.host}"
+            } else {
+                "web-origin:${session.origin}"
+            }
+        }
+        pages.addAll(handleGetDataSdJwt(session, credentialProtocol, clientIdToUse))
+    }
+    return pages
 }
 
 private suspend fun handleDcGetDataMdocApi(
@@ -1080,6 +1115,8 @@ private suspend fun handleAnnexARequest(
                 deviceRequestVersion = session.deviceRequestVersion,
                 uniqueDocSetRequired = session.uniqueDocSetRequired,
             )
+            val encodedDeviceRequest = Cbor.encode(deviceRequest.toDataItem())
+            session.deviceRequest = encodedDeviceRequest
 
             val sessionEncryption = SessionEncryption(
                 role = MdocRole.MDOC_READER,
@@ -1089,7 +1126,7 @@ private suspend fun handleAnnexARequest(
             )
             sessionEncryption.setSendSessionEstablishment(false)
             val sessionDataMessage = sessionEncryption.encryptMessage(
-                messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
+                messagePlaintext = encodedDeviceRequest,
                 statusCode = null
             )
             session.annexAMessageCounter += 1
@@ -1550,9 +1587,15 @@ private suspend fun handleGetDataMdoc(
         val deviceResponse = DeviceResponse.fromDataItem(
             Cbor.decode(encodedDeviceResponse)
         )
+        val sessionTranscriptDataItem = Cbor.decode(session.sessionTranscript!!)
+        val deviceRequest = session.deviceRequest?.let {
+            DeviceRequest.fromDataItem(Cbor.decode(it))
+        }
         try {
             deviceResponse.verify(
-                sessionTranscript = Cbor.decode(session.sessionTranscript!!),
+                sessionTranscript = sessionTranscriptDataItem,
+                deviceRequest = deviceRequest,
+                documentTypeRepository = documentTypeRepo,
             )
             headerLines.add(
                 ResultLine(
@@ -1732,9 +1775,19 @@ private suspend fun handleGetDataMdoc(
             lines.add(ResultLine("OtherDocument", otherDocument.docFormat))
             if (otherDocument.docFormat == "dc+sd-jwt") {
                 val compactSerialization = otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                val sessionTranscriptBytes = Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(Cbor.encode(sessionTranscriptDataItem))
+                )
+                val expectedNonce = Crypto.digest(
+                    Algorithm.SHA256,
+                    Cbor.encode(sessionTranscriptBytes)
+                ).toBase64Url()
                 handleGetDataAppendSdJwt(
                     compactSerialization = compactSerialization,
-                    lines = lines
+                    lines = lines,
+                    expectedNonce = expectedNonce,
+                    expectedAudience = otherDocument.expectedAudience,
                 )
             }
             pages.add(ResultPage(lines))
@@ -1754,6 +1807,7 @@ private suspend fun handleGetDataSdJwt(
     clientIdToUse: String,
 ): List<ResultPage> {
     val pages = mutableListOf<ResultPage>()
+    val expectedNonce = session.nonce.toByteArray().toBase64Url()
 
     for (presentationString in session.verifiablePresentations) {
         val lines = mutableListOf<ResultLine>()
@@ -1764,7 +1818,9 @@ private suspend fun handleGetDataSdJwt(
 
         handleGetDataAppendSdJwt(
             compactSerialization = presentationString,
-            lines = lines
+            lines = lines,
+            expectedNonce = expectedNonce,
+            expectedAudience = clientIdToUse,
         )
         pages.add(ResultPage(lines))
     }
@@ -1772,8 +1828,11 @@ private suspend fun handleGetDataSdJwt(
 }
 
 private suspend fun handleGetDataAppendSdJwt(
-   compactSerialization: String,
-   lines: MutableList<ResultLine>,
+    compactSerialization: String,
+    lines: MutableList<ResultLine>,
+    expectedNonce: String,
+    expectedAudience: String?,
+    atTime: Instant = Clock.System.now(),
 ) {
     val trustManager = getIssuerTrustManager()
 
@@ -1808,16 +1867,28 @@ private suspend fun handleGetDataAppendSdJwt(
     }
 
     if (sdJwtKb != null && issuerCert != null) {
-        // TODO: actually check nonce, audience, and creationTime
         try {
             var receivedAudience = ""
             val processedJwt = sdJwtKb.verify(
                 issuerKey = issuerCert.publicKey,
-                checkNonce = { nonce -> true },
-                checkAudience = { audience -> receivedAudience = audience; true },
-                checkCreationTime = { creationTime -> true },
+                checkNonce = { nonce -> nonce == expectedNonce },
+                checkAudience = { audience ->
+                    receivedAudience = audience
+                    expectedAudience != null && audience == expectedAudience
+                },
+                checkCreationTime = { creationTime ->
+                    (atTime - creationTime).absoluteValue < 5.minutes
+                },
                 transactionData = listOf()
             )
+            val validFrom = sdJwt.validFrom
+            val validUntil = sdJwt.validUntil
+            if (validFrom != null && atTime < validFrom) {
+                throw IllegalStateException("SD-JWT is not yet valid")
+            }
+            if (validUntil != null && atTime >= validUntil) {
+                throw IllegalStateException("SD-JWT is not valid anymore")
+            }
             lines.add(ResultLine("Key Binding", "Verified"))
             lines.add(ResultLine("Audience", receivedAudience))
 
@@ -1832,6 +1903,14 @@ private suspend fun handleGetDataAppendSdJwt(
     } else if (issuerCert != null) {
         try {
             val processedJwt = sdJwt.verify(issuerCert.publicKey)
+            val validFrom = sdJwt.validFrom
+            val validUntil = sdJwt.validUntil
+            if (validFrom != null && atTime < validFrom) {
+                throw IllegalStateException("SD-JWT is not yet valid")
+            }
+            if (validUntil != null && atTime >= validUntil) {
+                throw IllegalStateException("SD-JWT is not valid anymore")
+            }
             for ((claimName, claimValue) in processedJwt) {
                 val claimValueStr = prettyJson.encodeToString(claimValue)
                 lines.add(ResultLine(claimName, claimValueStr))
@@ -1911,6 +1990,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session,
                     session.issuerIdentifiers,
                     session.deviceRequestVersion,
                     session.uniqueDocSetRequired,
@@ -1999,6 +2079,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session,
                     session.issuerIdentifiers,
                     session.deviceRequestVersion,
                     session.uniqueDocSetRequired,
@@ -2035,6 +2116,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session,
                     session.issuerIdentifiers,
                     session.deviceRequestVersion,
                     session.uniqueDocSetRequired,
@@ -2053,6 +2135,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session,
                     session.issuerIdentifiers,
                     session.deviceRequestVersion,
                     session.uniqueDocSetRequired,
@@ -2089,6 +2172,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session,
                     session.issuerIdentifiers,
                     session.deviceRequestVersion,
                     session.uniqueDocSetRequired,
@@ -2119,7 +2203,7 @@ private suspend fun calcDcRequest(
     }
 }
 
-private suspend fun calcDcRequestNewRawDcql(
+internal suspend fun calcDcRequestNewRawDcql(
     rawDcql: String,
     exchangeProtocols: List<String>,
     sessionId: String,
@@ -2147,14 +2231,23 @@ private suspend fun calcDcRequestNewRawDcql(
             nonce = nonce,
             origin = origin,
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            verifierIdentities = listOf(
-                VerifierIdentity(
-                    key = readerAuthKey,
-                    clientId = "x509_san_dns:${session.host}"
-                )
-            ),
+            verifierIdentities = buildList {
+                if (signRequest) {
+                    add(
+                        VerifierIdentity(
+                            key = readerAuthKey,
+                            clientId = "x509_san_dns:${session.host}"
+                        )
+                    )
+                }
+            },
             deviceRequestVersion = session.deviceRequestVersion
-        )["requests"]!!.jsonArray[0].jsonObject
+        )["requests"]!!.jsonArray[0].jsonObject.also { req ->
+            if (exchangeProtocol == "org-iso-mdoc") {
+                session.deviceRequest =
+                    req["data"]!!.jsonObject["deviceRequest"]!!.jsonPrimitive.content.fromBase64Url()
+            }
+        }
     }
 
     val dcRequestProtocol = requests[0]["protocol"]!!.jsonPrimitive.content
@@ -2167,6 +2260,7 @@ private suspend fun calcDcRequestNewRawDcql(
     } else {
         Pair(null, null)
     }
+    session.offeredDcProtocols = listOfNotNull(dcRequestProtocol, dcRequestProtocol2)
     return DCBeginResponse(
         sessionId = sessionId,
         dcRequestProtocol = dcRequestProtocol,
@@ -2222,7 +2316,12 @@ private suspend fun calcDcRequestNew(
                 }
             },
             deviceRequestVersion = session.deviceRequestVersion
-        )["requests"]!!.jsonArray[0].jsonObject
+        )["requests"]!!.jsonArray[0].jsonObject.also { req ->
+            if (exchangeProtocol == "org-iso-mdoc") {
+                session.deviceRequest =
+                    req["data"]!!.jsonObject["deviceRequest"]!!.jsonPrimitive.content.fromBase64Url()
+            }
+        }
     }
 
     val dcRequestProtocol = requests[0]["protocol"]!!.jsonPrimitive.content
@@ -2332,6 +2431,7 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
     readerAuthKey: AsymmetricKey.X509Certified,
+    session: Session,
     issuerIdentifiers: List<ByteString> = emptyList(),
     deviceRequestVersion: String? = null,
     uniqueDocSetRequired: Boolean = true,
@@ -2357,7 +2457,9 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
         verifierIdentities = listOf(VerifierIdentity(readerAuthKey, "")),
         deviceRequestVersion = deviceRequestVersion
     )
-    return Json.encodeToString(dcRequest["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject)
+    val dataObj = dcRequest["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject
+    session.deviceRequest = dataObj["deviceRequest"]!!.jsonPrimitive.content.fromBase64Url()
+    return Json.encodeToString(dataObj)
 }
 
 private suspend fun AnnexACalcRequest(

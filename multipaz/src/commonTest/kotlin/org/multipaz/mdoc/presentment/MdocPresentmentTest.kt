@@ -43,6 +43,7 @@ import org.multipaz.util.zlibInflate
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -279,7 +280,49 @@ class MdocPresentmentTest {
             onDocumentsInFocus = {}
         )
 
-        dr.verify(sessionTranscript = sessionTranscript)
+        dr.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = deviceRequest,
+        )
+        assertEquals(
+            "Failed verification of audience",
+            assertFailsWith<IllegalStateException> {
+                dr.verify(sessionTranscript = sessionTranscript)
+            }.message
+        )
+        val mismatchedDeviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+        ) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf(
+                    "_" to mapOf(
+                        "sdjwtvc_given_name" to false,
+                        "sdjwtvc_family_name" to false
+                    )
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
+                        "sdjwtvc_family_name" to buildJsonArray { add("family_name") },
+                    )
+                ),
+                readerKey = if (readerAuthType == ReaderAuthType.NONE) readerKey else null
+            )
+            if (readerAuthType == ReaderAuthType.READER_AUTH) {
+                addReaderAuthAll(readerKey)
+            }
+        }
+        assertEquals(
+            "Failed verification of audience",
+            assertFailsWith<IllegalStateException> {
+                dr.verify(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequest = mismatchedDeviceRequest,
+                )
+            }.message
+        )
         assertEquals(0, dr.documents.size)
 
         assertEquals(1, dr.otherDocuments.size)

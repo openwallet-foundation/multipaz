@@ -15,6 +15,7 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.numericDateInstantOrNull
 import org.multipaz.util.toBase64Url
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
@@ -146,9 +147,7 @@ abstract class WebTokenClaim<T: Any>(
                 Long::class -> json.jsonPrimitive.longOrNull
                 Float::class -> json.jsonPrimitive.floatOrNull
                 Double::class -> json.jsonPrimitive.doubleOrNull
-                Instant::class -> json.jsonPrimitive.longOrNull?.let {
-                    Instant.fromEpochSeconds(it)
-                }
+                Instant::class -> json.jsonPrimitive.numericDateInstantOrNull()
                 ByteString::class -> ByteString(json.jsonPrimitive.content.fromBase64Url())
                 else -> throw IllegalArgumentException("Unsupported claim type")
             }
