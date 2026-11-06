@@ -59,6 +59,25 @@
     <string name="credential_presentment_purpose_item_bare_ticket_verification">ticket</string>
     <string name="credential_presentment_purpose_unknown">is requesting information</string>
 
+    <string name="credential_presentment_simple_age_over_known_requester">%1$s wants to know if you're older than %2$d</string>
+    <string name="credential_presentment_simple_age_over_unknown_requester">An unknown requester wants to know if you're older than %1$d</string>
+    <string name="credential_presentment_simple_age_over_anonymous_requester">An anonymous requester wants to know if you're older than %1$d</string>
+    <string name="credential_presentment_simple_age_in_years_known_requester">%1$s wants to know your age</string>
+    <string name="credential_presentment_simple_age_in_years_unknown_requester">An unknown requester wants to know your age</string>
+    <string name="credential_presentment_simple_age_in_years_anonymous_requester">An anonymous requester wants to know your age</string>
+    <string name="credential_presentment_simple_age_birth_year_known_requester">%1$s wants to know your birth year</string>
+    <string name="credential_presentment_simple_age_birth_year_unknown_requester">An unknown requester wants to know your birth year</string>
+    <string name="credential_presentment_simple_age_birth_year_anonymous_requester">An anonymous requester wants to know your birth year</string>
+    <string name="credential_presentment_simple_using_document">[app_icon] **%1$s** is using [card_art] **%2$s** to share only %3$s, and not any other identifying data. [More details](details)</string>
+    <string name="credential_presentment_simple_claim_age_over">that you're older than %1$d</string>
+    <string name="credential_presentment_simple_claim_age_over_and_portrait">that you're older than %1$d, your portrait</string>
+    <string name="credential_presentment_simple_claim_not_age_over">that you're not older than %1$d</string>
+    <string name="credential_presentment_simple_claim_not_age_over_and_portrait">that you're not older than %1$d, your portrait</string>
+    <string name="credential_presentment_simple_claim_age_in_years">your age</string>
+    <string name="credential_presentment_simple_claim_age_in_years_and_portrait">your age, your portrait</string>
+    <string name="credential_presentment_simple_claim_age_birth_year">your birth year</string>
+    <string name="credential_presentment_simple_claim_age_birth_year_and_portrait">your birth year, your portrait</string>
+
     <string name="credential_presentment_share_with_known_requester">This data will be shared with %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">This data will be shared:</string>
 

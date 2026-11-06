@@ -10,6 +10,7 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
 
 - **Run Compose golden verification tests:** `./gradlew :multipaz-compose:testDebugUnitTest`
 - **Regenerate Compose goldens & catalog:** `./gradlew :multipaz-compose:testDebugUnitTest -PupdateGoldens=true`
+- **Regenerate Android 17 QPR2+ EmbeddedBiometricPrompt goldens (manual):** `./multipaz-compose/golden-screenshots/update-biometric-goldens.sh`
 
 ## Categories
 
@@ -73,6 +74,15 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Arabic RTL (ar-SA) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain](#arabic_rtl_normal_with_subpages)
   - [Arabic RTL (ar-SA) — Payment Transaction with Tip Selector](#arabic_rtl_payment_with_tip)
   - [Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar](#arabic_rtl_high_risk_pii_and_retention)
+- **[11. Combined Consent & Biometric Authentication (Android EmbeddedBiometricPrompt)](#11_biometric_prompt)** (`11_biometric_prompt` — 8 scenarios)
+  - [Trusted Proximity Requester Requesting Age Over 21 (Without Portrait)](#trusted_requester_age_over_21)
+  - [Trusted Proximity Requester Requesting Age Over 21 & Portrait](#trusted_requester_age_over_21_and_portrait)
+  - [Unverified Proximity Requester Requesting Age Over 21 (Without Portrait)](#unknown_requester_age_over_21)
+  - [Unverified Proximity Requester Requesting Age Over 21 & Portrait](#unknown_requester_age_over_21_and_portrait)
+  - [Anonymous Proximity Requester Requesting Age Over 21 (Without Portrait)](#anonymous_requester_age_over_21)
+  - [Anonymous Proximity Requester Requesting Age Over 21 & Portrait](#anonymous_requester_age_over_21_and_portrait)
+  - [Trusted Proximity Requester Requesting Age Over 50 (Falling Back to Age in Years) & Portrait](#trusted_requester_age_over_50_and_portrait)
+  - [Trusted Proximity Requester Requesting Age Over 65 (False in Credential) & Portrait](#trusted_requester_age_over_65_and_portrait)
 
 ---
 
@@ -893,4 +903,124 @@ Arabic RTL rendering of the red high-risk warning card, RTL button placement ('�
 | `waiting` — High-risk prompt during cool-off with RTL progress fill (Arabic ar-SA RTL) | `ready` — High-risk prompt after cool-off ('متابعة', Arabic ar-SA RTL) |
 | :---: | :---: |
 | <img src="10_localization/arabic_rtl_high_risk_pii_and_retention__waiting.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar - High-risk prompt during cool-off with RTL progress fill (Arabic ar-SA RTL)" width="260" /> | <img src="10_localization/arabic_rtl_high_risk_pii_and_retention__ready.png" alt="Compose: Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar - High-risk prompt after cool-off ('متابعة', Arabic ar-SA RTL)" width="260" /> |
+
+---
+
+<a id="11_biometric_prompt"></a>
+
+## 11. Combined Consent & Biometric Authentication (Android EmbeddedBiometricPrompt)
+
+Android 17 QPR2+ (API 37.2) EmbeddedBiometricPrompt combining simple, well-defined non-PII proximity age verification requests with biometric authentication in a single bottom sheet. Captured on an Android 17 QPR2 device via `./multipaz-compose/golden-screenshots/update-biometric-goldens.sh` across eight requester and claim combinations.
+
+<a id="trusted_requester_age_over_21"></a>
+
+### `trusted_requester_age_over_21` — Trusted Proximity Requester Requesting Age Over 21 (Without Portrait)
+
+- **Relying Party:** Utopia Marketplace — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOver(21))`
+
+A trusted proximity relying party in the wallet's trust list requests only age_over_21 without portrait. The embedded biometric prompt displays the relying party's verified icon and display name, stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data, with a 'More details' link to expand to the full consent bottom sheet.
+
+| `main` — EmbeddedBiometricPrompt (Trusted RP, age_over_21) |
+| :---: |
+| <img src="11_biometric_prompt/trusted_requester_age_over_21__main.png" alt="Compose: Trusted Proximity Requester Requesting Age Over 21 (Without Portrait) - EmbeddedBiometricPrompt (Trusted RP, age_over_21)" width="260" /> |
+
+<a id="trusted_requester_age_over_21_and_portrait"></a>
+
+### `trusted_requester_age_over_21_and_portrait` — Trusted Proximity Requester Requesting Age Over 21 & Portrait
+
+- **Relying Party:** Utopia Marketplace — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21, portrait)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))`
+
+A trusted proximity relying party in the wallet's trust list requests age_over_21 and portrait. The embedded biometric prompt displays the relying party's verified icon and display name, stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Trusted RP, age_over_21 + portrait) |
+| :---: |
+| <img src="11_biometric_prompt/trusted_requester_age_over_21_and_portrait__main.png" alt="Compose: Trusted Proximity Requester Requesting Age Over 21 &amp; Portrait - EmbeddedBiometricPrompt (Trusted RP, age_over_21 + portrait)" width="260" /> |
+
+<a id="unknown_requester_age_over_21"></a>
+
+### `unknown_requester_age_over_21` — Unverified Proximity Requester Requesting Age Over 21 (Without Portrait)
+
+- **Relying Party:** Dave's Bookstore (Not in trust list) — Unverified Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOver(21))`
+
+A proximity reader presents a reader authentication certificate whose root CA is not in the wallet's trust list, requesting only age_over_21 without portrait. The embedded biometric prompt displays the generic business icon and 'An unknown requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Unknown RP, age_over_21) |
+| :---: |
+| <img src="11_biometric_prompt/unknown_requester_age_over_21__main.png" alt="Compose: Unverified Proximity Requester Requesting Age Over 21 (Without Portrait) - EmbeddedBiometricPrompt (Unknown RP, age_over_21)" width="260" /> |
+
+<a id="unknown_requester_age_over_21_and_portrait"></a>
+
+### `unknown_requester_age_over_21_and_portrait` — Unverified Proximity Requester Requesting Age Over 21 & Portrait
+
+- **Relying Party:** Dave's Bookstore (Not in trust list) — Unverified Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21, portrait)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))`
+
+A proximity reader presents a reader authentication certificate whose root CA is not in the wallet's trust list, requesting age_over_21 and portrait. The embedded biometric prompt displays the generic business icon and 'An unknown requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Unknown RP, age_over_21 + portrait) |
+| :---: |
+| <img src="11_biometric_prompt/unknown_requester_age_over_21_and_portrait__main.png" alt="Compose: Unverified Proximity Requester Requesting Age Over 21 &amp; Portrait - EmbeddedBiometricPrompt (Unknown RP, age_over_21 + portrait)" width="260" /> |
+
+<a id="anonymous_requester_age_over_21"></a>
+
+### `anonymous_requester_age_over_21` — Anonymous Proximity Requester Requesting Age Over 21 (Without Portrait)
+
+- **Relying Party:** Anonymous Requester — Anonymous Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOver(21))`
+
+A proximity reader provides no reader authentication certificate at all while requesting only age_over_21 without portrait. The embedded biometric prompt displays the generic business icon and 'An anonymous requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Anonymous RP, age_over_21) |
+| :---: |
+| <img src="11_biometric_prompt/anonymous_requester_age_over_21__main.png" alt="Compose: Anonymous Proximity Requester Requesting Age Over 21 (Without Portrait) - EmbeddedBiometricPrompt (Anonymous RP, age_over_21)" width="260" /> |
+
+<a id="anonymous_requester_age_over_21_and_portrait"></a>
+
+### `anonymous_requester_age_over_21_and_portrait` — Anonymous Proximity Requester Requesting Age Over 21 & Portrait
+
+- **Relying Party:** Anonymous Requester — Anonymous Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_21, portrait)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))`
+
+A proximity reader provides no reader authentication certificate at all while requesting age_over_21 and portrait. The embedded biometric prompt displays the generic business icon and 'An anonymous requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Anonymous RP, age_over_21 + portrait) |
+| :---: |
+| <img src="11_biometric_prompt/anonymous_requester_age_over_21_and_portrait__main.png" alt="Compose: Anonymous Proximity Requester Requesting Age Over 21 &amp; Portrait - EmbeddedBiometricPrompt (Anonymous RP, age_over_21 + portrait)" width="260" /> |
+
+<a id="trusted_requester_age_over_50_and_portrait"></a>
+
+### `trusted_requester_age_over_50_and_portrait` — Trusted Proximity Requester Requesting Age Over 50 (Falling Back to Age in Years) & Portrait
+
+- **Relying Party:** Utopia Marketplace — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_50 -> age_in_years, portrait, issuing_authority, issuing_country)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.AgeInYearsAndPortrait)`
+
+A trusted proximity relying party requests age_over_50 with alternative data elements (age_in_years, birth_date) along with portrait and issuer metadata. Because age_over_50 is not present in Erika's driving license, the request falls back to age_in_years and the embedded biometric prompt displays 'Utopia Marketplace wants to know your age' and states that Multipaz is sharing only the holder's age and portrait, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Trusted RP, age_over_50 -> age_in_years + portrait) |
+| :---: |
+| <img src="11_biometric_prompt/trusted_requester_age_over_50_and_portrait__main.png" alt="Compose: Trusted Proximity Requester Requesting Age Over 50 (Falling Back to Age in Years) &amp; Portrait - EmbeddedBiometricPrompt (Trusted RP, age_over_50 -&gt; age_in_years + portrait)" width="260" /> |
+
+<a id="trusted_requester_age_over_65_and_portrait"></a>
+
+### `trusted_requester_age_over_65_and_portrait` — Trusted Proximity Requester Requesting Age Over 65 (False in Credential) & Portrait
+
+- **Relying Party:** Utopia Marketplace — Proximity (ISO 18013-5)
+- **Protocol / Credentials:** mDL (age_over_65 = false, portrait, issuing_authority, issuing_country)
+- **Risk Assessment:** `NORMAL (SimpleConsentClaim.NotAgeOverAndPortrait(65))`
+
+A trusted proximity relying party requests age_over_65 along with portrait and issuer metadata. Because age_over_65 is present in Erika's driving license with value false (Erika is 53), the embedded biometric prompt displays 'Utopia Marketplace wants to know if you're older than 65' and states that Multipaz is sharing only that the holder is not older than 65 and their portrait, and not any other identifying data.
+
+| `main` — EmbeddedBiometricPrompt (Trusted RP, age_over_65 = false + portrait) |
+| :---: |
+| <img src="11_biometric_prompt/trusted_requester_age_over_65_and_portrait__main.png" alt="Compose: Trusted Proximity Requester Requesting Age Over 65 (False in Credential) &amp; Portrait - EmbeddedBiometricPrompt (Trusted RP, age_over_65 = false + portrait)" width="260" /> |
 

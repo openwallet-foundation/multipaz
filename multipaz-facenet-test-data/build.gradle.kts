@@ -243,7 +243,11 @@ kotlin {
 
 android {
     namespace = "org.multipaz.facenet.testdata"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
 
     defaultConfig {
         minSdk = 26

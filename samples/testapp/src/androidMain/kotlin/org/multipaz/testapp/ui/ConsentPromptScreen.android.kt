@@ -17,6 +17,7 @@ import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.prompt.AndroidPromptModel
+import org.multipaz.prompt.PlatformConsentOptions
 import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.prompt.Reason
@@ -24,6 +25,12 @@ import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.UserAuthenticationType as PromptUserAuthenticationType
 import org.multipaz.util.fromBase64Url
+
+actual fun createPlatformConsentOptions(
+    showOnBiometricPrompt: Boolean
+): PlatformConsentOptions? = PlatformConsentOptions(
+    showOnBiometricPrompt = showOnBiometricPrompt
+)
 
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,

@@ -23,6 +23,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
+import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -74,6 +75,7 @@ import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
+import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.util.Constants
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1055,6 +1057,79 @@ class Iso18013PresentmentTest {
             }
         }
         assertTrue(generateSequence<Throwable>(error) { it.cause }.any { it is KeyLockedException })
+    }
+
+    @Test
+    fun testMdocPresentmentAuthenticateUserUsesPreloadedKeyUnlockData() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionMdoc(
+            displayName = "mDL",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            data = mapOf(
+                DrivingLicense.MDL_NAMESPACE to listOf(
+                    "age_over_21" to true.toDataItem(),
+                )
+            ),
+            createKeySettings = SoftwareCreateKeySettings.Builder()
+                .setPassphraseRequired(true, "1234", PassphraseConstraints.PIN_FOUR_DIGITS)
+                .build(),
+        )
+
+        val presentmentSource = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            showConsentPromptFn = { _, _, presentmentData, preselectedDocuments, onDocumentsInFocus ->
+                val defaultSelection = presentmentData.select(preselectedDocuments)
+                onDocumentsInFocus(defaultSelection.matches.map { it.credential.document })
+                val cred = defaultSelection.matches.first().credential as SecureAreaBoundCredential
+                defaultSelection.copy(
+                    preloadedKeyUnlockData = listOf(
+                        SoftwareKeyUnlockData(
+                            secureArea = harness.softwareSecureArea,
+                            alias = cred.alias,
+                            passphrase = "1234",
+                        )
+                    )
+                )
+            },
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("age_over_21" to false),
+                ),
+            )
+        }
+        val selection = mdocPresentmentObtainConsent(
+            deviceRequest = deviceRequest,
+            source = presentmentSource,
+        )
+        assertNotNull(selection)
+        assertEquals(1, selection.preloadedKeyUnlockData.size)
+
+        // Should succeed without needing a PromptModel in the coroutineContext because
+        // the key unlock data was already provided in selection.preloadedKeyUnlockData.
+        val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection = selection)
+        val responseResult = withContext(keyUnlockDataProvider) {
+            mdocPresentmentGenerateResponse(
+                selection = selection,
+                deviceRequest = deviceRequest,
+                eReaderKey = null,
+                sessionTranscript = sessionTranscript,
+                source = presentmentSource,
+            )
+        }
+        val deviceResponse = responseResult.deviceResponse
+        deviceResponse.verify(sessionTranscript = sessionTranscript)
+        assertEquals(1, deviceResponse.documents.size)
     }
 
     @Test

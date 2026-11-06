@@ -50,6 +50,7 @@ internal object ConsentGoldenCatalogGenerator {
         appendLine()
         appendLine("- **Run Compose golden verification tests:** `./gradlew :multipaz-compose:testDebugUnitTest`")
         appendLine("- **Regenerate Compose goldens & catalog:** `./gradlew :multipaz-compose:testDebugUnitTest -PupdateGoldens=true`")
+        appendLine("- **Regenerate Android 17 QPR2+ EmbeddedBiometricPrompt goldens (manual):** `./multipaz-compose/golden-screenshots/update-biometric-goldens.sh`")
         appendLine()
         appendLine("## Categories")
         appendLine()
