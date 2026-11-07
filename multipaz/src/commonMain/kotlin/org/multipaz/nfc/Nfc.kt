@@ -57,6 +57,13 @@ object Nfc {
     const val RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS = 0x6f00
 
     /**
+     * The [ResponseApdu.status] for indicating a function in CLA is not supported.
+     *
+     * Reference: ISO/IEC 7816-4 clause 5.6
+     */
+    const val RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED = 0x6a81
+
+    /**
      * The [ResponseApdu.status] for indicating a file or application was not found.
      *
      * Reference: ISO/IEC 7816-4 clause 5.6
