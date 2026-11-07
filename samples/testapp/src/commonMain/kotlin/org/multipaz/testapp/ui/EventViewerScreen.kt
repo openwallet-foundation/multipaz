@@ -69,6 +69,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
 import org.multipaz.mdoc.transport.MdocTransportType
 import org.multipaz.datetime.formatLocalized
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
 import org.multipaz.eventlogger.Event
@@ -554,6 +555,10 @@ private fun EventViewerPresentment(
             val info = documentModel.documentInfos.collectAsState().value.find {
                 it.document.identifier == requestedDocument.documentId
             }
+            var fallbackDocType by remember(info?.document) { mutableStateOf<DocumentType?>(null) }
+            LaunchedEffect(info?.document) {
+                fallbackDocType = info?.document?.getDocumentType()
+            }
             if (info != null) {
                 Image(
                     modifier = Modifier.height(80.dp),
@@ -576,7 +581,7 @@ private fun EventViewerPresentment(
                     modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                     title = "This info was shared",
                 ) {
-                    ExtractClaimsItems(sharedClaims, documentTypeRepository)
+                    ExtractClaimsItems(sharedClaims, documentTypeRepository, fallbackDocType)
                 }
             }
 
@@ -588,7 +593,7 @@ private fun EventViewerPresentment(
                     modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                     title = "This info was shared and stored",
                 ) {
-                    ExtractClaimsItems(sharedAndStoredClaims, documentTypeRepository)
+                    ExtractClaimsItems(sharedAndStoredClaims, documentTypeRepository, fallbackDocType)
                 }
             }
         }
@@ -629,13 +634,15 @@ private fun OriginAndAppIdItem(
 @Composable
 private fun ExtractClaimsItems(
     requestedClaims: Map<RequestedClaim, Claim>,
-    documentTypeRepository: DocumentTypeRepository
+    documentTypeRepository: DocumentTypeRepository,
+    fallbackDocumentType: DocumentType? = null
 ) {
     requestedClaims.forEach { (requestedClaim, claim) ->
         // Make sure claim.attribute is set, if we know the document type
         val claim = Claim.fromDataItem(
             dataItem = claim.toDataItem(),
-            documentTypeRepository = documentTypeRepository
+            documentTypeRepository = documentTypeRepository,
+            fallbackDocumentType = fallbackDocumentType
         )
         SegmentedItemHeadingAndText(
             heading = claim.displayName,

@@ -8,7 +8,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.mpzpass.MpzPassMetadata
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.fromBase64
@@ -354,7 +357,8 @@ val SdJwtInspectorComponent = FC {
 fun react.ChildrenBuilder.renderSdJwtDetails(
     sdjwt: SdJwt,
     parsedSdJwtKb: SdJwtKb? = null,
-    processedPayload: JsonObject? = null
+    processedPayload: JsonObject? = null,
+    mpzPassMetadata: MpzPassMetadata? = null
 ) {
     div {
         css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 16.px }
@@ -635,6 +639,7 @@ fun react.ChildrenBuilder.renderSdJwtDetails(
 
     // Disclosures Table
     if (sdjwt.disclosures.isNotEmpty()) {
+        val hasMpzMetadata = mpzPassMetadata != null && mpzPassMetadata.sdJwtVcClaimsMetadata.isNotEmpty()
         h3 {
             css {
                 fontSize = 1.4.rem
@@ -660,6 +665,9 @@ fun react.ChildrenBuilder.renderSdJwtDetails(
                     th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Index" }
                     th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Salt" }
                     th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Name" }
+                    if (hasMpzMetadata) {
+                        th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8"); width = 260.px }; +"Claim Metadata" }
+                    }
                     th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Value" }
                 }
             }
@@ -684,6 +692,56 @@ fun react.ChildrenBuilder.renderSdJwtDetails(
                         td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); color = Color("#64748b") }; +(index + 1).toString() }
                         td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; fontSize = 12.px; color = Color("#cbd5e1") }; +decoded.first }
                         td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontWeight = FontWeight.bold; color = Color("#38bdf8") }; +decoded.second }
+                        if (hasMpzMetadata) {
+                            val claimName = decoded.second
+                            val claimMeta = mpzPassMetadata.getSdJwtVcClaimMetadata(buildJsonArray { add(claimName) })
+                                ?: mpzPassMetadata.sdJwtVcClaimsMetadata.entries
+                                    .firstOrNull { (path, _) -> path.lastOrNull()?.jsonPrimitive?.content == claimName }
+                                    ?.value
+                            td {
+                                css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")) }
+                                if (claimMeta == null) {
+                                    span { css { color = Color("#64748b"); fontSize = 12.px }; +"—" }
+                                } else {
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        div {
+                                            css { color = Color("#f1f5f9"); fontWeight = FontWeight.bold; fontSize = 13.px }
+                                            +claimMeta.getDisplayName()
+                                        }
+                                        claimMeta.getDescription()?.let { desc ->
+                                            div {
+                                                css { color = Color("#94a3b8"); fontSize = 12.px }
+                                                +desc
+                                            }
+                                        }
+                                        div {
+                                            css {
+                                                display = Display.flex
+                                                flexWrap = FlexWrap.wrap
+                                                gap = 6.px
+                                                alignItems = AlignItems.center
+                                            }
+                                            if (claimMeta.icon != null) {
+                                                renderMaterialIconBadge(claimMeta.icon)
+                                            }
+                                            renderClaimTypeBadge(claimMeta.type)
+                                            renderSensitivityBadge(claimMeta.sensitivity)
+                                            if (claimMeta.groupId != null) {
+                                                renderClaimGroupBadge(
+                                                    claimMeta.groupId,
+                                                    mpzPassMetadata.claimGroupsMetadata[claimMeta.groupId]
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         td {
                             css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }
                             

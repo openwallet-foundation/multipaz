@@ -22,4 +22,6 @@ const val ISO_23220_5_CHV_1_DATA_ELEMENT = "CHV_1"
 data class MdocPortraitEquivalenceData(
     val namespace: String,
     val dataElementName: String,
-)
+) {
+    companion object
+}

@@ -7,6 +7,9 @@ import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
+import org.multipaz.mpzpass.MpzPassClaimMetadata
+import org.multipaz.mpzpass.MpzPassMetadata
+import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.AgeVerification
@@ -23,7 +26,11 @@ import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentPurposeHintIso18013
+import org.multipaz.request.Iso18013RequesterIdentity
+import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.toBase64Url
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
@@ -555,5 +562,132 @@ class ConsentClassifierTest {
         }
         val unknownClaimData = unknownClaimReq.execute(presentmentSource = harness.presentmentSource)
         assertEquals(emptySet(), unknownClaimData.useCases[0].classifyPurposes())
+    }
+
+    @Test
+    fun testCustomDocTypeWithValidAndUnknownClaims() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        val customDocType = "org.example.loyalty.1"
+        val customDoc = harness.provisionMdoc(
+            displayName = "Erika's Mini Mart Loyalty Card",
+            docType = customDocType,
+            data = mapOf(
+                customDocType to listOf(
+                    "given_name" to Tstr("Erika"),
+                    "family_name" to Tstr("Mustermann"),
+                    "merchant_name" to Tstr("Utopia Mini Mart"),
+                    "membership_number" to Tstr("24601"),
+                    "tier" to Tstr("Gold"),
+                    "valid_from" to Tstr("2026-01-01"),
+                    "valid_until" to Tstr("2027-01-01"),
+                    "undocumented_claim" to Tstr("Secret"),
+                )
+            )
+        )
+        customDoc.edit {
+            mpzPassMetadata = MpzPassMetadata(
+                isoMdocClaimsMetadata = mapOf(
+                    customDocType to mapOf(
+                        "given_name" to MpzPassClaimMetadata(displayName = mapOf("en" to "Given Name")),
+                        "family_name" to MpzPassClaimMetadata(displayName = mapOf("en" to "Family Name")),
+                        "merchant_name" to MpzPassClaimMetadata(displayName = mapOf("en" to "Merchant Name")),
+                        "membership_number" to MpzPassClaimMetadata(displayName = mapOf("en" to "Membership Number")),
+                        "tier" to MpzPassClaimMetadata(displayName = mapOf("en" to "Tier")),
+                        "valid_from" to MpzPassClaimMetadata(
+                            displayName = mapOf("en" to "Valid From"),
+                            type = DocumentAttributeType.Date,
+                        ),
+                        "valid_until" to MpzPassClaimMetadata(
+                            displayName = mapOf("en" to "Valid Until"),
+                            type = DocumentAttributeType.Date,
+                        ),
+                    )
+                )
+            )
+        }
+
+        val trustedRequester = Requester(
+            requesterIdentities = listOf(Iso18013RequesterIdentity(harness.dsKey.certChain)),
+            origin = "https://verifier.multipaz.org",
+        )
+        val trustedIdentity = TrustedRequesterIdentity(
+            identity = trustedRequester.requesterIdentities.first(),
+            trustMetadata = TrustMetadata(displayName = "Multipaz Verifier"),
+        )
+        val unverifiedWebRequester = Requester(
+            requesterIdentities = listOf(Iso18013RequesterIdentity(harness.dsKey.certChain)),
+            origin = "https://verifier.multipaz.org",
+        )
+
+        // 1. Valid request for schema-defined claims on a custom doctype -> empty purposes, NOT unusual
+        val validDcql = DcqlQuery.fromJson(
+            Json.parseToJsonElement(
+                """
+                {
+                  "credentials": [
+                    {
+                      "id": "mdoc",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.example.loyalty.1"
+                      },
+                      "claims": [
+                        { "path": ["org.example.loyalty.1", "given_name"] },
+                        { "path": ["org.example.loyalty.1", "family_name"] },
+                        { "path": ["org.example.loyalty.1", "merchant_name"] },
+                        { "path": ["org.example.loyalty.1", "membership_number"] },
+                        { "path": ["org.example.loyalty.1", "tier"] },
+                        { "path": ["org.example.loyalty.1", "valid_from"] },
+                        { "path": ["org.example.loyalty.1", "valid_until"] }
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+        val validData = validDcql.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(emptySet(), defaultClassifyPurposes(trustedRequester, trustedIdentity, validData))
+        assertEquals(
+            ConsentRiskAssessment(ConsentRiskLevel.NORMAL, emptySet()),
+            defaultClassifyRisk(trustedRequester, trustedIdentity, validData)
+        )
+        assertEquals(
+            ConsentRiskAssessment(
+                ConsentRiskLevel.WARNING,
+                setOf(ConsentRiskReason.UNTRUSTED_REQUESTER, ConsentRiskReason.PII_REQUESTED),
+            ),
+            defaultClassifyRisk(unverifiedWebRequester, null, validData)
+        )
+
+        // 2. Request including a claim not in the custom doctype schema (attribute == null) -> HIGH_RISK (UNUSUAL_REQUEST)
+        val unknownClaimDcql = DcqlQuery.fromJson(
+            Json.parseToJsonElement(
+                """
+                {
+                  "credentials": [
+                    {
+                      "id": "mdoc",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.example.loyalty.1"
+                      },
+                      "claims": [
+                        { "path": ["org.example.loyalty.1", "given_name"] },
+                        { "path": ["org.example.loyalty.1", "undocumented_claim"] }
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+        val unknownClaimData = unknownClaimDcql.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(emptySet(), defaultClassifyPurposes(trustedRequester, trustedIdentity, unknownClaimData))
+        assertEquals(
+            ConsentRiskAssessment(ConsentRiskLevel.HIGH_RISK, setOf(ConsentRiskReason.UNUSUAL_REQUEST)),
+            defaultClassifyRisk(trustedRequester, trustedIdentity, unknownClaimData)
+        )
     }
 }

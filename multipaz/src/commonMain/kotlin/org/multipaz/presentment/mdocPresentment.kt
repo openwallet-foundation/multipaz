@@ -192,6 +192,7 @@ suspend fun mdocPerformFaceMatching(
         }
 
         val documentType = source.documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
+            ?: credential.document.getDocumentType()
         val peData = credential.document.portraitEquivalenceData ?: documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
             ?: throw FaceNotMatchedException("Credential docType '${credential.docType}' does not support portrait image equivalence")
         val issuerSignedItem = credential.issuerNamespaces.data[peData.namespace]?.get(peData.dataElementName)
@@ -649,7 +650,7 @@ internal fun isChv1Claim(reqClaim: RequestedClaim): Boolean {
             reqClaim.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
 }
 
-internal fun canSatisfyChv1(
+internal suspend fun canSatisfyChv1(
     cred: Credential,
     presentmentSource: PresentmentSource,
     faceMatchingMode: FaceMatchingMode
@@ -667,6 +668,7 @@ internal fun canSatisfyChv1(
         return false
     }
     val docType = presentmentSource.documentTypeRepository.getDocumentTypeForMdoc(cred.docType)
+        ?: cred.document.getDocumentType()
     val peData = cred.document.portraitEquivalenceData ?: docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
     val hasPortrait = cred.issuerNamespaces.data[peData.namespace]?.containsKey(peData.dataElementName) == true
     if (!hasPortrait) {

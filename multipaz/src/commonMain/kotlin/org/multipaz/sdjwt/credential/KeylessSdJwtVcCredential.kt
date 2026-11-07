@@ -95,6 +95,7 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            metadata = document.mpzPassMetadata,
             readerIdentifiers = document.readerIdentifiers,
             sdJwtVc = listOf(MpzPassSdJwtVc(
                 vct = vct,

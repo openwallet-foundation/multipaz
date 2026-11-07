@@ -69,6 +69,7 @@ import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.mpzpass.MpzPass
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.RequesterHistory
@@ -1037,6 +1038,15 @@ class SwiftConsentGoldenEcosystem private constructor(
                     randomProvider = twoPhotoIdsRng,
                 )
             }
+
+            val mpzPassBytes = readResourceBytes("mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass")
+            val mpzPass = MpzPass.fromDataItem(Cbor.decode(mpzPassBytes.toByteArray()))
+            documentStore.importMpzPass(
+                mpzPass = mpzPass,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt",
+            )
 
             return SwiftConsentGoldenEcosystem(
                 documentTypeRepository = documentTypeRepository,

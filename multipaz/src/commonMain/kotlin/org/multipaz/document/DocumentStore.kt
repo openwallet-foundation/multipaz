@@ -291,12 +291,13 @@ class DocumentStore private constructor(
      * Imports a [MpzPass] into a [DocumentStore].
      *
      * The returned document will have the [Document.provisioned] flag set to `true`,
-     * [Document.mpzPassId] and [Document.mpzPassVersion] will be set to [MpzPass.uniqueId]
-     * and [MpzPass.version], and [Document.readerIdentifiers] will be set to [MpzPass.readerIdentifiers].
+     * [Document.mpzPassId], [Document.mpzPassVersion], and [Document.mpzPassMetadata] will be set to
+     * [MpzPass.uniqueId], [MpzPass.version], and [MpzPass.metadata], and [Document.readerIdentifiers]
+     * will be set to [MpzPass.readerIdentifiers].
      *
      * If the pass had been previously imported at an earlier version, the same [Document] will
-     * be returned and the credentials, display metadata, reader identifiers, and [Document.mpzPassVersion]
-     * will be updated. If the pass is already import at the same or later version,
+     * be returned and the credentials, metadata, reader identifiers, and [Document.mpzPassVersion]
+     * will be updated. If the pass is already imported at the same or later version,
      * [ImportMpzPassException] will be thrown.
      *
      * @param mpzPass The [MpzPass] to import.
@@ -423,6 +424,7 @@ class DocumentStore private constructor(
                 cardArt = mpzPass.cardArt
                 mpzPassId = mpzPass.uniqueId
                 mpzPassVersion = mpzPass.version
+                mpzPassMetadata = mpzPass.metadata
                 readerIdentifiers = mpzPass.readerIdentifiers
             }
             return document
