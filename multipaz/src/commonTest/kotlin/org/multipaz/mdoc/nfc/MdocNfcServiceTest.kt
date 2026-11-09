@@ -70,6 +70,7 @@ import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcApduRouter
 import org.multipaz.nfc.NfcApduService
+import org.multipaz.nfc.NfcCommandFailedException
 import org.multipaz.nfc.NfcDeactivationReason
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.NfcTagLostException
@@ -99,6 +100,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -3281,5 +3283,40 @@ class MdocNfcServiceTest {
                 fixture.close()
             }
         }
+    }
+
+    @Test
+    fun readerHandover_returnsNullOnFileNotFoundOrFunctionNotSupported_andRethrowsUnexpectedStatus() = runTest {
+        fun tagReturningStatus(status: Int) = object : NfcIsoTag() {
+            override val maxTransceiveLength: Int = 261
+            override suspend fun transceive(command: CommandApdu): ResponseApdu = ResponseApdu(status)
+            override suspend fun close() {}
+            override suspend fun updateDialogMessage(message: String) {}
+        }
+
+        assertNull(
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(useCce = true),
+            )
+        )
+
+        assertNull(
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(useCce = true),
+            )
+        )
+
+        val ex = assertFailsWith<NfcCommandFailedException> {
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(useCce = false),
+            )
+        }
+        assertEquals(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS, ex.status)
     }
 }

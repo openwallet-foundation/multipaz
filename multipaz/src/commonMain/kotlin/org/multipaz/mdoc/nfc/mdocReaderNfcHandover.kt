@@ -138,14 +138,17 @@ suspend fun mdocReaderNfcHandover(
         tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
         Logger.i(TAG, "Successfully selected NDEF AID")
     } catch (e: NfcCommandFailedException) {
-        // This is returned by Android when locked phone is being tapped by an mdoc reader. Once unlocked the
-        // user will be shown UI to convey another tap should happen. So since we're the mdoc reader, we
-        // want to keep scanning...
+        // This is returned by Android when locked phone is being tapped by an mdoc reader, or when
+        // Observe Mode initially suppresses HCE on external readers. Once unlocked or re-polled,
+        // the tag will respond. So since we're the mdoc reader, we want to keep scanning...
         //
-        if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND) {
-            Logger.i(TAG, "NDEF application not found, continuing scanning")
+        if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND ||
+            e.status == Nfc.RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED
+        ) {
+            Logger.i(TAG, "NDEF application selection failed with 0x${e.status.toString(16)}, continuing scanning")
             return null
         }
+        throw e
     }
 
     tag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)

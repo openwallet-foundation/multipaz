@@ -1,23 +1,37 @@
 package org.multipaz.nfc
 
-import kotlinx.coroutines.CancellationException
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.multipaz.util.Logger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "NfcTagReaderUsb"
 
 private class NfcIsoTagUsb(
     private val driver: CcidDriver,
-    private val updateMessage: (message: String) -> Unit
+    private val updateMessage: (message: String) -> Unit,
+    private val onClose: () -> Unit,
 ): NfcIsoTag() {
+    @Volatile
+    var isClosed: Boolean = false
+        private set
+
+    fun resetClosed() {
+        isClosed = false
+    }
+
     override val maxTransceiveLength: Int
         get() = driver.maxCommandLength
 
@@ -33,7 +47,8 @@ private class NfcIsoTagUsb(
     }
 
     override suspend fun close() {
-        // No-op for the reader driver itself; the driver remains connected for future card insertions.
+        isClosed = true
+        onClose()
     }
 
     override suspend fun updateDialogMessage(message: String) {
@@ -47,6 +62,9 @@ internal class NfcTagReaderUsb(
     private val device: UsbDevice,
     private val interfaceIndex: Int,
 ): NfcTagReader {
+    private var activeDriver: CcidDriver? = null
+    private var delayedDisconnectJob: Job? = null
+
     override val external: Boolean
         get() = true
 
@@ -71,34 +89,71 @@ internal class NfcTagReaderUsb(
         options: NfcScanOptions,
         context: CoroutineContext
     ): T {
+        delayedDisconnectJob?.cancel()
+        delayedDisconnectJob = null
+        activeDriver?.disconnect()
+        activeDriver = null
+
         val driver = CcidDriver(
             usbManager = manager,
             device = device,
-            interfaceIndex = interfaceIndex
+            interfaceIndex = interfaceIndex,
+            pollingFrameData = options.pollingFrameData?.toByteArray()
         )
         driver.connect()
+        activeDriver = driver
+        val scanCompleted = AtomicBoolean(false)
+        var keepDriverConnectedUntilTagClosed = false
+        var activeTag: NfcIsoTagUsb? = null
         try {
             return scanNfcWithPromptDialog(message) { updateMessage, resetMessage ->
                 suspendCancellableCoroutine { continuation ->
+                    val stateLock = Any()
                     var readJob: Job? = null
+                    val isCardPresent = AtomicBoolean(false)
 
                     val listener = object : CcidDriverListener {
                         override fun onCardInserted() {
                             Logger.i(TAG, "Card inserted")
-                            if (readJob == null) {
+                            synchronized(stateLock) {
+                                isCardPresent.set(true)
+                                if (readJob != null) return
                                 readJob = CoroutineScope(context).launch {
                                     val tag = NfcIsoTagUsb(
                                         driver = driver,
-                                        updateMessage = updateMessage
-                                    )
-                                    try {
-                                        val funcResult = tagInteractionFunc(tag)
-                                        if (funcResult != null) {
-                                            if (continuation.isActive) {
-                                                continuation.resume(funcResult)
+                                        updateMessage = updateMessage,
+                                        onClose = {
+                                            if (scanCompleted.get()) {
+                                                delayedDisconnectJob?.cancel()
+                                                delayedDisconnectJob = null
+                                                if (activeDriver === driver) {
+                                                    activeDriver = null
+                                                }
+                                                driver.disconnect()
                                             }
-                                        } else {
+                                        }
+                                    )
+                                    activeTag = tag
+                                    try {
+                                        while (continuation.isActive && isCardPresent.get()) {
+                                            tag.resetClosed()
+                                            val funcResult = tagInteractionFunc(tag)
+                                            if (funcResult != null) {
+                                                keepDriverConnectedUntilTagClosed = !tag.isClosed
+                                                if (continuation.isActive) {
+                                                    continuation.resume(funcResult)
+                                                }
+                                                break
+                                            }
                                             resetMessage()
+                                            // Keep the RF field on briefly while Android's PollingFrameHandler
+                                            // finishes disabling Observe Mode, then power-cycle the slot so a fresh
+                                            // RATS/ATTRIB triggers ISO-DEP activation on the phone.
+                                            delay(200.milliseconds)
+                                            if (!continuation.isActive || !isCardPresent.get()) break
+                                            if (!driver.powerCycleCard()) {
+                                                delay(150.milliseconds)
+                                            }
                                         }
                                     } catch (e: NfcTagLostException) {
                                         // This is to properly handle emulated tags - such as on Android - which may be showing
@@ -110,14 +165,20 @@ internal class NfcTagReaderUsb(
                                         if (continuation.isActive) {
                                             continuation.resumeWithException(e)
                                         }
+                                    } finally {
+                                        synchronized(stateLock) {
+                                            readJob = null
+                                        }
                                     }
-                                    readJob = null
                                 }
                             }
                         }
 
                         override fun onCardRemoved() {
                             Logger.i(TAG, "Card removed")
+                            synchronized(stateLock) {
+                                isCardPresent.set(false)
+                            }
                         }
                     }
 
@@ -135,6 +196,9 @@ internal class NfcTagReaderUsb(
 
                     continuation.invokeOnCancellation {
                         readJob?.cancel()
+                        if (activeDriver === driver) {
+                            activeDriver = null
+                        }
                         driver.disconnect()
                     }
                 }
@@ -143,8 +207,22 @@ internal class NfcTagReaderUsb(
             if (e is CancellationException) throw e
             throw e
         } finally {
+            scanCompleted.set(true)
             driver.setListener(null)
-            driver.disconnect()
+            if (!keepDriverConnectedUntilTagClosed || activeTag?.isClosed == true) {
+                if (activeDriver === driver) {
+                    activeDriver = null
+                }
+                driver.disconnect()
+            } else {
+                delayedDisconnectJob = CoroutineScope(Dispatchers.Default).launch {
+                    delay(30.seconds)
+                    if (activeDriver === driver) {
+                        activeDriver = null
+                    }
+                    driver.disconnect()
+                }
+            }
         }
     }
 }
