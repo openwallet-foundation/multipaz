@@ -28,11 +28,19 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.DocumentAttributeType
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.MdocPortraitEquivalenceData
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mpzpass.MpzPassMetadata
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.tags.Tags
+import org.multipaz.util.currentLocale
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.concurrent.Volatile
@@ -169,6 +177,11 @@ class Document internal constructor(
     val mpzPassVersion: Long? get() = data.mpzPassVersion
 
     /**
+     * Metadata if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     */
+    val mpzPassMetadata: MpzPassMetadata? get() = data.mpzPassMetadata
+
+    /**
      * A list of reader identifiers for reader authentication.
      *
      * If non-empty, the document is only accessible to readers using reader authentication
@@ -195,6 +208,122 @@ class Document internal constructor(
      */
     val portraitEquivalenceData: MdocPortraitEquivalenceData? get() = data.portraitEquivalenceData
 
+    @Volatile
+    private var cachedDocumentTypeKey: Triple<DocumentData, List<Credential>, List<String>>? = null
+    @Volatile
+    private var cachedDocumentType: DocumentType? = null
+
+    /**
+     * Returns a [DocumentType] synthesized from metadata obtained at provisioning time, typically
+     * from the document issuer (such as [mpzPassMetadata], [openID4VCIClaimDescriptions], or
+     * [portraitEquivalenceData]), or `null` if no such metadata is available on this document.
+     *
+     * Looking up a [DocumentType] from a [org.multipaz.documenttype.DocumentTypeRepository] is the
+     * preferred path; if no matching entry exists in the repository, this method may be used as a
+     * fallback.
+     *
+     * @param locales BCP 47 language tags, most preferred first (e.g., `["ja-JP", "en-US"]`).
+     *   If empty, the current platform locale is used.
+     */
+    suspend fun getDocumentType(locales: List<String> = emptyList()): DocumentType? {
+        val currentData = data
+        val credentials = getCredentials()
+        val effectiveLocales = locales.ifEmpty { listOf(currentLocale) }
+        val key = Triple(currentData, credentials, effectiveLocales)
+        if (cachedDocumentTypeKey != key) {
+            cachedDocumentType = buildSynthesizedDocumentType(currentData, credentials, effectiveLocales)
+            cachedDocumentTypeKey = key
+        }
+        return cachedDocumentType
+    }
+
+    private fun buildSynthesizedDocumentType(
+        currentData: DocumentData,
+        credentials: List<Credential>,
+        locales: List<String>
+    ): DocumentType? {
+        val typeName = currentData.typeDisplayName ?: currentData.displayName ?: ""
+        val mdocCred = credentials.filterIsInstance<MdocCredential>().firstOrNull()
+        val sdJwtCred = credentials.filterIsInstance<SdJwtVcCredential>().firstOrNull()
+        val passMetadata = currentData.mpzPassMetadata
+        if (passMetadata != null) {
+            return passMetadata.buildDocumentType(typeName, mdocCred, sdJwtCred, locales)
+        }
+
+        val claimDescriptions = currentData.openID4VCIClaimDescriptions?.let {
+            decodeOpenID4VCIClaimDescriptions(it)
+        } ?: emptyList()
+        val peData = currentData.portraitEquivalenceData
+        if (claimDescriptions.isEmpty() && peData == null) {
+            return null
+        }
+
+        val builder = DocumentType.Builder(typeName)
+        val twoElementStringPaths = claimDescriptions.filter { desc ->
+            desc.path.size == 2 && desc.path.all { it is JsonPrimitive && it.isString }
+        }
+        val oneElementStringPaths = claimDescriptions.filter { desc ->
+            desc.path.size == 1 && desc.path.all { it is JsonPrimitive && it.isString }
+        }
+
+        if (mdocCred != null && (twoElementStringPaths.isNotEmpty() || peData != null)) {
+            builder.addMdocDocumentType(mdocCred.docType)
+            builder.setSupportsPortraitImageEquivalence(peData)
+            for (desc in twoElementStringPaths) {
+                val namespace = (desc.path[0] as JsonPrimitive).content
+                val dataElementName = (desc.path[1] as JsonPrimitive).content
+                builder.addMdocAttribute(
+                    type = DocumentAttributeType.String,
+                    identifier = dataElementName,
+                    displayName = desc.getDisplayName(locales) ?: dataElementName,
+                    description = "",
+                    mandatory = false,
+                    mdocNamespace = namespace
+                )
+            }
+        }
+
+        if (sdJwtCred != null && (oneElementStringPaths.isNotEmpty() || twoElementStringPaths.isNotEmpty())) {
+            builder.addJsonDocumentType(
+                type = sdJwtCred.vct,
+                keyBound = sdJwtCred is KeyBoundSdJwtVcCredential
+            )
+            val jsonBuilder = builder.jsonBuilder!!
+            for (desc in oneElementStringPaths) {
+                val id = (desc.path[0] as JsonPrimitive).content
+                jsonBuilder.addClaim(
+                    type = DocumentAttributeType.String,
+                    identifier = id,
+                    displayName = desc.getDisplayName(locales) ?: id,
+                    description = ""
+                )
+            }
+            for (desc in twoElementStringPaths) {
+                val parentId = (desc.path[0] as JsonPrimitive).content
+                val childId = (desc.path[1] as JsonPrimitive).content
+                if (!jsonBuilder.claims.containsKey(parentId)) {
+                    jsonBuilder.addClaim(
+                        type = DocumentAttributeType.ComplexType,
+                        identifier = parentId,
+                        displayName = parentId,
+                        description = ""
+                    )
+                }
+                jsonBuilder.addEmbeddedAttribute(
+                    parentIdentifier = parentId,
+                    type = DocumentAttributeType.String,
+                    identifier = childId,
+                    displayName = desc.getDisplayName(locales) ?: childId,
+                    description = ""
+                )
+            }
+        }
+        if (builder.mdocBuilder == null && builder.jsonBuilder == null) {
+            return null
+        }
+        return builder.build()
+    }
+
     /**
      * A [Tags] for storing application-specific data.
      *
@@ -216,6 +345,7 @@ class Document internal constructor(
                     appData = data.appData,
                     mpzPassId = data.mpzPassId,
                     mpzPassVersion = data.mpzPassVersion,
+                    mpzPassMetadata = data.mpzPassMetadata,
                     readerIdentifiers = data.readerIdentifiers,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
@@ -483,6 +613,7 @@ class Document internal constructor(
                 appData = data.appData,
                 mpzPassId = data.mpzPassId,
                 mpzPassVersion = data.mpzPassVersion,
+                mpzPassMetadata = data.mpzPassMetadata,
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags),
@@ -508,6 +639,7 @@ class Document internal constructor(
                 appData = editor.appData,
                 mpzPassId = editor.mpzPassId,
                 mpzPassVersion = editor.mpzPassVersion,
+                mpzPassMetadata = editor.mpzPassMetadata,
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
@@ -542,6 +674,7 @@ class Document internal constructor(
      * @property appData Application-specific data.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property mpzPassMetadata Metadata for claims if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
@@ -560,6 +693,7 @@ class Document internal constructor(
         var appData: ByteString?,
         var mpzPassId: String?,
         var mpzPassVersion: Long?,
+        var mpzPassMetadata: MpzPassMetadata? = null,
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor,

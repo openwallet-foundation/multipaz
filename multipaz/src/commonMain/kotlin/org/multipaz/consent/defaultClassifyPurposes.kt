@@ -53,32 +53,41 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
  *        `cinema`, `movie`, `show_date_time`, `movie_rating`, `theater_id`, `seat_id`,
  *        `parking_option`, `poster`) or have `VALIDITY`, `ISSUER`, or `PORTRAIT_IMAGE`
  *        sensitivity; otherwise returns an empty set.
- *    - **General identity / mDL / PID credentials**: Each requested claim is categorized:
- *      - Driving claims (`driving_privileges`, `domestic_driving_privileges`,
- *        `hazmat_endorsement_expiration_date`) add [PresentmentPurpose.DRIVING_PRIVILEGES].
- *      - Age claims ([DocumentAttributeSensitivity.AGE_INFORMATION], `age_in_years`,
- *        `age_birth_year`, `age_over_*`, `age_above*`, `age_equal_or_over.*`) add
- *        [PresentmentPurpose.AGE_VERIFICATION]. At most 2 age claims per credential are permitted;
- *        requesting 3 or more age claims on a single credential is treated as over-broad and
- *        returns an empty set.
- *      - Address claims (e.g., `resident_address`, `resident_city`, `resident_state`,
- *        `resident_postal_code`, `resident_country`, `address.*`, `locality`, `street_address`,
- *        etc.) add [PresentmentPurpose.ADDRESS_VERIFICATION].
- *      - Core identity claims (e.g., `family_name`, `given_name`, `birth_date`, `document_number`,
- *        `person_id`, `personal_administrative_number`, `sex`, `gender`, `nationality`,
- *        `place_of_birth`, `signature_usual_mark`, `dg1`, `dg2`, `sod`, etc.) add
- *        [PresentmentPurpose.IDENTITY_VERIFICATION].
- *      - Portrait claims ([DocumentAttributeSensitivity.PORTRAIT_IMAGE], `portrait`, `picture`,
- *        `resident_image`) and auxiliary validity/issuer metadata claims (`issue_date`,
- *        `expiry_date`, `issuing_country`, `issuing_authority`, `DHS_compliance`, etc.) are
- *        compatible with any purpose. If a credential requests only a portrait (or requires face
- *        matching) without other purpose-specific claims, it defaults to
- *        [PresentmentPurpose.IDENTITY_VERIFICATION].
- *      - Any other claim not accounted for above (such as `height`, `weight`, `eye_colour`,
- *        `hair_colour`, etc.) causes classification to fail and return an empty set.
- *      - **Same-credential subsumption**: When both [PresentmentPurpose.IDENTITY_VERIFICATION] and
- *        [PresentmentPurpose.AGE_VERIFICATION] are inferred on the same credential,
- *        [PresentmentPurpose.IDENTITY_VERIFICATION] subsumes [PresentmentPurpose.AGE_VERIFICATION].
+ *      - **General identity / mDL / PID / age verification credentials**
+ *        (`org.iso.18013.5.1.mDL`, `org.iso.23220.photoid.1`, `eu.europa.ec.eudi.pid.1`,
+ *        `urn:eudi:pid:1`, `https://example.bmi.bund.de/credential/pid/1.0`,
+ *        `eu.europa.ec.av.1`, `com.google.wallet.idcard.1`, `in.gov.uidai.aadhaar.1`,
+ *        `eu.europa.ec.eudi.cor.1`, `https://example.eudi.ec.europa.eu/cor/1`): Each requested
+ *        claim is categorized:
+ *        - Driving claims (`driving_privileges`, `domestic_driving_privileges`,
+ *          `hazmat_endorsement_expiration_date`) add [PresentmentPurpose.DRIVING_PRIVILEGES].
+ *        - Age claims ([DocumentAttributeSensitivity.AGE_INFORMATION], `age_in_years`,
+ *          `age_birth_year`, `age_over_*`, `age_above*`, `age_equal_or_over.*`) add
+ *          [PresentmentPurpose.AGE_VERIFICATION]. At most 2 age claims per credential are permitted;
+ *          requesting 3 or more age claims on a single credential is treated as over-broad and
+ *          returns an empty set.
+ *        - Address claims (e.g., `resident_address`, `resident_city`, `resident_state`,
+ *          `resident_postal_code`, `resident_country`, `address.*`, `locality`, `street_address`,
+ *          etc.) add [PresentmentPurpose.ADDRESS_VERIFICATION].
+ *        - Core identity claims (e.g., `family_name`, `given_name`, `birth_date`, `document_number`,
+ *          `person_id`, `personal_administrative_number`, `sex`, `gender`, `nationality`,
+ *          `place_of_birth`, `signature_usual_mark`, `dg1`, `dg2`, `sod`, etc.) add
+ *          [PresentmentPurpose.IDENTITY_VERIFICATION].
+ *        - Portrait claims ([DocumentAttributeSensitivity.PORTRAIT_IMAGE], `portrait`, `picture`,
+ *          `resident_image`) and auxiliary validity/issuer metadata claims (`issue_date`,
+ *          `expiry_date`, `issuing_country`, `issuing_authority`, `DHS_compliance`, etc.) are
+ *          compatible with any purpose. If a credential requests only a portrait (or requires face
+ *          matching) without other purpose-specific claims, it defaults to
+ *          [PresentmentPurpose.IDENTITY_VERIFICATION].
+ *        - Any other claim not accounted for above (such as `height`, `weight`, `eye_colour`,
+ *          `hair_colour`, etc.) causes classification to fail and return an empty set.
+ *        - **Same-credential subsumption**: When both [PresentmentPurpose.IDENTITY_VERIFICATION] and
+ *          [PresentmentPurpose.AGE_VERIFICATION] are inferred on the same credential,
+ *          [PresentmentPurpose.IDENTITY_VERIFICATION] subsumes [PresentmentPurpose.AGE_VERIFICATION].
+ *      - **Other / custom credentials**: For any other doctype or VCT, no domain-specific
+ *        [PresentmentPurpose] is inferred (unless a recognized transaction type such as
+ *        `"urn:eudi:sca:payment:1"` is attached), returning an empty set so the UI renders a
+ *        generic request subtitle without flagging the request as unusual.
  *
  * 2. **Purpose hints validation**: If [PresentmentUseCase.purposeHints] is non-empty, each
  *    protocol-level hint (such as ISO/IEC 18013-5 `org.iso.jtc1.sc17` purpose codes `1` for
@@ -153,6 +162,25 @@ private val TICKET_DOCTYPES_AND_VCTS = setOf(
     "org.multipaz.example.boarding-pass.1",
     "https://utopia.example.com/vct/movieticket",
 )
+
+private val IDENTITY_DOCTYPES_AND_VCTS = setOf(
+    "org.iso.18013.5.1.mDL",
+    "org.iso.23220.photoid.1",
+    "eu.europa.ec.eudi.pid.1",
+    "urn:eudi:pid:1",
+    "https://example.bmi.bund.de/credential/pid/1.0",
+    "eu.europa.ec.av.1",
+    "com.google.wallet.idcard.1",
+    "in.gov.uidai.aadhaar.1",
+    "eu.europa.ec.eudi.cor.1",
+    "https://example.eudi.ec.europa.eu/cor/1",
+)
+
+internal val KNOWN_PURPOSE_DOCTYPES_AND_VCTS =
+    PAYMENT_DOCTYPES_AND_VCTS +
+        LOYALTY_DOCTYPES_AND_VCTS +
+        TICKET_DOCTYPES_AND_VCTS +
+        IDENTITY_DOCTYPES_AND_VCTS
 
 private val TICKET_CLAIM_IDENTIFIERS = setOf(
     "passenger_name",
@@ -372,6 +400,10 @@ internal fun PresentmentCredentialMatch.classifyPurposes(): Set<PresentmentPurpo
         return purposes.sortedBy { it.ordinal }.toSet()
     }
 
+    if (docTypeOrVct !in IDENTITY_DOCTYPES_AND_VCTS) {
+        return purposes.sortedBy { it.ordinal }.toSet()
+    }
+
     var ageClaimCount = 0
     var hasPortrait = false
 
@@ -539,6 +571,40 @@ internal fun PresentmentSelection.classifyPurposes(): Set<PresentmentPurpose> {
         combined.addAll(matchPurposes)
     }
     return combined.sortedBy { it.ordinal }.toSet()
+}
+
+/**
+ * Returns `true` if this credential match's doctype or VCT is in [KNOWN_PURPOSE_DOCTYPES_AND_VCTS].
+ */
+internal fun PresentmentCredentialMatch.isKnownPurposeDocTypeOrVct(): Boolean =
+    resolveDocTypeOrVct() in KNOWN_PURPOSE_DOCTYPES_AND_VCTS
+
+/**
+ * Returns `true` if the selected credentials in [PresentmentData] represent an unusual or
+ * over-broad request on a known document type, an unrecognized/mismatched
+ * [PresentmentUseCase.purposeHints], or an unknown schema attribute (`attribute == null`).
+ */
+internal fun PresentmentData.hasUnusualRequest(
+    selections: List<List<Int>> = defaultSelections()
+): Boolean {
+    useCases.forEachIndexed { index, useCase ->
+        val selectedIndices = selections[index]
+        for (selectionIndex in selectedIndices) {
+            val solution = useCase.solutions.getOrNull(selectionIndex) ?: return true
+            for (match in solution.matches) {
+                if (match.claims.values.any { it.attribute == null }) {
+                    return true
+                }
+                if (match.isKnownPurposeDocTypeOrVct() && match.classifyPurposes().isEmpty()) {
+                    return true
+                }
+            }
+            if (useCase.purposeHints.isNotEmpty() && useCase.classifyPurposes(selectionIndex).isEmpty()) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 private fun PresentmentPurpose.permittedInferredPurposes(): Set<PresentmentPurpose> = when (this) {

@@ -490,6 +490,7 @@ class MdocCredential : SecureAreaBoundCredential {
         locales: List<String>
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)
+            ?: document.getDocumentType(locales)
         val namespaces = issuerSigned.getOrNull("nameSpaces")
             ?: return emptyList()
         val claimDescriptions = document.openID4VCIClaimDescriptions
@@ -573,6 +574,7 @@ class MdocCredential : SecureAreaBoundCredential {
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            metadata = document.mpzPassMetadata,
             userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
             readerIdentifiers = document.readerIdentifiers,
             isoMdoc = listOf(MpzPassIsoMdoc(

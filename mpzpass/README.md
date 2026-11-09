@@ -154,6 +154,18 @@ CredentialData = {
                                          ; order to present the pass.
   ? "readerIdentifiers": ReaderIdentifiers, ; If set, restrict access to certain readers.
   ? "shareable": bool,       ; If set and true, the pass may be shared with others.
+  ? "claimGroupsMetadata": {
+    + GroupIdentifier => ClaimGroupMetadata
+  },
+  ? "isoMdocClaimsMetadata": {
+    + Namespace => {
+      + DataElementIdentifier => ClaimMetadata
+    }
+  },
+  ? "isoMdocPortraitEquivalenceData": IsoMdocPortraitEquivalenceData,
+  ? "sdJwtVcClaimsMetadata": {
+    + ClaimPath => ClaimMetadata
+  },
   "display": Display,
   "credential": Credential,
 }
@@ -163,12 +175,67 @@ CredentialData = {
 ;
 ReaderIdentifiers = [+ bstr ]
 
+GroupIdentifier = tstr
+Namespace = tstr
+DataElementIdentifier = tstr
+ClaimPath = [+ tstr]
+
+; Information about portrait image equivalence support for an ISO mdoc credential.
+;
+IsoMdocPortraitEquivalenceData = {
+  "namespace": Namespace,
+  "dataElementName": DataElementIdentifier,
+}
+
+; Metadata for a logical group of claims that can be collapsed into a single
+; pseudo-claim in the consent prompt when at least `minClaimsToGroup` claims
+; from the group are requested.
+;
+ClaimGroupMetadata = {
+  "displayName": LocalizedString,
+  ? "description": LocalizedString,
+  ? "icon": Icon,
+  ? "sensitivity": tstr,      ; Attribute sensitivity classification ("VALIDITY", "ISSUER",
+                              ; "AGE_INFORMATION", "PORTRAIT_IMAGE", or "PII"); defaults to "PII" if unset
+  ? "minClaimsToGroup": uint, ; Minimum number of requested claims in this group required before
+                              ; collapsing into the pseudo-claim; defaults to 2 if unset
+}
+
+; Metadata for a single claim.
+;
+ClaimMetadata = {
+  "displayName": LocalizedString,
+  ? "description": LocalizedString,
+  ? "type": tstr,             ; Claim data type ("BLOB", "STRING", "NUMBER", "DATE",
+                              ; "DATETIME", "PICTURE", "BOOLEAN", or "COMPLEX_TYPE");
+                              ; defaults to "STRING" if unset
+  ? "icon": Icon,
+  ? "sensitivity": tstr,      ; Attribute sensitivity classification ("VALIDITY", "ISSUER",
+                              ; "AGE_INFORMATION", "PORTRAIT_IMAGE", or "PII"); defaults to "PII" if unset
+  ? "groupId": GroupIdentifier, ; Identifier of the group in `claimGroupsMetadata` this claim belongs to
+}
+
+; Icon for a claim or claim group.
+;
+; At least one key in this map may be set. This is for extensibility so new icon
+; formats can be added in the future (e.g. SVG).
+;
+Icon = {
+  ? "m": tstr,                ; Icon name according to https://fonts.google.com/icons (e.g. "person", "place")
+}
+
+; Map from BCP 47 language tag (e.g. "en", "en-US", "ja-JP", or "" for default) to localized text.
+;
+LocalizedString = {
+  + tstr => tstr
+}
+
 ; Display data.
 ;
 Display = {
   ? "name": tstr,         ; Display name, e.g. "Erika's Driving License"
-  ? "typeName" : tstr     ; Credential type, e.g. "Utopia Driving License"
-  ? "cardArt" bstr,       ; PNG or JPEG with aspect ratio of 1.586 (cf. ID-1 from ISO/IEC 7810)
+  ? "typeName": tstr,     ; Credential type, e.g. "Utopia Driving License"
+  ? "cardArt": bstr,      ; PNG or JPEG with aspect ratio of 1.586 (cf. ID-1 from ISO/IEC 7810)
 }
 
 ; The data for the credential.
@@ -226,9 +293,17 @@ The MIME type `application/vnd.multipaz.mpzpass` shall be used for data containi
 encoded in this format and the file extension `.mpzpass` shall be used for files containing
 credentials encoded in this format.
 
-## Examples files
+## Example files
 
-- [Driving license ISO mdoc](https://apps.multipaz.org/mpzpass/mDL.mpzpass)
-- [EU PID SD-JWT VC](https://apps.multipaz.org/mpzpass/EuPidSdJwt.mpzpass)
-- [Utopia Movie ticket SD-JWT VC w/o key-binding key](https://apps.multipaz.org/mpzpass/MovieTicketSdJwtKeyless.mpzpass)
+Checked into this directory:
+- [utopia_mini_mart_loyalty_card_for_erika.mpzpass](utopia_mini_mart_loyalty_card_for_erika.mpzpass): Example ISO mdoc loyalty card (`org.example.loyalty.1`) for "Utopia Mini Mart" with claim metadata, claim group metadata (`"name"`), and localized strings in English, Danish, and Japanese.
+- [utopia_mini_mart_iaca.pem](utopia_mini_mart_iaca.pem): IACA root certificate used to sign the Document Signer (DS) certificate for `utopia_mini_mart_loyalty_card_for_erika.mpzpass`.
+- [utopia_mini_mart_card_art.png](utopia_mini_mart_card_art.png): Card art embedded in `utopia_mini_mart_loyalty_card_for_erika.mpzpass`.
+
+You can inspect `utopia_mini_mart_loyalty_card_for_erika.mpzpass` (or any other `.mpzpass` file) using the online MpzPass decoder at https://tools.multipaz.org/mpzpass.
+
+To regenerate the checked-in example pass and IACA certificate:
+```bash
+./gradlew :mpzpass:generateMpzPassExamples
+```
 

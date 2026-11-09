@@ -55,6 +55,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKey
+import java.io.File
 import java.math.BigInteger
 import java.util.Locale
 import org.multipaz.crypto.X500Name
@@ -86,6 +87,7 @@ import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.mpzpass.MpzPass
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
 import org.multipaz.presentment.PresentmentData
@@ -129,6 +131,7 @@ import kotlin.time.Instant
  * targets, transaction types, and history fixtures for golden-master screenshot testing.
  */
 internal class ConsentGoldenEcosystem private constructor(
+    val locale: Locale,
     val documentTypeRepository: DocumentTypeRepository,
     val transactionDataRendererRepository: TransactionDataRendererRepository,
     val documentStore: DocumentStore,
@@ -268,12 +271,18 @@ internal class ConsentGoldenEcosystem private constructor(
         dcqlObject: JsonObject,
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
     ): PresentmentData {
-        val query = DcqlQuery.fromJson(dcql = dcqlObject)
-        val source = buildPresentmentSource()
-        return query.execute(
-            presentmentSource = source,
-            transactionDataMap = transactionDataMap,
-        )
+        val prevLocale = Locale.getDefault()
+        Locale.setDefault(locale)
+        try {
+            val query = DcqlQuery.fromJson(dcql = dcqlObject)
+            val source = buildPresentmentSource()
+            return query.execute(
+                presentmentSource = source,
+                transactionDataMap = transactionDataMap,
+            )
+        } finally {
+            Locale.setDefault(prevLocale)
+        }
     }
 
     /**
@@ -586,6 +595,18 @@ internal class ConsentGoldenEcosystem private constructor(
                 "Missing test resource at $path"
             }
             return ByteString(stream.use { it.readBytes() })
+        }
+
+        private fun resolveMpzPassFile(relativePath: String): File {
+            val userDir = File(System.getProperty("user.dir") ?: ".")
+            val rootDir = if (userDir.name == "multipaz-compose") {
+                userDir.parentFile ?: userDir
+            } else {
+                userDir
+            }
+            val file = File(rootDir, relativePath)
+            check(file.exists()) { "Missing MpzPass file at ${file.absolutePath}" }
+            return file
         }
 
         fun registerFakeAndroidApps(application: Application) {
@@ -1222,7 +1243,19 @@ internal class ConsentGoldenEcosystem private constructor(
                 )
             }
 
+            // 10. Import mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass (org.example.loyalty.1,
+            // intentionally NOT registered in documentTypeRepository so metadata comes from the MpzPass)
+            val mpzPassBytes = resolveMpzPassFile("mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass").readBytes()
+            val mpzPass = MpzPass.fromDataItem(Cbor.decode(mpzPassBytes))
+            documentStore.importMpzPass(
+                mpzPass = mpzPass,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt",
+            )
+
             return ConsentGoldenEcosystem(
+                locale = locale,
                 documentTypeRepository = documentTypeRepository,
                 transactionDataRendererRepository = transactionDataRendererRepository,
                 documentStore = documentStore,

@@ -3,6 +3,7 @@ package org.multipaz.document
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.documenttype.MdocPortraitEquivalenceData
+import org.multipaz.mpzpass.MpzPassMetadata
 import kotlin.time.Instant
 
 /**
@@ -24,6 +25,7 @@ internal data class DocumentData(
     val appData: ByteString? = null,
     val mpzPassId: String? = null,
     val mpzPassVersion: Long? = null,
+    val mpzPassMetadata: MpzPassMetadata? = null,
     val readerIdentifiers: List<ByteString>? = null,
     val metadata: ByteString? = null,  // serialized AbstractDocumentMetadata
     val tagsData: ByteString? = null,  // serialized Tags

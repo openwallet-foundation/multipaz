@@ -436,16 +436,14 @@ abstract class Credential {
     /**
      * Gets the claims in the credential.
      *
-     * If a [DocumentTypeRepository] is passed, it will be used to look up the document type
-     * and if a type is found, it'll be used to populate the [Claim.attribute] field of
-     * the resulting claims.
+     * If a [DocumentTypeRepository] is passed, it will be used to look up the document type;
+     * if not found in the repository (or if [documentTypeRepository] is `null`),
+     * [Document.getDocumentType] is used as a fallback. If a document type is resolved, it will be
+     * used to populate the [Claim.attribute] and [Claim.displayName] fields of the resulting claims.
      *
-     * The display name of a claim is taken from [documentTypeRepository] if it has an entry for the
-     * claim. Otherwise it is taken from
-     * [org.multipaz.document.Document.openID4VCIClaimDescriptions], as provided by the issuer, in the
-     * language which best matches [locales]. See [org.multipaz.openid.claim.OpenID4VCIClaimDisplay.locale]
-     * for how languages are matched. Note that [locales] is not used for names from
-     * [documentTypeRepository], which are in the language the repository was created with.
+     * Note that [locales] is used when synthesizing a document type via [Document.getDocumentType]
+     * or looking up names from [org.multipaz.document.Document.openID4VCIClaimDescriptions],
+     * whereas names from [documentTypeRepository] are in the language the repository was created with.
      *
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @param locales BCP 47 language tags, most preferred first, e.g. `["ja-JP", "en-US"]`. If

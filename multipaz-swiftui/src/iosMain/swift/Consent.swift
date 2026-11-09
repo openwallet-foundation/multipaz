@@ -148,7 +148,7 @@ private struct DocumentMatchGroup {
     let claimSections: [ClaimSection]
 
     var credential: Credential { matches[0].credential }
-    var document: Document { credential.document }
+    var document: MultipazDocument { credential.document }
 }
 
 private struct RecipientBucketKey: Equatable {

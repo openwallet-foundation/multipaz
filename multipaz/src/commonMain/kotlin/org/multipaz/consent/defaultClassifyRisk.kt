@@ -38,13 +38,19 @@ import org.multipaz.request.TrustedRequesterIdentity
  *      [ConsentRiskLevel.WARNING] with [ConsentRiskReason.UNTRUSTED_REQUESTER] or
  *      [ConsentRiskReason.ANONYMOUS_REQUESTER].
  *
- * 3. **Unclassified purpose or unknown schema attribute** (checked for both trusted and untrusted
+ * 3. **Unusual request or unknown schema attribute** (checked for both trusted and untrusted
  *    requesters):
- *    - If [purposes] is empty or any selected credential match contains a claim whose
- *      `attribute == null` (not defined in the credential schema), returns
- *      [ConsentRiskLevel.HIGH_RISK] with [ConsentRiskReason.UNUSUAL_REQUEST] (plus
+ *    - If any selected credential match contains a claim whose `attribute == null` (not defined in
+ *      the credential schema), or if [purposes] is empty and the selection violates the claim rules
+ *      of a known document type, violates declared [PresentmentUseCase.purposeHints], or consists
+ *      entirely of known document types (whose purposes were rejected by a custom classifier),
+ *      returns [ConsentRiskLevel.HIGH_RISK] with [ConsentRiskReason.UNUSUAL_REQUEST] (plus
  *      [ConsentRiskReason.UNTRUSTED_REQUESTER] or [ConsentRiskReason.ANONYMOUS_REQUESTER] if the
  *      requester is untrusted/anonymous).
+ *    - If [purposes] is empty solely because a selected credential uses a custom or generic
+ *      document type (whose requested claims are all defined in its schema and no
+ *      [PresentmentUseCase.purposeHints] are violated), the request is not flagged as
+ *      [ConsentRiskReason.UNUSUAL_REQUEST] and evaluation continues below.
  *
  * 4. **Untrusted claim-level encryption target** (checked for both trusted and untrusted
  *    requesters):
@@ -167,7 +173,13 @@ fun defaultClassifyRisk(
     val hasUnknownClaim = selection.matches.any { match ->
         match.claims.values.any { it.attribute == null }
     }
-    if (purposes.isEmpty() || hasUnknownClaim) {
+    val isUnusual = hasUnknownClaim || (
+        purposes.isEmpty() && (
+            presentmentData.hasUnusualRequest(selections) ||
+                selection.matches.all { it.isKnownPurposeDocTypeOrVct() }
+        )
+    )
+    if (isUnusual) {
         return ConsentRiskAssessment(
             level = ConsentRiskLevel.HIGH_RISK,
             reasons = baseReasons + ConsentRiskReason.UNUSUAL_REQUEST,

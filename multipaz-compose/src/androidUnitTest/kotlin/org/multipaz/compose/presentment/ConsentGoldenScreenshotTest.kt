@@ -1163,14 +1163,105 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // =========================================================================================
-        // Category 5: 05_warning_untrusted
-        // =========================================================================================
-        val cat5Dir = "05_warning_untrusted"
-        val cat5Title = "5. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII"
-        val cat5Desc = "Requests triggering ConsentRiskLevel.WARNING, which renders a top-anchored yellow warning box without a 5-second cool-off timer. Includes over-the-Internet and app-to-app requests for non-PII, unverified requesters (who signed with a certificate not in the wallet's trust list) requesting PII, retention, or transaction data, unverified encryption targets with a certificate chain, and anonymous proximity readers requesting PII."
+        val localeDa = Locale.forLanguageTag("da-DK")
+        val localeAr = Locale.forLanguageTag("ar-SA")
+        val ecoDa = ConsentGoldenEcosystem.create(localeDa)
+        val ecoAr = ConsentGoldenEcosystem.create(localeAr)
 
-        // 5.1 unverified_website_age_over_18
+        // =========================================================================================
+        // Category 5: 05_issuer_metadata
+        // =========================================================================================
+        val cat5Dir = "05_issuer_metadata"
+        val cat5Title = "5. Documents with Issuer-Provided Metadata (MpzPass)"
+        val cat5Desc = "Credentials whose document type is unknown to the wallet's DocumentTypeRepository, rendered using issuer-provided display and claim metadata embedded in the credential container (here loaded from mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass with custom doctype org.example.loyalty.1)."
+
+        val mpzPassLoyaltyDcql = """
+            {
+              "credentials": [
+                {
+                  "id": "mdoc",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.example.loyalty.1"
+                  },
+                  "claims": [
+                    { "path": ["org.example.loyalty.1", "given_name"] },
+                    { "path": ["org.example.loyalty.1", "family_name"] },
+                    { "path": ["org.example.loyalty.1", "merchant_name"] },
+                    { "path": ["org.example.loyalty.1", "membership_number"] },
+                    { "path": ["org.example.loyalty.1", "tier"] },
+                    { "path": ["org.example.loyalty.1", "bonus_points"] },
+                    { "path": ["org.example.loyalty.1", "valid_from"] },
+                    { "path": ["org.example.loyalty.1", "valid_until"] }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        // 5.1 mpzpass_loyalty_card
+        run {
+            val (req, trusted) = eco.trustedWebRequester(
+                rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
+                origin = "https://checkout.utopiamarketplace.example.com",
+            )
+            val pd = eco.executeDcql(mpzPassLoyaltyDcql)
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "mpzpass_loyalty_card",
+                title = "MpzPass Loyalty Card with Issuer-Provided Metadata",
+                requesterSummary = "Utopia Marketplace — Over-the-Internet (ISO 18013-7)",
+                protocolSummary = "MpzPass mdoc (org.example.loyalty.1 from mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass)",
+                riskBadge = "NORMAL",
+                description = "A relying party requests claims from 'Erika's Mini Mart Loyalty Card' (loaded from mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass), whose doctype org.example.loyalty.1 is not registered in the wallet's DocumentTypeRepository. Because the MpzPass includes issuer-provided metadata, the wallet synthesizes a DocumentType via Document.getDocumentType(), rendering the card art, icons, collapsed 'Name' group (for given_name and family_name), and typed Date/Number values on the details page while classifying the request as NORMAL.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main consent prompt (MpzPass with issuer metadata)")
+                clickViewDetails()
+                capture("doc_details", "Document details page (typed Date & Number claims)")
+            }
+        }
+
+        // 5.2 mpzpass_loyalty_card_danish
+        run {
+            val (req, trusted) = ecoDa.trustedWebRequester(
+                rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
+                origin = "https://checkout.utopiamarketplace.example.com",
+            )
+            val pd = ecoDa.executeDcql(mpzPassLoyaltyDcql)
+            runScenario(
+                categoryDir = cat5Dir,
+                categoryTitle = cat5Title,
+                categoryDescription = cat5Desc,
+                scenarioId = "mpzpass_loyalty_card_danish",
+                title = "MpzPass Loyalty Card — Localized Issuer Metadata (Danish da-DK)",
+                requesterSummary = "Utopia Marketplace — Over-the-Internet (ISO 18013-7)",
+                protocolSummary = "MpzPass mdoc (org.example.loyalty.1 from mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass)",
+                riskBadge = "NORMAL (da-DK)",
+                description = "The same request for mpzpass/utopia_mini_mart_loyalty_card_for_erika.mpzpass rendered under the Danish (da-DK) locale, demonstrating that the Danish claim and group display names embedded in the MpzPass metadata ('Navn', 'Fornavne', 'Efternavn', 'Forhandler', 'Medlemsnummer', 'Niveau', 'Bonuspoint', 'Gyldig fra', 'Gyldig indtil') are automatically selected alongside the localized wallet UI.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+                locale = localeDa,
+            ) {
+                capture("main", "Main consent prompt with Danish MpzPass metadata (da-DK)")
+                clickViewDetails("Se detaljer")
+                capture("doc_details", "Document details page with Danish MpzPass metadata (da-DK)")
+            }
+        }
+
+        // =========================================================================================
+        // Category 6: 06_warning_untrusted
+        // =========================================================================================
+        val cat6Dir = "06_warning_untrusted"
+        val cat6Title = "6. Warning (Yellow) — Unverified Requesters, Unverified Encryption Targets & Proximity Anonymous PII"
+        val cat6Desc = "Requests triggering ConsentRiskLevel.WARNING, which renders a top-anchored yellow warning box without a 5-second cool-off timer. Includes over-the-Internet and app-to-app requests for non-PII, unverified requesters (who signed with a certificate not in the wallet's trust list) requesting PII, retention, or transaction data, unverified encryption targets with a certificate chain, and anonymous proximity readers requesting PII."
+
+        // 6.1 unverified_website_age_over_18
         run {
             val (req, trusted) = eco.unverifiedWebRequester("https://age-check.utopia-gaming.example.com")
             val pd = eco.executeDcql(
@@ -1191,9 +1282,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "unverified_website_age_over_18",
                 title = "Unverified Website Requesting Age Over 18",
                 requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
@@ -1210,15 +1301,15 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.2 unverified_app_age_over_21
+        // 6.2 unverified_app_age_over_21
         run {
             val (req, trusted) = eco.unverifiedAppRequester(ConsentGoldenEcosystem.APP_NIGHTCLUB_SCANNER)
             val canned = DrivingLicense.getDocumentType().cannedRequests.first { it.id == "age_over_21_and_portrait" }
             val pd = eco.executeCannedDcql(canned)
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "unverified_app_age_over_21",
                 title = "Unverified Local Android App Requesting Age Over 21",
                 requesterSummary = "Utopia Nightclub Scanner (org.utopia.nightclub.scanner) — App-to-app",
@@ -1233,7 +1324,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.3 untrusted_requester_pii_requested
+        // 6.3 untrusted_requester_pii_requested
         run {
             val (req, trusted) = eco.unverifiedProximityRequester(ConsentGoldenEcosystem.RP_UNVERIFIED_LOUNGE)
             val pd = eco.executeDcql(
@@ -1256,9 +1347,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "untrusted_requester_pii_requested",
                 title = "Unverified Reader (With Certificate) Asking for Personally Identifiable Information (PII)",
                 requesterSummary = "Harbor View Lounge — Unverified Proximity (ISO 18013-5)",
@@ -1275,7 +1366,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.4 trusted_requester_untrusted_encryption_target
+        // 6.4 trusted_requester_untrusted_encryption_target
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -1285,9 +1376,9 @@ class ConsentGoldenScreenshotTest {
                 includeRecipientCertificates = true,
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "trusted_requester_untrusted_encryption_target",
                 title = "Trusted Intermediary + Unverified Encryption Target (With Certificate)",
                 requesterSummary = "Utopia Airlines -> encrypted for Unverified Recipient — Proximity (ISO 18013-5)",
@@ -1304,7 +1395,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.5 anonymous_requester_trusted_target
+        // 6.5 anonymous_requester_trusted_target
         run {
             val (req, trusted) = eco.anonymousProximityRequester()
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -1322,9 +1413,9 @@ class ConsentGoldenScreenshotTest {
                 }
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "anonymous_requester_trusted_target",
                 title = "Anonymous Proximity Intermediary Kiosk + Trusted Encryption Target",
                 requesterSummary = "Anonymous Kiosk -> encrypted for Utopia Border Protection — Proximity (ISO 18013-5)",
@@ -1341,7 +1432,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.6 untrusted_requester_intent_to_retain
+        // 6.6 untrusted_requester_intent_to_retain
         run {
             val (req, trusted) = eco.unverifiedWebRequester("https://age-check.utopia-gaming.example.com")
             val pd = eco.executeMdocRequestWithPurposeHints(
@@ -1355,9 +1446,9 @@ class ConsentGoldenScreenshotTest {
                 purposeHints = emptyMap(),
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "untrusted_requester_intent_to_retain",
                 title = "Unverified Over-the-Internet Requester (With Certificate) Asking to Retain Portrait",
                 requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
@@ -1372,7 +1463,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 5.7 untrusted_requester_transaction_data
+        // 6.7 untrusted_requester_transaction_data
         run {
             val (req, trusted) = eco.unverifiedWebRequester("https://pay.unverified-merchant.example.com")
             val canned = DigitalPaymentCredential.getDocumentType().cannedRequests.first {
@@ -1391,9 +1482,9 @@ class ConsentGoldenScreenshotTest {
                 ),
             )
             runScenario(
-                categoryDir = cat5Dir,
-                categoryTitle = cat5Title,
-                categoryDescription = cat5Desc,
+                categoryDir = cat6Dir,
+                categoryTitle = cat6Title,
+                categoryDescription = cat6Desc,
                 scenarioId = "untrusted_requester_transaction_data",
                 title = "Unverified Requester (With Certificate) Attaching Transaction Data",
                 requesterSummary = "https://pay.unverified-merchant.example.com — Unverified Over-the-Internet (ISO 18013-7)",
@@ -1409,13 +1500,13 @@ class ConsentGoldenScreenshotTest {
         }
 
         // =========================================================================================
-        // Category 6: 06_high_risk
+        // Category 7: 07_high_risk
         // =========================================================================================
-        val cat6Dir = "06_high_risk"
-        val cat6Title = "6. High-Risk (Red) & Cool-Off Safeguards"
-        val cat6Desc = "Requests triggering ConsentRiskLevel.HIGH_RISK due to anonymous remote/app requesters asking for PII, retention, or transaction data, over-broad/unusual claim combinations, mismatched purpose hints, or anonymous encryption targets with no certificate chain. Enforces a 5-second cool-off timer on the Continue button."
+        val cat7Dir = "07_high_risk"
+        val cat7Title = "7. High-Risk (Red) & Cool-Off Safeguards"
+        val cat7Desc = "Requests triggering ConsentRiskLevel.HIGH_RISK due to anonymous remote/app requesters asking for PII, retention, or transaction data, over-broad/unusual claim combinations, mismatched purpose hints, or anonymous encryption targets with no certificate chain. Enforces a 5-second cool-off timer on the Continue button."
 
-        // 6.1 anonymous_website_pii_requested
+        // 7.1 anonymous_website_pii_requested
         run {
             val (req, trusted) = eco.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = eco.executeDcql(
@@ -1438,9 +1529,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "anonymous_website_pii_requested",
                 title = "Anonymous Website (No Certificate) Asking for Personally Identifiable Information (PII)",
                 requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
@@ -1459,15 +1550,15 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.2 trusted_requester_unusual_overbroad
+        // 7.2 trusted_requester_unusual_overbroad
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_VINEYARDS)
             val canned = DrivingLicense.getDocumentType().cannedRequests.first { it.id == "full" }
             val pd = eco.executeCannedDcql(canned)
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "trusted_requester_unusual_overbroad",
                 title = "Trusted Requester Making an Over-Broad / Unusual Request (Scroll + Cool-Off)",
                 requesterSummary = "Utopia Vineyards — Proximity (ISO 18013-5)",
@@ -1486,7 +1577,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.3 trusted_requester_mismatched_purpose_hint
+        // 7.3 trusted_requester_mismatched_purpose_hint
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_VINEYARDS)
             // Hint says AGE_VERIFICATION (1), but claims include resident_address & document_number
@@ -1504,9 +1595,9 @@ class ConsentGoldenScreenshotTest {
                 purposeHints = mapOf("org.iso.18013.5.1.mDL" to 1),
             )
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "trusted_requester_mismatched_purpose_hint",
                 title = "Trusted Requester with Mismatched ISO 18013-5 Purpose Hint",
                 requesterSummary = "Utopia Vineyards — Proximity (ISO 18013-5)",
@@ -1521,7 +1612,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.4 trusted_requester_anonymous_encryption_target
+        // 7.4 trusted_requester_anonymous_encryption_target
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -1531,9 +1622,9 @@ class ConsentGoldenScreenshotTest {
                 includeRecipientCertificates = false,
             )
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "trusted_requester_anonymous_encryption_target",
                 title = "Trusted Intermediary + Anonymous Encryption Target (No Certificate Chain)",
                 requesterSummary = "Utopia Airlines -> encrypted for Anonymous Recipient — Proximity (ISO 18013-5)",
@@ -1550,7 +1641,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.5 anonymous_website_intent_to_retain
+        // 7.5 anonymous_website_intent_to_retain
         run {
             val (req, trusted) = eco.anonymousWebRequester("https://age-check.utopia-gaming.example.com")
             val pd = eco.executeMdocRequestWithPurposeHints(
@@ -1564,9 +1655,9 @@ class ConsentGoldenScreenshotTest {
                 purposeHints = emptyMap(),
             )
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "anonymous_website_intent_to_retain",
                 title = "Anonymous Over-the-Internet Requester (No Certificate) Asking to Retain Portrait",
                 requesterSummary = "https://age-check.utopia-gaming.example.com — Anonymous Over-the-Internet",
@@ -1581,7 +1672,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 6.6 anonymous_website_transaction_data
+        // 7.6 anonymous_website_transaction_data
         run {
             val (req, trusted) = eco.anonymousWebRequester("https://pay.unverified-merchant.example.com")
             val canned = DigitalPaymentCredential.getDocumentType().cannedRequests.first {
@@ -1600,9 +1691,9 @@ class ConsentGoldenScreenshotTest {
                 ),
             )
             runScenario(
-                categoryDir = cat6Dir,
-                categoryTitle = cat6Title,
-                categoryDescription = cat6Desc,
+                categoryDir = cat7Dir,
+                categoryTitle = cat7Title,
+                categoryDescription = cat7Desc,
                 scenarioId = "anonymous_website_transaction_data",
                 title = "Anonymous Over-the-Internet Requester (No Certificate) Attaching Transaction Data",
                 requesterSummary = "https://pay.unverified-merchant.example.com — Anonymous Over-the-Internet",
@@ -1618,13 +1709,13 @@ class ConsentGoldenScreenshotTest {
         }
 
         // =========================================================================================
-        // Category 7: 07_custom_policy
+        // Category 8: 08_custom_policy
         // =========================================================================================
-        val cat7Dir = "07_custom_policy"
-        val cat7Title = "7. Custom Risk & Purpose Classification Callbacks"
-        val cat7Desc = "Demonstrates overriding classifyPurposesFn and classifyRiskFn on Consent to enforce custom wallet security policies."
+        val cat8Dir = "08_custom_policy"
+        val cat8Title = "8. Custom Risk & Purpose Classification Callbacks"
+        val cat8Desc = "Demonstrates overriding classifyPurposesFn and classifyRiskFn on Consent to enforce custom wallet security policies."
 
-        // 7.1 custom_warning_for_trusted_rp_retaining_data
+        // 8.1 custom_warning_for_trusted_rp_retaining_data
         run {
             val (req, trusted) = eco.trustedWebRequester(
                 rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
@@ -1655,9 +1746,9 @@ class ConsentGoldenScreenshotTest {
                 }
             }
             runScenario(
-                categoryDir = cat7Dir,
-                categoryTitle = cat7Title,
-                categoryDescription = cat7Desc,
+                categoryDir = cat8Dir,
+                categoryTitle = cat8Title,
+                categoryDescription = cat8Desc,
                 scenarioId = "custom_warning_for_trusted_rp_retaining_data",
                 title = "Custom Policy: Elevate Trusted RP Data Retention to WARNING",
                 requesterSummary = "Utopia Marketplace — Over-the-Internet (ISO 18013-7)",
@@ -1673,7 +1764,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 7.2 custom_normal_for_allowlisted_first_party_app
+        // 8.2 custom_normal_for_allowlisted_first_party_app
         run {
             val (req, trusted) = eco.unverifiedAppRequester(ConsentGoldenEcosystem.APP_WALLET_VERIFIER)
             val canned = DrivingLicense.getDocumentType().cannedRequests.first { it.id == "age_over_21_and_portrait" }
@@ -1689,9 +1780,9 @@ class ConsentGoldenScreenshotTest {
                 }
             }
             runScenario(
-                categoryDir = cat7Dir,
-                categoryTitle = cat7Title,
-                categoryDescription = cat7Desc,
+                categoryDir = cat8Dir,
+                categoryTitle = cat8Title,
+                categoryDescription = cat8Desc,
                 scenarioId = "custom_normal_for_allowlisted_first_party_app",
                 title = "Custom Policy: Allowlist First-Party Verifier App as NORMAL",
                 requesterSummary = "Utopia Wallet Verifier (gov.utopia.wallet.verifier) — App-to-app",
@@ -1708,21 +1799,21 @@ class ConsentGoldenScreenshotTest {
         }
 
         // =========================================================================================
-        // Category 8: 08_dark_mode
+        // Category 9: 09_dark_mode
         // =========================================================================================
-        val cat8Dir = "08_dark_mode"
-        val cat8Title = "8. Dark Theme Coverage"
-        val cat8Desc = "Verifies dark-theme surface contrast, segmented container colors, warning/danger box palettes, and sub-page legibility."
+        val cat9Dir = "09_dark_mode"
+        val cat9Title = "9. Dark Theme Coverage"
+        val cat9Desc = "Verifies dark-theme surface contrast, segmented container colors, warning/danger box palettes, and sub-page legibility."
 
-        // 8.1 normal_age_verification
+        // 9.1 normal_age_verification
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_VINEYARDS)
             val canned = DrivingLicense.getDocumentType().cannedRequests.first { it.id == "age_over_21_and_portrait" }
             val pd = eco.executeCannedDcql(canned)
             runScenario(
-                categoryDir = cat8Dir,
-                categoryTitle = cat8Title,
-                categoryDescription = cat8Desc,
+                categoryDir = cat9Dir,
+                categoryTitle = cat9Title,
+                categoryDescription = cat9Desc,
                 scenarioId = "normal_age_verification",
                 title = "Dark Mode — Normal Age Verification",
                 requesterSummary = "Utopia Vineyards — Proximity (ISO 18013-5)",
@@ -1738,15 +1829,15 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 8.2 warning_untrusted_website
+        // 9.2 warning_untrusted_website
         run {
             val (req, trusted) = eco.unverifiedWebRequester("https://age-check.utopia-gaming.example.com")
             val canned = DrivingLicense.getDocumentType().cannedRequests.first { it.id == "age_over_21_and_portrait" }
             val pd = eco.executeCannedDcql(canned)
             runScenario(
-                categoryDir = cat8Dir,
-                categoryTitle = cat8Title,
-                categoryDescription = cat8Desc,
+                categoryDir = cat9Dir,
+                categoryTitle = cat9Title,
+                categoryDescription = cat9Desc,
                 scenarioId = "warning_untrusted_website",
                 title = "Dark Mode — Warning (Untrusted Over-the-Internet Requester)",
                 requesterSummary = "https://age-check.utopia-gaming.example.com — Unverified Over-the-Internet (ISO 18013-7)",
@@ -1762,7 +1853,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 8.3 high_risk_pii_requested
+        // 9.3 high_risk_pii_requested
         run {
             val (req, trusted) = eco.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = eco.executeDcql(
@@ -1785,9 +1876,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat8Dir,
-                categoryTitle = cat8Title,
-                categoryDescription = cat8Desc,
+                categoryDir = cat9Dir,
+                categoryTitle = cat9Title,
+                categoryDescription = cat9Desc,
                 scenarioId = "high_risk_pii_requested",
                 title = "Dark Mode — High-Risk (Anonymous Website Requesting PII)",
                 requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
@@ -1803,7 +1894,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 8.4 requester_info_with_encryption_target
+        // 9.4 requester_info_with_encryption_target
         run {
             val (req, trusted) = eco.trustedProximityRequester(ConsentGoldenEcosystem.RP_AIRLINES)
             val pd = eco.executeBorderCrossingEncryptionRequest(
@@ -1812,9 +1903,9 @@ class ConsentGoldenScreenshotTest {
                 encryptionTargetTrusted = true,
             )
             runScenario(
-                categoryDir = cat8Dir,
-                categoryTitle = cat8Title,
-                categoryDescription = cat8Desc,
+                categoryDir = cat9Dir,
+                categoryTitle = cat9Title,
+                categoryDescription = cat9Desc,
                 scenarioId = "requester_info_with_encryption_target",
                 title = "Dark Mode — Requester Info Page with Encryption Target",
                 requesterSummary = "Utopia Airlines -> Utopia Border Protection — Proximity (ISO 18013-5)",
@@ -1832,18 +1923,13 @@ class ConsentGoldenScreenshotTest {
         }
 
         // =========================================================================================
-        // Category 9: 09_localization
+        // Category 10: 10_localization
         // =========================================================================================
-        val cat9Dir = "09_localization"
-        val cat9Title = "9. Localization — Danish & Right-to-Left (Arabic)"
-        val cat9Desc = "Verifies complete translation of all Consent UI strings, localized document/claim names, date formatting, and Right-to-Left (RTL) layout mirroring across Danish (da-DK) and Arabic (ar-SA)."
+        val cat10Dir = "10_localization"
+        val cat10Title = "10. Localization — Danish & Right-to-Left (Arabic)"
+        val cat10Desc = "Verifies complete translation of all Consent UI strings, localized document/claim names, date formatting, and Right-to-Left (RTL) layout mirroring across Danish (da-DK) and Arabic (ar-SA)."
 
-        val localeDa = Locale.forLanguageTag("da-DK")
-        val localeAr = Locale.forLanguageTag("ar-SA")
-        val ecoDa = ConsentGoldenEcosystem.create(localeDa)
-        val ecoAr = ConsentGoldenEcosystem.create(localeAr)
-
-        // 9.1 danish_normal_with_subpages
+        // 10.1 danish_normal_with_subpages
         run {
             val (req, trusted) = ecoDa.trustedWebRequester(
                 rpId = ConsentGoldenEcosystem.RP_CAR_RENTALS,
@@ -1885,9 +1971,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "danish_normal_with_subpages",
                 title = "Danish (da-DK) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain",
                 requesterSummary = "Utopia Car Rentals — Over-the-Internet (ISO 18013-7)",
@@ -1914,7 +2000,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 9.2 danish_payment_with_tip
+        // 10.2 danish_payment_with_tip
         run {
             val (req, trusted) = ecoDa.trustedWebRequester(
                 rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
@@ -1936,9 +2022,9 @@ class ConsentGoldenScreenshotTest {
                 ),
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "danish_payment_with_tip",
                 title = "Danish (da-DK) — Payment Transaction with Tip Selector",
                 requesterSummary = "Utopia Marketplace — Over-the-Internet (ISO 18013-7)",
@@ -1956,7 +2042,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 9.3 danish_high_risk_pii_and_retention
+        // 10.3 danish_high_risk_pii_and_retention
         run {
             val (req, trusted) = ecoDa.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = ecoDa.executeDcql(
@@ -1979,9 +2065,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "danish_high_risk_pii_and_retention",
                 title = "Danish (da-DK) — High-Risk Anonymous Website Requesting PII & Retention",
                 requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",
@@ -1999,7 +2085,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 9.4 arabic_rtl_normal_with_subpages
+        // 10.4 arabic_rtl_normal_with_subpages
         run {
             val (req, trusted) = ecoAr.trustedWebRequester(
                 rpId = ConsentGoldenEcosystem.RP_CAR_RENTALS,
@@ -2041,9 +2127,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "arabic_rtl_normal_with_subpages",
                 title = "Arabic RTL (ar-SA) — Full Flow Across Main, Details, Chooser, Requester Info & Certificate Chain",
                 requesterSummary = "Utopia Car Rentals — Over-the-Internet (ISO 18013-7)",
@@ -2070,7 +2156,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 9.5 arabic_rtl_payment_with_tip
+        // 10.5 arabic_rtl_payment_with_tip
         run {
             val (req, trusted) = ecoAr.trustedWebRequester(
                 rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
@@ -2092,9 +2178,9 @@ class ConsentGoldenScreenshotTest {
                 ),
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "arabic_rtl_payment_with_tip",
                 title = "Arabic RTL (ar-SA) — Payment Transaction with Tip Selector",
                 requesterSummary = "Utopia Marketplace — Over-the-Internet (ISO 18013-7)",
@@ -2112,7 +2198,7 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
-        // 9.6 arabic_rtl_high_risk_pii_and_retention
+        // 10.6 arabic_rtl_high_risk_pii_and_retention
         run {
             val (req, trusted) = ecoAr.anonymousWebRequester("https://verify.unknown-portal.example.com")
             val pd = ecoAr.executeDcql(
@@ -2135,9 +2221,9 @@ class ConsentGoldenScreenshotTest {
                 """.trimIndent()
             )
             runScenario(
-                categoryDir = cat9Dir,
-                categoryTitle = cat9Title,
-                categoryDescription = cat9Desc,
+                categoryDir = cat10Dir,
+                categoryTitle = cat10Title,
+                categoryDescription = cat10Desc,
                 scenarioId = "arabic_rtl_high_risk_pii_and_retention",
                 title = "Arabic RTL (ar-SA) — High-Risk Anonymous Website with RTL Cool-Off Progress Bar",
                 requesterSummary = "https://verify.unknown-portal.example.com — Anonymous Over-the-Internet",

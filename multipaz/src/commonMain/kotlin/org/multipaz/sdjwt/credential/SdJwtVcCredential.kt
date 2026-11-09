@@ -85,6 +85,7 @@ interface SdJwtVcCredential {
         // By design, we only include the top-level claims.
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
             ?: otherVcts.firstNotNullOfOrNull { documentTypeRepository?.getDocumentTypeForJson(it) }
+            ?: (this as? Credential)?.document?.getDocumentType(locales)
         for ((claimName, claimValue) in processedJwt) {
             val attribute = dt?.jsonDocumentType?.claims?.get(claimName)
             val claimPath = buildJsonArray { add(claimName) }

@@ -11,6 +11,7 @@ import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
@@ -25,9 +26,15 @@ import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
 import org.multipaz.crypto.MlKemPrivateKey
+import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.DocumentAttributeType
+import org.multipaz.documenttype.Icon
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mpzpass.MpzPass
+import org.multipaz.mpzpass.MpzPassClaimMetadata
+import org.multipaz.mpzpass.MpzPassGroupMetadata
 import org.multipaz.mpzpass.MpzPassIsoMdoc
+import org.multipaz.mpzpass.MpzPassMetadata
 import org.multipaz.mpzpass.MpzPassSdJwtVc
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
@@ -679,8 +686,45 @@ val MpzPassDecoderComponent = FC {
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"SD-JWT VC Count" }
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#38bdf8") }; +"${pass.sdJwtVc.size}" }
                                         }
+                                        tr {
+                                            td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Portrait Equivalence" }
+                                            td {
+                                                css { padding = Padding(8.px, 12.px) }
+                                                val pe = pass.metadata?.isoMdocPortraitEquivalenceData
+                                                if (pe == null) {
+                                                    span { css { color = Color("#94a3b8") }; +"None" }
+                                                } else {
+                                                    span { css { color = Color("#64748b"); marginRight = 4.px }; +"Namespace:" }
+                                                    code { css { color = Color("#38bdf8"); marginRight = 12.px }; +pe.namespace }
+                                                    span { css { color = Color("#64748b"); marginRight = 4.px }; +"Data Element:" }
+                                                    code { css { color = Color("#34d399") }; +pe.dataElementName }
+                                                }
+                                            }
+                                        }
+                                        tr {
+                                            td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Claims & Groups Metadata" }
+                                            td {
+                                                css { padding = Padding(8.px, 12.px) }
+                                                val meta = pass.metadata
+                                                if (meta == null) {
+                                                    span { css { color = Color("#94a3b8") }; +"None" }
+                                                } else {
+                                                    val groupCount = meta.claimGroupsMetadata.size
+                                                    val mdocClaimCount = meta.isoMdocClaimsMetadata.values.sumOf { it.size }
+                                                    val sdJwtClaimCount = meta.sdJwtVcClaimsMetadata.size
+                                                    span {
+                                                        css { color = Color("#cbd5e1") }
+                                                        +"$groupCount group(s), $mdocClaimCount ISO mdoc claim(s), $sdJwtClaimCount SD-JWT VC claim(s)"
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
+                            }
+
+                            pass.metadata?.let { meta ->
+                                renderMpzPassMetadataCards(meta)
                             }
                         }
                     }
@@ -696,7 +740,7 @@ val MpzPassDecoderComponent = FC {
                             div {
                                 css { display = Display.flex; flexDirection = FlexDirection.column; gap = 24.px }
                                 pass.isoMdoc.forEachIndexed { index, mDoc ->
-                                    renderIsoMdocSection(index, mDoc, copiedCertIndex) { idx, pem ->
+                                    renderIsoMdocSection(index, mDoc, pass.metadata, copiedCertIndex) { idx, pem ->
                                         window.navigator.clipboard.writeText(pem)
                                         copiedCertIndex = idx
                                         window.setTimeout({ copiedCertIndex = null }, 1500)
@@ -717,7 +761,7 @@ val MpzPassDecoderComponent = FC {
                             div {
                                 css { display = Display.flex; flexDirection = FlexDirection.column; gap = 24.px }
                                 parsedSdJwtItems.forEachIndexed { index, item ->
-                                    renderSdJwtVcSection(index, item)
+                                    renderSdJwtVcSection(index, item, pass.metadata)
                                 }
                             }
                         }
@@ -987,9 +1031,430 @@ val MpzPassDecoderComponent = FC {
     }
 }
 
+fun ChildrenBuilder.renderMaterialIconBadge(icon: Icon?) {
+    if (icon == null) {
+        span { css { color = Color("#64748b"); fontSize = 12.px }; +"—" }
+    } else {
+        span {
+            css {
+                display = Display.inlineFlex
+                alignItems = AlignItems.center
+                gap = 6.px
+                background = Color("#1e293b")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 6.px
+                padding = Padding(2.px, 8.px)
+            }
+            span {
+                css(ClassName("material-symbols-outlined")) {
+                    fontSize = 16.px
+                    color = Color("#38bdf8")
+                }
+                +icon.iconName
+            }
+            code {
+                css {
+                    fontSize = 12.px
+                    color = Color("#cbd5e1")
+                }
+                +icon.iconName
+            }
+        }
+    }
+}
+
+fun ChildrenBuilder.renderClaimTypeBadge(type: DocumentAttributeType) {
+    val label = when (type) {
+        DocumentAttributeType.Blob -> "BLOB"
+        DocumentAttributeType.String -> "STRING"
+        DocumentAttributeType.Number -> "NUMBER"
+        DocumentAttributeType.Date -> "DATE"
+        DocumentAttributeType.DateTime -> "DATETIME"
+        DocumentAttributeType.Picture -> "PICTURE"
+        DocumentAttributeType.Boolean -> "BOOLEAN"
+        DocumentAttributeType.ComplexType -> "COMPLEX_TYPE"
+        is DocumentAttributeType.StringOptions -> "STRING_OPTIONS"
+        is DocumentAttributeType.IntegerOptions -> "INTEGER_OPTIONS"
+    }
+    span {
+        css {
+            display = Display.inlineBlock
+            background = Color("#1e293b")
+            border = Border(1.px, LineStyle.solid, Color("#475569"))
+            color = Color("#38bdf8")
+            fontSize = 11.px
+            fontWeight = FontWeight.bold
+            padding = Padding(2.px, 8.px)
+            borderRadius = 6.px
+            fontFamily = FontFamily.monospace
+        }
+        +label
+    }
+}
+
+fun ChildrenBuilder.renderSensitivityBadge(sensitivity: DocumentAttributeSensitivity) {
+    val (bgColor, textColor) = when (sensitivity) {
+        DocumentAttributeSensitivity.PII -> Color("#1e3a8a") to Color("#93c5fd")
+        DocumentAttributeSensitivity.ISSUER -> Color("#064e3b") to Color("#6ee7b7")
+        DocumentAttributeSensitivity.VALIDITY -> Color("#78350f") to Color("#fcd34d")
+        DocumentAttributeSensitivity.AGE_INFORMATION -> Color("#4c1d95") to Color("#c4b5fd")
+        DocumentAttributeSensitivity.PORTRAIT_IMAGE -> Color("#831843") to Color("#f9a8d4")
+    }
+    span {
+        css {
+            display = Display.inlineBlock
+            background = bgColor
+            color = textColor
+            fontSize = 11.px
+            fontWeight = FontWeight.bold
+            padding = Padding(2.px, 8.px)
+            borderRadius = 6.px
+            fontFamily = FontFamily.monospace
+        }
+        +sensitivity.name
+    }
+}
+
+fun ChildrenBuilder.renderClaimGroupBadge(groupId: String?, groupMetadata: MpzPassGroupMetadata?) {
+    if (groupId == null) {
+        span { css { color = Color("#64748b"); fontSize = 12.px }; +"—" }
+    } else {
+        span {
+            css {
+                display = Display.inlineFlex
+                alignItems = AlignItems.center
+                gap = 4.px
+                background = Color("#312e81")
+                color = Color("#a5b4fc")
+                fontSize = 12.px
+                fontWeight = FontWeight.bold
+                padding = Padding(2.px, 8.px)
+                borderRadius = 6.px
+            }
+            groupMetadata?.icon?.let { grpIcon ->
+                span {
+                    css(ClassName("material-symbols-outlined")) {
+                        fontSize = 14.px
+                        color = Color("#c7d2fe")
+                    }
+                    +grpIcon.iconName
+                }
+            }
+            code { css { color = Color("#e0e7ff"); fontSize = 12.px }; +groupId }
+            groupMetadata?.let { grp ->
+                span { css { color = Color("#c7d2fe"); fontWeight = FontWeight.normal; fontSize = 11.px }; +"(${grp.getDisplayName()})" }
+            }
+        }
+    }
+}
+
+fun ChildrenBuilder.renderPortraitEquivalenceBadge() {
+    span {
+        css {
+            display = Display.inlineBlock
+            background = Color("#831843")
+            color = Color("#fbcfe8")
+            fontSize = 11.px
+            fontWeight = FontWeight.bold
+            padding = Padding(2.px, 8.px)
+            borderRadius = 6.px
+        }
+        +"🖼️ Portrait Equivalence"
+    }
+}
+
+fun ChildrenBuilder.renderLocalizedStringsList(
+    displayNames: Map<String, String>,
+    descriptions: Map<String, String>?
+) {
+    val locales = (displayNames.keys + (descriptions?.keys ?: emptySet())).distinct()
+    div {
+        css {
+            display = Display.flex
+            flexDirection = FlexDirection.column
+            gap = 4.px
+        }
+        for (locale in locales) {
+            div {
+                css {
+                    display = Display.flex
+                    alignItems = AlignItems.baseline
+                    flexWrap = FlexWrap.wrap
+                    gap = 6.px
+                    fontSize = 13.px
+                }
+                span {
+                    css {
+                        background = Color("#1e293b")
+                        border = Border(1.px, LineStyle.solid, Color("#334155"))
+                        color = Color("#38bdf8")
+                        fontFamily = FontFamily.monospace
+                        fontSize = 11.px
+                        fontWeight = FontWeight.bold
+                        padding = Padding(1.px, 6.px)
+                        borderRadius = 4.px
+                    }
+                    +(locale.ifEmpty { "default" })
+                }
+                displayNames[locale]?.let { dn ->
+                    span {
+                        css {
+                            color = Color("#f1f5f9")
+                            fontWeight = FontWeight.bold
+                        }
+                        +dn
+                    }
+                }
+                descriptions?.get(locale)?.let { desc ->
+                    span {
+                        css {
+                            color = Color("#94a3b8")
+                            fontSize = 12.px
+                        }
+                        +"— $desc"
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun ChildrenBuilder.renderMpzPassMetadataCards(meta: MpzPassMetadata) {
+    // 1. Claim Groups Metadata Card
+    if (meta.claimGroupsMetadata.isNotEmpty()) {
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 12.px
+                padding = 20.px
+            }
+            h4 {
+                css {
+                    fontSize = 1.1.rem
+                    color = Color("#cbd5e1")
+                    margin = Margin(0.px, 0.px, 12.px, 0.px)
+                }
+                +"Claim Groups Metadata (claimGroupsMetadata)"
+            }
+            table {
+                css {
+                    width = 100.pct
+                    borderCollapse = BorderCollapse.collapse
+                    fontSize = 13.px
+                }
+                thead {
+                    tr {
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Group ID" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Icon" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Sensitivity" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Min Claims" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Localized Display Names & Descriptions" }
+                    }
+                }
+                tbody {
+                    meta.claimGroupsMetadata.forEach { (groupId, groupMeta) ->
+                        tr {
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                code { css { color = Color("#a5b4fc"); fontWeight = FontWeight.bold }; +groupId }
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderMaterialIconBadge(groupMeta.icon)
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderSensitivityBadge(groupMeta.sensitivity)
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top; fontFamily = FontFamily.monospace; color = Color("#f1f5f9") }
+                                +groupMeta.minClaimsToGroup.toString()
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderLocalizedStringsList(groupMeta.displayName, groupMeta.description)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. ISO mdoc Claims Metadata Card
+    if (meta.isoMdocClaimsMetadata.isNotEmpty()) {
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 12.px
+                padding = 20.px
+                display = Display.flex
+                flexDirection = FlexDirection.column
+                gap = 16.px
+            }
+            h4 {
+                css {
+                    fontSize = 1.1.rem
+                    color = Color("#cbd5e1")
+                    margin = Margin(0.px, 0.px, 0.px, 0.px)
+                }
+                +"ISO mdoc Claims Metadata (isoMdocClaimsMetadata)"
+            }
+            val pe = meta.isoMdocPortraitEquivalenceData
+            meta.isoMdocClaimsMetadata.forEach { (namespace, claimsMap) ->
+                div {
+                    div {
+                        css {
+                            background = Color("#334155")
+                            padding = Padding(4.px, 10.px)
+                            borderRadius = 6.px
+                            fontSize = 13.px
+                            fontWeight = FontWeight.bold
+                            display = Display.inlineBlock
+                            marginBottom = 10.px
+                            color = Color("#ffffff")
+                        }
+                        +namespace
+                    }
+                    table {
+                        css {
+                            width = 100.pct
+                            borderCollapse = BorderCollapse.collapse
+                            fontSize = 13.px
+                        }
+                        thead {
+                            tr {
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Data Element" }
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Type" }
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Group" }
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Icon" }
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Sensitivity" }
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Localized Display Names & Descriptions" }
+                            }
+                        }
+                        tbody {
+                            claimsMap.forEach { (dataElementName, claimMeta) ->
+                                tr {
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        div {
+                                            css { display = Display.flex; flexDirection = FlexDirection.column; gap = 4.px; alignItems = AlignItems.flexStart }
+                                            code { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold }; +dataElementName }
+                                            if (pe != null && pe.namespace == namespace && pe.dataElementName == dataElementName) {
+                                                renderPortraitEquivalenceBadge()
+                                            }
+                                        }
+                                    }
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        renderClaimTypeBadge(claimMeta.type)
+                                    }
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        renderClaimGroupBadge(
+                                            groupId = claimMeta.groupId,
+                                            groupMetadata = claimMeta.groupId?.let { meta.getClaimGroupMetadata(it) }
+                                        )
+                                    }
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        renderMaterialIconBadge(claimMeta.icon)
+                                    }
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        renderSensitivityBadge(claimMeta.sensitivity)
+                                    }
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                        renderLocalizedStringsList(claimMeta.displayName, claimMeta.description)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. SD-JWT VC Claims Metadata Card
+    if (meta.sdJwtVcClaimsMetadata.isNotEmpty()) {
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 12.px
+                padding = 20.px
+            }
+            h4 {
+                css {
+                    fontSize = 1.1.rem
+                    color = Color("#cbd5e1")
+                    margin = Margin(0.px, 0.px, 12.px, 0.px)
+                }
+                +"SD-JWT VC Claims Metadata (sdJwtVcClaimsMetadata)"
+            }
+            table {
+                css {
+                    width = 100.pct
+                    borderCollapse = BorderCollapse.collapse
+                    fontSize = 13.px
+                }
+                thead {
+                    tr {
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Path" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Type" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Group" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Icon" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Sensitivity" }
+                        th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Localized Display Names & Descriptions" }
+                    }
+                }
+                tbody {
+                    meta.sdJwtVcClaimsMetadata.forEach { (claimPath, claimMeta) ->
+                        val pathStr = claimPath.joinToString(".") { (it as? JsonPrimitive)?.content ?: it.toString() }
+                        tr {
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                code { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold }; +pathStr }
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderClaimTypeBadge(claimMeta.type)
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderClaimGroupBadge(
+                                    groupId = claimMeta.groupId,
+                                    groupMetadata = claimMeta.groupId?.let { meta.getClaimGroupMetadata(it) }
+                                )
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderMaterialIconBadge(claimMeta.icon)
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderSensitivityBadge(claimMeta.sensitivity)
+                            }
+                            td {
+                                css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); verticalAlign = VerticalAlign.top }
+                                renderLocalizedStringsList(claimMeta.displayName, claimMeta.description)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun ChildrenBuilder.renderIsoMdocSection(
     index: Int,
     mDoc: MpzPassIsoMdoc,
+    mpzPassMetadata: MpzPassMetadata?,
     copiedCertIndex: Int?,
     onCopyCert: (Int, String) -> Unit
 ) {
@@ -1047,12 +1512,17 @@ private fun ChildrenBuilder.renderIsoMdocSection(
         renderIssuerSignedDetails(
             result = issuerSignedData,
             copiedCertIndex = copiedCertIndex,
-            onCopyCert = onCopyCert
+            onCopyCert = onCopyCert,
+            mpzPassMetadata = mpzPassMetadata
         )
     }
 }
 
-private fun ChildrenBuilder.renderSdJwtVcSection(index: Int, item: ParsedSdJwtVcItem) {
+private fun ChildrenBuilder.renderSdJwtVcSection(
+    index: Int,
+    item: ParsedSdJwtVcItem,
+    mpzPassMetadata: MpzPassMetadata?
+) {
     div {
         css {
             background = Color("#0f172a")
@@ -1098,7 +1568,8 @@ private fun ChildrenBuilder.renderSdJwtVcSection(index: Int, item: ParsedSdJwtVc
             renderSdJwtDetails(
                 sdjwt = item.parsedSdJwt,
                 parsedSdJwtKb = item.parsedSdJwtKb,
-                processedPayload = item.processedPayload
+                processedPayload = item.processedPayload,
+                mpzPassMetadata = mpzPassMetadata
             )
         } else {
             // Fallback preview of compact string if parsing fails
