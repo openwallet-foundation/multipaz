@@ -18,6 +18,9 @@ import org.multipaz.documenttype.knowntypes.PaymentTransaction
 /**
  * Adds all known document and transaction data types from the `multipaz-utopia` library..
  *
+ * [DelegateTransaction] is not added: an application that registers it must also register a
+ * renderer that shows the mandate in the consent prompt, so it adds both itself.
+ *
  * @receiver the [DocumentTypeRepository] to add to.
  * @param locale BCP-47 language tag used to resolve localized strings.
  */

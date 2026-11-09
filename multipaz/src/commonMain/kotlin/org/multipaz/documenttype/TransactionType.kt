@@ -2,8 +2,12 @@ package org.multipaz.documenttype
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -84,6 +88,13 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
+ * @param nestSdJwtResponseClaims whether the claims returned by [generateSdJwtResponseClaims] are
+ *  nested in a JSON object under [kbJwtResponseClaimName] (the default). Set to `false` when a
+ *  specification fixes the shape and position of its own KB-JWT claims; they are then merged in
+ *  verbatim, preserving arrays that the nesting would wrap in an object.
+ * @param sdJwtKbType the `typ` header the Key Binding JWT must carry when this transaction type is
+ *  present, or `null` (the default) for the ordinary `kb+jwt`. A type whose `typ` depends on the
+ *  payload overrides [sdJwtKbType] (the function) instead; this value is what it returns otherwise.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -91,6 +102,8 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
+    val nestSdJwtResponseClaims: Boolean = true,
+    val sdJwtKbType: String? = null,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.
@@ -99,6 +112,16 @@ abstract class TransactionType<PayloadT: Any>(
         TransactionProtocol.ISO_18013_5 -> ISO_18013_TRANSACTION_DATA_NAMESPACE
         TransactionProtocol.OPENID4VP -> openId4VpMdocResponseNamespace
     }
+
+    /**
+     * The `typ` header the Key Binding JWT carries when it signs [transactionData], all the items
+     * of this type in the response, or `null` for the ordinary `kb+jwt`.
+     *
+     * Returns the [sdJwtKbType] property by default. Override it when the `typ` depends on what is
+     * being signed, not only on the transaction type. One Key Binding JWT signs every item, so the
+     * value is decided over all of them together and must not depend on their order.
+     */
+    open fun sdJwtKbType(transactionData: List<TransactionData<PayloadT>>): String? = sdJwtKbType
 
     /**
      * Serializes transaction data for use in OpenID4VP protocol.
@@ -144,6 +167,15 @@ abstract class TransactionType<PayloadT: Any>(
 
     /**
      * Parses transaction data serialized for use in OpenID4VP protocol.
+     *
+     * The payload comes from [parseOpenId4VpRequest]. The hash algorithms the verifier accepts
+     * come from `transaction_data_hashes_alg`, so a type that does not override this function
+     * still hashes its transaction data with the algorithm the verifier asked for.
+     *
+     * @param serialized the base64url-encoded JSON transaction data item.
+     * @return transaction data wrapping the parsed payload.
+     * @throws IllegalArgumentException if `transaction_data_hashes_alg` is not an array of strings
+     *  or names no known hash algorithm.
      */
     open fun parseJson(serialized: ByteString): TransactionData<PayloadT> {
         val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
@@ -152,6 +184,17 @@ abstract class TransactionType<PayloadT: Any>(
             payload = parseOpenId4VpRequest(jsonString),
             protocol = TransactionProtocol.OPENID4VP,
             rawBytes = serialized,
+            hashAlgorithms = parseJoseHashAlgorithms(
+                Json.parseToJsonElement(jsonString).jsonObject["transaction_data_hashes_alg"]
+                    ?.takeIf { it != JsonNull }
+                    ?.jsonArray
+                    ?.map { alg ->
+                        require(alg is JsonPrimitive && alg.isString) {
+                            "Hash algorithm in 'transaction_data_hashes_alg' must be a string: $alg"
+                        }
+                        alg.content
+                    }
+            ),
         )
     }
 
@@ -259,6 +302,29 @@ abstract class TransactionType<PayloadT: Any>(
             docRequestId?.let { put("doc_request_id", JsonPrimitive(it)) }
         }
     }
+
+    /**
+     * Generates what this transaction adds to an SD-JWT presentation: the Key Binding JWT claims
+     * and any disclosures that follow the Key Binding JWT.
+     *
+     * Returns the claims of [generateSdJwtResponseClaims] and no disclosures by default. A type
+     * whose claims refer to disclosures it adds itself, such as a digest of each, overrides this
+     * so the claims and the disclosures they commit to come from one call.
+     *
+     * @param transactionData transaction data
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5, null in OpenID4VP
+     * @return the claims and the disclosures to add to the presentation
+     */
+    open suspend fun generateSdJwtResponse(
+        transactionData: TransactionData<PayloadT>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): SdJwtTransactionResponse = SdJwtTransactionResponse(
+        claims = generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId),
+    )
 
     /**
      * Verifies transaction response returned in an Mdoc presentation.

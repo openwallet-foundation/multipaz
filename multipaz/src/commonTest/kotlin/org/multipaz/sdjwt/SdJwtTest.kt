@@ -23,6 +23,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.SignatureVerificationException
@@ -3246,4 +3247,94 @@ class SdJwtTest {
         }
     }
 
+    // Delegate SD-JWT §5.1.1: `<SD-JWT>~~<KB-JWT>~<Disclosure>~`. The Key-Binding JWT is the one
+    // present() builds; what changes is the empty component before it and the disclosures after.
+    @Test
+    fun testPresentWithKbDisclosures() = runTest {
+        val issuerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val kbKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.anonymous(issuerKey),
+            kbKey = kbKey.publicKey,
+            claims = Json.parseToJsonElement("""{"given_name": "Erika"}""").jsonObject,
+            nonSdClaims = Json.parseToJsonElement("""{"iss": "https://issuer.example.com", "vct": "urn:example:1"}""").jsonObject,
+        )
+        val disclosure = """["salt",{"vct":"mandate.payment.1"}]""".encodeToByteArray().toBase64Url()
+
+        val presentation = sdJwt.presentWithKbDisclosures(
+            signingKey = AsymmetricKey.anonymous(kbKey),
+            nonce = "nonce",
+            audience = "https://verifier.example.org",
+            kbDisclosures = listOf(disclosure),
+            type = "kb+sd-jwt",
+        )
+
+        assertTrue(presentation.startsWith(sdJwt.compactSerialization + "~"), presentation)
+        assertTrue(presentation.endsWith("~$disclosure~"), presentation)
+        val kbJwt = presentation.removePrefix(sdJwt.compactSerialization + "~").removeSuffix("~$disclosure~")
+        assertEquals(3, kbJwt.split('.').size, kbJwt)
+        JsonWebSignature.verify(kbJwt, kbKey.publicKey)
+        val header = Json.parseToJsonElement(kbJwt.split('.')[0].fromBase64Url().decodeToString()).jsonObject
+        val body = Json.parseToJsonElement(kbJwt.split('.')[1].fromBase64Url().decodeToString()).jsonObject
+        assertEquals("kb+sd-jwt", header["typ"]!!.jsonPrimitive.content)
+        assertEquals("nonce", body["nonce"]!!.jsonPrimitive.content)
+        assertEquals(
+            Crypto.digest(Algorithm.SHA256, sdJwt.compactSerialization.encodeToByteArray()).toBase64Url(),
+            body["sd_hash"]!!.jsonPrimitive.content
+        )
+    }
+
+    @Test
+    fun testPresentWithKbDisclosuresNeedsDisclosures() = runTest {
+        val kbKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.anonymous(Crypto.createEcPrivateKey(EcCurve.P256)),
+            kbKey = kbKey.publicKey,
+            claims = Json.parseToJsonElement("""{"given_name": "Erika"}""").jsonObject,
+            nonSdClaims = Json.parseToJsonElement("""{"iss": "https://issuer.example.com", "vct": "urn:example:1"}""").jsonObject,
+        )
+        for (disclosures in listOf(emptyList(), listOf(""), listOf("a~b"))) {
+            assertFailsWith<IllegalArgumentException> {
+                sdJwt.presentWithKbDisclosures(AsymmetricKey.anonymous(kbKey), "nonce", "aud", disclosures)
+            }
+        }
+    }
+    // A KB-JWT of another profile, such as Delegate SD-JWT's `kb+sd-jwt`, is checked the same way,
+    // but only when the verifier asks for that type: by default only `kb+jwt` is accepted.
+    @Test
+    fun testVerifyKbJwtOfAnotherTypeOnlyWhenExpected() = runTest {
+        val issuerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val kbKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.anonymous(issuerKey),
+            kbKey = kbKey.publicKey,
+            claims = Json.parseToJsonElement("""{"given_name": "Erika"}""").jsonObject,
+            nonSdClaims = Json.parseToJsonElement("""{"iss": "https://issuer.example.com", "vct": "urn:example:1"}""").jsonObject,
+        )
+        val disclosure = """["salt",{"vct":"mandate.payment.1"}]""".encodeToByteArray().toBase64Url()
+        val presentation = sdJwt.presentWithKbDisclosures(
+            signingKey = AsymmetricKey.anonymous(kbKey),
+            nonce = "nonce",
+            audience = "https://verifier.example.org",
+            kbDisclosures = listOf(disclosure),
+            type = "kb+sd-jwt",
+        )
+        val kbJwt = presentation.removePrefix(sdJwt.compactSerialization + "~").removeSuffix("~$disclosure~")
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(sdJwt.compactSerialization + kbJwt)
+        suspend fun verify(expectedType: String?) = if (expectedType == null) {
+            sdJwtKb.verify(issuerKey.publicKey, { it == "nonce" }, { it == "https://verifier.example.org" }, { true })
+        } else {
+            sdJwtKb.verify(
+                issuerKey.publicKey,
+                { it == "nonce" },
+                { it == "https://verifier.example.org" },
+                { true },
+                expectedType = expectedType,
+            )
+        }
+
+        assertFailsWith<IllegalStateException> { verify(null) }
+        assertFailsWith<IllegalStateException> { verify("kb+jwt") }
+        assertEquals("Erika", verify("kb+sd-jwt")["given_name"]!!.jsonPrimitive.content)
+    }
 }
