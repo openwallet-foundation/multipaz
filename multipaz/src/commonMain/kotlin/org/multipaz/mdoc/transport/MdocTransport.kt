@@ -97,7 +97,7 @@ abstract class MdocTransport {
         get() = MdocTransportStats(
             transportType = MdocTransportType.OTHER,
             role = role,
-            scanningTime = runCatching { scanningTime }.getOrNull(),
+            bleScanningTime = runCatching { scanningTime }.getOrNull(),
         )
 
     /**

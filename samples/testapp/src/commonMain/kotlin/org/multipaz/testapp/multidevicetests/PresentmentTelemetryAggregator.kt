@@ -214,8 +214,8 @@ class PresentmentTelemetryAggregator {
     }
 
     private fun recordTransportMetrics(stats: MdocTransportStats) {
-        stats.scanningTime?.let { scanningTimeSamples.add(it.inWholeMilliseconds) }
-        stats.connectingTime?.let { connectingTimeSamples.add(it.inWholeMilliseconds) }
+        stats.bleScanningTime?.let { scanningTimeSamples.add(it.inWholeMilliseconds) }
+        stats.bleConnectingTime?.let { connectingTimeSamples.add(it.inWholeMilliseconds) }
         if (stats.bytesSent > 0) {
             bytesSentSamples.add(stats.bytesSent)
         }
@@ -223,10 +223,10 @@ class PresentmentTelemetryAggregator {
             bytesReceivedSamples.add(stats.bytesReceived)
         }
         stats.bleNegotiatedMtu?.let { bleNegotiatedMtuSamples.add(it.toLong()) }
-        bleScanRestartCounts.add(stats.bleNumScanRestarts)
-        bleGattConnectRetryCounts.add(stats.bleNumGattConnectRetries)
-        bleServiceDiscoveryRetryCounts.add(stats.bleNumServiceDiscoveryRetries)
-        bleL2capConnectRetryCounts.add(stats.bleNumL2capConnectRetries)
+        stats.bleNumScanRestarts?.let { bleScanRestartCounts.add(it) }
+        stats.bleNumGattConnectRetries?.let { bleGattConnectRetryCounts.add(it) }
+        stats.bleNumServiceDiscoveryRetries?.let { bleServiceDiscoveryRetryCounts.add(it) }
+        stats.bleNumL2capConnectRetries?.let { bleL2capConnectRetryCounts.add(it) }
     }
 
     /**

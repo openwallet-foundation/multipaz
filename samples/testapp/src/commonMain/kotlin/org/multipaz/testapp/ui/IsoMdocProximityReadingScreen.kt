@@ -355,7 +355,7 @@ fun IsoMdocProximityReadingScreen(
                                         engagementType = EngagementType.QR_CODE,
                                         durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value,
                                         durationRequestSentToResponseReceived = durationRequestSentToResponseReceived.value,
-                                        durationScanningTime = readerMostRecentTransportStats.value?.scanningTime,
+                                        durationScanningTime = readerMostRecentTransportStats.value?.bleScanningTime,
                                         transportStats = readerMostRecentTransportStats.value,
                                     )
                                 )

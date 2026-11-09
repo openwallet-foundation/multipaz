@@ -241,7 +241,8 @@ internal class BlePeripheralManagerImpl(
             if (uuid == identCharacteristicUuid) {
                 val ident = identValue
                 if (ident == null) {
-                    onError(IllegalStateException("Received request for ident before it's set"))
+                    Logger.w(TAG, "Received request for ident before it's set; rejecting read so central can retry")
+                    hal.sendReadResponse(requestId, statusSuccess = false, value = byteArrayOf())
                 } else {
                     hal.sendReadResponse(requestId, statusSuccess = true, value = ident)
                 }
@@ -323,6 +324,14 @@ internal class BlePeripheralManagerImpl(
         }
 
         override fun onCentralDisconnected() {
+            if (!clientConnected) {
+                Logger.w(TAG, "Central disconnected before completing handshake; resetting per-connection state")
+                _negotiatedMtu = -1
+                _mtuInferredFromWrite = false
+                maxCharacteristicSizeMemoized = 0
+                incomingMessage = ByteStringBuilder()
+                return
+            }
             onError(IllegalStateException("Central unexpectedly disconnected"))
         }
 

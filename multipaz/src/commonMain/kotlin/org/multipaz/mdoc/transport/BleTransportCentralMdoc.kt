@@ -103,20 +103,24 @@ internal class BleTransportCentralMdoc(
         get() = MdocTransportStats(
             transportType = MdocTransportType.MDOC_CENTRAL_CLIENT_MODE,
             role = role,
-            scanningTime = _scanningTime,
-            connectingTime = _connectingTime,
             bytesSent = _bytesSent,
             bytesReceived = _bytesReceived,
             numMessagesSent = _numMessagesSent,
             numMessagesReceived = _numMessagesReceived,
             warnings = centralManager.warnings,
+            bleScanningTime = _scanningTime,
+            bleConnectingTime = _connectingTime,
             bleUsingL2cap = centralManager.usingL2cap,
             bleL2capPsmInEngagement = psm != null,
             bleNegotiatedMtu = centralManager.negotiatedMtu,
             bleMtuInferredFromWrite = false,
             bleNumScanRestarts = centralManager.numScanRestarts,
             bleNumGattConnectRetries = centralManager.numGattConnectRetries,
+            bleNumMtuRequestRetries = centralManager.numMtuRequestRetries,
             bleNumServiceDiscoveryRetries = centralManager.numServiceDiscoveryRetries,
+            bleNumCharacteristicDiscoveryRetries = centralManager.numCharacteristicDiscoveryRetries,
+            bleNumCharacteristicReadRetries = centralManager.numCharacteristicReadRetries,
+            bleNumDescriptorWriteRetries = centralManager.numDescriptorWriteRetries,
             bleNumL2capConnectRetries = centralManager.numL2capConnectRetries,
             bleNumChunksSent = centralManager.numChunksSent,
             bleNumChunksReceived = centralManager.numChunksReceived,
@@ -145,16 +149,23 @@ internal class BleTransportCentralMdoc(
                     Logger.i(TAG, "Connecting directly to PSM $psm")
                     centralManager.connectL2cap(psm)
                 } else {
-                    centralManager.connectToPeripheral()
-                    centralManager.requestMtu()
-                    centralManager.peripheralDiscoverServices(uuid)
-                    centralManager.peripheralDiscoverCharacteristics()
-                    centralManager.checkReaderIdentMatches(eSenderKey)
-                    if (centralManager.l2capPsm != null) {
-                        centralManager.connectL2cap(centralManager.l2capPsm!!)
-                    } else {
-                        centralManager.subscribeToCharacteristics()
-                        centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
+                    while (true) {
+                        try {
+                            centralManager.connectToPeripheral()
+                            centralManager.requestMtu()
+                            centralManager.peripheralDiscoverServices(uuid)
+                            centralManager.peripheralDiscoverCharacteristics()
+                            centralManager.checkReaderIdentMatches(eSenderKey)
+                            if (centralManager.l2capPsm != null) {
+                                centralManager.connectL2cap(centralManager.l2capPsm!!)
+                            } else {
+                                centralManager.subscribeToCharacteristics()
+                                centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
+                            }
+                            break
+                        } catch (e: BleReconnectRequiredException) {
+                            Logger.w(TAG, "Disconnected during GATT setup, reconnecting", e)
+                        }
                     }
                 }
                 _connectingTime = Clock.System.now() - timeConnectingStarted!!

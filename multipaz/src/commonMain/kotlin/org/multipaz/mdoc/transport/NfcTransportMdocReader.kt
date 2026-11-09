@@ -32,10 +32,8 @@ import org.multipaz.util.appendByteString
 import org.multipaz.util.appendUInt16
 import org.multipaz.util.appendUInt8
 import kotlin.math.min
-import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Instant
 
 class NfcTransportMdocReader(
     override val role: MdocRole,
@@ -66,7 +64,6 @@ class NfcTransportMdocReader(
     override val scanningTime: Duration?
         get() = null
 
-    private var _connectingTime: Duration? = null
     private var _bytesSent: Long = 0
     private var _bytesReceived: Long = 0
     private var _numMessagesSent: Int = 0
@@ -76,7 +73,6 @@ class NfcTransportMdocReader(
         get() = MdocTransportStats(
             transportType = MdocTransportType.NFC_DATA_TRANSFER_MODE,
             role = role,
-            connectingTime = _connectingTime,
             bytesSent = _bytesSent,
             bytesReceived = _bytesReceived,
             numMessagesSent = _numMessagesSent,
@@ -121,15 +117,11 @@ class NfcTransportMdocReader(
     override suspend fun open(eSenderKey: EcPublicKey) {
         mutex.withLock {
             check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
-            var timeConnectingStarted: Instant? = null
             try {
                 _state.value = State.CONNECTING
-                timeConnectingStarted = Clock.System.now()
                 tag.selectApplication(Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID)
-                _connectingTime = Clock.System.now() - timeConnectingStarted
                 _state.value = State.CONNECTED
             } catch (error: Exception) {
-                timeConnectingStarted?.let { _connectingTime = Clock.System.now() - it }
                 failTransport(error)
                 throw error.wrapUnlessCancellationException("Failed while opening transport")
             }

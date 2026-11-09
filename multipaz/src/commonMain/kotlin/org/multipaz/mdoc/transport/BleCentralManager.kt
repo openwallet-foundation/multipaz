@@ -68,7 +68,19 @@ internal interface BleCentralManager {
     val numGattConnectRetries: Int
         get() = 0
 
+    val numMtuRequestRetries: Int
+        get() = 0
+
     val numServiceDiscoveryRetries: Int
+        get() = 0
+
+    val numCharacteristicDiscoveryRetries: Int
+        get() = 0
+
+    val numCharacteristicReadRetries: Int
+        get() = 0
+
+    val numDescriptorWriteRetries: Int
         get() = 0
 
     val numL2capConnectRetries: Int
