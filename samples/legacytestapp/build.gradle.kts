@@ -21,7 +21,11 @@ kotlin {
 
 android {
     namespace = "org.multipaz.legacytestapp"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
 
     defaultConfig {
         applicationId = "org.multipaz.legacytestapp"

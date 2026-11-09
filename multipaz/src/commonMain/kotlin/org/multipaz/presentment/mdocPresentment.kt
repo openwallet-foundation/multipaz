@@ -135,9 +135,16 @@ suspend fun mdocPresentmentAuthenticateUser(
     selection: PresentmentSelection
 ): KeyUnlockDataProvider {
     return buildPreloadedKeyUnlockDataProvider {
+        add(selection.preloadedKeyUnlockData)
+        val alreadyUnlocked = selection.preloadedKeyUnlockData
+            .map { it.secureArea to it.alias }
+            .toSet()
         for (match in selection.matches) {
             if (match.credential is SecureAreaBoundCredential) {
                 val credential = match.credential
+                if ((credential.secureArea to credential.alias) in alreadyUnlocked) {
+                    continue
+                }
                 val keyUnlockDataList = try {
                     credential.secureArea.unlockKey(
                         alias = credential.alias,

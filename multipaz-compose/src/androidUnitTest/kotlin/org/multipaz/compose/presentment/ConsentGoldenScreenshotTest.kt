@@ -2241,6 +2241,138 @@ class ConsentGoldenScreenshotTest {
             }
         }
 
+        // =========================================================================================
+        // Category 11: 11_biometric_prompt (Android 17 QPR2+ EmbeddedBiometricPrompt)
+        // =========================================================================================
+        val cat11Dir = "11_biometric_prompt"
+        val cat11Title = "11. Combined Consent & Biometric Authentication (Android EmbeddedBiometricPrompt)"
+        val cat11Desc = "Android 17 QPR2+ (API 37.2) EmbeddedBiometricPrompt combining simple, well-defined non-PII proximity age verification requests with biometric authentication in a single bottom sheet. Captured on an Android 17 QPR2 device via `./multipaz-compose/golden-screenshots/update-biometric-goldens.sh` across eight requester and claim combinations."
+
+        fun recordPreCapturedScenario(
+            scenarioId: String,
+            title: String,
+            requesterSummary: String,
+            protocolSummary: String,
+            riskBadge: String,
+            description: String,
+            stepId: String = "main",
+            stepLabel: String,
+        ) {
+            val relativePath = "$cat11Dir/${scenarioId}__${stepId}.png"
+            val goldenFile = File(goldenRootDir, relativePath)
+            if (!goldenFile.exists()) {
+                mismatches.add("Missing pre-captured golden file: ${goldenFile.path}")
+            }
+            recordedScenarios.add(
+                GoldenScenarioRecord(
+                    categoryDir = cat11Dir,
+                    categoryTitle = cat11Title,
+                    categoryDescription = cat11Desc,
+                    scenarioId = scenarioId,
+                    title = title,
+                    requesterSummary = requesterSummary,
+                    protocolSummary = protocolSummary,
+                    riskBadge = riskBadge,
+                    description = description,
+                    steps = listOf(
+                        GoldenStepRecord(
+                            stepId = stepId,
+                            label = stepLabel,
+                            relativePath = relativePath,
+                        )
+                    ),
+                )
+            )
+        }
+
+        // 11.1 trusted_requester_age_over_21
+        recordPreCapturedScenario(
+            scenarioId = "trusted_requester_age_over_21",
+            title = "Trusted Proximity Requester Requesting Age Over 21 (Without Portrait)",
+            requesterSummary = "Utopia Marketplace — Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOver(21))",
+            description = "A trusted proximity relying party in the wallet's trust list requests only age_over_21 without portrait. The embedded biometric prompt displays the relying party's verified icon and display name, stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data, with a 'More details' link to expand to the full consent bottom sheet.",
+            stepLabel = "EmbeddedBiometricPrompt (Trusted RP, age_over_21)",
+        )
+
+        // 11.2 trusted_requester_age_over_21_and_portrait
+        recordPreCapturedScenario(
+            scenarioId = "trusted_requester_age_over_21_and_portrait",
+            title = "Trusted Proximity Requester Requesting Age Over 21 & Portrait",
+            requesterSummary = "Utopia Marketplace — Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21, portrait)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))",
+            description = "A trusted proximity relying party in the wallet's trust list requests age_over_21 and portrait. The embedded biometric prompt displays the relying party's verified icon and display name, stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Trusted RP, age_over_21 + portrait)",
+        )
+
+        // 11.3 unknown_requester_age_over_21
+        recordPreCapturedScenario(
+            scenarioId = "unknown_requester_age_over_21",
+            title = "Unverified Proximity Requester Requesting Age Over 21 (Without Portrait)",
+            requesterSummary = "Dave's Bookstore (Not in trust list) — Unverified Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOver(21))",
+            description = "A proximity reader presents a reader authentication certificate whose root CA is not in the wallet's trust list, requesting only age_over_21 without portrait. The embedded biometric prompt displays the generic business icon and 'An unknown requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Unknown RP, age_over_21)",
+        )
+
+        // 11.4 unknown_requester_age_over_21_and_portrait
+        recordPreCapturedScenario(
+            scenarioId = "unknown_requester_age_over_21_and_portrait",
+            title = "Unverified Proximity Requester Requesting Age Over 21 & Portrait",
+            requesterSummary = "Dave's Bookstore (Not in trust list) — Unverified Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21, portrait)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))",
+            description = "A proximity reader presents a reader authentication certificate whose root CA is not in the wallet's trust list, requesting age_over_21 and portrait. The embedded biometric prompt displays the generic business icon and 'An unknown requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Unknown RP, age_over_21 + portrait)",
+        )
+
+        // 11.5 anonymous_requester_age_over_21
+        recordPreCapturedScenario(
+            scenarioId = "anonymous_requester_age_over_21",
+            title = "Anonymous Proximity Requester Requesting Age Over 21 (Without Portrait)",
+            requesterSummary = "Anonymous Requester — Anonymous Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOver(21))",
+            description = "A proximity reader provides no reader authentication certificate at all while requesting only age_over_21 without portrait. The embedded biometric prompt displays the generic business icon and 'An anonymous requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Anonymous RP, age_over_21)",
+        )
+
+        // 11.6 anonymous_requester_age_over_21_and_portrait
+        recordPreCapturedScenario(
+            scenarioId = "anonymous_requester_age_over_21_and_portrait",
+            title = "Anonymous Proximity Requester Requesting Age Over 21 & Portrait",
+            requesterSummary = "Anonymous Requester — Anonymous Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_21, portrait)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeOverAndPortrait(21))",
+            description = "A proximity reader provides no reader authentication certificate at all while requesting age_over_21 and portrait. The embedded biometric prompt displays the generic business icon and 'An anonymous requester wants to know if you're older than 21', stating that Multipaz is using Erika's driving license to share only that the holder is older than 21 and their portrait, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Anonymous RP, age_over_21 + portrait)",
+        )
+
+        // 11.7 trusted_requester_age_over_50_and_portrait
+        recordPreCapturedScenario(
+            scenarioId = "trusted_requester_age_over_50_and_portrait",
+            title = "Trusted Proximity Requester Requesting Age Over 50 (Falling Back to Age in Years) & Portrait",
+            requesterSummary = "Utopia Marketplace — Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_50 -> age_in_years, portrait, issuing_authority, issuing_country)",
+            riskBadge = "NORMAL (SimpleConsentClaim.AgeInYearsAndPortrait)",
+            description = "A trusted proximity relying party requests age_over_50 with alternative data elements (age_in_years, birth_date) along with portrait and issuer metadata. Because age_over_50 is not present in Erika's driving license, the request falls back to age_in_years and the embedded biometric prompt displays 'Utopia Marketplace wants to know your age' and states that Multipaz is sharing only the holder's age and portrait, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Trusted RP, age_over_50 -> age_in_years + portrait)",
+        )
+
+        // 11.8 trusted_requester_age_over_65_and_portrait
+        recordPreCapturedScenario(
+            scenarioId = "trusted_requester_age_over_65_and_portrait",
+            title = "Trusted Proximity Requester Requesting Age Over 65 (False in Credential) & Portrait",
+            requesterSummary = "Utopia Marketplace — Proximity (ISO 18013-5)",
+            protocolSummary = "mDL (age_over_65 = false, portrait, issuing_authority, issuing_country)",
+            riskBadge = "NORMAL (SimpleConsentClaim.NotAgeOverAndPortrait(65))",
+            description = "A trusted proximity relying party requests age_over_65 along with portrait and issuer metadata. Because age_over_65 is present in Erika's driving license with value false (Erika is 53), the embedded biometric prompt displays 'Utopia Marketplace wants to know if you're older than 65' and states that Multipaz is sharing only that the holder is not older than 65 and their portrait, and not any other identifying data.",
+            stepLabel = "EmbeddedBiometricPrompt (Trusted RP, age_over_65 = false + portrait)",
+        )
+
         if (updateGoldens) {
             ConsentGoldenCatalogGenerator.generate(goldenRootDir, recordedScenarios)
         }

@@ -151,7 +151,11 @@ group = "org.multipaz"
 
 android {
     namespace = "org.multipaz.utopia"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
 
     defaultConfig {
         minSdk = 26

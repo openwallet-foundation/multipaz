@@ -78,6 +78,7 @@ import org.multipaz.presentment.SimpleRequesterHistory
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherRepository
+import org.multipaz.prompt.PlatformConsentOptions
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.prompt.promptModelRequestConsent
@@ -114,6 +115,7 @@ private enum class CertChain(
     CERT_CHAIN_UTOPIA_AIRLINES("Utopia Airlines"),
     CERT_CHAIN_IDENTITY_READER("Multipaz Identity Reader"),
     CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT("Multipaz Identity Reader (w/ Google Account)"),
+    CERT_CHAIN_DAVES_BOOKSTORE("Dave's Bookstore (Not in trust list)"),
     CERT_CHAIN_NONE("None")
 }
 
@@ -146,7 +148,10 @@ private enum class Example(
     val desc: String,
 ) {
     MDL_US_TRANSPORTATION("mDL: US transportation"),
+    MDL_AGE_OVER_21("mDL: Age over 21"),
     MDL_AGE_OVER_21_AND_PORTRAIT("mDL: Age over 21 + portrait"),
+    MDL_AGE_OVER_50_AND_PORTRAIT("mDL: Age over 50 + portrait"),
+    MDL_AGE_OVER_65_AND_PORTRAIT("mDL: Age over 65 + portrait"),
     MDL_MANDATORY("mDL: Mandatory data elements"),
     MDL_ALL("mDL: All data elements"),
     MDL_ADDRESS_ONLY("mDL: Address only"),
@@ -203,6 +208,10 @@ data class AndroidPresentmentActivityData(
     val preselectedDocuments: List<Document> = emptyList()
 )
 
+expect fun createPlatformConsentOptions(
+    showOnBiometricPrompt: Boolean
+): PlatformConsentOptions?
+
 expect suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
@@ -229,6 +238,7 @@ fun ConsentPromptScreen(
     var encryptionTarget by remember { mutableStateOf(EncryptionTarget.entries.first()) }
     var origin by remember { mutableStateOf(Origin.entries.first()) }
     var appId by remember { mutableStateOf(AppId.entries.first()) }
+    var showOnBiometricPrompt by remember { mutableStateOf(true) }
     var cardArtMdl by remember { mutableStateOf(ByteArray(0)) }
     var cardArtPhotoId by remember { mutableStateOf(ByteArray(0)) }
     var cardArtBoardingPass by remember { mutableStateOf(ByteArray(0)) }
@@ -441,7 +451,7 @@ fun ConsentPromptScreen(
 
         item {
             SettingMultipleChoice(
-                title = "TrustPoint",
+                title = "Requester",
                 choices = CertChain.entries.map { it.desc },
                 initialChoice = CertChain.entries.first().desc,
                 onChoiceSelected = { choice -> certChain = CertChain.entries.find { it.desc == choice }!! },
@@ -450,7 +460,7 @@ fun ConsentPromptScreen(
 
         item {
             SettingMultipleChoice(
-                title = "Secondary TrustPoint",
+                title = "Secondary Requester",
                 choices = CertChain.entries.map { it.desc },
                 initialChoice = CertChain.CERT_CHAIN_NONE.desc,
                 onChoiceSelected = { choice -> secondaryCertChain = CertChain.entries.find { it.desc == choice }!! },
@@ -484,6 +494,16 @@ fun ConsentPromptScreen(
             )
         }
 
+        item {
+            SettingToggle(
+                title = "Use Biometric Prompt when possible",
+                isChecked = showOnBiometricPrompt,
+                onCheckedChange = { newValue ->
+                    showOnBiometricPrompt = newValue
+                }
+            )
+        }
+
         fun launchConsent(launcher: suspend (
             source: PresentmentSource,
             paData: AndroidPresentmentActivityData,
@@ -513,6 +533,7 @@ fun ConsentPromptScreen(
                         faceMatcherRepository = faceMatcherRepository,
                         transactionDataRendererRepository = transactionDataRendererRepository,
                         requesterHistory = requesterHistory,
+                        platformConsentOptions = createPlatformConsentOptions(showOnBiometricPrompt),
                     )
                     val trustedRequesterIdentity =
                         queryResult.source.resolveTrust(queryResult.requester)
@@ -557,6 +578,7 @@ fun ConsentPromptScreen(
                                 onDocumentsInFocus = onDocumentsInFocus,
                                 transactionDataRendererRepository = transactionDataRendererRepository,
                                 requesterHistory = source.requesterHistory,
+                                platformConsentOptions = createPlatformConsentOptions(showOnBiometricPrompt),
                             )
                         },
                         paData = AndroidPresentmentActivityData()
@@ -773,10 +795,65 @@ private suspend fun getQueryResult(
     faceMatcherRepository: FaceMatcherRepository? = null,
     transactionDataRendererRepository: TransactionDataRendererRepository? = null,
     requesterHistory: RequesterHistory? = null,
+    platformConsentOptions: PlatformConsentOptions? = null,
 ): QueryResult {
     val dcql = when (example) {
+        Example.MDL_AGE_OVER_21 ->
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21" }!!.mdocRequest!!.toDcql(emptyList())
         Example.MDL_AGE_OVER_21_AND_PORTRAIT ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.mdocRequest!!.toDcql(emptyList())
+        Example.MDL_AGE_OVER_50_AND_PORTRAIT -> Json.parseToJsonElement(
+            """
+            {
+              "credentials": [
+                {
+                  "id": "cred1",
+                  "format": "mso_mdoc",
+                  "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                  "claims": [
+                    { "id": "portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] },
+                    { "id": "age_over", "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_over_50"] },
+                    { "id": "age_in_years", "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_in_years"] },
+                    { "id": "birth_date", "path": ["${DrivingLicense.MDL_NAMESPACE}", "birth_date"] },
+                    { "id": "issuing_authority", "path": ["${DrivingLicense.MDL_NAMESPACE}", "issuing_authority"] },
+                    { "id": "issuing_country", "path": ["${DrivingLicense.MDL_NAMESPACE}", "issuing_country"] }
+                  ],
+                  "claim_sets": [
+                    ["portrait", "age_over", "issuing_authority", "issuing_country"],
+                    ["portrait", "age_in_years", "issuing_authority", "issuing_country"],
+                    ["portrait", "birth_date", "issuing_authority", "issuing_country"]
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+        Example.MDL_AGE_OVER_65_AND_PORTRAIT -> Json.parseToJsonElement(
+            """
+            {
+              "credentials": [
+                {
+                  "id": "cred1",
+                  "format": "mso_mdoc",
+                  "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                  "claims": [
+                    { "id": "portrait", "path": ["${DrivingLicense.MDL_NAMESPACE}", "portrait"] },
+                    { "id": "age_over", "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_over_65"] },
+                    { "id": "age_in_years", "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_in_years"] },
+                    { "id": "birth_date", "path": ["${DrivingLicense.MDL_NAMESPACE}", "birth_date"] },
+                    { "id": "issuing_authority", "path": ["${DrivingLicense.MDL_NAMESPACE}", "issuing_authority"] },
+                    { "id": "issuing_country", "path": ["${DrivingLicense.MDL_NAMESPACE}", "issuing_country"] }
+                  ],
+                  "claim_sets": [
+                    ["portrait", "age_over", "issuing_authority", "issuing_country"],
+                    ["portrait", "age_in_years", "issuing_authority", "issuing_country"],
+                    ["portrait", "birth_date", "issuing_authority", "issuing_country"]
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
         Example.MDL_US_TRANSPORTATION ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.mdocRequest!!.toDcql(emptyList())
         Example.MDL_MANDATORY ->
@@ -1146,6 +1223,7 @@ private suspend fun getQueryResult(
                 onDocumentsInFocus = onDocumentsInFocus,
                 transactionDataRendererRepository = transactionDataRendererRepository,
                 requesterHistory = requesterHistory,
+                platformConsentOptions = platformConsentOptions,
             )
         },
         domainsMdocSignature = listOf("mdoc"),
@@ -1179,7 +1257,10 @@ private suspend fun getQueryResult(
 
     val deviceRequest = when (example) {
         Example.MDL_US_TRANSPORTATION,
+        Example.MDL_AGE_OVER_21,
         Example.MDL_AGE_OVER_21_AND_PORTRAIT,
+        Example.MDL_AGE_OVER_50_AND_PORTRAIT,
+        Example.MDL_AGE_OVER_65_AND_PORTRAIT,
         Example.MDL_MANDATORY,
         Example.MDL_ALL,
         Example.MDL_ADDRESS_ONLY,
@@ -1351,10 +1432,10 @@ private suspend fun calculateRequester(
         privateKey = readerRootKey
     )
     val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    suspend fun buildEntry(chain: CertChain): Pair<RequesterIdentity, TrustMetadata>? {
-        val trustMetadata = when (chain) {
+    suspend fun buildEntry(chain: CertChain): Pair<RequesterIdentity, TrustMetadata?>? {
+        val (subjectName, trustMetadata) = when (chain) {
             CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE -> {
-                TrustMetadata(
+                "Utopia Marketplace" to TrustMetadata(
                     identifier = "utopia_marketplace",
                     displayName = "Utopia Marketplace",
                     displayIcon = utopiaMarketplaceIcon,
@@ -1362,7 +1443,7 @@ private suspend fun calculateRequester(
                 )
             }
             CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY -> {
-                TrustMetadata(
+                "Utopia Marketplace" to TrustMetadata(
                     identifier = "utopia_marketplace",
                     displayName = "Utopia Marketplace",
                     displayIcon = utopiaMarketplaceIcon,
@@ -1370,7 +1451,7 @@ private suspend fun calculateRequester(
                 )
             }
             CertChain.CERT_CHAIN_UTOPIA_AIRLINES -> {
-                TrustMetadata(
+                "Utopia Airlines" to TrustMetadata(
                     identifier = "utopia_airlines",
                     displayName = "Utopia Airlines",
                     displayIcon = utopiaAirlinesIcon,
@@ -1379,12 +1460,15 @@ private suspend fun calculateRequester(
             }
             CertChain.CERT_CHAIN_IDENTITY_READER,
             CertChain.CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT -> {
-                TrustMetadata(
+                "Multipaz Identity Reader" to TrustMetadata(
                     identifier = "multipaz_identity_reader",
                     displayName = "Multipaz Identity Reader",
                     displayIcon = identityReaderIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
                 )
+            }
+            CertChain.CERT_CHAIN_DAVES_BOOKSTORE -> {
+                "Dave's Bookstore" to null
             }
             CertChain.CERT_CHAIN_NONE -> return null
         }
@@ -1411,7 +1495,7 @@ private suspend fun calculateRequester(
         val readerCert = MdocUtil.generateReaderCertificate(
             readerRootKey = readerRootSigningKey,
             readerKey = readerKey.publicKey,
-            subject = X500Name.fromName("CN=${trustMetadata.displayName} Single-Use key"),
+            subject = X500Name.fromName("CN=$subjectName Single-Use key"),
             dnsName = null,
             serial = ASN1Integer.fromRandom(128),
             validFrom = validFrom,
@@ -1435,7 +1519,9 @@ private suspend fun calculateRequester(
             appId = appId.appId,
             origin = origin.origin
         ),
-        entries.toMap()
+        entries.mapNotNull { (identity, trustMetadata) ->
+            trustMetadata?.let { identity to it }
+        }.toMap()
     )
 }
 

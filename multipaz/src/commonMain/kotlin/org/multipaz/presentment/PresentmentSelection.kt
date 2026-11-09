@@ -1,6 +1,7 @@
 package org.multipaz.presentment
 
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.securearea.KeyUnlockData
 
 /**
  * A selection of credentials and claims from a [PresentmentData].
@@ -11,9 +12,12 @@ import org.multipaz.documenttype.DocumentAttributeSensitivity
  * This is typically returned from a consent prompt user interface.
  *
  * @property matches the list of credentials and claims to return to the relying party.
+ * @property preloadedKeyUnlockData optional list of [KeyUnlockData] for credentials that were
+ *   already unlocked during the consent flow (for example via an embedded biometric prompt).
  */
 data class PresentmentSelection(
-    val matches: List<PresentmentCredentialMatch>
+    val matches: List<PresentmentCredentialMatch>,
+    val preloadedKeyUnlockData: List<KeyUnlockData> = emptyList(),
 ) {
 
     /**

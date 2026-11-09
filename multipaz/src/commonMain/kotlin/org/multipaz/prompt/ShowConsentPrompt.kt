@@ -2,8 +2,10 @@ package org.multipaz.prompt
 
 import org.multipaz.consent.ClassifyPurposesFn
 import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.ClassifySimpleConsentFn
 import org.multipaz.consent.defaultClassifyPurposes
 import org.multipaz.consent.defaultClassifyRisk
+import org.multipaz.consent.defaultClassifySimpleConsent
 import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
@@ -69,6 +71,9 @@ suspend fun promptModelSilentConsent(
  *   for the active selection.
  * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
  *   for the active selection.
+ * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
+ *   combined simple consent and biometric authentication prompt.
+ * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
  * @return `null` if the user dismissed the prompt, otherwise a [PresentmentSelection] object
  *   conveying which credentials the user selected, if multiple options are available.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
@@ -84,6 +89,8 @@ suspend fun promptModelRequestConsent(
     requesterHistory: RequesterHistory? = null,
     classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
     classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
+    classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
+    platformConsentOptions: PlatformConsentOptions? = null,
 ): PresentmentSelection? {
     return try {
         PromptModel.get().requestConsent(
@@ -96,6 +103,8 @@ suspend fun promptModelRequestConsent(
             requesterHistory = requesterHistory,
             classifyPurposesFn = classifyPurposesFn,
             classifyRiskFn = classifyRiskFn,
+            classifySimpleConsentFn = classifySimpleConsentFn,
+            platformConsentOptions = platformConsentOptions,
         )
     } catch (_: PromptDismissedException) {
         null

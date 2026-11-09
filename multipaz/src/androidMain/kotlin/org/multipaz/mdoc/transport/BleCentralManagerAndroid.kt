@@ -263,6 +263,11 @@ internal class BleCentralHalAndroid : BleCentralHal {
     }
 
     override fun startScan(serviceUuid: UUID) {
+        val scanner = bluetoothManager.adapter.bluetoothLeScanner
+        if (scanner == null) {
+            callback.onError(IllegalStateException("Scanner not available, is Bluetooth off?"))
+            return
+        }
         val filter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(serviceUuid.toJavaUuid()))
             .build()
@@ -270,8 +275,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
-        bluetoothManager.adapter.bluetoothLeScanner
-            .startScan(listOf(filter), settings, scanCallback)
+        scanner.startScan(listOf(filter), settings, scanCallback)
     }
 
     override fun stopScan() {

@@ -59,8 +59,8 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
  *        `eu.europa.ec.av.1`, `com.google.wallet.idcard.1`, `in.gov.uidai.aadhaar.1`,
  *        `eu.europa.ec.eudi.cor.1`, `https://example.eudi.ec.europa.eu/cor/1`): Each requested
  *        claim is categorized:
- *        - Driving claims (`driving_privileges`, `domestic_driving_privileges`,
- *          `hazmat_endorsement_expiration_date`) add [PresentmentPurpose.DRIVING_PRIVILEGES].
+ *        - Driving claims (`driving_privileges`, `domestic_driving_privileges`) add
+ *          [PresentmentPurpose.DRIVING_PRIVILEGES].
  *        - Age claims ([DocumentAttributeSensitivity.AGE_INFORMATION], `age_in_years`,
  *          `age_birth_year`, `age_over_*`, `age_above*`, `age_equal_or_over.*`) add
  *          [PresentmentPurpose.AGE_VERIFICATION]. At most 2 age claims per credential are permitted;
@@ -198,7 +198,7 @@ private val TICKET_CLAIM_IDENTIFIERS = setOf(
     "poster",
 )
 
-private val METADATA_CLAIM_IDENTIFIERS = setOf(
+internal val METADATA_CLAIM_IDENTIFIERS = setOf(
     "issue_date",
     "issuance_date",
     "date_of_issuance",
@@ -216,12 +216,13 @@ private val METADATA_CLAIM_IDENTIFIERS = setOf(
     "aamva_version",
     "DHS_compliance",
     "DHS_temporary_lawful_status",
+    "hazmat_endorsement_expiration_date",
     "credential_issuing_date",
     "enrolment_date",
     "AadhaarExpiresOn",
 )
 
-private val PORTRAIT_CLAIM_IDENTIFIERS = setOf(
+internal val PORTRAIT_CLAIM_IDENTIFIERS = setOf(
     "portrait",
     "picture",
     "resident_image",
@@ -230,7 +231,6 @@ private val PORTRAIT_CLAIM_IDENTIFIERS = setOf(
 private val DRIVING_CLAIM_IDENTIFIERS = setOf(
     "driving_privileges",
     "domestic_driving_privileges",
-    "hazmat_endorsement_expiration_date",
 )
 
 private val ADDRESS_CLAIM_IDENTIFIERS = setOf(
@@ -642,7 +642,7 @@ private fun PresentmentCredentialMatch.resolveDocTypeOrVct(): String? {
     return null
 }
 
-private fun Claim.canonicalIdentifier(): String {
+internal fun Claim.canonicalIdentifier(): String {
     attribute?.identifier?.let { attrId ->
         if (this is JsonClaim && attribute?.parentAttribute != null) {
             return "${attribute!!.parentAttribute!!.identifier}.$attrId"
@@ -658,7 +658,7 @@ private fun Claim.canonicalIdentifier(): String {
     }
 }
 
-private fun isAgeClaimIdentifier(id: String): Boolean {
+internal fun isAgeClaimIdentifier(id: String): Boolean {
     return id == "age_in_years" ||
         id == "age_birth_year" ||
         id.startsWith("age_over_") ||

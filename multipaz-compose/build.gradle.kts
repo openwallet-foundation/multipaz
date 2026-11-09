@@ -173,7 +173,11 @@ tasks.matching { it.name == "processDebugUnitTestJavaRes" || it.name == "process
 
 android {
     namespace = "org.multipaz.compose"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
 
     sourceSets["test"].resources.srcDir(layout.buildDirectory.dir("generated/unitTestComposeResources"))
 

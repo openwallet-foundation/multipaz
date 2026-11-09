@@ -3,8 +3,10 @@ package org.multipaz.prompt
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.consent.ClassifyPurposesFn
 import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.ClassifySimpleConsentFn
 import org.multipaz.consent.defaultClassifyPurposes
 import org.multipaz.consent.defaultClassifyRisk
+import org.multipaz.consent.defaultClassifySimpleConsent
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FacePose
@@ -88,6 +90,9 @@ suspend fun PromptModel.requestPassphrase(
  *   for the active selection.
  * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
  *   for the active selection.
+ * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
+ *   combined simple consent and biometric authentication prompt.
+ * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
  * @return a [PresentmentSelection] object conveying which credentials the user selected, if multiple
  *   options are available.
  * @throws PromptDismissedException if the user dismissed the prompt.
@@ -111,6 +116,8 @@ suspend fun PromptModel.requestConsent(
     requesterHistory: RequesterHistory? = null,
     classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
     classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
+    classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
+    platformConsentOptions: PlatformConsentOptions? = null,
 ): PresentmentSelection {
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
@@ -123,6 +130,8 @@ suspend fun PromptModel.requestConsent(
             requesterHistory = requesterHistory,
             classifyPurposesFn = classifyPurposesFn,
             classifyRiskFn = classifyRiskFn,
+            classifySimpleConsentFn = classifySimpleConsentFn,
+            platformConsentOptions = platformConsentOptions,
         )
     )
 }

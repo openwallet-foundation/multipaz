@@ -2,8 +2,10 @@ package org.multipaz.prompt
 
 import org.multipaz.consent.ClassifyPurposesFn
 import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.ClassifySimpleConsentFn
 import org.multipaz.consent.defaultClassifyPurposes
 import org.multipaz.consent.defaultClassifyRisk
+import org.multipaz.consent.defaultClassifySimpleConsent
 import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
@@ -37,6 +39,9 @@ class ConsentPromptDialogModel():
      *   for the active selection.
      * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
      *   for the active selection.
+     * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
+     *   combined simple consent and biometric authentication prompt.
+     * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
      */
     class ConsentPromptRequest(
         val requester: Requester,
@@ -48,5 +53,7 @@ class ConsentPromptDialogModel():
         val requesterHistory: RequesterHistory? = null,
         val classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
         val classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
+        val classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
+        val platformConsentOptions: PlatformConsentOptions? = null,
     )
 }
