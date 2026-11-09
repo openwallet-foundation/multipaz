@@ -132,6 +132,18 @@ class ProvisioningClientTest {
         }
     }
 
+    private val tokenResponseStatuses = mutableListOf<HttpStatusCode>()
+
+    // Records the status of every response from the token endpoint, so that a test can tell
+    // a token request that succeeded at once from one the server refused first.
+    private val tokenResponseRecorder = createClientPlugin("TokenResponseRecorder") {
+        onResponse { response ->
+            if (response.call.request.url.segments.lastOrNull() == "token") {
+                tokenResponseStatuses.add(response.status)
+            }
+        }
+    }
+
     @Before
     fun setup() = runTest {
         storage = EphemeralStorage()
@@ -444,6 +456,7 @@ class ProvisioningClientTest {
         val httpClient = createClient {
             followRedirects = false
             install(credentialRequestRecorder)
+            install(tokenResponseRecorder)
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
@@ -502,12 +515,16 @@ class ProvisioningClientTest {
             val authorizationData = provisioningClient.getAuthorizationData()!!
 
             // Test refresh workflow
+            tokenResponseStatuses.clear()
             val refreshClient = Provisioning.createClientFromAuthorizationData(authorizationData)
             refreshClient.getKeyBindingChallenge()
             val refreshKeyInfo = secureArea.createKey(null, CreateKeySettings())
             val refreshed = refreshClient.obtainCredentials(KeyBindingInfo.Attestation(
                 listOf(CredentialKeyAttestation("refresh", refreshKeyInfo.attestation))))
             Assert.assertEquals(1, refreshed.certifications.size)
+            // The refresh token request carries a fresh client attestation challenge, so it
+            // is not first refused with `use_attestation_challenge`.
+            Assert.assertEquals(listOf(HttpStatusCode.OK), tokenResponseStatuses)
             assertCredentialRequestsCompliant()
 
             // Clean up authorization data
