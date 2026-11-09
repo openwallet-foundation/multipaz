@@ -18,3 +18,7 @@ internal actual fun getPlatformLogPrinter() = Logger.LogPrinter { level, tag, ms
         t = null
     }
 }
+
+internal actual fun isDebugEnabledByEnvironment(): Boolean =
+    !System.getenv("MULTIPAZ_DEBUG").isNullOrEmpty()
+

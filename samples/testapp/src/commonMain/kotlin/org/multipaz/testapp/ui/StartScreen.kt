@@ -174,7 +174,8 @@ fun StartScreen(
                         }
                     }
 
-                    TestAppPlatform.WASMJS -> {
+                    TestAppPlatform.WASMJS,
+                    TestAppPlatform.JVM -> {
                         // No native SecureArea (for now)
                     }
                 }

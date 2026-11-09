@@ -12,7 +12,8 @@ import org.multipaz.storage.Storage
 enum class TestAppPlatform(val displayName: String) {
     ANDROID("Android"),
     IOS("iOS"),
-    WASMJS("WasmJS")
+    WASMJS("WasmJS"),
+    JVM("JVM")
 }
 
 expect object TestAppConfiguration {

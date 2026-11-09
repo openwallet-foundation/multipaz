@@ -31,6 +31,8 @@ kotlin {
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 
+    jvm()
+
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         instrumentedTestVariant.sourceSetTree.set(KotlinSourceSetTree.test)
@@ -140,6 +142,13 @@ kotlin {
                 implementation(libs.zxing.core)
                 implementation(libs.ktor.client.android)
                 implementation(libs.androidx.browser)
+                implementation(project(":multipaz-jpeg2000"))
+            }
+        }
+        val jvmMain by getting {
+            dependencies {
+                implementation(compose.desktop.common)
+                implementation(libs.zxing.core)
                 implementation(project(":multipaz-jpeg2000"))
             }
         }
