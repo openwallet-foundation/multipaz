@@ -17,8 +17,14 @@ import kotlin.math.min
 
 /**
  * Direct HCI implementation of [BlePeripheralHal] for Linux JVM.
+ *
+ * @param gapDeviceName the GAP Device Name (`0x2A00`) exposed by the mandatory GAP Primary Service
+ *   (`0x1800`) on `CID 0x0004` (defaults to `"Multipaz"`).
+ * @param randomAddress optional 6-byte static random LE address, or `null` to generate one randomly.
+ * @param packetIoFactory factory that opens the [HciPacketIo] transport for each BLE session.
  */
 internal class BlePeripheralHalHci(
+    private val gapDeviceName: String = "Multipaz",
     private val randomAddress: ByteArray? = null,
     private val packetIoFactory: suspend () -> HciPacketIo = {
         LinuxHciSocketPacketIo().also { it.open() }
@@ -35,7 +41,14 @@ internal class BlePeripheralHalHci(
         val uuid16: Int?,
         val uuid128: UUID?,
         val characteristicUuid: UUID? = null,
+        val properties: Int = 0,
+        var groupEndHandle: Int = handle,
         @Volatile var staticValue: ByteArray = byteArrayOf()
+    )
+
+    private data class PendingReadRequest(
+        val connectionHandle: Int,
+        val attrHandle: Int
     )
 
     private lateinit var callback: BlePeripheralHal.Callback
@@ -71,7 +84,10 @@ internal class BlePeripheralHalHci(
     private var serviceGroupEndHandle: Int = 0
 
     private val nextReadRequestId = AtomicInteger(1)
-    private val pendingReadHandleByRequestId = ConcurrentHashMap<Int, Int>()
+    private val pendingReadByRequestId = ConcurrentHashMap<Int, PendingReadRequest>()
+
+    @Volatile
+    private var shuttingDown = false
 
     @Volatile
     private var closed = false
@@ -162,15 +178,15 @@ internal class BlePeripheralHalHci(
                     return attr.handle
                 }
 
-                // 1. Primary Service declaration (0x2800)
-                addAttr(
-                    GattAttribute(
-                        handle = nextHandle++,
-                        uuid16 = BleHciConstants.GATT_UUID_PRIMARY_SERVICE,
-                        uuid128 = null,
-                        staticValue = serviceUuid.toLittleEndianBytes()
-                    )
+                // 1. ISO 18013-5 Primary Service declaration (0x2800)
+                val isoServiceAttr = GattAttribute(
+                    handle = nextHandle++,
+                    uuid16 = BleHciConstants.GATT_UUID_PRIMARY_SERVICE,
+                    uuid128 = null,
+                    properties = BleHciConstants.GATT_PROP_READ,
+                    staticValue = serviceUuid.toLittleEndianBytes()
                 )
+                addAttr(isoServiceAttr)
 
                 fun addCharacteristic(
                     uuid: UUID,
@@ -190,6 +206,7 @@ internal class BlePeripheralHalHci(
                             handle = declHandle,
                             uuid16 = BleHciConstants.GATT_UUID_CHARACTERISTIC,
                             uuid128 = null,
+                            properties = BleHciConstants.GATT_PROP_READ,
                             staticValue = declValue
                         )
                     )
@@ -199,6 +216,7 @@ internal class BlePeripheralHalHci(
                             uuid16 = null,
                             uuid128 = uuid,
                             characteristicUuid = uuid,
+                            properties = properties,
                             staticValue = initialValue
                         )
                     )
@@ -210,6 +228,7 @@ internal class BlePeripheralHalHci(
                                 handle = nextHandle++,
                                 uuid16 = BleHciConstants.GATT_UUID_CCCD,
                                 uuid128 = null,
+                                properties = BleHciConstants.GATT_PROP_READ or BleHciConstants.GATT_PROP_WRITE,
                                 staticValue = byteArrayOf(0x00, 0x00)
                             )
                         )
@@ -257,6 +276,51 @@ internal class BlePeripheralHalHci(
                 }
 
                 serviceGroupEndHandle = nextHandle - 1
+                isoServiceAttr.groupEndHandle = serviceGroupEndHandle
+
+                // 2. Mandatory GAP Primary Service (0x1800) per Bluetooth Core Spec Vol 3 Part C Section 12,
+                // placed after the ISO 18013-5 service handles so existing 1..serviceGroupEndHandle handles
+                // remain contiguous at handle 1 while centrals querying 0x1800 / 0x2A00 / 0x2A01 succeed.
+                val gapServiceAttr = GattAttribute(
+                    handle = nextHandle++,
+                    uuid16 = BleHciConstants.GATT_UUID_PRIMARY_SERVICE,
+                    uuid128 = null,
+                    properties = BleHciConstants.GATT_PROP_READ,
+                    staticValue = u16leBytes(BleHciConstants.GAP_UUID_SERVICE)
+                )
+                addAttr(gapServiceAttr)
+
+                fun addCharacteristic16(uuid16: Int, value: ByteArray) {
+                    val declHandle = nextHandle++
+                    val valHandle = nextHandle++
+                    val declValue = ByteArray(5)
+                    declValue[0] = BleHciConstants.GATT_PROP_READ.toByte()
+                    putU16le(declValue, 1, valHandle)
+                    putU16le(declValue, 3, uuid16)
+                    addAttr(
+                        GattAttribute(
+                            handle = declHandle,
+                            uuid16 = BleHciConstants.GATT_UUID_CHARACTERISTIC,
+                            uuid128 = null,
+                            properties = BleHciConstants.GATT_PROP_READ,
+                            staticValue = declValue
+                        )
+                    )
+                    addAttr(
+                        GattAttribute(
+                            handle = valHandle,
+                            uuid16 = uuid16,
+                            uuid128 = null,
+                            properties = BleHciConstants.GATT_PROP_READ,
+                            staticValue = value
+                        )
+                    )
+                }
+
+                addCharacteristic16(BleHciConstants.GAP_UUID_DEVICE_NAME, gapDeviceName.encodeToByteArray())
+                addCharacteristic16(BleHciConstants.GAP_UUID_APPEARANCE, byteArrayOf(0x00, 0x00))
+                gapServiceAttr.groupEndHandle = nextHandle - 1
+
                 callback.onServiceAdded(null)
             } catch (t: Throwable) {
                 callback.onServiceAdded(t)
@@ -330,9 +394,9 @@ internal class BlePeripheralHalHci(
     override fun sendReadResponse(requestId: Int, statusSuccess: Boolean, value: ByteArray) {
         enqueue {
             val hci = engine ?: return@enqueue
+            val pending = pendingReadByRequestId.remove(requestId) ?: return@enqueue
             val handle = connectionHandle
-            if (handle < 0) return@enqueue
-            val attrHandle = pendingReadHandleByRequestId.remove(requestId) ?: 0
+            if (handle < 0 || pending.connectionHandle != handle) return@enqueue
             if (statusSuccess) {
                 val maxLen = (negotiatedMtu - 1).coerceAtLeast(22)
                 val truncatedLen = min(value.size, maxLen)
@@ -345,7 +409,7 @@ internal class BlePeripheralHalHci(
                     hci,
                     handle,
                     BleHciConstants.ATT_OP_READ_REQ,
-                    attrHandle,
+                    pending.attrHandle,
                     BleHciConstants.ATT_ERR_UNLIKELY_ERROR
                 )
             }
@@ -381,10 +445,20 @@ internal class BlePeripheralHalHci(
         }
     }
 
+    override suspend fun shutdown() {
+        if (closed) return
+        shuttingDown = true
+        l2capServerListening = false
+        advertisingActive = false
+        engine?.flushAndDisconnect()
+    }
+
     override fun close() {
         if (closed) return
         closed = true
+        shuttingDown = true
         l2capServerListening = false
+        advertisingActive = false
         activeL2capChannel?.close()
         activeL2capChannel = null
         actionQueue.close()
@@ -394,33 +468,39 @@ internal class BlePeripheralHalHci(
     }
 
     private fun handleLeConnected(handle: Int, peerAddrType: Int, peerAddr: ByteArray) {
-        connectionHandle = handle
-        negotiatedMtu = 23
+        enqueue {
+            if (closed || shuttingDown) return@enqueue
+            connectionHandle = handle
+            negotiatedMtu = 23
+        }
     }
 
     private fun handleLeDisconnected(handle: Int, reason: Int) {
-        if (closed) return
-        if (connectionHandle == handle || handle == 0) {
-            connectionHandle = -1
-            negotiatedMtu = 23
-            pendingReadHandleByRequestId.clear()
-            for (attr in attributes) {
-                if (attr.uuid16 == BleHciConstants.GATT_UUID_CCCD) {
-                    attr.staticValue = byteArrayOf(0x00, 0x00)
-                }
-            }
-            activeL2capChannel?.onPeerDisconnected()
-            if (advertisingActive) {
-                // Controller automatically disables advertising upon LE connection creation;
-                // if the connection dropped before the GATT/L2CAP handshake finished and
-                // stopAdvertising() was called, re-enable advertising so the central can reconnect.
-                enqueue {
-                    if (advertisingActive) {
-                        engine?.sendCommand(BleHciConstants.HCI_OP_LE_SET_ADVERTISE_ENABLE, byteArrayOf(0x01))
+        if (closed || shuttingDown || handle < 0) return
+        enqueue {
+            if (closed || shuttingDown) return@enqueue
+            if (connectionHandle == handle) {
+                connectionHandle = -1
+                negotiatedMtu = 23
+                pendingReadByRequestId.clear()
+                for (attr in attributes) {
+                    if (attr.uuid16 == BleHciConstants.GATT_UUID_CCCD) {
+                        attr.staticValue = byteArrayOf(0x00, 0x00)
                     }
                 }
+                activeL2capChannel?.onPeerDisconnected()
+                activeL2capChannel = null
+                if (advertisingActive) {
+                    // Controller automatically disables advertising upon LE connection creation;
+                    // if the connection dropped before the GATT/L2CAP handshake finished and
+                    // stopAdvertising() was called, re-enable advertising so the central can reconnect.
+                    try {
+                        engine?.sendCommand(BleHciConstants.HCI_OP_LE_SET_ADVERTISE_ENABLE, byteArrayOf(0x01))
+                    } catch (_: Throwable) {
+                    }
+                }
+                callback.onCentralDisconnected()
             }
-            callback.onCentralDisconnected()
         }
     }
 
@@ -428,6 +508,10 @@ internal class BlePeripheralHalHci(
         if (pdu.isEmpty()) return
         enqueue {
             val hci = engine ?: return@enqueue
+            if (handle != connectionHandle) return@enqueue
+            if (pdu.size > negotiatedMtu) {
+                negotiatedMtu = pdu.size.coerceAtMost(DEFAULT_SERVER_MTU)
+            }
             val opcode = pdu[0].toInt() and 0xFF
             when (opcode) {
                 BleHciConstants.ATT_OP_EXCHANGE_MTU_REQ -> {
@@ -444,30 +528,44 @@ internal class BlePeripheralHalHci(
                     callback.onMtuChanged(negotiatedMtu)
                 }
                 BleHciConstants.ATT_OP_READ_BY_GROUP_TYPE_REQ -> {
-                    if (pdu.size < 7) {
+                    if (pdu.size != 7 && pdu.size != 21) {
                         sendAttError(hci, handle, opcode, 0, BleHciConstants.ATT_ERR_INVALID_PDU)
                         return@enqueue
                     }
                     val startHandle = u16le(pdu, 1)
                     val endHandle = u16le(pdu, 3)
+                    if (startHandle == 0 || startHandle > endHandle) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_INVALID_HANDLE)
+                        return@enqueue
+                    }
                     val groupUuid16 = if (pdu.size == 7) u16le(pdu, 5) else -1
                     if (groupUuid16 != BleHciConstants.GATT_UUID_PRIMARY_SERVICE) {
                         sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_UNSUPPORTED_GROUP_TYPE)
                         return@enqueue
                     }
-                    val primaryAttr = attributesByHandle[1]
-                    if (primaryAttr != null && 1 in startHandle..endHandle) {
-                        val valBytes = primaryAttr.staticValue
-                        val rsp = ByteArray(2 + 4 + valBytes.size)
-                        rsp[0] = BleHciConstants.ATT_OP_READ_BY_GROUP_TYPE_RSP.toByte()
-                        rsp[1] = (4 + valBytes.size).toByte()
-                        putU16le(rsp, 2, 1)
-                        putU16le(rsp, 4, serviceGroupEndHandle)
-                        valBytes.copyInto(rsp, destinationOffset = 6)
-                        hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, rsp)
-                    } else {
-                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
+                    val matching = attributes.filter {
+                        it.handle in startHandle..endHandle && it.uuid16 == BleHciConstants.GATT_UUID_PRIMARY_SERVICE
                     }
+                    if (matching.isEmpty()) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
+                        return@enqueue
+                    }
+                    val firstVal = matching[0].staticValue
+                    val entryLen = (4 + firstVal.size).coerceAtMost(255)
+                    val maxRspBytes = (negotiatedMtu - 2).coerceAtLeast(21)
+                    val out = ByteArrayOutputStream()
+                    out.write(BleHciConstants.ATT_OP_READ_BY_GROUP_TYPE_RSP)
+                    out.write(entryLen)
+                    var count = 0
+                    for (attr in matching) {
+                        if (4 + attr.staticValue.size != entryLen) break
+                        if (count > 0 && (out.size() - 2) + entryLen > maxRspBytes) break
+                        out.write(u16leBytes(attr.handle))
+                        out.write(u16leBytes(attr.groupEndHandle))
+                        out.write(attr.staticValue)
+                        count++
+                    }
+                    hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, out.toByteArray())
                 }
                 BleHciConstants.ATT_OP_FIND_BY_TYPE_VALUE_REQ -> {
                     if (pdu.size < 7) {
@@ -476,22 +574,32 @@ internal class BlePeripheralHalHci(
                     }
                     val startHandle = u16le(pdu, 1)
                     val endHandle = u16le(pdu, 3)
+                    if (startHandle == 0 || startHandle > endHandle) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_INVALID_HANDLE)
+                        return@enqueue
+                    }
                     val attrType = u16le(pdu, 5)
                     val targetVal = pdu.copyOfRange(7, pdu.size)
-                    val primaryAttr = attributesByHandle[1]
-                    if (attrType == BleHciConstants.GATT_UUID_PRIMARY_SERVICE &&
-                        primaryAttr != null &&
-                        1 in startHandle..endHandle &&
-                        (primaryAttr.staticValue contentEquals targetVal)
-                    ) {
-                        val rsp = ByteArray(5)
-                        rsp[0] = BleHciConstants.ATT_OP_FIND_BY_TYPE_VALUE_RSP.toByte()
-                        putU16le(rsp, 1, 1)
-                        putU16le(rsp, 3, serviceGroupEndHandle)
-                        hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, rsp)
-                    } else {
-                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
+                    val matching = attributes.filter {
+                        it.handle in startHandle..endHandle &&
+                            it.uuid16 == attrType &&
+                            (it.staticValue contentEquals targetVal)
                     }
+                    if (matching.isEmpty()) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
+                        return@enqueue
+                    }
+                    val maxRspBytes = (negotiatedMtu - 1).coerceAtLeast(22)
+                    val out = ByteArrayOutputStream()
+                    out.write(BleHciConstants.ATT_OP_FIND_BY_TYPE_VALUE_RSP)
+                    var count = 0
+                    for (attr in matching) {
+                        if (count > 0 && (out.size() - 1) + 4 > maxRspBytes) break
+                        out.write(u16leBytes(attr.handle))
+                        out.write(u16leBytes(attr.groupEndHandle))
+                        count++
+                    }
+                    hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, out.toByteArray())
                 }
                 BleHciConstants.ATT_OP_READ_BY_TYPE_REQ -> {
                     if (pdu.size != 7 && pdu.size != 21) {
@@ -500,6 +608,10 @@ internal class BlePeripheralHalHci(
                     }
                     val startHandle = u16le(pdu, 1)
                     val endHandle = u16le(pdu, 3)
+                    if (startHandle == 0 || startHandle > endHandle) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_INVALID_HANDLE)
+                        return@enqueue
+                    }
                     val type16 = if (pdu.size == 7) u16le(pdu, 5) else null
                     val type128 = if (pdu.size == 21) uuidFromLittleEndianBytes(pdu, 5) else null
 
@@ -511,18 +623,26 @@ internal class BlePeripheralHalHci(
                         sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
                         return@enqueue
                     }
-                    val firstVal = matching[0].staticValue
-                    val pairLen = (2 + firstVal.size).coerceAtMost(255)
+                    val firstAttr = matching[0]
+                    if ((firstAttr.properties and BleHciConstants.GATT_PROP_READ) == 0) {
+                        sendAttError(hci, handle, opcode, firstAttr.handle, BleHciConstants.ATT_ERR_READ_NOT_PERMITTED)
+                        return@enqueue
+                    }
+                    val maxValuePerPair = (negotiatedMtu - 4).coerceIn(0, 253)
+                    val firstValSliceLen = min(firstAttr.staticValue.size, maxValuePerPair)
+                    val pairLen = 2 + firstValSliceLen
                     val maxRspBytes = (negotiatedMtu - 2).coerceAtLeast(21)
                     val out = ByteArrayOutputStream()
                     out.write(BleHciConstants.ATT_OP_READ_BY_TYPE_RSP)
                     out.write(pairLen)
                     var count = 0
                     for (attr in matching) {
-                        if (2 + attr.staticValue.size != pairLen) break
+                        if ((attr.properties and BleHciConstants.GATT_PROP_READ) == 0) break
+                        val valSliceLen = min(attr.staticValue.size, maxValuePerPair)
+                        if (2 + valSliceLen != pairLen) break
                         if (count > 0 && (out.size() - 2) + pairLen > maxRspBytes) break
                         out.write(u16leBytes(attr.handle))
-                        out.write(attr.staticValue)
+                        out.write(attr.staticValue, 0, valSliceLen)
                         count++
                     }
                     hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, out.toByteArray())
@@ -534,6 +654,10 @@ internal class BlePeripheralHalHci(
                     }
                     val startHandle = u16le(pdu, 1)
                     val endHandle = u16le(pdu, 3)
+                    if (startHandle == 0 || startHandle > endHandle) {
+                        sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_INVALID_HANDLE)
+                        return@enqueue
+                    }
                     val matching = attributes.filter { it.handle in startHandle..endHandle }
                     if (matching.isEmpty()) {
                         sendAttError(hci, handle, opcode, startHandle, BleHciConstants.ATT_ERR_ATTRIBUTE_NOT_FOUND)
@@ -561,25 +685,48 @@ internal class BlePeripheralHalHci(
                     }
                     hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, out.toByteArray())
                 }
-                BleHciConstants.ATT_OP_READ_REQ -> {
-                    if (pdu.size < 3) {
+                BleHciConstants.ATT_OP_READ_REQ,
+                BleHciConstants.ATT_OP_READ_BLOB_REQ -> {
+                    val minSize = if (opcode == BleHciConstants.ATT_OP_READ_BLOB_REQ) 5 else 3
+                    if (pdu.size < minSize) {
                         sendAttError(hci, handle, opcode, 0, BleHciConstants.ATT_ERR_INVALID_PDU)
                         return@enqueue
                     }
                     val attrHandle = u16le(pdu, 1)
+                    val blobOffset = if (opcode == BleHciConstants.ATT_OP_READ_BLOB_REQ) u16le(pdu, 3) else 0
                     val attr = attributesByHandle[attrHandle]
                     if (attr == null) {
                         sendAttError(hci, handle, opcode, attrHandle, BleHciConstants.ATT_ERR_INVALID_HANDLE)
                         return@enqueue
                     }
+                    if ((attr.properties and BleHciConstants.GATT_PROP_READ) == 0) {
+                        sendAttError(hci, handle, opcode, attrHandle, BleHciConstants.ATT_ERR_READ_NOT_PERMITTED)
+                        return@enqueue
+                    }
                     if (attr.characteristicUuid != null) {
+                        if (opcode == BleHciConstants.ATT_OP_READ_BLOB_REQ) {
+                            sendAttError(hci, handle, opcode, attrHandle, BleHciConstants.ATT_ERR_REQUEST_NOT_SUPPORTED)
+                            return@enqueue
+                        }
                         val reqId = nextReadRequestId.getAndIncrement()
-                        pendingReadHandleByRequestId[reqId] = attrHandle
+                        pendingReadByRequestId[reqId] = PendingReadRequest(handle, attrHandle)
                         callback.onCharacteristicReadRequest(reqId, attr.characteristicUuid)
                     } else {
-                        val rsp = ByteArray(1 + attr.staticValue.size)
-                        rsp[0] = BleHciConstants.ATT_OP_READ_RSP.toByte()
-                        attr.staticValue.copyInto(rsp, destinationOffset = 1)
+                        val fullBytes = attr.staticValue
+                        if (blobOffset > fullBytes.size) {
+                            sendAttError(hci, handle, opcode, attrHandle, BleHciConstants.ATT_ERR_INVALID_OFFSET)
+                            return@enqueue
+                        }
+                        val maxLen = (negotiatedMtu - 1).coerceAtLeast(22)
+                        val sliceLen = min(maxLen, fullBytes.size - blobOffset)
+                        val rspOp = if (opcode == BleHciConstants.ATT_OP_READ_BLOB_REQ) {
+                            BleHciConstants.ATT_OP_READ_BLOB_RSP
+                        } else {
+                            BleHciConstants.ATT_OP_READ_RSP
+                        }
+                        val rsp = ByteArray(1 + sliceLen)
+                        rsp[0] = rspOp.toByte()
+                        fullBytes.copyInto(rsp, destinationOffset = 1, startIndex = blobOffset, endIndex = blobOffset + sliceLen)
                         hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_ATT, rsp)
                     }
                 }
@@ -602,7 +749,9 @@ internal class BlePeripheralHalHci(
                             BleHciConstants.L2CAP_CID_ATT,
                             byteArrayOf(BleHciConstants.ATT_OP_WRITE_RSP.toByte())
                         )
-                    } else if (attr.characteristicUuid != null) {
+                    } else if (attr.characteristicUuid != null &&
+                        (attr.properties and (BleHciConstants.GATT_PROP_WRITE or BleHciConstants.GATT_PROP_WRITE_NO_RSP)) != 0
+                    ) {
                         hci.sendL2capPdu(
                             handle,
                             BleHciConstants.L2CAP_CID_ATT,
@@ -619,6 +768,9 @@ internal class BlePeripheralHalHci(
                     val value = pdu.copyOfRange(3, pdu.size)
                     val attr = attributesByHandle[attrHandle] ?: return@enqueue
                     val charUuid = attr.characteristicUuid ?: return@enqueue
+                    if ((attr.properties and (BleHciConstants.GATT_PROP_WRITE_NO_RSP or BleHciConstants.GATT_PROP_WRITE)) == 0) {
+                        return@enqueue
+                    }
                     callback.onCharacteristicWriteRequest(charUuid, value, null)
                 }
                 BleHciConstants.ATT_OP_HANDLE_VALUE_CFM -> {
@@ -661,7 +813,15 @@ internal class BlePeripheralHalHci(
 
                     enqueue {
                         val hci = engine ?: return@enqueue
-                        if (l2capServerListening && psm == publishedPsm) {
+                        if (handle != connectionHandle) return@enqueue
+                        val rejectResult: Int? = when {
+                            !l2capServerListening || psm != publishedPsm -> 0x0002 // LE_PSM not supported
+                            activeL2capChannel != null -> 0x0004 // No resources available
+                            peerScid < BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT -> 0x0009 // Invalid Source CID
+                            peerMtu < 23 || peerMps < 23 -> 0x000B // Unacceptable parameters
+                            else -> null
+                        }
+                        if (rejectResult == null) {
                             if (advertisingActive) {
                                 advertisingActive = false
                                 try {
@@ -694,12 +854,11 @@ internal class BlePeripheralHalHci(
 
                             callback.onL2capClientConnected(channel)
                         } else {
-                            // Refuse connection: 0x0002 = LE_PSM not supported
                             val rsp = ByteArray(14)
                             rsp[0] = BleHciConstants.L2CAP_LE_CREDIT_CONN_RSP.toByte()
                             rsp[1] = identifier.toByte()
                             putU16le(rsp, 2, 10)
-                            putU16le(rsp, 12, 0x0002)
+                            putU16le(rsp, 12, rejectResult)
                             hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_LE_SIGNALING, rsp)
                         }
                     }
@@ -707,29 +866,52 @@ internal class BlePeripheralHalHci(
             }
             BleHciConstants.L2CAP_FLOW_CONTROL_CREDIT_IND -> {
                 if (pdu.size >= 8) {
+                    val cid = u16le(pdu, 4)
                     val credits = u16le(pdu, 6)
-                    activeL2capChannel?.onPeerCreditsGranted(credits)
+                    val ch = activeL2capChannel
+                    if (ch != null && ch.connectionHandle == handle && cid == ch.peerCid) {
+                        ch.onPeerCreditsGranted(credits)
+                    }
                 }
             }
             BleHciConstants.L2CAP_DISCONN_REQ -> {
                 if (pdu.size >= 8) {
                     val dcid = u16le(pdu, 4)
                     val scid = u16le(pdu, 6)
-                    activeL2capChannel?.onPeerDisconnected()
-                    val hci = engine
-                    if (hci != null) {
-                        scope.launch {
-                            try {
-                                val rsp = ByteArray(8)
-                                rsp[0] = BleHciConstants.L2CAP_DISCONN_RSP.toByte()
-                                rsp[1] = identifier.toByte()
-                                putU16le(rsp, 2, 4)
-                                putU16le(rsp, 4, dcid)
-                                putU16le(rsp, 6, scid)
-                                hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_LE_SIGNALING, rsp)
-                            } catch (_: Throwable) {
-                            }
+                    enqueue {
+                        val hci = engine ?: return@enqueue
+                        if (handle != connectionHandle) return@enqueue
+                        val ch = activeL2capChannel
+                        if (ch != null && dcid == ch.localCid && scid == ch.peerCid) {
+                            ch.onPeerDisconnected()
+                            activeL2capChannel = null
+                            val rsp = ByteArray(8)
+                            rsp[0] = BleHciConstants.L2CAP_DISCONN_RSP.toByte()
+                            rsp[1] = identifier.toByte()
+                            putU16le(rsp, 2, 4)
+                            putU16le(rsp, 4, dcid)
+                            putU16le(rsp, 6, scid)
+                            hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_LE_SIGNALING, rsp)
                         }
+                    }
+                }
+            }
+            else -> {
+                val isResponseOrIndication = code == BleHciConstants.L2CAP_CMD_REJECT ||
+                    code == BleHciConstants.L2CAP_DISCONN_RSP ||
+                    code == BleHciConstants.L2CAP_CONN_PARAM_UPDATE_RSP ||
+                    code == BleHciConstants.L2CAP_LE_CREDIT_CONN_RSP ||
+                    code == 0x18 || code == 0x1A
+                if (!isResponseOrIndication && identifier != 0) {
+                    enqueue {
+                        val hci = engine ?: return@enqueue
+                        if (handle != connectionHandle) return@enqueue
+                        val rsp = ByteArray(6)
+                        rsp[0] = BleHciConstants.L2CAP_CMD_REJECT.toByte()
+                        rsp[1] = identifier.toByte()
+                        putU16le(rsp, 2, 2)
+                        putU16le(rsp, 4, 0x0000) // Command not understood
+                        hci.sendL2capPdu(handle, BleHciConstants.L2CAP_CID_LE_SIGNALING, rsp)
                     }
                 }
             }
@@ -738,7 +920,7 @@ internal class BlePeripheralHalHci(
 
     private fun handleL2capCoCPdu(handle: Int, cid: Int, pdu: ByteArray) {
         val ch = activeL2capChannel
-        if (ch != null && cid == ch.localCid) {
+        if (ch != null && ch.connectionHandle == handle && cid == ch.localCid) {
             ch.onKFrameReceived(pdu)
         }
     }

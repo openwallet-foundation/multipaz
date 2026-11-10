@@ -470,6 +470,15 @@ class BleManagerImplTest {
         assertNull(peripheralError)
         assertEquals(false, bridge.peripheralHal.lastReadResponseStatusSuccess)
 
+        // Reading an unexpected characteristic rejects the read via sendReadResponse(statusSuccess = false)
+        // and records BLE_UNEXPECTED_CALLBACK rather than stalling the ATT bearer.
+        bridge.peripheralHal.lastReadResponseStatusSuccess = null
+        bridge.peripheralHal.halCallback.onCharacteristicReadRequest(2, stateUuid)
+        assertEquals(false, bridge.peripheralHal.lastReadResponseStatusSuccess)
+        assertTrue(
+            peripheralManager.warnings.contains(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
+        )
+
         // Malformed chunk on peripheral's Client2Server characteristic triggers onError
         bridge.peripheralHal.halCallback.onCharacteristicWriteRequest(c2sUuid, byteArrayOf(0x09, 0x01), null)
         assertNotNull(peripheralError)

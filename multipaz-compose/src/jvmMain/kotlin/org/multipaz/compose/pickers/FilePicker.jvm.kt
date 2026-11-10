@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import java.awt.FileDialog
 import java.awt.Frame
@@ -24,19 +25,25 @@ actual fun rememberFilePicker(
             types = types,
             allowMultiple = allowMultiple,
             onLaunch = {
-                scope.launch(Dispatchers.IO) {
-                    val dialog = FileDialog(null as Frame?, "Select File", FileDialog.LOAD)
-                    dialog.isMultipleMode = allowMultiple
-                    dialog.isVisible = true
-                    val selectedFiles: Array<File> = if (allowMultiple) {
-                        dialog.files
-                    } else {
-                        val dir = dialog.directory
-                        val file = dialog.file
-                        if (dir != null && file != null) arrayOf(File(dir, file)) else emptyArray()
-                    }
-                    val results = selectedFiles.mapNotNull { f ->
-                        if (f.isFile) ByteString(f.readBytes()) else null
+                scope.launch {
+                    val results = withContext(Dispatchers.IO) {
+                        val dialog = FileDialog(null as Frame?, "Select File", FileDialog.LOAD)
+                        try {
+                            dialog.isMultipleMode = allowMultiple
+                            dialog.isVisible = true
+                            val selectedFiles: Array<File> = if (allowMultiple) {
+                                dialog.files
+                            } else {
+                                val dir = dialog.directory
+                                val file = dialog.file
+                                if (dir != null && file != null) arrayOf(File(dir, file)) else emptyArray()
+                            }
+                            selectedFiles.mapNotNull { f ->
+                                if (f.isFile) ByteString(f.readBytes()) else null
+                            }
+                        } finally {
+                            dialog.dispose()
+                        }
                     }
                     if (results.isNotEmpty()) {
                         currentOnResult.value(results)

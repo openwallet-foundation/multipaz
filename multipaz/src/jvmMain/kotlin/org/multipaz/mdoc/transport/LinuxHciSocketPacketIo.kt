@@ -32,6 +32,17 @@ internal interface HciPacketIo {
     suspend fun writePacket(packet: ByteArray)
 
     /**
+     * Whether the underlying transport keeps its descriptor open across [close] calls for reuse.
+     */
+    val keepsDescriptorOpenOnClose: Boolean
+        get() = false
+
+    /**
+     * Notifies the transport that `HCI_Reset` has already been executed and acknowledged prior to [close].
+     */
+    fun markControllerResetCompleted() {}
+
+    /**
      * Closes the underlying HCI transport and unblocks any pending [readPacket] call.
      */
     fun close()
@@ -159,6 +170,7 @@ internal class LinuxHciSocketPacketIo(
         private const val EINTR = 4
         private const val EAGAIN = 11
         private const val EBUSY = 16
+        private const val ENOSYS = 38
         private const val EALREADY = 114
 
         private const val MAX_HCI_PACKET_SIZE = 65536 + 16
@@ -215,7 +227,7 @@ internal class LinuxHciSocketPacketIo(
         fun bind(sockfd: Int, addr: ByteArray, addrlen: Int): Int
 
         @Throws(LastErrorException::class)
-        fun ioctl(fd: Int, request: NativeLong, arg: Int): Int
+        fun ioctl(fd: Int, request: NativeLong, arg: NativeLong): Int
 
         @Throws(LastErrorException::class)
         fun fcntl(fd: Int, cmd: Int, arg: Int): Int
@@ -231,6 +243,9 @@ internal class LinuxHciSocketPacketIo(
 
         @Throws(LastErrorException::class)
         fun pipe(pipefd: IntArray): Int
+
+        @Throws(LastErrorException::class)
+        fun pipe2(pipefd: IntArray, flags: Int): Int
 
         fun close(fd: Int): Int
 
@@ -255,8 +270,45 @@ internal class LinuxHciSocketPacketIo(
     @Volatile
     private var closed: Boolean = false
 
+    @Volatile
+    private var controllerResetCompleted: Boolean = false
+
+    private var activeIoCount: Int = 0
+
     private val writeMutex = Mutex()
     private val closeLock = Any()
+
+    override val keepsDescriptorOpenOnClose: Boolean
+        get() = preOpenedHciFd != null
+
+    override fun markControllerResetCompleted() {
+        controllerResetCompleted = true
+    }
+
+    private fun bringControllerDown(libc: LinuxLibc) {
+        val ctlFd = try {
+            libc.socket(AF_BLUETOOTH, SOCK_RAW or SOCK_CLOEXEC, BTPROTO_HCI)
+        } catch (e: LastErrorException) {
+            throw IOException(
+                "Failed to open AF_BLUETOOTH raw socket (errno=${e.errorCode}: ${formatErrno(libc, e.errorCode)}). " +
+                    "Ensure Bluetooth kernel modules are loaded and CAP_NET_RAW/CAP_NET_ADMIN are granted.",
+                e
+            )
+        }
+        try {
+            libc.ioctl(ctlFd, NativeLong(HCIDEVDOWN), NativeLong(hciDeviceIndex.toLong()))
+        } catch (e: LastErrorException) {
+            if (e.errorCode != EALREADY) {
+                Logger.w(
+                    TAG,
+                    "ioctl(HCIDEVDOWN, hci$hciDeviceIndex) returned errno=${e.errorCode} " +
+                        "(${formatErrno(libc, e.errorCode)}); proceeding to bind HCI_CHANNEL_USER"
+                )
+            }
+        } finally {
+            libc.close(ctlFd)
+        }
+    }
 
     suspend fun open() = withContext(Dispatchers.IO) {
         ensureJnaAvailable()
@@ -270,12 +322,27 @@ internal class LinuxHciSocketPacketIo(
 
         val pipeFds = IntArray(2)
         try {
-            libc.pipe(pipeFds)
+            try {
+                libc.pipe2(pipeFds, SOCK_CLOEXEC)
+            } catch (e: LastErrorException) {
+                if (e.errorCode == ENOSYS) {
+                    libc.pipe(pipeFds)
+                } else {
+                    throw e
+                }
+            }
         } catch (e: LastErrorException) {
-            throw IOException("pipe() failed: ${formatErrno(libc, e.errorCode)}", e)
+            throw IOException("pipe2() failed: ${formatErrno(libc, e.errorCode)}", e)
         }
-        wakePipeReadFd = pipeFds[0]
-        wakePipeWriteFd = pipeFds[1]
+        synchronized(closeLock) {
+            if (closed) {
+                libc.close(pipeFds[0])
+                libc.close(pipeFds[1])
+                throw IOException("LinuxHciSocketPacketIo is already closed")
+            }
+            wakePipeReadFd = pipeFds[0]
+            wakePipeWriteFd = pipeFds[1]
+        }
 
         try {
             val inheritedFd = preOpenedHciFd
@@ -305,28 +372,7 @@ internal class LinuxHciSocketPacketIo(
             }
 
             // Bring down hciN first so bluetoothd detaches and releases the controller for HCI_CHANNEL_USER.
-            val ctlFd = try {
-                libc.socket(AF_BLUETOOTH, SOCK_RAW or SOCK_CLOEXEC, BTPROTO_HCI)
-            } catch (e: LastErrorException) {
-                throw IOException(
-                    "Failed to open AF_BLUETOOTH raw socket (errno=${e.errorCode}: ${formatErrno(libc, e.errorCode)}). " +
-                        "Ensure Bluetooth kernel modules are loaded and CAP_NET_RAW/CAP_NET_ADMIN are granted.",
-                    e
-                )
-            }
-            try {
-                libc.ioctl(ctlFd, NativeLong(HCIDEVDOWN), hciDeviceIndex)
-            } catch (e: LastErrorException) {
-                if (e.errorCode != EALREADY) {
-                    Logger.w(
-                        TAG,
-                        "ioctl(HCIDEVDOWN, hci$hciDeviceIndex) returned errno=${e.errorCode} " +
-                            "(${formatErrno(libc, e.errorCode)}); proceeding to bind HCI_CHANNEL_USER"
-                    )
-                }
-            } finally {
-                libc.close(ctlFd)
-            }
+            bringControllerDown(libc)
 
             // Bind exclusive HCI_CHANNEL_USER socket on hciN. Retry briefly if bluetoothd is still releasing it.
             val addrBytes = packSockaddrHci(
@@ -347,6 +393,7 @@ internal class LinuxHciSocketPacketIo(
                     lastError = e
                     if (e.errorCode == EBUSY && attempt < 10) {
                         delay(50.milliseconds)
+                        bringControllerDown(libc)
                     } else {
                         break
                     }
@@ -407,138 +454,194 @@ internal class LinuxHciSocketPacketIo(
         val pollFds = ByteArray(16)
         val pollBuf = ByteBuffer.wrap(pollFds).order(ByteOrder.nativeOrder())
 
-        while (!closed) {
-            val fd = userFd
-            val wakeFd = wakePipeReadFd
-            if (fd < 0 || wakeFd < 0) {
+        val (fd, wakeFd) = synchronized(closeLock) {
+            if (closed || userFd < 0 || wakePipeReadFd < 0) {
                 return@withContext null
             }
+            activeIoCount++
+            Pair(userFd, wakePipeReadFd)
+        }
 
-            pollBuf.clear()
-            pollBuf.putInt(fd)
-            pollBuf.putShort(POLLIN)
-            pollBuf.putShort(0)
-            pollBuf.putInt(wakeFd)
-            pollBuf.putShort(POLLIN)
-            pollBuf.putShort(0)
+        try {
+            while (!closed) {
+                pollBuf.clear()
+                pollBuf.putInt(fd)
+                pollBuf.putShort(POLLIN)
+                pollBuf.putShort(0)
+                pollBuf.putInt(wakeFd)
+                pollBuf.putShort(POLLIN)
+                pollBuf.putShort(0)
 
-            try {
-                libc.poll(pollFds, NativeLong(2), -1)
-            } catch (e: LastErrorException) {
-                if (e.errorCode == EINTR) {
-                    continue
+                try {
+                    libc.poll(pollFds, NativeLong(2), -1)
+                } catch (e: LastErrorException) {
+                    if (e.errorCode == EINTR) {
+                        continue
+                    }
+                    if (closed) {
+                        return@withContext null
+                    }
+                    throw IOException("poll() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}", e)
                 }
+
                 if (closed) {
                     return@withContext null
                 }
-                throw IOException("poll() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}", e)
-            }
 
-            if (closed) {
-                return@withContext null
-            }
-
-            val userRevents = pollBuf.getShort(6).toInt()
-            val wakeRevents = pollBuf.getShort(14).toInt()
-            if ((wakeRevents and POLLIN.toInt()) != 0) {
-                return@withContext null
-            }
-            if ((userRevents and (POLLERR.toInt() or POLLHUP.toInt() or POLLNVAL.toInt())) != 0) {
-                if (closed) return@withContext null
-                throw IOException(
-                    "HCI_CHANNEL_USER socket on hci$hciDeviceIndex reported error/hangup (revents=0x${userRevents.toString(16)})"
-                )
-            }
-            if ((userRevents and POLLIN.toInt()) != 0) {
-                val bytesRead = try {
-                    libc.read(fd, readBuf, NativeLong(readBuf.size.toLong())).toInt()
-                } catch (e: LastErrorException) {
-                    if (e.errorCode == EINTR || e.errorCode == EAGAIN) {
-                        continue
-                    }
-                    if (closed) return@withContext null
-                    throw IOException("read() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}", e)
-                }
-                if (bytesRead <= 0) {
+                val userRevents = pollBuf.getShort(6).toInt()
+                val wakeRevents = pollBuf.getShort(14).toInt()
+                if ((wakeRevents and POLLIN.toInt()) != 0) {
                     return@withContext null
                 }
-                return@withContext readBuf.copyOfRange(0, bytesRead)
+                if ((userRevents and (POLLERR.toInt() or POLLHUP.toInt() or POLLNVAL.toInt())) != 0) {
+                    if (closed) return@withContext null
+                    throw IOException(
+                        "HCI_CHANNEL_USER socket on hci$hciDeviceIndex reported error/hangup (revents=0x${userRevents.toString(16)})"
+                    )
+                }
+                if ((userRevents and POLLIN.toInt()) != 0) {
+                    val bytesRead = try {
+                        libc.read(fd, readBuf, NativeLong(readBuf.size.toLong())).toInt()
+                    } catch (e: LastErrorException) {
+                        if (e.errorCode == EINTR || e.errorCode == EAGAIN) {
+                            continue
+                        }
+                        if (closed) return@withContext null
+                        throw IOException("read() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}", e)
+                    }
+                    if (bytesRead <= 0) {
+                        return@withContext null
+                    }
+                    return@withContext readBuf.copyOfRange(0, bytesRead)
+                }
             }
+            null
+        } finally {
+            releaseActiveIo()
         }
-        null
     }
 
     override suspend fun writePacket(packet: ByteArray) {
         writeMutex.withLock {
             withContext(Dispatchers.IO) {
-                if (closed) {
-                    throw IOException("HCI socket on hci$hciDeviceIndex is closed")
-                }
-                val fd = userFd
-                if (fd < 0) {
-                    throw IOException("HCI socket on hci$hciDeviceIndex is not open")
-                }
-                val libc = LibcHolder.INSTANCE
-                while (true) {
-                    try {
-                        val written = libc.write(fd, packet, NativeLong(packet.size.toLong())).toInt()
-                        if (written != packet.size) {
-                            throw IOException("Short write on hci$hciDeviceIndex: wrote $written of ${packet.size} bytes")
-                        }
-                        break
-                    } catch (e: LastErrorException) {
-                        if (e.errorCode == EINTR) {
-                            continue
-                        }
-                        throw IOException("write() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}", e)
+                val fd = synchronized(closeLock) {
+                    if (closed) {
+                        throw IOException("HCI socket on hci$hciDeviceIndex is closed")
                     }
+                    if (userFd < 0) {
+                        throw IOException("HCI socket on hci$hciDeviceIndex is not open")
+                    }
+                    activeIoCount++
+                    userFd
+                }
+                try {
+                    val libc = LibcHolder.INSTANCE
+                    while (true) {
+                        try {
+                            val written = libc.write(fd, packet, NativeLong(packet.size.toLong())).toInt()
+                            if (written != packet.size) {
+                                throw IOException(
+                                    "Short write on hci$hciDeviceIndex: wrote $written of ${packet.size} bytes"
+                                )
+                            }
+                            break
+                        } catch (e: LastErrorException) {
+                            if (e.errorCode == EINTR) {
+                                continue
+                            }
+                            throw IOException(
+                                "write() failed on hci$hciDeviceIndex: ${formatErrno(libc, e.errorCode)}",
+                                e
+                            )
+                        }
+                    }
+                } finally {
+                    releaseActiveIo()
                 }
             }
         }
     }
 
-    override fun close() {
-        synchronized(closeLock) {
-            if (closed) return
-            closed = true
-            val libc = try {
-                LibcHolder.INSTANCE
-            } catch (_: Throwable) {
-                null
-            }
-            if (libc != null) {
-                val wakeWrite = wakePipeWriteFd
-                if (wakeWrite >= 0) {
+    private data class ClaimedFds(
+        val userFd: Int,
+        val wakeReadFd: Int,
+        val wakeWriteFd: Int
+    )
+
+    private fun claimFdsLocked(): ClaimedFds {
+        val claimed = ClaimedFds(
+            userFd = userFd,
+            wakeReadFd = wakePipeReadFd,
+            wakeWriteFd = wakePipeWriteFd
+        )
+        userFd = -1
+        wakePipeReadFd = -1
+        wakePipeWriteFd = -1
+        return claimed
+    }
+
+    private fun finalizeCloseFds(claimed: ClaimedFds) {
+        val libc = try {
+            LibcHolder.INSTANCE
+        } catch (_: Throwable) {
+            null
+        } ?: return
+
+        if (claimed.userFd >= 0) {
+            if (preOpenedHciFd != null) {
+                // Leave pre-opened fd open so subsequent BLE sessions can reuse it without CAP_NET_ADMIN.
+                // If BleHciEngine did not already complete an orderly HCI_Reset prior to close(),
+                // send a best-effort HCI_Reset now to halt any active advertising/scanning/connection.
+                if (!controllerResetCompleted) {
                     try {
-                        libc.write(wakeWrite, byteArrayOf(1), NativeLong(1))
+                        libc.write(
+                            claimed.userFd,
+                            HCI_RESET_PACKET,
+                            NativeLong(HCI_RESET_PACKET.size.toLong())
+                        )
                     } catch (_: Throwable) {
                     }
                 }
-                val fd = userFd
-                userFd = -1
-                if (fd >= 0) {
-                    if (preOpenedHciFd != null) {
-                        // Leave pre-opened fd open so subsequent BLE sessions can reuse it without CAP_NET_ADMIN,
-                        // and send a best-effort HCI_Reset to halt any active advertising/scanning/connection.
-                        try {
-                            libc.write(fd, HCI_RESET_PACKET, NativeLong(HCI_RESET_PACKET.size.toLong()))
-                        } catch (_: Throwable) {
-                        }
-                    } else {
-                        libc.close(fd)
-                    }
-                }
-                val wakeRead = wakePipeReadFd
-                wakePipeReadFd = -1
-                if (wakeRead >= 0) {
-                    libc.close(wakeRead)
-                }
-                wakePipeWriteFd = -1
-                if (wakeWrite >= 0) {
-                    libc.close(wakeWrite)
-                }
+            } else {
+                libc.close(claimed.userFd)
             }
         }
+        if (claimed.wakeReadFd >= 0) {
+            libc.close(claimed.wakeReadFd)
+        }
+        if (claimed.wakeWriteFd >= 0) {
+            libc.close(claimed.wakeWriteFd)
+        }
+    }
+
+    private fun releaseActiveIo() {
+        var fdsToClose: ClaimedFds? = null
+        synchronized(closeLock) {
+            activeIoCount--
+            if (closed && activeIoCount == 0) {
+                fdsToClose = claimFdsLocked()
+            }
+        }
+        fdsToClose?.let { finalizeCloseFds(it) }
+    }
+
+    override fun close() {
+        var fdsToCloseNow: ClaimedFds? = null
+        synchronized(closeLock) {
+            if (closed) return
+            closed = true
+            val wakeWrite = wakePipeWriteFd
+            if (wakeWrite >= 0) {
+                try {
+                    LibcHolder.INSTANCE.write(wakeWrite, byteArrayOf(1), NativeLong(1))
+                } catch (_: Throwable) {
+                }
+            }
+            if (activeIoCount == 0) {
+                fdsToCloseNow = claimFdsLocked()
+            }
+        }
+        fdsToCloseNow?.let { finalizeCloseFds(it) }
     }
 
     private fun packSockaddrHci(family: Short, dev: Short, channel: Short): ByteArray {

@@ -277,6 +277,7 @@ internal class BleTransportPeripheralMdocReader(
             if (_state.value == State.FAILED || _state.value == State.CLOSED) {
                 return@withContext
             }
+            centralManager.shutdown()
             closeWithoutDelay()
         }
     }

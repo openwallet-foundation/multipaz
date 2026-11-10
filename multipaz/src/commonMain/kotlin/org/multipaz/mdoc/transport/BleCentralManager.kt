@@ -95,5 +95,7 @@ internal interface BleCentralManager {
     val warnings: List<TransportWarning>
         get() = emptyList()
 
+    suspend fun shutdown() {}
+
     fun close()
 }

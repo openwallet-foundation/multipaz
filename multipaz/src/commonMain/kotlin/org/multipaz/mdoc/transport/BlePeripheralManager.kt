@@ -43,6 +43,8 @@ internal interface BlePeripheralManager {
 
     suspend fun sendMessage(message: ByteArray)
 
+    suspend fun shutdown() {}
+
     fun close()
 
     // The PSM if listening on L2CAP.

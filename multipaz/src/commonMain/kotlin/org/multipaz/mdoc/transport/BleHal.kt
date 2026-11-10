@@ -93,6 +93,8 @@ internal interface BleCentralHal {
 
     fun closeConnectedL2capAttempt()
 
+    suspend fun shutdown() {}
+
     fun close()
 }
 
@@ -148,6 +150,8 @@ internal interface BlePeripheralHal {
     fun sendReadResponse(requestId: Int, statusSuccess: Boolean, value: ByteArray)
 
     fun notifyCharacteristicChanged(uuid: UUID, value: ByteArray)
+
+    suspend fun shutdown() {}
 
     fun close()
 }

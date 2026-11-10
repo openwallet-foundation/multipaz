@@ -35,11 +35,15 @@ internal fun createBleCentralManagerJvm(
  * See [createBleCentralManagerJvm] and [LinuxHciSocketPacketIo] for configuration and permissions details.
  */
 internal fun createBlePeripheralManagerJvm(
+    gapDeviceName: String = "Multipaz",
     packetIoFactory: suspend () -> HciPacketIo = {
         LinuxHciSocketPacketIo().also { it.open() }
     }
 ): BlePeripheralManager = BlePeripheralManagerImpl(
-    hal = BlePeripheralHalHci(packetIoFactory = packetIoFactory)
+    hal = BlePeripheralHalHci(
+        gapDeviceName = gapDeviceName,
+        packetIoFactory = packetIoFactory
+    )
 )
 
 internal actual fun defaultMdocTransportFactoryCreateTransport(

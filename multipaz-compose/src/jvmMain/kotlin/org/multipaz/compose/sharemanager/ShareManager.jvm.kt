@@ -15,12 +15,16 @@ actual class ShareManager {
     ) {
         withContext(Dispatchers.IO) {
             val dialog = FileDialog(null as Frame?, title ?: "Save $filename", FileDialog.SAVE)
-            dialog.file = filename
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                File(dir, file).writeBytes(content)
+            try {
+                dialog.file = filename
+                dialog.isVisible = true
+                val dir = dialog.directory
+                val file = dialog.file
+                if (dir != null && file != null) {
+                    File(dir, file).writeBytes(content)
+                }
+            } finally {
+                dialog.dispose()
             }
         }
     }

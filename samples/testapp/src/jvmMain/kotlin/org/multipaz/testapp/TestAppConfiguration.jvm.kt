@@ -1,7 +1,7 @@
 package org.multipaz.testapp
 
 import io.ktor.client.engine.HttpClientEngineFactory
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.java.Java
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -58,7 +58,7 @@ actual object TestAppConfiguration {
     }
 
     actual val httpClientEngineFactory: HttpClientEngineFactory<*> by lazy {
-        CIO
+        Java
     }
 
     actual val platformSecureAreaHasKeyAgreement = true

@@ -65,6 +65,8 @@ import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.random.Random
@@ -190,6 +192,11 @@ class BleHciTransportTest {
                     } else {
                         "$role sends HCI_LE_Create_Connection (0x200d) (GATT connect retry #$retryNum)."
                     }
+                }
+                BleHciConstants.HCI_OP_DISCONNECT -> {
+                    val handle = if (params.size >= 2) u16le(params, 0) and 0x0FFF else 0
+                    val reason = if (params.size >= 3) params[2].toInt() and 0xFF else 0
+                    "$role sends HCI_Disconnect (0x0406, handle=0x${handle.toString(16).padStart(4, '0')}, reason=0x${reason.toString(16)})."
                 }
                 else -> "$role sends HCI command 0x${opcode.toString(16)}."
             }
@@ -1832,6 +1839,9 @@ class BleHciTransportTest {
             #   "status": 20
             # }
             ATT Peripheral->Central: 1b080000a16673746174757314
+
+            # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+            HCI-Cmd (Central): 01060403400013
         """.trimIndent()
         assertEquals(expectedTranscript, transcript)
     }
@@ -2009,6 +2019,9 @@ class BleHciTransportTest {
             #   "status": 20
             # }
             L2CAP-CoC Peripheral->Central: 0d0000000009a16673746174757314
+
+            # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+            HCI-Cmd (Central): 01060403400013
         """.trimIndent()
         assertEquals(expectedTranscript, transcript)
     }
@@ -2136,6 +2149,9 @@ class BleHciTransportTest {
             #   "status": 20
             # }
             L2CAP-CoC Peripheral->Central: 0d0000000009a16673746174757314
+
+            # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+            HCI-Cmd (Central): 01060403400013
         """.trimIndent()
         assertEquals(expectedTranscript, transcript)
     }
@@ -2358,6 +2374,9 @@ class BleHciTransportTest {
             #   "status": 20
             # }
             ATT Peripheral->Central: 1b080000a16673746174757314
+
+            # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+            HCI-Cmd (Central): 01060403400013
         """.trimIndent()
         assertEquals(expectedTranscript, transcript)
     }
@@ -2579,6 +2598,9 @@ class BleHciTransportTest {
             #   "status": 20
             # }
             L2CAP-CoC Peripheral->Central: 0d0000000009a16673746174757314
+
+            # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+            HCI-Cmd (Central): 01060403400013
         """.trimIndent()
         assertEquals(expectedTranscript, transcript)
     }
@@ -3099,6 +3121,9 @@ class BleHciTransportTest {
                 #   "response": "reply from mdoc over 23-byte default ATT_MTU"
                 # }
                 ATT Central->Peripheral: 5206000074652064656661756c74204154545f4d5455
+
+                # Central sends HCI_Disconnect (0x0406, handle=0x0040, reason=0x13).
+                HCI-Cmd (Central): 01060403400013
                 """.trimIndent(),
                 transcriptLogger.toString()
             )
@@ -3598,6 +3623,621 @@ class BleHciTransportTest {
                     reader.close()
                     bus.centralIo.close()
                     bus.peripheralIo.close()
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifies:
+     * 1. `HCI_Read_Buffer_Size` (`0x1005`) shared BR/EDR buffer fallback reads `HC_Total_Num_ACL_Data_Packets`
+     *    from bytes `[4..5]` (skipping the 1-byte `HC_Synchronous_Data_Packet_Length` at byte `[3]`).
+     * 2. `Num_HCI_Command_Packets == 0` in `HCI_Command_Complete` pauses subsequent HCI commands until
+     *    the controller emits `HCI_Command_Complete(opcode=0x0000, numPackets=1)`.
+     * 3. Generated random static addresses satisfy Core Spec Vol 6 Part B 1.3.2.1 (`MSB[7:6] == 11` and
+     *    46-bit random part neither all zeros nor all ones).
+     * 4. Concurrent ACL fragment sends and `HCI_Number_Of_Completed_Packets` events never leak ACL credits.
+     */
+    @Test
+    fun hciReadBufferSizeFallbackCommandFlowControlAndStaticAddress() = runTest {
+        withContext(Dispatchers.Default) {
+            val rxEvents = Channel<ByteArray>(Channel.UNLIMITED)
+            var setRandomAddressPayload: ByteArray? = null
+            var commandAfterZeroCreditsSentBeforeNop = false
+            var nopCreditGranted = false
+
+            val mockIo = object : HciPacketIo {
+                override suspend fun readPacket(): ByteArray? = rxEvents.receiveCatching().getOrNull()
+
+                override suspend fun writePacket(packet: ByteArray) {
+                    when (packet[0]) {
+                        BleHciConstants.HCI_COMMAND_PKT -> {
+                            val opcode = u16le(packet, 1)
+                            val paramLen = packet[3].toInt() and 0xFF
+                            val params = packet.copyOfRange(4, 4 + paramLen)
+                            when (opcode) {
+                                BleHciConstants.HCI_OP_RESET -> {
+                                    // Return Num_HCI_Command_Packets = 0 first, then emit NOP with 1 credit
+                                    rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x04, 0x00, 0x03, 0x0C, 0x00))
+                                    launch {
+                                        delay(15.milliseconds)
+                                        nopCreditGranted = true
+                                        rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x03, 0x01, 0x00, 0x00))
+                                    }
+                                }
+                                BleHciConstants.HCI_OP_SET_EVENT_MASK -> {
+                                    if (!nopCreditGranted) {
+                                        commandAfterZeroCreditsSentBeforeNop = true
+                                    }
+                                    rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x04, 0x01, 0x01, 0x0C, 0x00))
+                                }
+                                BleHciConstants.HCI_OP_LE_SET_EVENT_MASK -> {
+                                    rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x04, 0x01, 0x01, 0x20, 0x00))
+                                }
+                                BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE -> {
+                                    // Shared with BR/EDR: pktLen = 0, numPkts = 0
+                                    rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x07, 0x01, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00))
+                                }
+                                BleHciConstants.HCI_OP_READ_BUFFER_SIZE -> {
+                                    // [status=0, aclLen=251(0x00fb), scoLen=64(0x40), numAcl=6(0x0006), numSco=4(0x0004)]
+                                    rxEvents.trySend(
+                                        byteArrayOf(
+                                            0x04, 0x0E, 0x0B, 0x01, 0x05, 0x10,
+                                            0x00, 0xFB.toByte(), 0x00, 0x40, 0x06, 0x00, 0x04, 0x00
+                                        )
+                                    )
+                                }
+                                BleHciConstants.HCI_OP_LE_SET_RANDOM_ADDRESS -> {
+                                    setRandomAddressPayload = params
+                                    rxEvents.trySend(byteArrayOf(0x04, 0x0E, 0x04, 0x01, 0x05, 0x20, 0x00))
+                                }
+                            }
+                        }
+                        BleHciConstants.HCI_ACL_DATA_PKT -> {
+                            val handle = u16le(packet, 1) and 0x0FFF
+                            launch {
+                                rxEvents.trySend(
+                                    byteArrayOf(
+                                        0x04, 0x13, 0x05, 0x01,
+                                        (handle and 0xFF).toByte(),
+                                        ((handle ushr 8) and 0xFF).toByte(),
+                                        0x01, 0x00
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                override fun close() {
+                    rxEvents.close()
+                }
+            }
+
+            val engine = BleHciEngine(packetIo = mockIo)
+            try {
+                engine.initializeController()
+                assertEquals(false, commandAfterZeroCreditsSentBeforeNop)
+                assertEquals(251, engine.leAclDataPacketLength)
+                assertEquals(6, engine.totalNumLeAclDataPackets)
+
+                val randAddr = assertNotNull(setRandomAddressPayload)
+                assertEquals(6, randAddr.size)
+                assertEquals(0xC0, randAddr[5].toInt() and 0xC0)
+
+                // Simulate connection on handle 0x0000 (verifying handle 0 is valid!) and stress ACL credits
+                val connEv = ByteArray(22)
+                connEv[0] = 0x04
+                connEv[1] = 0x3E
+                connEv[2] = 19
+                connEv[3] = BleHciConstants.HCI_EV_LE_CONN_COMPLETE.toByte()
+                connEv[4] = 0x00 // status = success, handle = 0x0000
+                rxEvents.trySend(connEv)
+                delay(10.milliseconds)
+
+                // Send 40 multi-fragment PDUs across coroutines with only 6 controller ACL buffers;
+                // if any credit were lost under CAS contention, this would deadlock.
+                coroutineScope {
+                    repeat(4) {
+                        launch {
+                            repeat(10) {
+                                engine.sendL2capPdu(0x0000, BleHciConstants.L2CAP_CID_ATT, ByteArray(600))
+                            }
+                        }
+                    }
+                }
+            } finally {
+                engine.close()
+            }
+        }
+    }
+
+    /**
+     * Verifies L2CAP signaling edge cases:
+     * 1. When a peer probes `0x17` (`L2CAP_CREDIT_BASED_CONNECTION_REQ`, BT 5.2 ECFC) on `CID 0x0005`,
+     *    `BlePeripheralHalHci` responds with `L2CAP_COMMAND_REJECT_RSP` (`0x01`, reason `0x0000`), allowing
+     *    immediate fallback to `0x14` (`L2CAP_LE_CREDIT_BASED_CONNECTION_REQ`).
+     * 2. When `HciBleL2capChannel.write()` is suspended with `0` peer credits, `L2CAP_DISCONN_REQ` (`0x06`)
+     *    immediately wakes the writer with `IOException`.
+     * 3. `nextNonZeroL2capIdentifier()` skips `0x00` on 8-bit wraparound.
+     */
+    @Test
+    fun l2capEnhancedCreditBasedProbeRejectedAndDisconnUnblocksZeroCreditWrite() = runTest {
+        withContext(Dispatchers.Default) {
+            val idCounter = AtomicInteger(255)
+            assertEquals(255, nextNonZeroL2capIdentifier(idCounter))
+            assertEquals(1, nextNonZeroL2capIdentifier(idCounter))
+
+            val rxFromController = Channel<ByteArray>(Channel.UNLIMITED)
+            val txSignalingPdus = Channel<ByteArray>(Channel.UNLIMITED)
+            val io = object : HciPacketIo {
+                override suspend fun readPacket(): ByteArray? = rxFromController.receiveCatching().getOrNull()
+                override suspend fun writePacket(packet: ByteArray) {
+                    when (packet[0]) {
+                        BleHciConstants.HCI_COMMAND_PKT -> {
+                            val op = u16le(packet, 1)
+                            val ret = if (op == BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE) {
+                                byteArrayOf(0x00, 0xFB.toByte(), 0x00, 0x08)
+                            } else {
+                                byteArrayOf(0x00)
+                            }
+                            val ev = ByteArray(6 + ret.size)
+                            ev[0] = 0x04
+                            ev[1] = 0x0E
+                            ev[2] = (3 + ret.size).toByte()
+                            ev[3] = 0x01
+                            putU16le(ev, 4, op)
+                            ret.copyInto(ev, destinationOffset = 6)
+                            rxFromController.trySend(ev)
+                        }
+                        BleHciConstants.HCI_ACL_DATA_PKT -> {
+                            val handle = u16le(packet, 1) and 0x0FFF
+                            rxFromController.trySend(
+                                byteArrayOf(
+                                    0x04, 0x13, 0x05, 0x01,
+                                    (handle and 0xFF).toByte(),
+                                    ((handle ushr 8) and 0xFF).toByte(),
+                                    0x01, 0x00
+                                )
+                            )
+                            val cid = u16le(packet, 7)
+                            if (cid == BleHciConstants.L2CAP_CID_LE_SIGNALING) {
+                                val len = u16le(packet, 5)
+                                txSignalingPdus.trySend(packet.copyOfRange(9, 9 + len))
+                            }
+                        }
+                    }
+                }
+                override fun close() {
+                    rxFromController.close()
+                }
+            }
+
+            val connectedChannels = Channel<BleL2capChannel>(1)
+            val hal = BlePeripheralHalHci(packetIoFactory = { io })
+            hal.setCallback(object : BlePeripheralHal.Callback {
+                override fun onPowerOn(error: Throwable?) {}
+                override fun onL2capPublished(psm: Int?, error: Throwable?) {}
+                override fun onServiceAdded(error: Throwable?) {}
+                override fun onAdvertisingStarted(error: Throwable?) {}
+                override fun onMtuChanged(mtu: Int) {}
+                override fun onCharacteristicReadRequest(requestId: Int, uuid: UUID) {}
+                override fun onCharacteristicWriteRequest(uuid: UUID, value: ByteArray, maxWriteSizeForCentral: Int?) {}
+                override fun onNotificationSent(uuid: UUID, error: Throwable?) {}
+                override fun onL2capClientConnected(channel: BleL2capChannel) {
+                    connectedChannels.trySend(channel)
+                }
+                override fun onCentralDisconnected() {}
+                override fun onError(error: Throwable) {}
+            })
+
+            try {
+                hal.waitForPowerOn()
+                hal.publishL2capChannel()
+                delay(20.milliseconds)
+
+                // Emit LE Connection Complete on handle = 0x0000
+                val connEv = ByteArray(22)
+                connEv[0] = 0x04
+                connEv[1] = 0x3E
+                connEv[2] = 19
+                connEv[3] = 0x01
+                rxFromController.trySend(connEv)
+
+                fun sendSignalingToPeripheral(sigPdu: ByteArray) {
+                    val acl = ByteArray(9 + sigPdu.size)
+                    acl[0] = 0x02
+                    putU16le(acl, 1, 0x0000 or (0x02 shl 12))
+                    putU16le(acl, 3, 4 + sigPdu.size)
+                    putU16le(acl, 5, sigPdu.size)
+                    putU16le(acl, 7, BleHciConstants.L2CAP_CID_LE_SIGNALING)
+                    sigPdu.copyInto(acl, destinationOffset = 9)
+                    rxFromController.trySend(acl)
+                }
+
+                // 1. Probe 0x17 (L2CAP_CREDIT_BASED_CONNECTION_REQ) -> expect 0x01 Command Reject (reason 0x0000)
+                sendSignalingToPeripheral(
+                    byteArrayOf(0x17, 0x05, 0x0C, 0x00, 0x80.toByte(), 0x00, 0xFF.toByte(), 0xFF.toByte(), 0xF7.toByte(), 0x00, 0x10, 0x00, 0x40, 0x00, 0x00, 0x00)
+                )
+                val rejectPdu = txSignalingPdus.receive()
+                assertContentEquals(byteArrayOf(0x01, 0x05, 0x02, 0x00, 0x00, 0x00), rejectPdu)
+
+                // 2. Fallback to 0x14 with initialCredits = 0
+                val connReq = ByteArray(14)
+                connReq[0] = BleHciConstants.L2CAP_LE_CREDIT_CONN_REQ.toByte()
+                connReq[1] = 0x06
+                putU16le(connReq, 2, 10)
+                putU16le(connReq, 4, 0x0080)
+                putU16le(connReq, 6, 0x0045) // peerScid
+                putU16le(connReq, 8, 512)
+                putU16le(connReq, 10, 247)
+                putU16le(connReq, 12, 0) // 0 initial credits!
+                sendSignalingToPeripheral(connReq)
+
+                val connRsp = txSignalingPdus.receive()
+                assertEquals(BleHciConstants.L2CAP_LE_CREDIT_CONN_RSP, connRsp[0].toInt() and 0xFF)
+                assertEquals(0x0000, u16le(connRsp, 12))
+                val channel = connectedChannels.receive()
+
+                // 3. Start write() with 0 credits; it must suspend until L2CAP_DISCONN_REQ wakes it with IOException
+                val writeDeferred = async {
+                    assertFailsWith<IOException> {
+                        channel.write(byteArrayOf(1, 2, 3, 4))
+                    }
+                }
+                delay(20.milliseconds)
+                val disconnReq = ByteArray(8)
+                disconnReq[0] = BleHciConstants.L2CAP_DISCONN_REQ.toByte()
+                disconnReq[1] = 0x07
+                putU16le(disconnReq, 2, 4)
+                putU16le(disconnReq, 4, 0x0040) // dcid = peripheral's localCid
+                putU16le(disconnReq, 6, 0x0045) // scid = central's peerScid
+                sendSignalingToPeripheral(disconnReq)
+
+                val disconnRsp = txSignalingPdus.receive()
+                assertEquals(BleHciConstants.L2CAP_DISCONN_RSP, disconnRsp[0].toInt() and 0xFF)
+                writeDeferred.await()
+            } finally {
+                hal.close()
+            }
+        }
+    }
+
+    /**
+     * Verifies that when [BleCentralManagerImpl]'s `l2capConnectTimeout` expires while `L2CAP_LE_CREDIT_CONN_REQ`
+     * is still awaiting a response:
+     * - [BleCentralHalHci.closeConnectedL2capAttempt] immediately cancels the in-flight attempt on `actionQueue`
+     *   and rotates the local dynamic SCID (`0x0040` -> `0x0041`).
+     * - A delayed response for timed-out attempt #1 is ignored and does not fail or confuse attempt #2.
+     */
+    @Test
+    fun l2capConnectTimeoutCancelsInFlightAttemptAndRotatesScid() = runTest {
+        withContext(Dispatchers.Default) {
+            val rxFromController = Channel<ByteArray>(Channel.UNLIMITED)
+            val sentScids = mutableListOf<Int>()
+            var connReqCount = 0
+            var firstAttemptId: Byte = 0
+
+            val io = object : HciPacketIo {
+                override suspend fun readPacket(): ByteArray? = rxFromController.receiveCatching().getOrNull()
+                override suspend fun writePacket(packet: ByteArray) {
+                    when (packet[0]) {
+                        BleHciConstants.HCI_COMMAND_PKT -> {
+                            val op = u16le(packet, 1)
+                            if (op == BleHciConstants.HCI_OP_LE_CREATE_CONNECTION) {
+                                rxFromController.trySend(byteArrayOf(0x04, 0x0F, 0x04, 0x00, 0x01, 0x0D, 0x20))
+                                val connEv = ByteArray(22)
+                                connEv[0] = 0x04
+                                connEv[1] = 0x3E
+                                connEv[2] = 19
+                                connEv[3] = 0x01
+                                putU16le(connEv, 5, 0x0000)
+                                rxFromController.trySend(connEv)
+                            } else {
+                                val ret = if (op == BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE) {
+                                    byteArrayOf(0x00, 0xFB.toByte(), 0x00, 0x08)
+                                } else {
+                                    byteArrayOf(0x00)
+                                }
+                                val ev = ByteArray(6 + ret.size)
+                                ev[0] = 0x04
+                                ev[1] = 0x0E
+                                ev[2] = (3 + ret.size).toByte()
+                                ev[3] = 0x01
+                                putU16le(ev, 4, op)
+                                ret.copyInto(ev, destinationOffset = 6)
+                                rxFromController.trySend(ev)
+                                if (op == BleHciConstants.HCI_OP_LE_SET_SCAN_ENABLE && packet[4].toInt() != 0) {
+                                    // Emit advertising report for target UUID
+                                    val targetBytes = UUID(9UL, 9UL).toLittleEndianBytes()
+                                    val adv = ByteArray(3 + 11 + 21 + 1)
+                                    adv[0] = 0x04
+                                    adv[1] = 0x3E
+                                    adv[2] = (11 + 21 + 1).toByte()
+                                    adv[3] = 0x02
+                                    adv[4] = 0x01
+                                    adv[5] = 0x00 // ADV_IND
+                                    adv[6] = 0x01
+                                    adv[13] = 21
+                                    adv[14] = 0x02
+                                    adv[15] = 0x01
+                                    adv[16] = 0x06
+                                    adv[17] = 0x11
+                                    adv[18] = 0x07
+                                    targetBytes.copyInto(adv, destinationOffset = 19)
+                                    rxFromController.trySend(adv)
+                                }
+                            }
+                        }
+                        BleHciConstants.HCI_ACL_DATA_PKT -> {
+                            val handle = u16le(packet, 1) and 0x0FFF
+                            rxFromController.trySend(
+                                byteArrayOf(
+                                    0x04, 0x13, 0x05, 0x01,
+                                    (handle and 0xFF).toByte(),
+                                    ((handle ushr 8) and 0xFF).toByte(),
+                                    0x01, 0x00
+                                )
+                            )
+                            val cid = u16le(packet, 7)
+                            if (cid == BleHciConstants.L2CAP_CID_LE_SIGNALING &&
+                                (packet[9].toInt() and 0xFF) == BleHciConstants.L2CAP_LE_CREDIT_CONN_REQ
+                            ) {
+                                val id = packet[10]
+                                val scid = u16le(packet, 15)
+                                synchronized(sentScids) { sentScids.add(scid) }
+                                connReqCount++
+                                if (connReqCount == 1) {
+                                    // Attempt #1 gets no response before l2capConnectTimeout expires
+                                    firstAttemptId = id
+                                } else {
+                                    // Deterministically deliver a stale RSP for attempt #1 first, followed
+                                    // immediately by the valid RSP for the current attempt.
+                                    val staleRsp = ByteArray(9 + 14)
+                                    staleRsp[0] = 0x02
+                                    putU16le(staleRsp, 1, 0x0000 or (0x02 shl 12))
+                                    putU16le(staleRsp, 3, 18)
+                                    putU16le(staleRsp, 5, 14)
+                                    putU16le(staleRsp, 7, BleHciConstants.L2CAP_CID_LE_SIGNALING)
+                                    staleRsp[9] = BleHciConstants.L2CAP_LE_CREDIT_CONN_RSP.toByte()
+                                    staleRsp[10] = firstAttemptId
+                                    putU16le(staleRsp, 11, 10)
+                                    putU16le(staleRsp, 13, 0x0050)
+                                    putU16le(staleRsp, 15, 512)
+                                    putU16le(staleRsp, 17, 247)
+                                    putU16le(staleRsp, 19, 16)
+                                    putU16le(staleRsp, 21, 0x0000)
+                                    rxFromController.trySend(staleRsp)
+
+                                    val rsp = ByteArray(9 + 14)
+                                    rsp[0] = 0x02
+                                    putU16le(rsp, 1, 0x0000 or (0x02 shl 12))
+                                    putU16le(rsp, 3, 18)
+                                    putU16le(rsp, 5, 14)
+                                    putU16le(rsp, 7, BleHciConstants.L2CAP_CID_LE_SIGNALING)
+                                    rsp[9] = BleHciConstants.L2CAP_LE_CREDIT_CONN_RSP.toByte()
+                                    rsp[10] = id
+                                    putU16le(rsp, 11, 10)
+                                    putU16le(rsp, 13, 0x0051)
+                                    putU16le(rsp, 15, 512)
+                                    putU16le(rsp, 17, 247)
+                                    putU16le(rsp, 19, 16)
+                                    putU16le(rsp, 21, 0x0000)
+                                    rxFromController.trySend(rsp)
+                                }
+                            }
+                        }
+                    }
+                }
+                override fun close() {
+                    rxFromController.close()
+                }
+            }
+
+            val manager = BleCentralManagerImpl(
+                hal = BleCentralHalHci(packetIoFactory = { io }),
+                postScanDelay = 1.milliseconds,
+                requireL2capPeripheralConnectedFirst = true,
+                l2capConnectTimeout = 80.milliseconds,
+                l2capRetryInitialDelay = 5.milliseconds
+            )
+            manager.setCallbacks(onError = {}, onClosed = {})
+            val svcUuid = UUID(9UL, 9UL)
+            manager.setUuids(UUID(1UL, 1UL), UUID(1UL, 2UL), UUID(1UL, 3UL), null, null)
+
+            try {
+                manager.waitForPowerOn()
+                manager.waitForPeripheralWithUuid(svcUuid)
+                manager.connectL2cap(0x0080)
+                assertTrue(manager.usingL2cap)
+                assertTrue(manager.numL2capConnectRetries >= 1)
+                val scids = synchronized(sentScids) { sentScids.toList() }
+                assertTrue(scids.size >= 2 && scids[0] == 0x0040 && scids[1] == 0x0041, "Unexpected SCIDs: $scids")
+            } finally {
+                manager.close()
+            }
+        }
+    }
+
+    /**
+     * Verifies:
+     * 1. [BlePeripheralHalHci] exposes the mandatory GAP Primary Service (`0x1800`) with `0x2A00`
+     *    (Device Name) and `0x2A01` (Appearance), while enforcing `ATT_ERR_READ_NOT_PERMITTED` (`0x02`)
+     *    when reading `State` and `ATT_ERR_WRITE_NOT_PERMITTED` (`0x03`) when writing `Ident`.
+     * 2. [BleCentralHalHci] retains `negotiatedMtu = 515` when a peripheral initiates `ATT_EXCHANGE_MTU_REQ`
+     *    first and subsequently rejects Central's `ATT_EXCHANGE_MTU_REQ` with `ATT_ERROR_RSP`.
+     */
+    @Test
+    fun peripheralGapServiceAttPermissionsAndAospMtuRetention() = runTest {
+        withContext(Dispatchers.Default) {
+            // Part 1: Peripheral GAP service & ATT permission checks
+            run {
+                val rx = Channel<ByteArray>(Channel.UNLIMITED)
+                val attReplies = Channel<ByteArray>(Channel.UNLIMITED)
+                val io = object : HciPacketIo {
+                    override suspend fun readPacket(): ByteArray? = rx.receiveCatching().getOrNull()
+                    override suspend fun writePacket(packet: ByteArray) {
+                        when (packet[0]) {
+                            BleHciConstants.HCI_COMMAND_PKT -> {
+                                val op = u16le(packet, 1)
+                                val ret = if (op == BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE) {
+                                    byteArrayOf(0x00, 0xFB.toByte(), 0x00, 0x08)
+                                } else {
+                                    byteArrayOf(0x00)
+                                }
+                                val ev = ByteArray(6 + ret.size)
+                                ev[0] = 0x04
+                                ev[1] = 0x0E
+                                ev[2] = (3 + ret.size).toByte()
+                                ev[3] = 0x01
+                                putU16le(ev, 4, op)
+                                ret.copyInto(ev, destinationOffset = 6)
+                                rx.trySend(ev)
+                            }
+                            BleHciConstants.HCI_ACL_DATA_PKT -> {
+                                val handle = u16le(packet, 1) and 0x0FFF
+                                rx.trySend(
+                                    byteArrayOf(
+                                        0x04, 0x13, 0x05, 0x01,
+                                        (handle and 0xFF).toByte(),
+                                        ((handle ushr 8) and 0xFF).toByte(),
+                                        0x01, 0x00
+                                    )
+                                )
+                                if (u16le(packet, 7) == BleHciConstants.L2CAP_CID_ATT) {
+                                    val len = u16le(packet, 5)
+                                    attReplies.trySend(packet.copyOfRange(9, 9 + len))
+                                }
+                            }
+                        }
+                    }
+                    override fun close() {
+                        rx.close()
+                    }
+                }
+
+                val hal = BlePeripheralHalHci(gapDeviceName = "LinuxWallet", packetIoFactory = { io })
+                val added = Channel<Unit>(1)
+                hal.setCallback(object : BlePeripheralHal.Callback {
+                    override fun onPowerOn(error: Throwable?) {}
+                    override fun onL2capPublished(psm: Int?, error: Throwable?) {}
+                    override fun onServiceAdded(error: Throwable?) {
+                        added.trySend(Unit)
+                    }
+                    override fun onAdvertisingStarted(error: Throwable?) {}
+                    override fun onMtuChanged(mtu: Int) {}
+                    override fun onCharacteristicReadRequest(requestId: Int, uuid: UUID) {}
+                    override fun onCharacteristicWriteRequest(uuid: UUID, value: ByteArray, maxWriteSizeForCentral: Int?) {}
+                    override fun onNotificationSent(uuid: UUID, error: Throwable?) {}
+                    override fun onL2capClientConnected(channel: BleL2capChannel) {}
+                    override fun onCentralDisconnected() {}
+                    override fun onError(error: Throwable) {}
+                })
+
+                try {
+                    hal.waitForPowerOn()
+                    hal.setupGattServerAndAddService(
+                        serviceUuid = UUID(1UL, 10UL),
+                        stateCharacteristicUuid = UUID(1UL, 1UL),
+                        client2ServerCharacteristicUuid = UUID(1UL, 2UL),
+                        server2ClientCharacteristicUuid = UUID(1UL, 3UL),
+                        identCharacteristicUuid = UUID(1UL, 4UL),
+                        l2capCharacteristicUuid = null,
+                        encodedL2capPsm = null
+                    )
+                    added.receive()
+
+                    // Connect on handle 0x0000
+                    val connEv = ByteArray(22).also {
+                        it[0] = 0x04
+                        it[1] = 0x3E
+                        it[2] = 19
+                        it[3] = 0x01
+                    }
+                    rx.trySend(connEv)
+
+                    fun sendAtt(pdu: ByteArray) {
+                        val acl = ByteArray(9 + pdu.size)
+                        acl[0] = 0x02
+                        putU16le(acl, 1, 0x0000 or (0x02 shl 12))
+                        putU16le(acl, 3, 4 + pdu.size)
+                        putU16le(acl, 5, pdu.size)
+                        putU16le(acl, 7, BleHciConstants.L2CAP_CID_ATT)
+                        pdu.copyInto(acl, destinationOffset = 9)
+                        rx.trySend(acl)
+                    }
+
+                    // Query GAP Device Name (0x2A00) via ATT_READ_BY_TYPE_REQ
+                    sendAtt(byteArrayOf(0x08, 0x01, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x00, 0x2A))
+                    val nameRsp = attReplies.receive()
+                    assertEquals(BleHciConstants.ATT_OP_READ_BY_TYPE_RSP, nameRsp[0].toInt() and 0xFF)
+                    assertEquals("LinuxWallet", nameRsp.copyOfRange(4, nameRsp.size).decodeToString())
+
+                    // Query GAP Primary Service (0x1800) via ATT_READ_BY_GROUP_TYPE_REQ starting after ISO service (0x000c..0xFFFF)
+                    sendAtt(byteArrayOf(0x10, 0x0C, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x00, 0x28))
+                    val grpRsp = attReplies.receive()
+                    assertEquals(BleHciConstants.ATT_OP_READ_BY_GROUP_TYPE_RSP, grpRsp[0].toInt() and 0xFF)
+                    assertEquals(0x1800, u16le(grpRsp, 6))
+
+                    // Reading State characteristic (handle 0x0003, no READ property) returns ATT_ERR_READ_NOT_PERMITTED (0x02)
+                    sendAtt(byteArrayOf(0x0A, 0x03, 0x00))
+                    val readErr = attReplies.receive()
+                    assertContentEquals(
+                        byteArrayOf(0x01, 0x0A, 0x03, 0x00, BleHciConstants.ATT_ERR_READ_NOT_PERMITTED.toByte()),
+                        readErr
+                    )
+
+                    // Writing Ident characteristic (handle 0x000b, READ-only) returns ATT_ERR_WRITE_NOT_PERMITTED (0x03)
+                    sendAtt(byteArrayOf(0x12, 0x0B, 0x00, 0x42))
+                    val writeErr = attReplies.receive()
+                    assertContentEquals(
+                        byteArrayOf(0x01, 0x12, 0x0B, 0x00, BleHciConstants.ATT_ERR_WRITE_NOT_PERMITTED.toByte()),
+                        writeErr
+                    )
+                } finally {
+                    hal.close()
+                }
+            }
+
+            // Part 2: Peripheral initiates ATT_EXCHANGE_MTU_REQ(517) first, then rejects Central's ATT_EXCHANGE_MTU_REQ
+            run {
+                val bus = VirtualHciBus(
+                    faultConfig = FaultConfig(
+                        injectPeripheralGapClientRequestsOnConnect = true,
+                        failMtuExchangeAttempts = 1
+                    )
+                )
+                val serviceUuid = UUID.randomUUID()
+                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+                val centralManager = createCentralManager(bus.centralIo)
+                val peripheralManager = createPeripheralManager(bus.peripheralIo)
+                val mdoc = BleTransportCentralMdoc(
+                    role = MdocRole.MDOC,
+                    options = MdocTransportOptions(bleUseL2CAP = false),
+                    centralManager = centralManager,
+                    uuid = serviceUuid,
+                    psm = null
+                )
+                val reader = BleTransportCentralMdocReader(
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(bleUseL2CAP = false),
+                    peripheralManager = peripheralManager,
+                    uuid = serviceUuid
+                )
+                try {
+                    reader.advertise()
+                    coroutineScope {
+                        val r = async { reader.open(eSenderKey) }
+                        val m = async { mdoc.open(eSenderKey) }
+                        r.await()
+                        m.await()
+                    }
+                    // Retained 515 MTU on first attempt without falling back to 23 or retrying!
+                    assertEquals(515, mdoc.stats.bleNegotiatedMtu)
+                    assertEquals(0, mdoc.stats.bleNumMtuRequestRetries)
+                } finally {
+                    mdoc.close()
+                    reader.close()
                 }
             }
         }

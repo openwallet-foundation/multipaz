@@ -253,6 +253,7 @@ internal class BlePeripheralManagerImpl(
             } else {
                 Logger.w(TAG, "Read on unexpected characteristic with UUID $uuid")
                 addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
+                hal.sendReadResponse(requestId, statusSuccess = false, value = byteArrayOf())
             }
         }
 
@@ -481,6 +482,10 @@ internal class BlePeripheralManagerImpl(
             _numChunksSent += 1
         }
         Logger.i(TAG, "sendMessage completed")
+    }
+
+    override suspend fun shutdown() {
+        hal.shutdown()
     }
 
     override fun close() {

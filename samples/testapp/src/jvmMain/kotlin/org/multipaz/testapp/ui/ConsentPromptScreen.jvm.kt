@@ -4,8 +4,13 @@ import org.multipaz.document.Document
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.prompt.PlatformConsentOptions
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
+
+actual fun createPlatformConsentOptions(
+    showOnBiometricPrompt: Boolean
+): PlatformConsentOptions? = null
 
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,

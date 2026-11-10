@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.multipaz.context.applicationContext
@@ -70,7 +71,7 @@ internal fun createBlePeripheralManagerAndroid(): BlePeripheralManager =
  */
 internal class GattServerCloseCoordinator<S : Any>(
     private val closeServer: (S) -> Unit,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     private val fallbackTimeout: Duration = 5.seconds,
 ) {
     companion object {
@@ -197,6 +198,9 @@ internal class GattServerCloseCoordinator<S : Any>(
 
     fun onMtuChanged(peerAddress: String) {
         synchronized(lock) {
+            if (mtuNegotiatedPeerAddress != peerAddress) {
+                gattOrL2capActivitySeenForConnection = false
+            }
             mtuNegotiatedPeerAddress = peerAddress
         }
     }
@@ -216,14 +220,13 @@ internal class GattServerCloseCoordinator<S : Any>(
      */
     fun onPeerDisconnected(peerAddress: String): Boolean {
         val suspectedHandleMapPoisoning = synchronized(lock) {
+            val noActivityAfterMtu = mtuNegotiatedPeerAddress == peerAddress &&
+                !gattOrL2capActivitySeenForConnection
             if (mtuNegotiatedPeerAddress == peerAddress) {
-                val noActivity = !gattOrL2capActivitySeenForConnection
                 mtuNegotiatedPeerAddress = null
-                gattOrL2capActivitySeenForConnection = false
-                noActivity
-            } else {
-                false
             }
+            gattOrL2capActivitySeenForConnection = false
+            noActivityAfterMtu
         }
         if (suspectedHandleMapPoisoning) {
             Logger.w(
@@ -311,6 +314,8 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             Logger.d(TAG, "onConnectionStateChange: ${device.address} $status + $newState")
+            val srv = server ?: return
+            if (srv !== gattServer) return
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 gattServerCloseCoordinator.onPeerDisconnected(device.address)
                 if (device.address == connectedDevice?.address) {
@@ -327,6 +332,8 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
             characteristic: BluetoothGattCharacteristic
         ) {
             Logger.d(TAG, "onCharacteristicReadRequest: ${device.address} $requestId $offset ${characteristic.uuid}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
             gattServerCloseCoordinator.onGattOrL2capActivity()
             pendingReadDevices[requestId] = device
             callback.onCharacteristicReadRequest(requestId, UUID.fromJavaUuid(characteristic.uuid))
@@ -346,9 +353,11 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
                 "onCharacteristicWriteRequest: ${device.address} $requestId $offset " +
                         "${characteristic.uuid} ${value.toHex()}"
             )
+            val srv = server ?: return
+            if (srv !== gattServer) return
             gattServerCloseCoordinator.onGattOrL2capActivity()
             if (responseNeeded) {
-                gattServer?.sendResponse(
+                srv.sendResponse(
                     device,
                     requestId,
                     BluetoothGatt.GATT_SUCCESS,
@@ -382,9 +391,11 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
                             "$offset ${value.toHex()}"
                 )
             }
+            val srv = server ?: return
+            if (srv !== gattServer) return
             gattServerCloseCoordinator.onGattOrL2capActivity()
             if (responseNeeded) {
-                gattServer?.sendResponse(
+                srv.sendResponse(
                     device,
                     requestId,
                     BluetoothGatt.GATT_SUCCESS,
@@ -396,12 +407,16 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             Logger.d(TAG, "Negotiated MTU $mtu for ${device.address}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
             gattServerCloseCoordinator.onMtuChanged(device.address)
             callback.onMtuChanged(mtu)
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
             Logger.d(TAG, "onNotificationSent $status for ${device.address}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 callback.onNotificationSent(
                     UUID(0UL, 0UL),

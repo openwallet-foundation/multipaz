@@ -126,5 +126,13 @@ class GattServerCloseCoordinatorTest {
         coordinator.onMtuChanged(peerAddress)
         coordinator.onGattOrL2capActivity()
         assertFalse(coordinator.onPeerDisconnected(peerAddress))
+
+        // Case 3: Prior peer had GATT/L2CAP activity without negotiating MTU and disconnected;
+        // subsequent peer negotiating MTU with zero activity is still detected.
+        val otherPeer = "11:22:33:44:55:66"
+        coordinator.onGattOrL2capActivity()
+        assertFalse(coordinator.onPeerDisconnected(otherPeer))
+        coordinator.onMtuChanged(peerAddress)
+        assertTrue(coordinator.onPeerDisconnected(peerAddress))
     }
 }

@@ -144,37 +144,70 @@ internal class BleCentralManagerImpl(
         val characteristicUuid: UUID? = null,
     )
 
-    @Volatile
-    private var waitFor: WaitFor? = null
+    private val waitFor = MutableStateFlow<WaitFor?>(null)
 
     private fun setWaitCondition(
         state: WaitState,
         continuation: CancellableContinuation<Boolean>,
         characteristicUuid: UUID? = null,
     ) {
-        check(waitFor == null) { "waitFor is already set to ${waitFor?.state}" }
-        waitFor = WaitFor(state, continuation, characteristicUuid)
+        val entry = WaitFor(state, continuation, characteristicUuid)
+        check(waitFor.compareAndSet(null, entry)) {
+            "waitFor is already set to ${waitFor.value?.state}"
+        }
         continuation.invokeOnCancellation {
-            if (waitFor?.continuation === continuation) {
-                waitFor = null
-            }
+            waitFor.compareAndSet(entry, null)
         }
     }
 
     private fun clearWaitCondition() {
-        waitFor = null
+        waitFor.value = null
     }
 
-    private fun resumeWait() {
-        val continuation = waitFor!!.continuation
-        waitFor = null
+    private fun claimWaitCondition(
+        expectedState: WaitState,
+        expectedUuid: UUID? = null,
+    ): CancellableContinuation<Boolean>? {
+        while (true) {
+            val current = waitFor.value
+            if (current == null || current.state != expectedState) {
+                return null
+            }
+            if (expectedUuid != null &&
+                current.characteristicUuid != null &&
+                current.characteristicUuid != expectedUuid
+            ) {
+                return null
+            }
+            if (waitFor.compareAndSet(current, null)) {
+                return current.continuation
+            }
+        }
+    }
+
+    private fun claimAnyWaitCondition(): WaitFor? {
+        while (true) {
+            val current = waitFor.value ?: return null
+            if (waitFor.compareAndSet(current, null)) {
+                return current
+            }
+        }
+    }
+
+    private fun resumeWait(expectedState: WaitState, expectedUuid: UUID? = null): Boolean {
+        val continuation = claimWaitCondition(expectedState, expectedUuid) ?: return false
         continuation.resume(true)
+        return true
     }
 
-    private fun resumeWaitWithException(exception: Throwable) {
-        val continuation = waitFor!!.continuation
-        waitFor = null
+    private fun resumeWaitWithException(
+        expectedState: WaitState,
+        exception: Throwable,
+        expectedUuid: UUID? = null,
+    ): Boolean {
+        val continuation = claimWaitCondition(expectedState, expectedUuid) ?: return false
         continuation.resumeWithException(exception)
+        return true
     }
 
     override val incomingMessages = Channel<ByteArray>(Channel.UNLIMITED)
@@ -279,22 +312,19 @@ internal class BleCentralManagerImpl(
 
     private val halCallback = object : BleCentralHal.Callback {
         override fun onPowerOn(error: Throwable?) {
-            if (waitFor?.state == WaitState.POWER_ON) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.POWER_ON, error)
             } else {
+                resumeWait(WaitState.POWER_ON)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onPowerOn callback but not waiting")
             }
         }
 
         override fun onPeripheralDiscovered() {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    resumeWait()
-                } else {
+                if (!resumeWait(WaitState.PERIPHERAL_DISCOVERED)) {
                     Logger.w(TAG, "onPeripheralDiscovered but not waiting")
                 }
             } catch (error: Exception) {
@@ -305,9 +335,8 @@ internal class BleCentralManagerImpl(
 
         override fun onScanFailed(error: Throwable) {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    resumeWaitWithException(ScanFailedException(error.message ?: "BLE scan failed", error))
-                } else {
+                val scanEx = ScanFailedException(error.message ?: "BLE scan failed", error)
+                if (!resumeWaitWithException(WaitState.PERIPHERAL_DISCOVERED, scanEx)) {
                     Logger.w(TAG, "onScanFailed but not waiting")
                 }
             } catch (e: Exception) {
@@ -318,9 +347,7 @@ internal class BleCentralManagerImpl(
 
         override fun onConnected() {
             try {
-                if (waitFor?.state == WaitState.CONNECT_TO_PERIPHERAL) {
-                    resumeWait()
-                } else {
+                if (!resumeWait(WaitState.CONNECT_TO_PERIPHERAL)) {
                     Logger.w(TAG, "onConnected but not waiting")
                 }
             } catch (error: Exception) {
@@ -331,10 +358,14 @@ internal class BleCentralManagerImpl(
 
         override fun onDisconnected() {
             try {
-                val currentWaitState = waitFor?.state
-                if (currentWaitState == WaitState.CONNECT_TO_PERIPHERAL) {
-                    resumeWaitWithException(ConnectionFailedException("Failed to connect to peripheral"))
-                } else if (isConnectingToPeripheral) {
+                if (resumeWaitWithException(
+                        WaitState.CONNECT_TO_PERIPHERAL,
+                        ConnectionFailedException("Failed to connect to peripheral")
+                    )
+                ) {
+                    return
+                }
+                if (isConnectingToPeripheral) {
                     // On Android, a failed BluetoothGatt connection attempt can fire
                     // onConnectionStateChange(..., STATE_DISCONNECTED) twice in quick succession
                     // (e.g. status=147 followed a few milliseconds later by status=133 when
@@ -344,23 +375,33 @@ internal class BleCentralManagerImpl(
                     // delay(connectRetryDelay) before the next retry attempt. Ignore the duplicate
                     // callback so the retry loop can proceed instead of failing the transport.
                     Logger.w(TAG, "Ignoring duplicate onDisconnected callback while retrying connection")
-                } else if (currentWaitState == WaitState.OPEN_L2CAP_CHANNEL) {
-                    resumeWaitWithException(ConnectionFailedException("Peripheral disconnected while opening L2CAP channel"))
-                } else if (isConnectingL2cap) {
+                    return
+                }
+                if (resumeWaitWithException(
+                        WaitState.OPEN_L2CAP_CHANNEL,
+                        ConnectionFailedException("Peripheral disconnected while opening L2CAP channel")
+                    )
+                ) {
+                    return
+                }
+                if (isConnectingL2cap) {
                     Logger.w(TAG, "Ignoring onDisconnected callback while retrying L2CAP connection")
-                } else if (inGattHandshake) {
+                    return
+                }
+                if (inGattHandshake) {
                     needsReconnectDelay = true
-                    if (waitFor != null) {
-                        resumeWaitWithException(
-                            BleReconnectRequiredException("Peripheral disconnected during $currentWaitState")
+                    val claimed = claimAnyWaitCondition()
+                    if (claimed != null) {
+                        claimed.continuation.resumeWithException(
+                            BleReconnectRequiredException("Peripheral disconnected during ${claimed.state}")
                         )
                     } else {
                         disconnectedDuringGattHandshake = true
                         Logger.w(TAG, "Peripheral disconnected while waiting between GATT handshake retries")
                     }
-                } else {
-                    throw IllegalStateException("Peripheral unexpectedly disconnected")
+                    return
                 }
+                throw IllegalStateException("Peripheral unexpectedly disconnected")
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 onError(IllegalStateException("onDisconnected failed", error))
@@ -369,13 +410,14 @@ internal class BleCentralManagerImpl(
 
         override fun onMtuChanged(mtu: Int, error: Throwable?) {
             try {
-                if (waitFor?.state == WaitState.REQUEST_MTU) {
+                val continuation = claimWaitCondition(WaitState.REQUEST_MTU)
+                if (continuation != null) {
                     if (error != null) {
-                        resumeWaitWithException(
+                        continuation.resumeWithException(
                             GattOperationFailedException(error.message ?: "MTU exchange failed", error)
                         )
                     } else if (mtu < MIN_ACCEPTABLE_MTU) {
-                        resumeWaitWithException(IllegalStateException("Unexpected MTU size $mtu"))
+                        continuation.resumeWithException(IllegalStateException("Unexpected MTU size $mtu"))
                     } else {
                         _negotiatedMtu = mtu
                         if (mtu <= 23) {
@@ -383,7 +425,7 @@ internal class BleCentralManagerImpl(
                         }
                         maxCharacteristicSize = min(mtu - 3, MAX_CHARACTERISTIC_SIZE_CAP)
                         Logger.i(TAG, "MTU is $mtu, using $maxCharacteristicSize as maximum data size for characteristics")
-                        resumeWait()
+                        continuation.resume(true)
                     }
                 } else {
                     Logger.w(TAG, "onMtuChanged but not waiting")
@@ -397,13 +439,18 @@ internal class BleCentralManagerImpl(
 
         override fun onServicesDiscovered(hasTargetService: Boolean, error: Throwable?) {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_SERVICES) {
+                val continuation = claimWaitCondition(WaitState.PERIPHERAL_DISCOVER_SERVICES)
+                if (continuation != null) {
                     if (error != null) {
-                        resumeWaitWithException(ServiceDiscoveryFailedException(error.message ?: "Discover services failed", error))
+                        continuation.resumeWithException(
+                            ServiceDiscoveryFailedException(error.message ?: "Discover services failed", error)
+                        )
                     } else if (!hasTargetService) {
-                        resumeWaitWithException(ServiceDiscoveryFailedException("No service with the given UUID"))
+                        continuation.resumeWithException(
+                            ServiceDiscoveryFailedException("No service with the given UUID")
+                        )
                     } else {
-                        resumeWait()
+                        continuation.resume(true)
                     }
                 } else {
                     Logger.w(TAG, "onServicesDiscovered but not waiting")
@@ -420,9 +467,10 @@ internal class BleCentralManagerImpl(
             hasL2capCharacteristic: Boolean,
             error: Throwable?
         ) {
-            if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS) {
+            val continuation = claimWaitCondition(WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS)
+            if (continuation != null) {
                 if (error != null) {
-                    resumeWaitWithException(
+                    continuation.resumeWithException(
                         GattOperationFailedException(error.message ?: "Discover characteristics failed", error)
                     )
                 } else {
@@ -433,7 +481,7 @@ internal class BleCentralManagerImpl(
                         }
                     }
                     this@BleCentralManagerImpl.hasL2capCharacteristic = hasL2capCharacteristic
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicsDiscovered but not waiting")
@@ -444,34 +492,36 @@ internal class BleCentralManagerImpl(
         override fun onCharacteristicRead(uuid: UUID, value: ByteArray?, error: Throwable?) {
             try {
                 if (uuid == l2capCharacteristicUuid) {
-                    if (waitFor?.state == WaitState.GET_L2CAP_PSM) {
+                    val continuation = claimWaitCondition(WaitState.GET_L2CAP_PSM, uuid)
+                    if (continuation != null) {
                         if (error != null) {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 GattOperationFailedException(error.message ?: "L2CAP PSM read failed", error)
                             )
                         } else if (value == null || value.size != 4) {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 IllegalStateException("onCharacteristicRead: Expected four bytes for PSM, got ${value?.size}")
                             )
                         } else {
                             _l2capPsm = value.getUInt32(0).toInt()
                             Logger.i(TAG, "L2CAP PSM is $_l2capPsm")
-                            resumeWait()
+                            continuation.resume(true)
                         }
                     } else {
                         Logger.w(TAG, "onCharacteristicRead for L2CAP PSM but not waiting")
                         addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                     }
                 } else if (uuid == identCharacteristicUuid) {
-                    if (waitFor?.state == WaitState.GET_READER_IDENT) {
+                    val continuation = claimWaitCondition(WaitState.GET_READER_IDENT, uuid)
+                    if (continuation != null) {
                         if (error != null) {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 GattOperationFailedException(error.message ?: "Ident read failed", error)
                             )
                         } else if (value != null && expectedIdentValue contentEquals value) {
-                            resumeWait()
+                            continuation.resume(true)
                         } else {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 IllegalStateException(
                                     "onCharacteristicRead: Expected ${expectedIdentValue?.toHex()} " +
                                             "for ident, got ${value?.toHex()} instead"
@@ -490,17 +540,18 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onCharacteristicWrite(uuid: UUID, error: Throwable?) {
-            if (waitFor?.state == WaitState.CHARACTERISTIC_WRITE_COMPLETED) {
+            val continuation = claimWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, uuid)
+            if (continuation != null) {
                 if (error != null) {
                     if (inGattHandshake) {
-                        resumeWaitWithException(
+                        continuation.resumeWithException(
                             GattOperationFailedException(error.message ?: "Characteristic write failed", error)
                         )
                     } else {
-                        resumeWaitWithException(error)
+                        continuation.resumeWithException(error)
                     }
                 } else {
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicWrite for characteristic $uuid but not waiting")
@@ -509,13 +560,14 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onDescriptorWrite(characteristicUuid: UUID, error: Throwable?) {
-            if (waitFor?.state == WaitState.WRITE_TO_DESCRIPTOR) {
+            val continuation = claimWaitCondition(WaitState.WRITE_TO_DESCRIPTOR, characteristicUuid)
+            if (continuation != null) {
                 if (error != null) {
-                    resumeWaitWithException(
+                    continuation.resumeWithException(
                         GattOperationFailedException(error.message ?: "Descriptor write failed", error)
                     )
                 } else {
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onDescriptorWrite but not waiting")
@@ -543,14 +595,16 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onL2capConnected(channel: BleL2capChannel?, error: Throwable?) {
-            if (waitFor?.state == WaitState.OPEN_L2CAP_CHANNEL) {
+            val continuation = claimWaitCondition(WaitState.OPEN_L2CAP_CHANNEL)
+            if (continuation != null) {
                 if (error != null || channel == null) {
-                    resumeWaitWithException(error ?: IllegalStateException("L2CAP channel is null"))
+                    continuation.resumeWithException(error ?: IllegalStateException("L2CAP channel is null"))
                 } else {
                     l2capChannel = channel
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
+                channel?.close()
                 Logger.w(TAG, "onL2capConnected but not waiting")
                 addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
@@ -1057,6 +1111,10 @@ internal class BleCentralManagerImpl(
                 onError(IllegalStateException("Reading from L2CAP socket failed", error))
             }
         }
+    }
+
+    override suspend fun shutdown() {
+        hal.shutdown()
     }
 
     override fun close() {

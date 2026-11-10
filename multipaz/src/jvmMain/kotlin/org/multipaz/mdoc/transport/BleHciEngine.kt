@@ -8,21 +8,26 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.multipaz.crypto.Crypto
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
-import org.multipaz.util.toHex
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 internal object BleHciConstants {
@@ -128,11 +133,15 @@ internal object BleHciConstants {
     const val ATT_ERR_WRITE_NOT_PERMITTED = 0x03
     const val ATT_ERR_INVALID_PDU = 0x04
     const val ATT_ERR_REQUEST_NOT_SUPPORTED = 0x06
+    const val ATT_ERR_INVALID_OFFSET = 0x07
     const val ATT_ERR_ATTRIBUTE_NOT_FOUND = 0x0A
     const val ATT_ERR_UNLIKELY_ERROR = 0x0E
     const val ATT_ERR_UNSUPPORTED_GROUP_TYPE = 0x10
 
     // GATT 16-bit UUIDs
+    const val GAP_UUID_SERVICE = 0x1800
+    const val GAP_UUID_DEVICE_NAME = 0x2A00
+    const val GAP_UUID_APPEARANCE = 0x2A01
     const val GATT_UUID_PRIMARY_SERVICE = 0x2800
     const val GATT_UUID_CHARACTERISTIC = 0x2803
     const val GATT_UUID_CCCD = 0x2902
@@ -162,6 +171,13 @@ internal fun u16leBytes(value: Int): ByteArray = byteArrayOf(
     (value and 0xFF).toByte(),
     ((value ushr 8) and 0xFF).toByte()
 )
+
+internal fun nextNonZeroL2capIdentifier(counter: AtomicInteger): Int {
+    while (true) {
+        val id = counter.getAndIncrement() and 0xFF
+        if (id != 0) return id
+    }
+}
 
 internal fun UUID.toLittleEndianBytes(): ByteArray = toByteArray().reversedArray()
 
@@ -229,6 +245,7 @@ internal class BleHciEngine(
     val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val commandMutex = Mutex()
+    private val commandCreditsAvailable = MutableStateFlow(1)
     private val pendingCommandLock = Any()
     private var pendingCommandOpcode: Int = -1
     private var pendingCommandDeferred: CompletableDeferred<ByteArray>? = null
@@ -242,8 +259,10 @@ internal class BleHciEngine(
         private set
 
     private var aclCreditSemaphore = Semaphore(8)
-    private val inFlightAclPackets = AtomicInteger(0)
+    private val inFlightAclPackets = MutableStateFlow(0)
     private val aclSendMutex = Mutex()
+    private val activeHandles = ConcurrentHashMap.newKeySet<Int>()
+    private val disconnectWaiters = ConcurrentHashMap<Int, CompletableDeferred<Unit>>()
 
     private class AclReassemblyState(
         val cid: Int,
@@ -282,6 +301,8 @@ internal class BleHciEngine(
     }
 
     suspend fun initializeController(randomAddress: ByteArray? = null) {
+        commandCreditsAvailable.value = 1
+        activeHandles.clear()
         startReaderLoop()
 
         // 1. HCI_Reset
@@ -316,7 +337,10 @@ internal class BleHciEngine(
         val leMaskRsp = sendCommand(BleHciConstants.HCI_OP_LE_SET_EVENT_MASK, leEventMask)
         checkCommandStatus("HCI_LE_Set_Event_Mask", leMaskRsp)
 
-        // 4. HCI_LE_Read_Buffer_Size (with fallback to HCI_Read_Buffer_Size if shared with BR/EDR)
+        // 4. HCI_LE_Read_Buffer_Size (with fallback to HCI_Read_Buffer_Size if shared with BR/EDR).
+        // Per Bluetooth Core Spec Vol 4 Part E 7.4.5, HCI_Read_Buffer_Size return parameters are:
+        // [0]=Status, [1..2]=HC_ACL_Data_Packet_Length, [3]=HC_Synchronous_Data_Packet_Length (1 byte),
+        // [4..5]=HC_Total_Num_ACL_Data_Packets (2 bytes), [6..7]=HC_Total_Num_Synchronous_Data_Packets.
         val leBufRsp = sendCommand(BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE)
         checkCommandStatus("HCI_LE_Read_Buffer_Size", leBufRsp)
         var pktLen = if (leBufRsp.size >= 3) u16le(leBufRsp, 1) else 0
@@ -324,26 +348,40 @@ internal class BleHciEngine(
         if (pktLen == 0 || numPkts == 0) {
             val brBufRsp = sendCommand(BleHciConstants.HCI_OP_READ_BUFFER_SIZE)
             checkCommandStatus("HCI_Read_Buffer_Size", brBufRsp)
-            if (brBufRsp.size >= 5) {
-                pktLen = u16le(brBufRsp, 1)
-                numPkts = u16le(brBufRsp, 3)
+            if (brBufRsp.size >= 6) {
+                if (pktLen == 0) pktLen = u16le(brBufRsp, 1)
+                if (numPkts == 0) numPkts = u16le(brBufRsp, 4)
             }
         }
         leAclDataPacketLength = if (pktLen > 0) pktLen else 27
         totalNumLeAclDataPackets = if (numPkts > 0) numPkts else 8
         aclCreditSemaphore = Semaphore(totalNumLeAclDataPackets)
-        inFlightAclPackets.set(0)
+        inFlightAclPackets.value = 0
 
-        // 5. HCI_LE_Set_Random_Address (6-byte static random address: top 2 bits of MSB set to 11)
+        // 5. HCI_LE_Set_Random_Address (6-byte static random address: top 2 bits of MSB set to 11,
+        // and remaining 46 bits neither all 0s nor all 1s per Core Spec Vol 6 Part B 1.3.2.1).
         val randomAddr = if (randomAddress != null) {
             require(randomAddress.size == 6) { "Expected 6-byte random address, got ${randomAddress.size}" }
             randomAddress.copyOf()
         } else {
-            Crypto.secureRandom.nextBytes(6).also {
-                it[0] = (it[0].toInt() or 0x01).toByte() // ensure not all zeros
-                it[0] = (it[0].toInt() and 0xFE).toByte() // ensure not all ones
-                it[5] = (it[5].toInt() or 0xC0).toByte() // static random address (11xxxxxx)
-            }
+            var candidate: ByteArray
+            do {
+                candidate = Crypto.secureRandom.nextBytes(6)
+                candidate[5] = (candidate[5].toInt() or 0xC0).toByte()
+                val allZeros = candidate[0] == 0.toByte() &&
+                    candidate[1] == 0.toByte() &&
+                    candidate[2] == 0.toByte() &&
+                    candidate[3] == 0.toByte() &&
+                    candidate[4] == 0.toByte() &&
+                    (candidate[5].toInt() and 0x3F) == 0
+                val allOnes = candidate[0] == 0xFF.toByte() &&
+                    candidate[1] == 0xFF.toByte() &&
+                    candidate[2] == 0xFF.toByte() &&
+                    candidate[3] == 0xFF.toByte() &&
+                    candidate[4] == 0xFF.toByte() &&
+                    (candidate[5].toInt() and 0x3F) == 0x3F
+            } while (allZeros || allOnes)
+            candidate
         }
         val randAddrRsp = sendCommand(BleHciConstants.HCI_OP_LE_SET_RANDOM_ADDRESS, randomAddr)
         checkCommandStatus("HCI_LE_Set_Random_Address", randAddrRsp)
@@ -354,6 +392,9 @@ internal class BleHciEngine(
         params: ByteArray = byteArrayOf(),
         timeout: Duration = 5.seconds
     ): ByteArray = commandMutex.withLock {
+        require(params.size <= 255) {
+            "HCI command 0x${opcode.toString(16)} parameter length ${params.size} exceeds 255 bytes"
+        }
         val deferred = CompletableDeferred<ByteArray>()
         synchronized(pendingCommandLock) {
             pendingCommandOpcode = opcode
@@ -366,8 +407,9 @@ internal class BleHciEngine(
         params.copyInto(packet, destinationOffset = 4)
 
         try {
-            packetIo.writePacket(packet)
             withTimeout(timeout) {
+                commandCreditsAvailable.first { it > 0 }
+                packetIo.writePacket(packet)
                 deferred.await()
             }
         } finally {
@@ -391,6 +433,10 @@ internal class BleHciEngine(
     }
 
     suspend fun sendL2capPdu(connectionHandle: Int, cid: Int, payload: ByteArray) {
+        require(payload.size <= 65535) { "L2CAP payload length ${payload.size} exceeds 65535 bytes" }
+        if (closed || connectionHandle < 0 || !activeHandles.contains(connectionHandle)) {
+            throw IOException("BLE connection handle $connectionHandle is not active")
+        }
         val l2capFrame = ByteArray(4 + payload.size)
         putU16le(l2capFrame, 0, payload.size)
         putU16le(l2capFrame, 2, cid)
@@ -401,6 +447,9 @@ internal class BleHciEngine(
             var offset = 0
             var first = true
             while (offset < l2capFrame.size) {
+                if (closed || !activeHandles.contains(connectionHandle)) {
+                    throw IOException("BLE connection handle 0x${connectionHandle.toString(16)} disconnected")
+                }
                 val sliceLen = min(maxSlice, l2capFrame.size - offset)
                 val pbFlag = if (first) 0x00 else 0x01 // 0x00 = LE start of L2CAP PDU, 0x01 = continuing
                 first = false
@@ -413,12 +462,15 @@ internal class BleHciEngine(
                 offset += sliceLen
 
                 aclCreditSemaphore.acquire()
-                inFlightAclPackets.incrementAndGet()
+                if (closed || !activeHandles.contains(connectionHandle)) {
+                    aclCreditSemaphore.release()
+                    throw IOException("BLE connection handle 0x${connectionHandle.toString(16)} disconnected")
+                }
+                inFlightAclPackets.update { it + 1 }
                 try {
                     packetIo.writePacket(aclPacket)
                 } catch (t: Throwable) {
-                    inFlightAclPackets.decrementAndGet()
-                    aclCreditSemaphore.release()
+                    releaseAclCredits(1)
                     throw t
                 }
             }
@@ -427,18 +479,30 @@ internal class BleHciEngine(
 
     private fun releaseAclCredits(count: Int) {
         for (i in 0 until count) {
-            val current = inFlightAclPackets.get()
-            if (current <= 0) break
-            if (inFlightAclPackets.compareAndSet(current, current - 1)) {
-                aclCreditSemaphore.release()
+            var released = false
+            while (true) {
+                val current = inFlightAclPackets.value
+                if (current <= 0) break
+                if (inFlightAclPackets.compareAndSet(current, current - 1)) {
+                    released = true
+                    break
+                }
             }
+            if (!released) break
+            aclCreditSemaphore.release()
         }
     }
 
     private fun releaseAllInFlightAclCredits() {
-        val outstanding = inFlightAclPackets.getAndSet(0)
-        for (i in 0 until outstanding) {
-            aclCreditSemaphore.release()
+        while (true) {
+            val outstanding = inFlightAclPackets.value
+            if (outstanding <= 0) break
+            if (inFlightAclPackets.compareAndSet(outstanding, 0)) {
+                repeat(outstanding) {
+                    aclCreditSemaphore.release()
+                }
+                break
+            }
         }
     }
 
@@ -452,22 +516,28 @@ internal class BleHciEngine(
         when (eventCode) {
             BleHciConstants.HCI_EV_CMD_COMPLETE -> {
                 if (params.size >= 3) {
+                    commandCreditsAvailable.value = params[0].toInt() and 0xFF
                     val opcode = u16le(params, 1)
-                    val returnParams = params.copyOfRange(3, params.size)
-                    val deferred = synchronized(pendingCommandLock) {
-                        if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                    if (opcode != 0x0000) {
+                        val returnParams = params.copyOfRange(3, params.size)
+                        val deferred = synchronized(pendingCommandLock) {
+                            if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                        }
+                        deferred?.complete(returnParams)
                     }
-                    deferred?.complete(returnParams)
                 }
             }
             BleHciConstants.HCI_EV_CMD_STATUS -> {
                 if (params.size >= 4) {
                     val status = params[0]
+                    commandCreditsAvailable.value = params[1].toInt() and 0xFF
                     val opcode = u16le(params, 2)
-                    val deferred = synchronized(pendingCommandLock) {
-                        if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                    if (opcode != 0x0000) {
+                        val deferred = synchronized(pendingCommandLock) {
+                            if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                        }
+                        deferred?.complete(byteArrayOf(status))
                     }
-                    deferred?.complete(byteArrayOf(status))
                 }
             }
             BleHciConstants.HCI_EV_NUM_COMP_PKTS -> {
@@ -487,10 +557,16 @@ internal class BleHciEngine(
                     val status = params[0].toInt() and 0xFF
                     val handle = u16le(params, 1) and 0x0FFF
                     val reason = params[3].toInt() and 0xFF
-                    synchronized(reassemblyByHandle) {
-                        reassemblyByHandle.remove(handle)
+                    if (status == 0x00) {
+                        activeHandles.remove(handle)
+                        synchronized(reassemblyByHandle) {
+                            reassemblyByHandle.remove(handle)
+                        }
+                        if (activeHandles.isEmpty()) {
+                            releaseAllInFlightAclCredits()
+                        }
                     }
-                    releaseAllInFlightAclCredits()
+                    disconnectWaiters.remove(handle)?.complete(Unit)
                     if (status == 0x00) {
                         onDisconnected(handle, reason)
                     }
@@ -515,9 +591,10 @@ internal class BleHciEngine(
                         val handle = u16le(params, 2) and 0x0FFF
                         val peerAddrType = params[5].toInt() and 0xFF
                         val peerAddr = params.copyOfRange(6, 12)
+                        activeHandles.add(handle)
                         onConnected(handle, peerAddrType, peerAddr)
                     } else {
-                        onDisconnected(0, status)
+                        onDisconnected(-1, status)
                     }
                 }
             }
@@ -529,9 +606,10 @@ internal class BleHciEngine(
                         val handle = u16le(params, 2) and 0x0FFF
                         val peerAddrType = params[5].toInt() and 0xFF
                         val peerAddr = params.copyOfRange(6, 12)
+                        activeHandles.add(handle)
                         onConnected(handle, peerAddrType, peerAddr)
                     } else {
-                        onDisconnected(0, status)
+                        onDisconnected(-1, status)
                     }
                 }
             }
@@ -568,35 +646,24 @@ internal class BleHciEngine(
                 }
             }
             BleHciConstants.HCI_EV_LE_ADVERTISING_REPORT -> {
-                // [0]=subevent(0x02), [1]=numReports
+                // [0]=subevent(0x02), [1]=numReports, followed by sequential report records:
+                // [0]=eventType, [1]=addrType, [2..7]=addr, [8]=dataLen, [9..9+dataLen]=data, [9+dataLen]=RSSI
                 if (params.size < 2) return
                 val numReports = params[1].toInt() and 0xFF
                 var offset = 2
-                // Note: per Bluetooth Core Spec Vol 4 Part E 7.7.65.2, HCI_LE_Advertising_Report arrays are
-                // structured per report when numReports == 1, or grouped by field across numReports.
-                // Virtually all controllers emit numReports == 1 per event, but we support both layouts:
-                if (numReports == 1) {
-                    if (offset + 9 <= params.size) {
-                        val addrType = params[offset + 1].toInt() and 0xFF
-                        val addr = params.copyOfRange(offset + 2, offset + 8)
-                        val dataLen = params[offset + 8].toInt() and 0xFF
-                        if (offset + 9 + dataLen <= params.size) {
-                            val adData = params.copyOfRange(offset + 9, offset + 9 + dataLen)
-                            onAdvertisingReport(addrType, addr, adData)
-                        }
-                    }
-                } else {
-                    // Sequential report parsing fallback
-                    for (i in 0 until numReports) {
-                        if (offset + 9 > params.size) break
-                        val addrType = params[offset + 1].toInt() and 0xFF
-                        val addr = params.copyOfRange(offset + 2, offset + 8)
-                        val dataLen = params[offset + 8].toInt() and 0xFF
-                        if (offset + 9 + dataLen > params.size) break
+                for (i in 0 until numReports) {
+                    if (offset + 9 > params.size) break
+                    val eventType = params[offset].toInt() and 0xFF
+                    val addrType = params[offset + 1].toInt() and 0xFF
+                    val addr = params.copyOfRange(offset + 2, offset + 8)
+                    val dataLen = params[offset + 8].toInt() and 0xFF
+                    if (offset + 9 + dataLen > params.size) break
+                    // Ignore non-connectable advertisements (0x02 = ADV_SCAN_IND, 0x03 = ADV_NONCONN_IND)
+                    if (eventType != 0x02 && eventType != 0x03 && addrType in 0x00..0x03) {
                         val adData = params.copyOfRange(offset + 9, offset + 9 + dataLen)
                         onAdvertisingReport(addrType, addr, adData)
-                        offset += 9 + dataLen + 1 // +1 for RSSI
                     }
+                    offset += 9 + dataLen + if (offset + 9 + dataLen < params.size) 1 else 0
                 }
             }
             BleHciConstants.HCI_EV_LE_EXT_ADVERTISING_REPORT -> {
@@ -607,12 +674,16 @@ internal class BleHciEngine(
                 var offset = 2
                 for (i in 0 until numReports) {
                     if (offset + 24 > params.size) break
+                    val eventType = u16le(params, offset)
                     val addrType = params[offset + 2].toInt() and 0xFF
                     val addr = params.copyOfRange(offset + 3, offset + 9)
                     val dataLen = params[offset + 23].toInt() and 0xFF
                     if (offset + 24 + dataLen > params.size) break
-                    val adData = params.copyOfRange(offset + 24, offset + 24 + dataLen)
-                    onAdvertisingReport(addrType, addr, adData)
+                    // Bit 0 of Extended Advertising Event_Type indicates Connectable; 0xFF is anonymous
+                    if ((eventType and 0x0001) != 0 && addrType in 0x00..0x03) {
+                        val adData = params.copyOfRange(offset + 24, offset + 24 + dataLen)
+                        onAdvertisingReport(addrType, addr, adData)
+                    }
                     offset += 24 + dataLen
                 }
             }
@@ -688,9 +759,55 @@ internal class BleHciEngine(
         }
     }
 
+    /**
+     * Flushes any in-flight ACL fragments (waiting for `HCI_Number_Of_Completed_Packets`), cleanly
+     * terminates any active LE connections via `HCI_Disconnect` (`0x13` Remote User Terminated
+     * Connection), and—if [packetIo] keeps its descriptor open across sessions—executes `HCI_Reset`
+     * and awaits `HCI_Command_Complete` before [close] runs.
+     */
+    suspend fun flushAndDisconnect(timeout: Duration = 500.milliseconds) {
+        if (closed) return
+        withTimeoutOrNull(timeout) {
+            inFlightAclPackets.first { it == 0 }
+        }
+        for (handle in activeHandles.toList()) {
+            val waiter = CompletableDeferred<Unit>()
+            disconnectWaiters[handle] = waiter
+            try {
+                if (!activeHandles.contains(handle)) continue
+                val params = ByteArray(3)
+                putU16le(params, 0, handle and 0x0FFF)
+                params[2] = 0x13 // Remote User Terminated Connection
+                val statusRsp = sendCommand(BleHciConstants.HCI_OP_DISCONNECT, params, timeout)
+                if (statusRsp.isNotEmpty() && (statusRsp[0].toInt() and 0xFF) == 0x00) {
+                    withTimeoutOrNull(timeout) {
+                        waiter.await()
+                    }
+                }
+            } catch (_: Throwable) {
+            } finally {
+                disconnectWaiters.remove(handle)
+            }
+        }
+        if (packetIo.keepsDescriptorOpenOnClose && !closed) {
+            try {
+                val resetRsp = sendCommand(BleHciConstants.HCI_OP_RESET, timeout = timeout)
+                if (resetRsp.isNotEmpty() && (resetRsp[0].toInt() and 0xFF) == 0x00) {
+                    packetIo.markControllerResetCompleted()
+                }
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     fun close() {
         if (closed) return
         closed = true
+        activeHandles.clear()
+        for (waiter in disconnectWaiters.values) {
+            waiter.cancel()
+        }
+        disconnectWaiters.clear()
         synchronized(pendingCommandLock) {
             pendingCommandDeferred?.cancel()
             pendingCommandDeferred = null
@@ -706,14 +823,19 @@ internal class BleHciEngine(
  */
 internal class HciBleL2capChannel(
     private val engine: BleHciEngine,
-    private val connectionHandle: Int,
+    val connectionHandle: Int,
     val localCid: Int,
     val peerCid: Int,
     val peerMtu: Int,
     val peerMps: Int,
     initialPeerCredits: Int
 ) : BleL2capChannel {
-    private val peerCredits = Semaphore(initialPeerCredits)
+    companion object {
+        private const val TAG = "HciBleL2capChannel"
+    }
+
+    // Holds >= 0 available peer credits while open, or -1 once closed/disconnected so suspended writers wake immediately.
+    private val peerCreditState = MutableStateFlow(initialPeerCredits.coerceIn(0, 65535))
     private val writeMutex = Mutex()
     private val readMutex = Mutex()
     private val incomingSdus = Channel<ByteArray>(Channel.UNLIMITED)
@@ -730,16 +852,48 @@ internal class HciBleL2capChannel(
     @Volatile
     private var closed = false
 
-    fun onPeerCreditsGranted(credits: Int) {
-        for (i in 0 until credits) {
-            peerCredits.release()
+    private suspend fun acquirePeerCredit() {
+        while (true) {
+            val cur = peerCreditState.first { it != 0 }
+            if (cur < 0 || closed) {
+                throw IOException("L2CAP channel is closed")
+            }
+            if (peerCreditState.compareAndSet(cur, cur - 1)) {
+                return
+            }
+        }
+    }
+
+    /**
+     * Grants [credits] from the peer. Returns `false` if credit count exceeds 65535 (requiring
+     * channel disconnection per Bluetooth Core Spec Vol 3 Part A Section 10.1).
+     */
+    fun onPeerCreditsGranted(credits: Int): Boolean {
+        if (credits <= 0) return true
+        while (true) {
+            val cur = peerCreditState.value
+            if (cur < 0 || closed) return true
+            if (cur + credits > 65535) {
+                Logger.w(TAG, "Peer L2CAP credit overflow ($cur + $credits > 65535); disconnecting channel")
+                disconnectAndClose()
+                return false
+            }
+            if (peerCreditState.compareAndSet(cur, cur + credits)) {
+                return true
+            }
         }
     }
 
     fun onKFrameReceived(kFrame: ByteArray) {
-        if (closed || kFrame.isEmpty()) return
+        if (closed) return
+        if (kFrame.size > BleHciConstants.L2CAP_DEFAULT_MPS) {
+            Logger.w(TAG, "Received K-frame (${kFrame.size} bytes) exceeding local MPS (${BleHciConstants.L2CAP_DEFAULT_MPS}); disconnecting")
+            disconnectAndClose()
+            return
+        }
         var completedSdu: ByteArray? = null
         var creditsToGrant = 0
+        var protocolViolation = false
 
         synchronized(sduReassemblyLock) {
             creditsConsumedSinceLastGrant += 1
@@ -750,26 +904,40 @@ internal class HciBleL2capChannel(
 
             if (expectedSduLen < 0) {
                 // First K-frame of SDU begins with 2-byte little-endian SDU length
-                if (kFrame.size < 2) return
-                val totalLen = u16le(kFrame, 0)
-                val dataLen = kFrame.size - 2
-                if (dataLen >= totalLen) {
-                    completedSdu = kFrame.copyOfRange(2, 2 + totalLen)
+                if (kFrame.size < 2) {
+                    protocolViolation = true
                 } else {
-                    expectedSduLen = totalLen
-                    sduBuffer = ByteArrayOutputStream(totalLen)
-                    sduBuffer.write(kFrame, 2, dataLen)
+                    val totalLen = u16le(kFrame, 0)
+                    val dataLen = kFrame.size - 2
+                    if (totalLen > BleHciConstants.L2CAP_DEFAULT_MTU || dataLen > totalLen) {
+                        protocolViolation = true
+                    } else if (dataLen == totalLen) {
+                        completedSdu = kFrame.copyOfRange(2, 2 + totalLen)
+                    } else {
+                        expectedSduLen = totalLen
+                        sduBuffer = ByteArrayOutputStream(totalLen)
+                        sduBuffer.write(kFrame, 2, dataLen)
+                    }
                 }
             } else {
                 val needed = expectedSduLen - sduBuffer.size()
-                val toCopy = min(needed, kFrame.size)
-                sduBuffer.write(kFrame, 0, toCopy)
-                if (sduBuffer.size() >= expectedSduLen) {
-                    completedSdu = sduBuffer.toByteArray()
-                    expectedSduLen = -1
-                    sduBuffer = ByteArrayOutputStream()
+                if (kFrame.size > needed) {
+                    protocolViolation = true
+                } else {
+                    sduBuffer.write(kFrame, 0, kFrame.size)
+                    if (sduBuffer.size() == expectedSduLen) {
+                        completedSdu = sduBuffer.toByteArray()
+                        expectedSduLen = -1
+                        sduBuffer = ByteArrayOutputStream()
+                    }
                 }
             }
+        }
+
+        if (protocolViolation) {
+            Logger.w(TAG, "Invalid L2CAP K-frame SDU framing; disconnecting channel")
+            disconnectAndClose()
+            return
         }
 
         if (creditsToGrant > 0) {
@@ -777,7 +945,7 @@ internal class HciBleL2capChannel(
                 try {
                     val sigPdu = ByteArray(8)
                     sigPdu[0] = BleHciConstants.L2CAP_FLOW_CONTROL_CREDIT_IND.toByte()
-                    sigPdu[1] = (nextSigIdentifier.getAndIncrement() and 0xFF).toByte()
+                    sigPdu[1] = nextNonZeroL2capIdentifier(nextSigIdentifier).toByte()
                     putU16le(sigPdu, 2, 4)
                     putU16le(sigPdu, 4, localCid)
                     putU16le(sigPdu, 6, creditsToGrant)
@@ -820,6 +988,7 @@ internal class HciBleL2capChannel(
         val mps = peerMps.coerceIn(23, 65533)
         var sduOffset = 0
         while (sduOffset < data.size) {
+            if (closed) throw IOException("L2CAP channel is closed")
             val sduLen = min(maxSduSize, data.size - sduOffset)
             // First K-frame has 2-byte SDU length prefix
             val sduWithHeader = ByteArray(2 + sduLen)
@@ -829,11 +998,12 @@ internal class HciBleL2capChannel(
 
             var kOffset = 0
             while (kOffset < sduWithHeader.size) {
+                if (closed) throw IOException("L2CAP channel is closed")
                 val kLen = min(mps, sduWithHeader.size - kOffset)
                 val kFrame = sduWithHeader.copyOfRange(kOffset, kOffset + kLen)
                 kOffset += kLen
 
-                peerCredits.acquire()
+                acquirePeerCredit()
                 engine.sendL2capPdu(connectionHandle, peerCid, kFrame)
             }
         }
@@ -841,12 +1011,37 @@ internal class HciBleL2capChannel(
 
     fun onPeerDisconnected() {
         closed = true
+        peerCreditState.value = -1
         incomingSdus.close()
+    }
+
+    /**
+     * Sends a best-effort `L2CAP_DISCONN_REQ` (`0x06`) to the peer while the ACL link remains up
+     * and closes the channel locally.
+     */
+    fun disconnectAndClose() {
+        if (closed) return
+        closed = true
+        peerCreditState.value = -1
+        incomingSdus.close()
+        engine.scope.launch {
+            try {
+                val req = ByteArray(8)
+                req[0] = BleHciConstants.L2CAP_DISCONN_REQ.toByte()
+                req[1] = nextNonZeroL2capIdentifier(nextSigIdentifier).toByte()
+                putU16le(req, 2, 4)
+                putU16le(req, 4, peerCid)
+                putU16le(req, 6, localCid)
+                engine.sendL2capPdu(connectionHandle, BleHciConstants.L2CAP_CID_LE_SIGNALING, req)
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     override fun close() {
         if (closed) return
         closed = true
+        peerCreditState.value = -1
         incomingSdus.close()
     }
 }
