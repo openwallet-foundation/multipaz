@@ -18,6 +18,16 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicInteger
 
+internal interface CcidDriverOps {
+    val maxCommandLength: Int
+    fun connect()
+    fun disconnect()
+    fun setListener(listener: CcidDriverListener?)
+    fun getCardStatus(): CardStatus
+    suspend fun powerCycleCard(fieldOffDelay: Duration = 80.milliseconds): Boolean
+    fun transceive(commandApdu: ByteArray): ByteArray
+}
+
 /**
  * A driver for USB CCID (Chip Card Interface Device) smart card readers.
  * This class handles the communication with a CCID-compliant smart card reader,
@@ -35,7 +45,7 @@ internal class CcidDriver(
     private val device: UsbDevice,
     private val interfaceIndex: Int,
     private val pollingFrameData: ByteArray? = null,
-) {
+) : CcidDriverOps {
     private var connection: UsbDeviceConnection? = null
     private var usbInterface: UsbInterface? = null
     private var bulkInEndpoint: UsbEndpoint? = null
@@ -64,7 +74,7 @@ internal class CcidDriver(
      * @throws IOException if the connection to the device fails or interface cannot be claimed.
      * @throws SecurityException if permission to access the device is denied.
      */
-    fun connect() {
+    override fun connect() {
         if (!usbManager.hasPermission(device)) {
             throw SecurityException("Permission denied for device ${device.deviceName}")
         }
@@ -251,7 +261,7 @@ internal class CcidDriver(
      * @param fieldOffDelay the duration to keep the slot powered off before re-powering.
      * @return `true` if the card slot was successfully re-powered with a valid ATR, `false` otherwise.
      */
-    suspend fun powerCycleCard(fieldOffDelay: Duration = 80.milliseconds): Boolean {
+    override suspend fun powerCycleCard(fieldOffDelay: Duration): Boolean {
         if (!isConnected) return false
         return try {
             val powerOffCommand = powerOff()
@@ -286,7 +296,7 @@ internal class CcidDriver(
      * application is finished with the device. It releases all resources and closes
      * the connection.
      */
-    fun disconnect() {
+    override fun disconnect() {
         val wasConnected = isConnected
         val wasHardwarePolling = isHardwarePollingConfigured
         val wasTwoBytePollingType = usesTwoBytePollingTypeCommand
@@ -340,7 +350,7 @@ internal class CcidDriver(
      *
      * @param listener The listener to be notified of card events, or null to remove the current listener.
      */
-    fun setListener(listener: CcidDriverListener?) {
+    override fun setListener(listener: CcidDriverListener?) {
         this.listener = listener
     }
 
@@ -350,7 +360,7 @@ internal class CcidDriver(
      * @return A [CardStatus] enum indicating if a card is present and its state.
      * @throws IOException if there is a communication error.
      */
-    fun getCardStatus(): CardStatus {
+    override fun getCardStatus(): CardStatus {
         if (!isConnected) throw IOException("Driver is not connected.")
 
         val command = createGetSlotStatusCommand()
@@ -382,7 +392,7 @@ internal class CcidDriver(
      * @throws CcidException if the card returns an error.
      */
     @Throws(IOException::class)
-    fun transceive(commandApdu: ByteArray): ByteArray {
+    override fun transceive(commandApdu: ByteArray): ByteArray {
         if (!isConnected) throw IOException("Driver is not connected.")
 
         if (!isCardPoweredOn) {
@@ -567,7 +577,7 @@ internal class CcidDriver(
         return 255
     }
 
-    val maxCommandLength: Int
+    override val maxCommandLength: Int
         get() {
             cachedMaxCommandLength?.let { return it }
             if (supportsCcidChaining) {
