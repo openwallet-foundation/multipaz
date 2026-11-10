@@ -140,16 +140,39 @@ internal actual fun ExternalNfcReaderUsb.observeUsbState(): Flow<ExternalNfcRead
     }
 }
 
+private data class UsbReaderKey(
+    val vendorId: Int,
+    val productId: Int,
+    val interfaceIndex: Int,
+)
+
+private val usbReadersLock = Any()
+private val usbReaders = mutableMapOf<UsbReaderKey, NfcTagReaderUsb>()
+
 internal actual suspend fun ExternalNfcReaderUsb.getUsbNfcTagReader(): NfcTagReader {
     val usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
     val deviceList = usbManager.deviceList
     val device = deviceList.values.firstOrNull { it.vendorId == vendorId && it.productId == productId }
-    if (device == null) {
-        throw IllegalStateException("Device is not connected")
+        ?: throw IllegalStateException("Device is not connected")
+    val key = UsbReaderKey(vendorId, productId, interfaceIndex)
+    var staleReader: NfcTagReaderUsb? = null
+    val reader = synchronized(usbReadersLock) {
+        val existing = usbReaders[key]
+        if (existing != null &&
+            existing.device?.deviceId == device.deviceId &&
+            existing.device.deviceName == device.deviceName &&
+            existing.interfaceIndex == interfaceIndex
+        ) {
+            existing
+        } else {
+            staleReader = existing
+            NfcTagReaderUsb(
+                manager = usbManager,
+                device = device,
+                interfaceIndex = interfaceIndex
+            ).also { usbReaders[key] = it }
+        }
     }
-    return NfcTagReaderUsb(
-        manager = usbManager,
-        device = device,
-        interfaceIndex = interfaceIndex
-    )
+    staleReader?.close()
+    return reader
 }

@@ -74,6 +74,15 @@ interface NfcTagReader {
         context: CoroutineContext = Dispatchers.Default
     ): T
 
+    /**
+     * Suspends until the tag from the most recent [scan] call is no longer in the reader's RF field.
+     *
+     * Note that this only works after at least one tag has been scanned via [scan]; if no tag has
+     * been scanned yet (or if the platform always shows a system dialog that turns off the RF field
+     * upon completion, such as iOS), this returns immediately.
+     */
+    suspend fun waitUntilRemoved() {}
+
     companion object {
         /**
          * Gets the default/built-in readers on the platform, if any.
