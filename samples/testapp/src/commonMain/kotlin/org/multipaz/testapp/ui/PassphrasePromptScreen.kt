@@ -1,8 +1,8 @@
 package org.multipaz.testapp.ui
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -62,7 +62,7 @@ fun PassphrasePromptScreen(
             })
     }
     
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item {

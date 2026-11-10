@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -36,6 +35,7 @@ import org.multipaz.testapp.TestAppPlatform
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.decodeImage
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import org.multipaz.document.Document
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.ui.customtheme.AppThemeLimeGreen
@@ -51,7 +51,7 @@ fun SettingsScreen(
     val nfcAvailable = (TestAppConfiguration.platform == TestAppPlatform.ANDROID)
     val negotiatedHandoverOrder = app.settingsModel.presentmentNegotiatedHandoverPreferredOrder.collectAsState().value
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item { SettingHeadline("Cryptography Library Settings") }

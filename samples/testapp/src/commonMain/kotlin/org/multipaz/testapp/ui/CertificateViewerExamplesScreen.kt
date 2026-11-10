@@ -1,9 +1,8 @@
 package org.multipaz.testapp.ui
 
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,10 +19,8 @@ fun CertificateViewerExamplesScreen(
     onViewCertificate: (encodedCertificateData: String) -> Unit
 ) {
     val samplesData = getCertificateExamplesList()
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
+    LazyColumnWithScrollbar(
+        modifier = Modifier.padding(8.dp)
     ) {
         items(samplesData.keys.toList()) { title ->
             TextButton(

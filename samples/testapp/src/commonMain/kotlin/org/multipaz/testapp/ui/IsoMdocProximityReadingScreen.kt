@@ -3,17 +3,17 @@ package org.multipaz.testapp.ui
 import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.verticalScroll
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -568,7 +568,7 @@ fun IsoMdocProximityReadingScreen(
                 }
             }
         } else {
-            LazyColumn(
+            LazyColumnWithScrollbar(
                 modifier = Modifier.padding(8.dp)
             ) {
                 item {
@@ -1136,11 +1136,8 @@ private fun ShowReaderResults(
             fontWeight = FontWeight.Bold,
         )
     } else {
-        val scrollState = rememberScrollState()
-        Column(
-            modifier = Modifier
-                .fillMaxWidth().padding(8.dp)
-                .verticalScroll(scrollState)
+        ColumnWithScrollbar(
+            contentPadding = PaddingValues(8.dp),
         ) {
             ShowResponse(
                 vpToken = null,

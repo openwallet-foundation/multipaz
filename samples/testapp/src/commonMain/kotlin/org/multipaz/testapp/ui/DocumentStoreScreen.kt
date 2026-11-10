@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -64,6 +63,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.cbor.Cbor
 import org.multipaz.compose.pickers.rememberFilePicker
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import org.multipaz.mpzpass.MpzPass
 import org.multipaz.securearea.software.SoftwareUserAuthType
 import org.multipaz.testapp.TestAppConfiguration
@@ -274,7 +274,7 @@ fun DocumentStoreScreen(
     }
 
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {

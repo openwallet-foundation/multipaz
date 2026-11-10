@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -19,6 +18,7 @@ import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.compose.document.DocumentModel
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.DigitalCredentialsAuthorizationState
 import org.multipaz.testapp.TestAppConfiguration
@@ -120,7 +120,9 @@ fun StartScreen(
                     }
                 }
             }
-            LazyColumn {
+            LazyColumnWithScrollbar(
+                modifier = Modifier.weight(1f)
+            ) {
                 item {
                     TextButton(onClick = onClickAbout) {
                         Text("About")

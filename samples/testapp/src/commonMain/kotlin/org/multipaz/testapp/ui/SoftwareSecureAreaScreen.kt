@@ -2,7 +2,6 @@ package org.multipaz.testapp.ui
 
 import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -10,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
@@ -40,7 +40,7 @@ fun SoftwareSecureAreaScreen(
 ) {
     val coroutineScope = rememberCoroutineScope { promptModel }
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item {

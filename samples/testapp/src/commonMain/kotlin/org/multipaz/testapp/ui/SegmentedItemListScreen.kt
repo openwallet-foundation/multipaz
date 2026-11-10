@@ -5,8 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -34,7 +34,7 @@ fun SegmentedItemListScreen(
     showToast: (message: String) -> Unit,
     onNavigateToLazySegmentedItemList: () -> Unit = {},
 ) {
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {

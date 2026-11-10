@@ -3,9 +3,9 @@ package org.multipaz.testapp.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -29,6 +29,7 @@ import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.compose.presentment.MdocProximityQrPresentment
 import org.multipaz.compose.presentment.MdocProximityQrSettings
 import org.multipaz.compose.qrcode.generateQrCode
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
@@ -68,8 +69,9 @@ fun IsoMdocProximitySharingScreen(
         )
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(5.dp),
+    ColumnWithScrollbar(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(5.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
