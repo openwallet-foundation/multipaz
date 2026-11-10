@@ -161,12 +161,12 @@ internal class BleTransportCentralMdocReader(
                     currentJob = coroutineContext[Job]
                     advertising
                 }
+                peripheralManager.setESenderKey(eSenderKey)
                 if (!wasAdvertising) {
                     // Start advertising if we aren't already...
                     peripheralManager.waitForPowerOn()
                     peripheralManager.advertiseService(uuid)
                 }
-                peripheralManager.setESenderKey(eSenderKey)
                 timeConnectingStarted = Clock.System.now()
                 // Note: It's not really possible to know someone is connecting to use until they're _actually_
                 // connected. I mean, for all we know, someone could be BLE scanning us. So not really possible

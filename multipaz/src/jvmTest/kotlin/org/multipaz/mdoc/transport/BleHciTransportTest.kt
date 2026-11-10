@@ -542,6 +542,7 @@ class BleHciTransportTest {
         val failCharacteristicReadAttempts: Int = 0,
         val failCccdWriteAttempts: Int = 0,
         val interceptMtuExchangeAtController: Boolean = false,
+        val injectPeripheralGapClientRequestsOnConnect: Boolean = false,
     )
 
     /**
@@ -574,6 +575,7 @@ class BleHciTransportTest {
         private var cccdWriteAttemptCount = 0
         @Volatile
         var l2capCreditIndCount = 0
+        val centralAttResponsesToPeripheralGapClient = mutableListOf<ByteArray>()
 
         inner class Endpoint(val name: String) : HciPacketIo {
             lateinit var peer: Endpoint
@@ -902,6 +904,19 @@ class BleHciTransportTest {
                         val attOpcode = completedPdu[0].toInt() and 0xFF
                         when (attOpcode) {
                             BleHciConstants.ATT_OP_EXCHANGE_MTU_REQ -> {
+                                if (faultConfig.injectPeripheralGapClientRequestsOnConnect) {
+                                    // Simulate AOSP peripheral GAP client sending ATT_READ_BY_TYPE_REQ
+                                    // (0x08) for GAP Device Name (0x2A00) and ATT_EXCHANGE_MTU_REQ (0x02)
+                                    // while Central's ATT_EXCHANGE_MTU_REQ is in flight.
+                                    deliverSynthesizedL2capPduToSelf(
+                                        BleHciConstants.L2CAP_CID_ATT,
+                                        byteArrayOf(0x08, 0x01, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x00, 0x2A)
+                                    )
+                                    deliverSynthesizedL2capPduToSelf(
+                                        BleHciConstants.L2CAP_CID_ATT,
+                                        byteArrayOf(0x02, 0x05, 0x02)
+                                    )
+                                }
                                 if (faultConfig.interceptMtuExchangeAtController) {
                                     pendingAclFragments.clear()
                                     val mtuRsp = byteArrayOf(
@@ -927,6 +942,15 @@ class BleHciTransportTest {
                                 }
                             }
                             BleHciConstants.ATT_OP_FIND_BY_TYPE_VALUE_REQ -> {
+                                if (faultConfig.injectPeripheralGapClientRequestsOnConnect) {
+                                    // Simulate AOSP peripheral GAP client sending ATT_READ_BY_TYPE_REQ
+                                    // (0x08) for GAP Appearance (0x2A01) while Central's
+                                    // ATT_FIND_BY_TYPE_VALUE_REQ (0x06) is in flight.
+                                    deliverSynthesizedL2capPduToSelf(
+                                        BleHciConstants.L2CAP_CID_ATT,
+                                        byteArrayOf(0x08, 0x01, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x01, 0x2A)
+                                    )
+                                }
                                 if (midHandshakeDisconnectCount < faultConfig.disconnectMidHandshakeAttempts) {
                                     midHandshakeDisconnectCount++
                                     pendingAclFragments.clear()
@@ -1003,6 +1027,17 @@ class BleHciTransportTest {
                                     return
                                 }
                             }
+                            BleHciConstants.ATT_OP_EXCHANGE_MTU_RSP,
+                            BleHciConstants.ATT_OP_READ_BY_TYPE_RSP,
+                            BleHciConstants.ATT_OP_ERROR_RSP -> {
+                                if (faultConfig.injectPeripheralGapClientRequestsOnConnect) {
+                                    synchronized(centralAttResponsesToPeripheralGapClient) {
+                                        centralAttResponsesToPeripheralGapClient.add(completedPdu)
+                                    }
+                                    pendingAclFragments.clear()
+                                    return
+                                }
+                            }
                         }
                     } else if (completedCid == BleHciConstants.L2CAP_CID_LE_SIGNALING &&
                         completedPdu.size >= 4
@@ -1057,10 +1092,15 @@ class BleHciTransportTest {
 
     private fun createCentralManager(
         io: HciPacketIo,
-        randomAddress: ByteArray? = null
+        randomAddress: ByteArray? = null,
+        gapDeviceName: String = "Multipaz"
     ): BleCentralManager =
         BleCentralManagerImpl(
-            hal = BleCentralHalHci(randomAddress = randomAddress, packetIoFactory = { io }),
+            hal = BleCentralHalHci(
+                gapDeviceName = gapDeviceName,
+                randomAddress = randomAddress,
+                packetIoFactory = { io }
+            ),
             scanRestartTimeout = 20.milliseconds,
             postScanDelay = 1.milliseconds,
             connectRetryDelay = 10.milliseconds,
@@ -3467,6 +3507,98 @@ class BleHciTransportTest {
             } finally {
                 LinuxHciSocketPacketIo.closeFdForTesting(clientFd)
                 LinuxHciSocketPacketIo.closeFdForTesting(controllerSideFd)
+            }
+        }
+    }
+
+    /**
+     * Verifies [BleCentralHalHci]'s workaround for AOSP peripherals (such as Pixel 8 Pro) whose
+     * GAP client sends `ATT_READ_BY_TYPE_REQ` (`0x08`) for `0x2A00` (GAP Device Name) and
+     * `0x2A01` (GAP Appearance) as well as `ATT_EXCHANGE_MTU_REQ` (`0x02`) on `CID 0x0004`
+     * while the Central's own `ATT_EXCHANGE_MTU_REQ` (`0x02`) and `ATT_FIND_BY_TYPE_VALUE_REQ`
+     * (`0x06`) are in flight:
+     * - [BleCentralHalHci] replies with valid GAP Device Name (`"Multipaz"` at handle `0x0003`),
+     *   GAP Appearance (`0x0000` at handle `0x0005`), and `ATT_EXCHANGE_MTU_RSP` (`0x03`).
+     * - In-flight Central ATT requests (`requestMtu`, `discoverServices`) are not completed with
+     *   mismatched peripheral PDUs (`bleNumMtuExchangeRetries == 0`, `bleNumServiceDiscoveryRetries == 0`).
+     */
+    @Test
+    fun aospPeripheralGapClientRequestsDuringCentralGattSetup() = runTest {
+        withContext(Dispatchers.Default) {
+            for (expectedDeviceName in listOf(null, "CustomReader")) {
+                val bus = VirtualHciBus(
+                    faultConfig = FaultConfig(injectPeripheralGapClientRequestsOnConnect = true)
+                )
+                val serviceUuid = UUID.randomUUID()
+                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+
+                val centralManager = if (expectedDeviceName == null) {
+                    createCentralManager(bus.centralIo)
+                } else {
+                    createCentralManager(bus.centralIo, gapDeviceName = expectedDeviceName)
+                }
+                val peripheralManager = createPeripheralManager(bus.peripheralIo)
+
+                val mdoc = BleTransportCentralMdoc(
+                    role = MdocRole.MDOC,
+                    options = MdocTransportOptions(bleUseL2CAP = true),
+                    centralManager = centralManager,
+                    uuid = serviceUuid,
+                    psm = null
+                )
+                val reader = BleTransportCentralMdocReader(
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(bleUseL2CAP = true),
+                    peripheralManager = peripheralManager,
+                    uuid = serviceUuid
+                )
+
+                try {
+                    reader.advertise()
+                    coroutineScope {
+                        val readerOpen = async { reader.open(eSenderKey) }
+                        val mdocOpen = async { mdoc.open(eSenderKey) }
+                        readerOpen.await()
+                        mdocOpen.await()
+                    }
+
+                    val payload = "pixel8-gap-client-race-test".encodeToByteArray()
+                    coroutineScope {
+                        val recvJob = async { reader.waitForMessage() }
+                        mdoc.sendMessage(payload)
+                        assertContentEquals(payload, recvJob.await())
+                    }
+
+                    val stats = mdoc.stats
+                    assertNotNull(stats)
+                    assertEquals(0, stats.bleNumMtuRequestRetries)
+                    assertEquals(0, stats.bleNumServiceDiscoveryRetries)
+
+                    val gapResponses = synchronized(bus.centralAttResponsesToPeripheralGapClient) {
+                        bus.centralAttResponsesToPeripheralGapClient.map { it.toHex() }
+                    }
+                    val resolvedName = expectedDeviceName ?: "Multipaz"
+                    val nameBytes = resolvedName.encodeToByteArray()
+                    val expectedNameRsp = ByteArray(4 + nameBytes.size).also {
+                        it[0] = BleHciConstants.ATT_OP_READ_BY_TYPE_RSP.toByte()
+                        it[1] = (2 + nameBytes.size).toByte()
+                        putU16le(it, 2, 0x0003)
+                        nameBytes.copyInto(it, destinationOffset = 4)
+                    }.toHex()
+                    assertTrue(
+                        gapResponses.contains(expectedNameRsp),
+                        "Expected GAP Device Name response ($resolvedName -> $expectedNameRsp) in $gapResponses"
+                    )
+                    // 090405000000 = ATT_READ_BY_TYPE_RSP (handle=0x0005, Appearance=0x0000)
+                    assertTrue(gapResponses.contains("090405000000"), "Expected GAP Appearance response in $gapResponses")
+                    // 030302 = ATT_EXCHANGE_MTU_RSP (mtu=515)
+                    assertTrue(gapResponses.contains("030302"), "Expected ATT_EXCHANGE_MTU_RSP in $gapResponses")
+                } finally {
+                    mdoc.close()
+                    reader.close()
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
             }
         }
     }

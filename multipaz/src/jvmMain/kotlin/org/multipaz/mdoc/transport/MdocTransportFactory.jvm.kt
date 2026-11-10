@@ -17,11 +17,15 @@ import org.multipaz.mdoc.role.MdocRole
  * See [LinuxHciSocketPacketIo] for detailed setup instructions and a privileged launcher example.
  */
 internal fun createBleCentralManagerJvm(
+    gapDeviceName: String = "Multipaz",
     packetIoFactory: suspend () -> HciPacketIo = {
         LinuxHciSocketPacketIo().also { it.open() }
     }
 ): BleCentralManager = BleCentralManagerImpl(
-    hal = BleCentralHalHci(packetIoFactory = packetIoFactory),
+    hal = BleCentralHalHci(
+        gapDeviceName = gapDeviceName,
+        packetIoFactory = packetIoFactory
+    ),
     requireL2capPeripheralConnectedFirst = true
 )
 

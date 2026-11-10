@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeout
 import org.multipaz.crypto.Crypto
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
+import org.multipaz.util.toHex
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
@@ -46,6 +47,8 @@ internal object BleHciConstants {
     const val HCI_OP_LE_SET_SCAN_ENABLE = 0x200C
     const val HCI_OP_LE_CREATE_CONNECTION = 0x200D
     const val HCI_OP_LE_CREATE_CONNECTION_CANCEL = 0x200E
+    const val HCI_OP_LE_LTK_REQ_NEG_REPLY = 0x201B
+    const val HCI_OP_LE_REMOTE_CONN_PARAM_REQ_REPLY = 0x2020
 
     // HCI Event Codes
     const val HCI_EV_DISCONN_COMPLETE = 0x05
@@ -57,6 +60,11 @@ internal object BleHciConstants {
     // HCI LE Meta Subevent Codes
     const val HCI_EV_LE_CONN_COMPLETE = 0x01
     const val HCI_EV_LE_ADVERTISING_REPORT = 0x02
+    const val HCI_EV_LE_CONN_UPDATE_COMPLETE = 0x03
+    const val HCI_EV_LE_READ_REMOTE_FEATURES_COMPLETE = 0x04
+    const val HCI_EV_LE_LTK_REQ = 0x05
+    const val HCI_EV_LE_REMOTE_CONN_PARAM_REQ = 0x06
+    const val HCI_EV_LE_DATA_LEN_CHANGE = 0x07
     const val HCI_EV_LE_ENHANCED_CONN_COMPLETE = 0x0A
     const val HCI_EV_LE_EXT_ADVERTISING_REPORT = 0x0D
 
@@ -94,14 +102,25 @@ internal object BleHciConstants {
     const val ATT_OP_READ_BY_TYPE_RSP = 0x09
     const val ATT_OP_READ_REQ = 0x0A
     const val ATT_OP_READ_RSP = 0x0B
+    const val ATT_OP_READ_BLOB_REQ = 0x0C
+    const val ATT_OP_READ_BLOB_RSP = 0x0D
+    const val ATT_OP_READ_MULTI_REQ = 0x0E
+    const val ATT_OP_READ_MULTI_RSP = 0x0F
     const val ATT_OP_READ_BY_GROUP_TYPE_REQ = 0x10
     const val ATT_OP_READ_BY_GROUP_TYPE_RSP = 0x11
     const val ATT_OP_WRITE_REQ = 0x12
     const val ATT_OP_WRITE_RSP = 0x13
+    const val ATT_OP_PREPARE_WRITE_REQ = 0x16
+    const val ATT_OP_PREPARE_WRITE_RSP = 0x17
+    const val ATT_OP_EXECUTE_WRITE_REQ = 0x18
+    const val ATT_OP_EXECUTE_WRITE_RSP = 0x19
     const val ATT_OP_HANDLE_VALUE_NTF = 0x1B
     const val ATT_OP_HANDLE_VALUE_IND = 0x1D
     const val ATT_OP_HANDLE_VALUE_CFM = 0x1E
+    const val ATT_OP_READ_MULTI_VAR_REQ = 0x20
+    const val ATT_OP_READ_MULTI_VAR_RSP = 0x21
     const val ATT_OP_WRITE_CMD = 0x52
+    const val ATT_OP_SIGNED_WRITE_CMD = 0xD2
 
     // ATT Error Codes
     const val ATT_ERR_INVALID_HANDLE = 0x01
@@ -283,7 +302,7 @@ internal class BleHciEngine(
         val maskRsp = sendCommand(BleHciConstants.HCI_OP_SET_EVENT_MASK, eventMask)
         checkCommandStatus("HCI_Set_Event_Mask", maskRsp)
 
-        // 3. HCI_LE_Set_Event_Mask (enable Connection Complete, Adv Report, Enhanced Conn Complete, Ext Adv Report)
+        // 3. HCI_LE_Set_Event_Mask (enable Connection Complete, Adv Report, Remote Conn Param Req, Enhanced Conn Complete, Ext Adv Report)
         val leEventMask = byteArrayOf(
             0xFF.toByte(),
             0x1F.toByte(),
@@ -516,6 +535,38 @@ internal class BleHciEngine(
                     }
                 }
             }
+            BleHciConstants.HCI_EV_LE_REMOTE_CONN_PARAM_REQ -> {
+                // [0]=subevent(0x06), [1..2]=handle, [3..4]=intervalMin, [5..6]=intervalMax, [7..8]=latency, [9..10]=timeout
+                if (params.size >= 11) {
+                    val handle = u16le(params, 1) and 0x0FFF
+                    val replyParams = ByteArray(14)
+                    putU16le(replyParams, 0, handle)
+                    params.copyInto(replyParams, destinationOffset = 2, startIndex = 3, endIndex = 11)
+                    putU16le(replyParams, 10, 0x0000) // minCeLength
+                    putU16le(replyParams, 12, 0x0000) // maxCeLength
+                    scope.launch {
+                        try {
+                            sendCommand(BleHciConstants.HCI_OP_LE_REMOTE_CONN_PARAM_REQ_REPLY, replyParams)
+                        } catch (t: Throwable) {
+                            Logger.d(TAG, "HCI_LE_Remote_Connection_Parameter_Request_Reply failed", t)
+                        }
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_LTK_REQ -> {
+                if (params.size >= 3) {
+                    val handle = u16le(params, 1) and 0x0FFF
+                    val replyParams = ByteArray(2)
+                    putU16le(replyParams, 0, handle)
+                    scope.launch {
+                        try {
+                            sendCommand(BleHciConstants.HCI_OP_LE_LTK_REQ_NEG_REPLY, replyParams)
+                        } catch (t: Throwable) {
+                            Logger.d(TAG, "HCI_LE_Long_Term_Key_Request_Negative_Reply failed", t)
+                        }
+                    }
+                }
+            }
             BleHciConstants.HCI_EV_LE_ADVERTISING_REPORT -> {
                 // [0]=subevent(0x02), [1]=numReports
                 if (params.size < 2) return
@@ -616,6 +667,20 @@ internal class BleHciEngine(
             when (cid) {
                 BleHciConstants.L2CAP_CID_ATT -> onAttPdu(handle, pdu)
                 BleHciConstants.L2CAP_CID_LE_SIGNALING -> onL2capSignalingPdu(handle, pdu)
+                BleHciConstants.L2CAP_CID_SMP -> {
+                    if (pdu.isNotEmpty()) {
+                        val smpCode = pdu[0].toInt() and 0xFF
+                        // 0x01 = Pairing Request, 0x0B = Security Request -> reply with 0x05 Pairing Failed (0x05 = Pairing Not Supported)
+                        if (smpCode == 0x01 || smpCode == 0x0B) {
+                            scope.launch {
+                                try {
+                                    sendL2capPdu(handle, BleHciConstants.L2CAP_CID_SMP, byteArrayOf(0x05, 0x05))
+                                } catch (_: Throwable) {
+                                }
+                            }
+                        }
+                    }
+                }
                 else -> if (cid >= BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT) {
                     onL2capCoCPdu(handle, cid, pdu)
                 }
