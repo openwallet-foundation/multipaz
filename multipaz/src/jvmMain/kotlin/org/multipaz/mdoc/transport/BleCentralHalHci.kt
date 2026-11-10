@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -28,19 +29,46 @@ import kotlin.time.Duration.Companion.seconds
  * @param gapDeviceName the GAP Device Name (`0x2A00`) reported if the connected peripheral queries
  *   the central's GAP server on `CID 0x0004` (defaults to `"Multipaz"`).
  * @param randomAddress optional 6-byte static random LE address, or `null` to generate one randomly.
+ * @param scanInterval the LE scan interval (`2.5 ms` to `10.24 s`, defaults to `60.milliseconds`).
+ * @param scanWindow the LE scan window (`2.5 ms` to `10.24 s`, must be `<= scanInterval`, defaults to
+ *   `30.milliseconds`).
+ * @param connectTimeout per-attempt timeout for `HCI_LE_Create_Connection` before cancelling and
+ *   retrying (defaults to `3.seconds`).
  * @param packetIoFactory factory that opens the [HciPacketIo] transport for each BLE session.
  */
 internal class BleCentralHalHci(
     private val gapDeviceName: String = "Multipaz",
     private val randomAddress: ByteArray? = null,
+    private val scanInterval: Duration = 60.milliseconds,
+    private val scanWindow: Duration = 30.milliseconds,
+    private val connectTimeout: Duration = 3.seconds,
     private val packetIoFactory: suspend () -> HciPacketIo = {
         LinuxHciSocketPacketIo().also { it.open() }
     }
 ) : BleCentralHal {
+    private val scanIntervalUnits: Int = durationToHciScanUnits("scanInterval", scanInterval)
+    private val scanWindowUnits: Int = durationToHciScanUnits("scanWindow", scanWindow)
+
+    init {
+        require(scanWindowUnits <= scanIntervalUnits) {
+            "scanWindow ($scanWindow) must be <= scanInterval ($scanInterval)"
+        }
+    }
+
     companion object {
         private const val TAG = "BleCentralHalHci"
         private const val DEFAULT_CENTRAL_MTU = 515
         private const val L2CAP_DYNAMIC_CID_MAX = 0x007F
+        private const val HCI_SCAN_UNITS_MIN = 0x0004 // 2.5 ms
+        private const val HCI_SCAN_UNITS_MAX = 0x4000 // 10.24 s
+
+        private fun durationToHciScanUnits(name: String, duration: Duration): Int {
+            val units = (duration.inWholeMicroseconds / 625L).toInt()
+            require(units in HCI_SCAN_UNITS_MIN..HCI_SCAN_UNITS_MAX) {
+                "$name ($duration) out of valid BLE HCI range (2.5ms..10.24s)"
+            }
+            return units
+        }
     }
 
     private class DisconnectedAbortException(message: String) : IOException(message)
@@ -185,16 +213,13 @@ internal class BleCentralHalHci(
                 // Disable any previous scan first (ignore status in case scanning wasn't enabled)
                 hci.sendCommand(BleHciConstants.HCI_OP_LE_SET_SCAN_ENABLE, byteArrayOf(0x00, 0x00))
 
-                // Active scan, interval = 0x0030 (30 ms), window = 0x0030 (30 ms), ownAddr = Random (0x01), filter = 0x00
-                val scanParams = byteArrayOf(
-                    0x01,
-                    0x30,
-                    0x00,
-                    0x30,
-                    0x00,
-                    0x01,
-                    0x00
-                )
+                // Active scan, interval = scanIntervalUnits, window = scanWindowUnits, ownAddr = Random (0x01), filter = 0x00
+                val scanParams = ByteArray(7)
+                scanParams[0] = 0x01
+                putU16le(scanParams, 1, scanIntervalUnits)
+                putU16le(scanParams, 3, scanWindowUnits)
+                scanParams[5] = 0x01
+                scanParams[6] = 0x00
                 val paramRsp = hci.sendCommand(BleHciConstants.HCI_OP_LE_SET_SCAN_PARAMETERS, scanParams)
                 hci.checkCommandStatus("HCI_LE_Set_Scan_Parameters", paramRsp)
 
@@ -248,8 +273,8 @@ internal class BleCentralHalHci(
             try {
                 // HCI_LE_Create_Connection (25 bytes)
                 val params = ByteArray(25)
-                putU16le(params, 0, 0x0060) // scanInterval
-                putU16le(params, 2, 0x0030) // scanWindow
+                putU16le(params, 0, scanIntervalUnits) // scanInterval
+                putU16le(params, 2, scanWindowUnits) // scanWindow
                 params[4] = 0x00 // initiatorFilterPolicy = peer address
                 params[5] = (discoveredPeerAddrType and 0xFF).toByte()
                 peerAddr.copyInto(params, destinationOffset = 6, startIndex = 0, endIndex = 6)
@@ -264,7 +289,7 @@ internal class BleCentralHalHci(
                 val statusRsp = hci.sendCommand(BleHciConstants.HCI_OP_LE_CREATE_CONNECTION, params)
                 hci.checkCommandStatus("HCI_LE_Create_Connection", statusRsp)
 
-                val handle = withTimeout(10.seconds) {
+                val handle = withTimeout(connectTimeout) {
                     deferred.await()
                 }
                 val deliverConnected = synchronized(pendingConnectLock) {
@@ -879,7 +904,7 @@ internal class BleCentralHalHci(
                     if (uuid != null) {
                         callback.onCharacteristicChanged(uuid, value)
                     } else {
-                        Logger.w(TAG, "Received indication for unknown attrHandle 0x${attrHandle.toString(16)}")
+                        Logger.d(TAG, "Received indication for unknown attrHandle 0x${attrHandle.toString(16)}")
                     }
                 }
             }

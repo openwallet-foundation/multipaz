@@ -88,7 +88,7 @@ class MultiDeviceTestsClient(
                 }
                 Logger.i(TAG, "Starting")
                 try {
-                    withTimeout(15.seconds) {
+                    withTimeout(45.seconds) {
                         val timeStart = Clock.System.now()
                         transport.open(eDeviceKey)
 

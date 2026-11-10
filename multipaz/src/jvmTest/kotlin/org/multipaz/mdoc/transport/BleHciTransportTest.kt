@@ -1726,7 +1726,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
             HCI-Cmd (Central): 010c20020100
@@ -1896,7 +1896,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
             HCI-Cmd (Central): 010c20020100
@@ -2079,7 +2079,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
             HCI-Cmd (Central): 010c20020100
@@ -2213,7 +2213,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
             HCI-Cmd (Central): 010c20020100
@@ -2225,7 +2225,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1) (scan restart #1).
             HCI-Cmd (Central): 010c20020100
@@ -2237,7 +2237,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1) (scan restart #2).
             HCI-Cmd (Central): 010c20020100
@@ -2439,7 +2439,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
             HCI-Cmd (Central): 010c20020100
@@ -2451,7 +2451,7 @@ class BleHciTransportTest {
             HCI-Cmd (Central): 010c20020000
 
             # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-            HCI-Cmd (Central): 010b200701300030000100
+            HCI-Cmd (Central): 010b200701600030000100
 
             # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1) (scan restart #1).
             HCI-Cmd (Central): 010c20020100
@@ -2945,7 +2945,7 @@ class BleHciTransportTest {
                 HCI-Cmd (Central): 010c20020000
 
                 # Central sends HCI_LE_Set_Scan_Parameters (0x200b).
-                HCI-Cmd (Central): 010b200701300030000100
+                HCI-Cmd (Central): 010b200701600030000100
 
                 # Central sends HCI_LE_Set_Scan_Enable (0x200c, enable=1).
                 HCI-Cmd (Central): 010c20020100
