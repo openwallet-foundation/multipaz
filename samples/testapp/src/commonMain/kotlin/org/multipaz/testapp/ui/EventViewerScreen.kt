@@ -4,7 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -219,13 +221,11 @@ fun EventViewerScreen(
         },
     ) { innerPadding ->
 
-        val scrollState = rememberScrollState()
-        Column(
+        ColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(innerPadding)
-                .padding(10.dp),
+                .padding(innerPadding),
+            contentPadding = PaddingValues(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             when (val currentEvents = events) {

@@ -2,10 +2,8 @@ package org.multipaz.testapp.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.claim.RenderClaimValue
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 
 @Composable
 fun CredentialClaimsViewerScreen(
@@ -31,12 +30,8 @@ fun CredentialClaimsViewerScreen(
     val documentInfo = documentInfos.find { it.document.identifier == documentId }
     val credentialInfo = documentInfo?.credentialInfos?.find { it.credential.identifier == credentialId  }
 
-    val scrollState = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(16.dp),
+    ColumnWithScrollbar(
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (credentialInfo == null) {

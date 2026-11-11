@@ -3,7 +3,6 @@ package org.multipaz.mdoc.devicesigned
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
-import org.multipaz.util.Logger
 
 /**
  * A data structure for representing `DeviceNameSpaces` in ISO/IEC 18013-5:2021.
@@ -40,7 +39,6 @@ data class DeviceNamespaces(
          * @return the parsed representation.
          */
         fun fromDataItem(nameSpaces: DataItem): DeviceNamespaces {
-            Logger.dCbor("TAG", "nameSpaces", nameSpaces)
             val ret = mutableMapOf<String, MutableMap<String, DataItem>>()
             for ((namespaceDataItemKey, namespaceDataItemValue) in nameSpaces.asMap) {
                 val namespaceName = namespaceDataItemKey.asTstr

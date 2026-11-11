@@ -88,15 +88,21 @@ object Logger {
         fun print(level: Level, tag: String, msg: String, throwable: Throwable?)
     }
 
+    private val debugEnabledByEnvironment = isDebugEnabledByEnvironment()
+
     /**
      * Whether to print debug messages or not.
+     *
+     * If the `MULTIPAZ_DEBUG` environment variable is set to a non-empty value other than `"0"` or
+     * `"false"`, this property always evaluates to `true`, overriding any value set programmatically.
      *
      * **Note**: turning on debug messages significantly increasing the amount of messages being
      * printed and these messages may include PII. Use with caution.
      *
      * Note that this is process-wide so library code should never touch this.
      */
-    var isDebugEnabled = false
+    var isDebugEnabled = debugEnabledByEnvironment
+        get() = debugEnabledByEnvironment || field
 
     /**
      * Optional [LogPrinter] property for overriding the default functionality with a custom
@@ -406,3 +412,12 @@ object Logger {
 
 // Low-level platform-specific printer
 internal expect fun getPlatformLogPrinter(): Logger.LogPrinter
+
+internal expect fun isDebugEnabledByEnvironment(): Boolean
+
+internal fun parseDebugEnvValue(raw: String?): Boolean {
+    val trimmed = raw?.trim()
+    if (trimmed.isNullOrEmpty()) return false
+    return !trimmed.equals("0", ignoreCase = true) &&
+        !trimmed.equals("false", ignoreCase = true)
+}

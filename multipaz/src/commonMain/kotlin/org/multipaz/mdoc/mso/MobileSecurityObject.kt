@@ -353,7 +353,7 @@ data class MobileSecurityObject(
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Logger.w(TAG, "Ignoring malformed status field in MSO", e)
-                    Logger.iCbor(TAG, "The malformed status field is", dataItem["status"])
+                    Logger.dCbor(TAG, "The malformed status field is", dataItem["status"])
                     null
                 }
             } else {

@@ -3,8 +3,8 @@ package org.multipaz.testapp.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -20,7 +20,7 @@ import org.multipaz.compose.items.segmentedItemList
 fun LazySegmentedItemListScreen(
     showToast: (message: String) -> Unit,
 ) {
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier
             .fillMaxSize()
             .padding(10.dp),

@@ -150,6 +150,7 @@ import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
 import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
+import org.multipaz.testapp.ui.NfcObserveModeScreen
 import org.multipaz.testapp.ui.NfcReaderScreen
 import org.multipaz.testapp.ui.NfcReadersScreen
 import org.multipaz.testapp.ui.NfcScreen
@@ -1293,6 +1294,7 @@ class App private constructor (val promptModel: PromptModel) {
                             },
                             onClickQrCodes = { navController.navigate(QrCodesDestination) },
                             onClickNfc = { navController.navigate(NfcDestination) },
+                            onClickNfcObserveMode = { navController.navigate(NfcObserveModeDestination) },
                             onClickIsoMdocProximitySharing = {
                                 navController.navigate(IsoMdocProximitySharingDestination)
                             },
@@ -1718,6 +1720,13 @@ class App private constructor (val promptModel: PromptModel) {
                         NfcScreen(
                             externalNfcReaderStore = externalNfcReaderStore,
                             promptModel = promptModel,
+                            showToast = { message -> showToast(message) }
+                        )
+                    }
+                }
+                composable<NfcObserveModeDestination> { backStackEntry ->
+                    WithAppBar(navController, "NFC Observe Mode") {
+                        NfcObserveModeScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }

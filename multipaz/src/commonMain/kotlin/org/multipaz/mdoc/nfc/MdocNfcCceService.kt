@@ -319,8 +319,8 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                         val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
                                         newDeviceRequest.verifyReaderAuthentication(sessionTranscript)
                                         if (!newDeviceRequest.isSameAuthenticatedReader(currentActiveRequest, settings.source)) {
-                                            Logger.iCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
-                                            Logger.iCbor(TAG, "New request", newDeviceRequest.toDataItem())
+                                            Logger.dCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
+                                            Logger.dCbor(TAG, "New request", newDeviceRequest.toDataItem())
                                             Logger.w(TAG, "Incoming DeviceRequest is NOT equivalent to active request. Killing old session.")
                                             transactionJob?.cancel()
                                             activeDeviceRequest = null

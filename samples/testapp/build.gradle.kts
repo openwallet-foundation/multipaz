@@ -34,10 +34,14 @@ buildConfig {
 }
 
 kotlin {
+    jvmToolchain(21)
+
     compilerOptions {
         optIn.add("kotlin.time.ExperimentalTime")
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
+
+    jvm()
 
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -139,6 +143,19 @@ kotlin {
                 implementation(libs.ktor.client.android)
                 implementation(libs.process.phoenix)
                 implementation(libs.accompanist.drawablepainter)
+            }
+        }
+
+        val jvmMain by getting {
+            dependencies {
+                implementation(project(":multipaz-bthci"))
+                implementation(project(":multipaz-nci"))
+                implementation(compose.desktop.currentOs)
+                implementation(libs.kotlinx.coroutines.swing)
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.ktor.client.java)
+                implementation(libs.jna)
+                implementation(libs.sqlite.jdbc)
             }
         }
 
@@ -269,9 +286,43 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().all {
     }
 }
 
+tasks["compileKotlinJvm"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
 if (!disableWebTargets) {
     tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
 }
+
+compose.desktop {
+    application {
+        mainClass = "org.multipaz.testapp.MainKt"
+    }
+}
+
+tasks.register("prepareJvmRun") {
+    dependsOn("jvmJar")
+    val jvmCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+    val runtimeClasspath = jvmCompilation.runtimeDependencyFiles
+    val jvmJarTask = tasks.named<org.gradle.jvm.tasks.Jar>("jvmJar")
+    val launcherProvider = javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+    val outDir = layout.buildDirectory.dir("jvm-run")
+    if (runtimeClasspath != null) {
+        inputs.files(runtimeClasspath)
+    }
+    inputs.files(jvmJarTask)
+    outputs.dir(outDir)
+    doLast {
+        val dir = outDir.get().asFile
+        dir.mkdirs()
+        val javaBin = launcherProvider.get().executablePath.asFile.absolutePath
+        dir.resolve("java-executable.txt").writeText(javaBin)
+        val cp = (listOf(jvmJarTask.get().archiveFile.get().asFile) + runtimeClasspath?.files.orEmpty())
+            .joinToString(File.pathSeparator) { it.absolutePath }
+        val escapedCp = cp.replace("\\", "\\\\").replace("\"", "\\\"")
+        dir.resolve("jvm.args").writeText("-cp \"$escapedCp\"\norg.multipaz.testapp.MainKt\n")
+    }
+}
+

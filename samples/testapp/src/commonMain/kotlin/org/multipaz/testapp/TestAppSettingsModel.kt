@@ -190,6 +190,13 @@ class TestAppSettingsModel private constructor(
         bind(observeModeEnabled, "observeModeEnabled", false)
         bind(observeModeEmitPollingFramesAsReader, "observeModeEmitPollingFramesAsReader", false)
 
+        bind(nciNfcEnabled, "nciNfcEnabled", false)
+        bind(nciI2cDevicePath, "nciI2cDevicePath", "/dev/i2c-1")
+        bind(nciI2cAddress, "nciI2cAddress", "0x28")
+        bind(nciGpioChipPath, "nciGpioChipPath", "/dev/gpiochip0")
+        bind(nciIrqGpioPin, "nciIrqGpioPin", "23")
+        bind(nciVenGpioPin, "nciVenGpioPin", "24")
+
         bind(currentlyFocusedDocumentId, "currentlyFocusedDocumentId", "")
 
         bind(signRequest, "signRequest", true)
@@ -241,6 +248,14 @@ class TestAppSettingsModel private constructor(
 
     val observeModeEnabled = MutableStateFlow<Boolean>(false)
     val observeModeEmitPollingFramesAsReader = MutableStateFlow<Boolean>(false)
+
+    val nciNfcEnabled = MutableStateFlow<Boolean>(false)
+    val nciI2cDevicePath = MutableStateFlow<String>("/dev/i2c-1")
+    val nciI2cAddress = MutableStateFlow<String>("0x28")
+    val nciGpioChipPath = MutableStateFlow<String>("/dev/gpiochip0")
+    val nciIrqGpioPin = MutableStateFlow<String>("23")
+    val nciVenGpioPin = MutableStateFlow<String>("24")
+
     val currentlyFocusedDocumentId = MutableStateFlow<String>("")
     val signRequest = MutableStateFlow<Boolean>(true)
 

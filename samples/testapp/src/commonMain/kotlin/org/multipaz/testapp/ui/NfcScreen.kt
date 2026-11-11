@@ -4,8 +4,8 @@ import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,7 +74,7 @@ internal data class NfcReaderExternal(
     }
 }
 
-internal class NfcReaderNoneAvailable: NfcReaderEntry("No NFC readers available") {
+internal data object NfcReaderNoneAvailable : NfcReaderEntry("No NFC readers available") {
     override suspend fun getNfcTagReader(): NfcTagReader {
         throw IllegalStateException("No NFC readers available")
     }
@@ -90,17 +91,18 @@ fun NfcScreen(
     val dismissableNfcJob = remember { mutableStateOf<Job?>(null) }
     var invisiblePromptMessage by remember { mutableStateOf<String?>(null) }
 
+    val configuredExternalReaders = externalNfcReaderStore.readers.collectAsState().value
     val readers = mutableListOf<NfcReaderEntry>()
-    NfcTagReader.getReaders().forEachIndexed { index, reader ->
+    NfcTagReader.getReaders().forEachIndexed { index, _ ->
         readers.add(NfcReaderInternal("Internal NFC Reader", index))
     }
-    externalNfcReaderStore.readers.value.forEach { externalReader ->
+    configuredExternalReaders.forEach { externalReader ->
         readers.add(NfcReaderExternal(externalReader.userDisplayName ?: externalReader.displayName, externalReader))
     }
     if (readers.isEmpty()) {
-        readers.add(NfcReaderNoneAvailable())
+        readers.add(NfcReaderNoneAvailable)
     }
-    val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
+    val readerSelected = remember(readers) { mutableStateOf<NfcReaderEntry>(
         if (lastNfcReaderSelected < readers.size) {
             readers[lastNfcReaderSelected]
         } else {
@@ -137,7 +139,7 @@ fun NfcScreen(
         }
     }
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item {

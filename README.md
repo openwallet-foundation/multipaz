@@ -16,7 +16,7 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   credentials), and presentment to applications using the W3C Digital
   Credentials API according to ISO/IEC 18013-7:2025 and OpenID4VP 1.0.
 - `multipaz-compose` provides rich UI elements to be used in Compose
-  applications.
+  Multiplatform applications across Android, iOS, Web, and Desktop JVM.
 - [`multipaz-facenet`](multipaz-facenet/README.md) provides on-device and server-side
   biometric face matching and active liveness verification using MediaPipe BlazeFace
   and MobileFaceNet.
@@ -205,11 +205,66 @@ see the next section for an example of this.
 
 ## Examples / Samples
 
-For a fully-fledged mDL wallet, our current answer is to use the `samples/testapp`
-module which works on both Android and iOS. This application is intended for
-developers and as such has a lot of options and settings. It's intended to
-exercise all code in the libraries. Prebuilt APKs are available from
-https://apps.multipaz.org.
+For a fully-fledged mDL wallet and testbed, our current answer is to use the
+`samples/testapp` module which works on Android, iOS, and Linux (Compose Desktop
+JVM). This application is intended for developers and as such has a lot of
+options and settings. It's intended to exercise all code in the libraries.
+Prebuilt Android APKs are available from https://apps.multipaz.org.
+
+### Running `samples/testapp` on Linux
+
+`samples/testapp` can run on Linux (including embedded Linux systems such as
+Raspberry Pi) using Compose Desktop JVM, with support for direct Bluetooth Low
+Energy (`multipaz-bthci`), external USB CCID NFC readers (`libusb-1.0`), and
+I2C + GPIO NCI 2.0 NFC controllers such as the NXP PN7160 (`multipaz-nci`).
+Credentials and settings are stored under `$XDG_DATA_HOME/multipaz` (or
+`~/.local/share/multipaz`).
+
+1. **System packages (Debian / Ubuntu / Raspberry Pi OS):**
+   ```shell
+   $ sudo apt install libusb-1.0-0 libcap2-bin
+   ```
+   - `libusb-1.0-0` is used to access external USB CCID NFC readers. If `pcscd`
+     is installed and claims the reader exclusively, stop it first
+     (`sudo systemctl stop pcscd.socket pcscd.service`); you can then grant
+     per-user ACL access from the **USB NFC Readers** screen in the app.
+   - `libcap2-bin` provides `/usr/sbin/capsh`, used by the HCI launcher script
+     below.
+
+2. **Launching without direct Bluetooth HCI access:**
+   ```shell
+   $ ./gradlew :samples:testapp:run -Pdisable.web.targets=true
+   ```
+
+3. **Launching with Bluetooth Low Energy (`HCI_CHANNEL_USER`):**
+
+   Direct HCI access via `LinuxHciSocketPacketIo` binds exclusively to a kernel
+   Bluetooth controller (`hci0`, `hci1`, etc.) and requires `CAP_NET_ADMIN` (the
+   kernel temporarily detaches BlueZ `bluetoothd` from that controller while the
+   socket is open). Use [`utils/launch-samples-testapp-with-hci`](utils/README.md),
+   which builds unprivileged as your normal user and uses `sudo` + `capsh` to
+   drop back to your user with only ambient `CAP_NET_ADMIN`:
+   ```shell
+   $ ./utils/launch-samples-testapp-with-hci --help
+   $ ./utils/launch-samples-testapp-with-hci hci0
+   ```
+
+4. **Using an I2C + GPIO NCI 2.0 NFC controller (e.g., NXP PN7160):**
+
+   Ensure your user belongs to the `i2c` and `gpio` groups so `/dev/i2c-*` and
+   `/dev/gpiochip*` are accessible. You can configure and enable the controller
+   either in **Settings -> Enable NCI NFC Controller (Linux I2C + GPIO)** in the
+   UI, or transiently for a single run via environment variables:
+   ```shell
+   $ MULTIPAZ_NFC_ENABLED=1 \
+     MULTIPAZ_NFC_I2C_DEV=/dev/i2c-1 \
+     MULTIPAZ_NFC_I2C_ADDR=0x28 \
+     MULTIPAZ_NFC_GPIO_CHIP=/dev/gpiochip0 \
+     MULTIPAZ_NFC_IRQ_PIN=23 \
+     MULTIPAZ_NFC_VEN_PIN=24 \
+     ./utils/launch-samples-testapp-with-hci hci0
+   ```
+   Set `MULTIPAZ_DEBUG=1` to enable verbose debug logging.
 
 For a SwiftUI version of `samples/testapp` see `samples/SwiftTestApp` which works
 on iOS and is a testbed for the Swift bindings as well as the SwiftUI components

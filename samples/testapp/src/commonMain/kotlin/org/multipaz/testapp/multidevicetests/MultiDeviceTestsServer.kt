@@ -5,9 +5,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
-import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.MdocTransportStats
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.mdoc.transport.fromDataItem
 import org.multipaz.presentment.PresentmentOutcome
 import org.multipaz.util.Constants
@@ -160,7 +160,7 @@ class MultiDeviceTestsServer(
         val iterationNumber = numIterations + 1
         Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
 
-        var transport = MdocTransportFactory.Default.createTransport(
+        var transport = TestAppConfiguration.mdocTransportFactory.createTransport(
             connectionMethod = connectionMethod,
             role = MdocRole.MDOC,
             options = options
@@ -190,7 +190,7 @@ class MultiDeviceTestsServer(
                     peripheralServerModePsm = psmFromReader,
                     peripheralServerModeMacAddress = null
                 )
-                transport = MdocTransportFactory.Default.createTransport(
+                transport = TestAppConfiguration.mdocTransportFactory.createTransport(
                     connectionMethod = connectionMethodWithPsm,
                     role = MdocRole.MDOC,
                     options = options

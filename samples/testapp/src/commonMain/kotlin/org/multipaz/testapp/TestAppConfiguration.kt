@@ -6,13 +6,15 @@ import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 
 enum class TestAppPlatform(val displayName: String) {
     ANDROID("Android"),
     IOS("iOS"),
-    WASMJS("WasmJS")
+    WASMJS("WasmJS"),
+    JVM("JVM")
 }
 
 expect object TestAppConfiguration {
@@ -57,4 +59,6 @@ expect object TestAppConfiguration {
     suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean)
 
     fun getPlatformFaceMatchers(): List<FaceMatcher>
+
+    val mdocTransportFactory: MdocTransportFactory
 }

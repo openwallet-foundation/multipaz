@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+# Copyright 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+print_available_controllers() {
+    echo "Available Bluetooth HCI controllers on this system:"
+    local found=0
+    if [[ -d /sys/class/bluetooth ]]; then
+        for dev_path in /sys/class/bluetooth/hci*; do
+            [[ -e "$dev_path" ]] || continue
+            found=1
+            local dev_name
+            dev_name="$(basename "$dev_path")"
+            local bus_info=""
+            if [[ -L "$dev_path/device" ]]; then
+                bus_info=" ($(basename "$(readlink -f "$dev_path/device")"))"
+            fi
+            echo "  - ${dev_name}${bus_info}"
+        done
+    fi
+    if [[ "$found" -eq 0 ]]; then
+        echo "  (none detected under /sys/class/bluetooth)"
+    fi
+}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] <hci-controller> [-- <extra-jvm-args...>]
+
+Builds and launches samples/testapp on Linux Desktop JVM with direct HCI
+Bluetooth Low Energy (HCI_CHANNEL_USER) access on the specified controller.
+
+Why this script exists:
+  - Running 'sudo ./gradlew :samples:testapp:run' runs the Gradle daemon as
+    root, creating root-owned build artifacts and losing desktop display/Wayland
+    environment variables.
+  - Running 'setcap cap_net_admin+ep java' triggers AT_SECURE=1 in glibc's
+    dynamic linker, breaking \$ORIGIN RPATH resolution for libjli.so and
+    granting CAP_NET_ADMIN to every Java process on the system.
+
+How this script works:
+  1. Compiles samples/testapp as your normal unprivileged user via Gradle
+     (':samples:testapp:prepareJvmRun').
+  2. Uses 'sudo' and '/usr/sbin/capsh' to immediately drop back to your own
+     UID/GID while granting only the ambient 'cap_net_admin' capability to the
+     JVM process and setting MULTIPAZ_BLE_HCI_DEV=<hciN>.
+
+Arguments:
+  <hci-controller>   Bluetooth controller to bind exclusively via
+                     HCI_CHANNEL_USER, specified as e.g. 'hci0', 'hci1', or
+                     an index like '0', '1'.
+                     Note: The kernel will detach bluetoothd from this
+                     controller while the socket is bound.
+
+Options:
+  --no-build         Skip the Gradle build step if prepareJvmRun was already run.
+  -h, --help         Show this help message and exit.
+
+Environment Variables:
+  MULTIPAZ_DEBUG        If set to a non-empty value other than 0/false,
+                        forces Logger.isDebugEnabled to true.
+  MULTIPAZ_NFC_ENABLED  If set to 1/true (or 0/false), transiently overrides
+                        NCI NFC controller enablement for this run.
+  MULTIPAZ_NFC_I2C_DEV  Transiently overrides NCI I2C device (e.g. /dev/i2c-1).
+  MULTIPAZ_NFC_I2C_ADDR Transiently overrides NCI I2C address (e.g. 0x28).
+  MULTIPAZ_NFC_GPIO_CHIP Transiently overrides GPIO chip (e.g. /dev/gpiochip0).
+  MULTIPAZ_NFC_IRQ_PIN  Transiently overrides NCI IRQ GPIO line offset.
+  MULTIPAZ_NFC_VEN_PIN  Transiently overrides NCI VEN GPIO line offset.
+
+Examples:
+  $(basename "$0") hci0
+  $(basename "$0") hci1
+  MULTIPAZ_DEBUG=1 $(basename "$0") hci0
+
+EOF
+    print_available_controllers
+}
+
+NO_BUILD=0
+HCI_ARG=""
+EXTRA_JVM_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --no-build)
+            NO_BUILD=1
+            shift
+            ;;
+        --)
+            shift
+            EXTRA_JVM_ARGS+=("$@")
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option '$1'" >&2
+            echo "" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$HCI_ARG" ]]; then
+                HCI_ARG="$1"
+                shift
+            else
+                echo "Error: Unexpected argument '$1' (HCI controller already set to '$HCI_ARG')" >&2
+                echo "" >&2
+                usage >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [[ -z "$HCI_ARG" ]]; then
+    echo "Error: Missing required <hci-controller> argument (e.g. 'hci0' or 'hci1')." >&2
+    echo "" >&2
+    usage >&2
+    exit 1
+fi
+
+# Normalize '0' or 'hci0' -> index '0' and name 'hci0'
+if [[ "$HCI_ARG" =~ ^[hH][cC][iI]([0-9]+)$ ]]; then
+    HCI_INDEX="${BASH_REMATCH[1]}"
+elif [[ "$HCI_ARG" =~ ^([0-9]+)$ ]]; then
+    HCI_INDEX="${BASH_REMATCH[1]}"
+else
+    echo "Error: Invalid HCI controller '$HCI_ARG'. Expected e.g. 'hci0', 'hci1', '0', or '1'." >&2
+    exit 1
+fi
+HCI_NAME="hci${HCI_INDEX}"
+
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    echo "Error: Do not run $(basename "$0") with sudo." >&2
+    echo "Run it as your normal user; the script builds with Gradle unprivileged" >&2
+    echo "and invokes sudo internally only when launching the JVM with capsh." >&2
+    exit 1
+fi
+
+CAPSH_BIN=""
+for candidate in /usr/sbin/capsh /sbin/capsh "$(command -v capsh 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+        CAPSH_BIN="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$CAPSH_BIN" ]]; then
+    echo "Error: 'capsh' not found (typically provided by the 'libcap2-bin' package)." >&2
+    exit 1
+fi
+
+TARGET_USER="$(id -un)"
+
+echo "========================================================================"
+echo "Multipaz Desktop TestApp Launcher (Linux Direct HCI BLE)"
+echo "========================================================================"
+echo "  Target User      : ${TARGET_USER} (uid=$(id -u), gid=$(id -g))"
+echo "  HCI Controller   : ${HCI_NAME} (MULTIPAZ_BLE_HCI_DEV=${HCI_INDEX})"
+if [[ -n "${MULTIPAZ_DEBUG:-}" ]]; then
+    echo "  Debug Logging    : MULTIPAZ_DEBUG=${MULTIPAZ_DEBUG}"
+fi
+if [[ -n "${MULTIPAZ_NFC_ENABLED:-}" ]]; then
+    echo "  NCI NFC Override : MULTIPAZ_NFC_ENABLED=${MULTIPAZ_NFC_ENABLED}"
+fi
+if [[ -e "/sys/class/bluetooth/${HCI_NAME}" ]]; then
+    echo "  Sysfs Device     : $(readlink -f "/sys/class/bluetooth/${HCI_NAME}")"
+else
+    echo "  Warning          : /sys/class/bluetooth/${HCI_NAME} does not currently exist!"
+    print_available_controllers
+fi
+echo "========================================================================"
+
+cd "$REPO_ROOT"
+
+if [[ "$NO_BUILD" -eq 0 ]]; then
+    echo ""
+    echo "[1/2] Building :samples:testapp for Desktop JVM as user '${TARGET_USER}'..."
+    ./gradlew :samples:testapp:prepareJvmRun -Pdisable.web.targets=true
+else
+    echo ""
+    echo "[1/2] Skipping Gradle build (--no-build)."
+fi
+
+JAVA_EXEC_FILE="${REPO_ROOT}/samples/testapp/build/jvm-run/java-executable.txt"
+JVM_ARGS_FILE="${REPO_ROOT}/samples/testapp/build/jvm-run/jvm.args"
+
+if [[ ! -f "$JAVA_EXEC_FILE" || ! -f "$JVM_ARGS_FILE" ]]; then
+    echo "Error: Build metadata not found at ${REPO_ROOT}/samples/testapp/build/jvm-run/." >&2
+    echo "Run without --no-build first." >&2
+    exit 1
+fi
+
+JAVA_BIN="$(cat "$JAVA_EXEC_FILE")"
+if [[ ! -x "$JAVA_BIN" ]]; then
+    echo "Error: Java executable '$JAVA_BIN' is not executable." >&2
+    exit 1
+fi
+
+echo ""
+echo "[2/2] Launching TestApp as '${TARGET_USER}' with ambient CAP_NET_ADMIN on ${HCI_NAME}..."
+echo "      Java binary : ${JAVA_BIN}"
+echo "      Note        : Prompting for sudo if not cached..."
+echo ""
+
+PRESERVE_VARS="DISPLAY,WAYLAND_DISPLAY,XAUTHORITY,XDG_RUNTIME_DIR,XDG_DATA_HOME,XDG_CONFIG_HOME,XDG_CACHE_HOME,XDG_SESSION_TYPE,DBUS_SESSION_BUS_ADDRESS,HOME,USER,LOGNAME,LANG,LC_ALL,PATH,TERM,MULTIPAZ_DEBUG,MULTIPAZ_NFC_ENABLED,MULTIPAZ_NFC_I2C_DEV,MULTIPAZ_NFC_I2C_ADDR,MULTIPAZ_NFC_GPIO_CHIP,MULTIPAZ_NFC_IRQ_PIN,MULTIPAZ_NFC_VEN_PIN"
+
+exec sudo --preserve-env="${PRESERVE_VARS}" \
+    "$CAPSH_BIN" \
+    --keep=1 \
+    --noenv \
+    --user="${TARGET_USER}" \
+    --caps="cap_net_admin+eip" \
+    --addamb="cap_net_admin" \
+    -- -c 'export MULTIPAZ_BLE_HCI_DEV="$1"; shift; exec "$@"' \
+    -- "${HCI_INDEX}" "${JAVA_BIN}" "@${JVM_ARGS_FILE}" "${EXTRA_JVM_ARGS[@]}"
