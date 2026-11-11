@@ -101,6 +101,9 @@ data object QrCodesDestination: Destination()
 data object NfcDestination: Destination()
 
 @Serializable
+data object NfcObserveModeDestination: Destination()
+
+@Serializable
 data object IsoMdocProximitySharingDestination: Destination()
 
 @Serializable

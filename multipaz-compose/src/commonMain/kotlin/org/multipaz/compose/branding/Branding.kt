@@ -29,12 +29,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.io.bytestring.ByteString
-import org.jetbrains.compose.resources.getDrawableResourceBytes
-import org.jetbrains.compose.resources.getSystemResourceEnvironment
 import org.multipaz.compose.decodeImage
 import org.multipaz.document.Document
 import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.default_card_art
 
 /**
  * An interface the application can use to express what branding to use in multipaz-compose.
@@ -158,10 +155,7 @@ private suspend fun getFallbackBaseImage(): ImageBitmap {
     if (fallbackBaseImage != null) {
         return fallbackBaseImage!!
     }
-    val baseImageBytes = getDrawableResourceBytes(
-        getSystemResourceEnvironment(),
-        Res.drawable.default_card_art
-    )
+    val baseImageBytes = Res.readBytes("drawable/default_card_art.png")
     fallbackBaseImage = decodeImage(baseImageBytes)
     return fallbackBaseImage!!
 }

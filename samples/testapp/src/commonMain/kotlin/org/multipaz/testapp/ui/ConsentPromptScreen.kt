@@ -4,8 +4,8 @@ import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -436,7 +436,7 @@ fun ConsentPromptScreen(
         )
     }
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

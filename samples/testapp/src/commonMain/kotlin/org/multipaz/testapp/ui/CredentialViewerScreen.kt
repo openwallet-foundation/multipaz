@@ -2,12 +2,11 @@ package org.multipaz.testapp.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -60,12 +59,8 @@ fun CredentialViewerScreen(
     val documentInfo = documentInfos.find { it.document.identifier == documentId }
     val credentialInfo = documentInfo?.credentialInfos?.find { it.credential.identifier == credentialId  }
 
-    val scrollState = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(16.dp),
+    ColumnWithScrollbar(
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (credentialInfo == null) {

@@ -3,12 +3,12 @@ package org.multipaz.testapp.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -142,12 +142,11 @@ fun EventLoggerScreen(
 
         // TODO: with many events Column might be too slow, consider using LazyColumn instead.
         //
-        val scrollState = rememberScrollState()
-        Column(modifier = Modifier
-            .verticalScroll(scrollState)
-            .fillMaxSize()
-            .padding(innerPadding)
-            .padding(10.dp)
+        ColumnWithScrollbar(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(10.dp)
         ) {
             SegmentedItemList(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),

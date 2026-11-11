@@ -1,13 +1,9 @@
 package org.multipaz.testapp.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.EcPrivateKey
@@ -32,11 +28,8 @@ fun ShowResponseScreen(
     zkSystemRepository: ZkSystemRepository?,
     onViewCertChain: (certChain: X509CertChain) -> Unit
 ) {
-    val scrollState = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth().padding(8.dp)
-            .verticalScroll(scrollState)
+    ColumnWithScrollbar(
+        contentPadding = PaddingValues(8.dp)
     ) {
         ShowResponse(
             vpToken = vpToken,

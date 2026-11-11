@@ -7,10 +7,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
@@ -271,11 +272,12 @@ fun TrustManagerScreen(
         },
     ) { innerPadding ->
 
-        Column(
+        ColumnWithScrollbar(
             modifier = Modifier
-                .verticalScroll(scrollState)
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(innerPadding),
+            scrollState = scrollState,
+            contentPadding = PaddingValues(10.dp),
         ) {
             TrustEntryList(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),

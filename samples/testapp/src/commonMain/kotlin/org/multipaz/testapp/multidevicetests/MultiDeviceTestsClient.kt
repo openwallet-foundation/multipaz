@@ -4,8 +4,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
-import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.mdoc.transport.toDataItem
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -65,11 +65,11 @@ class MultiDeviceTestsClient(
 
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
                 Logger.i(TAG, "Test: $test")
-                Logger.iHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
+                Logger.dHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
                 val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
                 val connectionMethod = deviceEngagement.connectionMethods[0]
                 val eDeviceKey = deviceEngagement.eDeviceKey
-                val transport = MdocTransportFactory.Default.createTransport(
+                val transport = TestAppConfiguration.mdocTransportFactory.createTransport(
                     connectionMethod,
                     MdocRole.MDOC_READER,
                     options
@@ -88,7 +88,7 @@ class MultiDeviceTestsClient(
                 }
                 Logger.i(TAG, "Starting")
                 try {
-                    withTimeout(15.seconds) {
+                    withTimeout(45.seconds) {
                         val timeStart = Clock.System.now()
                         transport.open(eDeviceKey)
 

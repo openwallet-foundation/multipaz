@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Checkbox
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -242,7 +242,7 @@ fun DcRequestScreen(
     val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.dcRequestIssuerIdentifiers.value) }
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item {
@@ -463,11 +463,11 @@ private suspend fun doDcRequestFlow(
 
     Logger.i(TAG, "clientId: $clientId")
     Logger.i(TAG, "origin: $origin")
-    Logger.iJson(TAG, "Request", dcRequestObject)
+    Logger.dJson(TAG, "Request", dcRequestObject)
     val t0 = Clock.System.now()
     val dcResponseObject = app.digitalCredentials!!.request(dcRequestObject)
     val durationRequestSentToResponseReceived = Clock.System.now() - t0
-    Logger.iJson(TAG, "Response", dcResponseObject)
+    Logger.dJson(TAG, "Response", dcResponseObject)
 
     val presentmentRecord = session.processDcResponse(dcResponse = dcResponseObject)
     val requestJson = Json.encodeToString(dcRequestObject)

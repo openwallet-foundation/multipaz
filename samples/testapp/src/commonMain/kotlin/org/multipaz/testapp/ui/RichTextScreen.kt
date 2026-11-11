@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -27,7 +27,7 @@ fun RichTextScreen() {
     val content = remember { mutableStateOf(TEST_MARKDOWN) }
     val onSurface = remember { mutableStateOf(false) }
     val primary = remember { mutableStateOf(false) }
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = Modifier.padding(8.dp)
     ) {
         item {
