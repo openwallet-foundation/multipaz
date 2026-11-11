@@ -8,7 +8,7 @@ This directory contains helper scripts and utilities for developing, testing, an
 
 ### Background
 
-On Linux, Multipaz's JVM BLE transport (`LinuxHciSocketPacketIo`) bypasses the BlueZ `bluetoothd` daemon and binds directly to a kernel HCI controller (`hci0`, `hci1`, etc.) using an exclusive `AF_BLUETOOTH` / `BTPROTO_HCI` socket with `HCI_CHANNEL_USER`. Bringing the controller down (`ioctl(HCIDEVDOWN)`) and binding `HCI_CHANNEL_USER` requires the Linux `CAP_NET_ADMIN` capability.
+On Linux, Multipaz's Bluetooth HCI module (`multipaz-bthci`, via `org.multipaz.bthci.LinuxHciSocketPacketIo`) bypasses the BlueZ `bluetoothd` daemon and binds directly to a kernel HCI controller (`hci0`, `hci1`, etc.) using an exclusive `AF_BLUETOOTH` / `BTPROTO_HCI` socket with `HCI_CHANNEL_USER`. Bringing the controller down (`ioctl(HCIDEVDOWN)`) and binding `HCI_CHANNEL_USER` requires the Linux `CAP_NET_ADMIN` capability.
 
 Granting `CAP_NET_ADMIN` to a Gradle-launched desktop JVM application has two common pitfalls:
 1. **Running `sudo ./gradlew :samples:testapp:run`** starts a `root`-owned Gradle daemon, creates `root`-owned build artifacts in `build/` and `.gradle/`, and loses the user's X11/Wayland/XDG desktop session environment variables.

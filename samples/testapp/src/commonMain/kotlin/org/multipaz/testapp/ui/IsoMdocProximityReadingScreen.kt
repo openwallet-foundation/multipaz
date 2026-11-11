@@ -50,11 +50,11 @@ import org.multipaz.mdoc.nfc.scanMdocReader
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
-import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.MdocTransportStats
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.testapp.App
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -676,6 +676,7 @@ fun IsoMdocProximityReadingScreen(
                                     bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                     bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value
                                 ),
+                                transportFactory = TestAppConfiguration.mdocTransportFactory,
                                 selectConnectionMethod = { connectionMethods ->
                                     if (connectionMethods.size == 1) {
                                         connectionMethods[0]
@@ -939,7 +940,7 @@ private suspend fun doReaderFlow(
             // If user canceled
             return
         }
-        val transport = MdocTransportFactory.Default.createTransport(
+        val transport = TestAppConfiguration.mdocTransportFactory.createTransport(
             connectionMethod,
             MdocRole.MDOC_READER,
             MdocTransportOptions(

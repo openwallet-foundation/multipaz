@@ -357,7 +357,6 @@ internal class CcidDriver(
      * @throws IOException if there is an error during the transfer.
      * @throws CcidException if the card returns an error.
      */
-    @Throws(IOException::class)
     override fun transceive(commandApdu: ByteArray): ByteArray {
         if (!isConnected) throw IOException("Driver is not connected.")
 

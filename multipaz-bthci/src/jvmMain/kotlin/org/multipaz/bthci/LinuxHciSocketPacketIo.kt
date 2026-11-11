@@ -1,4 +1,4 @@
-package org.multipaz.mdoc.transport
+package org.multipaz.bthci
 
 import com.sun.jna.LastErrorException
 import com.sun.jna.Library
@@ -15,38 +15,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.milliseconds
-
-/**
- * Abstraction for reading and writing H4-framed Bluetooth HCI packets (`0x01` Command,
- * `0x02` ACL Data, `0x04` Event).
- */
-internal interface HciPacketIo {
-    /**
-     * Reads the next H4-framed HCI packet from the controller, or returns `null` if closed.
-     */
-    suspend fun readPacket(): ByteArray?
-
-    /**
-     * Writes an H4-framed HCI packet to the controller.
-     */
-    suspend fun writePacket(packet: ByteArray)
-
-    /**
-     * Whether the underlying transport keeps its descriptor open across [close] calls for reuse.
-     */
-    val keepsDescriptorOpenOnClose: Boolean
-        get() = false
-
-    /**
-     * Notifies the transport that `HCI_Reset` has already been executed and acknowledged prior to [close].
-     */
-    fun markControllerResetCompleted() {}
-
-    /**
-     * Closes the underlying HCI transport and unblocks any pending [readPacket] call.
-     */
-    fun close()
-}
 
 /**
  * Linux `AF_BLUETOOTH` / `BTPROTO_HCI` / `HCI_CHANNEL_USER` implementation of [HciPacketIo].
@@ -140,7 +108,7 @@ internal interface HciPacketIo {
  * }
  * ```
  */
-internal class LinuxHciSocketPacketIo(
+class LinuxHciSocketPacketIo(
     private val hciDeviceIndex: Int = defaultHciDeviceIndex(),
     private val preOpenedHciFd: Int? = defaultPreOpenedHciFd()
 ) : HciPacketIo {
@@ -310,6 +278,10 @@ internal class LinuxHciSocketPacketIo(
         }
     }
 
+    /**
+     * Opens the Linux `HCI_CHANNEL_USER` socket (or adopts `preOpenedHciFd` if configured) and
+     * prepares the non-blocking poll/wake-pipe loop.
+     */
     suspend fun open() = withContext(Dispatchers.IO) {
         ensureJnaAvailable()
         val osName = System.getProperty("os.name") ?: ""

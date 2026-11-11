@@ -1,4 +1,4 @@
-package org.multipaz.mdoc.transport
+package org.multipaz.bthci
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,8 +35,20 @@ import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.mdoc.TestVectors
+import kotlinx.io.IOException
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.transport.BleCentralConfig
+import org.multipaz.mdoc.transport.BleCentralHal
+import org.multipaz.mdoc.transport.BleL2capChannel
+import org.multipaz.mdoc.transport.BlePeripheralHal
+import org.multipaz.mdoc.transport.MdocTransport
+import org.multipaz.mdoc.transport.MdocTransportException
+import org.multipaz.mdoc.transport.MdocTransportFactory
+import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.mdoc.transport.NfcTransportMdocReader
+import org.multipaz.mdoc.transport.TransportWarning
+import org.multipaz.mdoc.transport.TransportWarningCode
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -64,9 +76,6 @@ import org.multipaz.util.Constants
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.random.Random
@@ -86,12 +95,13 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 class BleHciTransportTest {
 
-    private class BleTranscriptLogger {
+    internal class BleTranscriptLogger {
+        private val loggerLock = HciLock()
         private val sb = StringBuilder()
-        private val gattWriteChunkBuffer = ByteArrayOutputStream()
-        private val gattNotifyChunkBuffer = ByteArrayOutputStream()
+        private val gattWriteChunkBuffer = HciByteBuffer()
+        private val gattNotifyChunkBuffer = HciByteBuffer()
         private var l2capSduExpectedLen = -1
-        private var l2capSduBuffer = ByteArrayOutputStream()
+        private var l2capSduBuffer = HciByteBuffer()
         private val charNameByValueHandle = mutableMapOf<Int, String>()
         private val charNameByCccdHandle = mutableMapOf<Int, String>()
         private var lastReadHandle = -1
@@ -133,8 +143,7 @@ class BleHciTransportTest {
             }
         }
 
-        @Synchronized
-        fun appendHciCommand(role: String, packet: ByteArray) {
+        fun appendHciCommand(role: String, packet: ByteArray): Unit = loggerLock.withLock {
             val opcode = u16le(packet, 1)
             val params = packet.copyOfRange(4, packet.size)
             val comment = when (opcode) {
@@ -205,8 +214,7 @@ class BleHciTransportTest {
             sb.appendLine("HCI-Cmd ($role): ${packet.toHex()}")
         }
 
-        @Synchronized
-        fun appendHciEvent(role: String, comment: String, packet: ByteArray) {
+        fun appendHciEvent(role: String, comment: String, packet: ByteArray): Unit = loggerLock.withLock {
             if (packet.size >= 4 &&
                 (packet[1].toInt() and 0xFF) == BleHciConstants.HCI_EV_LE_META &&
                 (packet[3].toInt() and 0xFF) == BleHciConstants.HCI_EV_LE_ADVERTISING_REPORT
@@ -218,8 +226,7 @@ class BleHciTransportTest {
             sb.appendLine("HCI-Evt ($role): ${packet.toHex()}")
         }
 
-        @Synchronized
-        fun appendL2capPdu(senderRole: String, receiverRole: String, cid: Int, pdu: ByteArray) {
+        fun appendL2capPdu(senderRole: String, receiverRole: String, cid: Int, pdu: ByteArray): Unit = loggerLock.withLock {
             if (sb.isNotEmpty()) sb.appendLine()
             when (cid) {
                 BleHciConstants.L2CAP_CID_ATT -> {
@@ -293,7 +300,7 @@ class BleHciTransportTest {
                         BleHciConstants.ATT_OP_READ_BY_TYPE_REQ -> {
                             val start = u16le(pdu, 1)
                             val end = u16le(pdu, 3)
-                            val retryNum = readByTypeCountByStartHandle.getOrDefault(start, 0)
+                            val retryNum = readByTypeCountByStartHandle[start] ?: 0
                             readByTypeCountByStartHandle[start] = retryNum + 1
                             if (retryNum == 0) {
                                 "$senderRole sends ATT_READ_BY_TYPE_REQ (0x08, start=0x${start.toString(16)}, end=0x${end.toString(16)}, type=0x2803 Characteristic Declaration)."
@@ -329,7 +336,7 @@ class BleHciTransportTest {
                         BleHciConstants.ATT_OP_READ_REQ -> {
                             val handle = u16le(pdu, 1)
                             lastReadHandle = handle
-                            val retryNum = readReqCountByHandle.getOrDefault(handle, 0)
+                            val retryNum = readReqCountByHandle[handle] ?: 0
                             readReqCountByHandle[handle] = retryNum + 1
                             val charName = charNameByValueHandle[handle]
                             val retrySuffix = if (retryNum > 0) " (characteristic read retry #$retryNum)" else ""
@@ -359,7 +366,7 @@ class BleHciTransportTest {
                         BleHciConstants.ATT_OP_WRITE_REQ -> {
                             val handle = u16le(pdu, 1)
                             lastWriteHandle = handle
-                            val retryNum = writeReqCountByHandle.getOrDefault(handle, 0)
+                            val retryNum = writeReqCountByHandle[handle] ?: 0
                             writeReqCountByHandle[handle] = retryNum + 1
                             val retrySuffix = if (retryNum > 0) " (CCCD write retry #$retryNum)" else ""
                             val cccdOwner = charNameByCccdHandle[handle]
@@ -456,17 +463,17 @@ class BleHciTransportTest {
                             completedSdu = pdu.copyOfRange(2, 2 + totalLen)
                         } else {
                             l2capSduExpectedLen = totalLen
-                            l2capSduBuffer = ByteArrayOutputStream(totalLen)
+                            l2capSduBuffer = HciByteBuffer(totalLen)
                             l2capSduBuffer.write(pdu, 2, dataLen)
                         }
                     } else {
-                        val needed = l2capSduExpectedLen - l2capSduBuffer.size()
+                        val needed = l2capSduExpectedLen - l2capSduBuffer.size
                         val toCopy = min(needed, pdu.size)
                         l2capSduBuffer.write(pdu, 0, toCopy)
-                        if (l2capSduBuffer.size() >= l2capSduExpectedLen) {
+                        if (l2capSduBuffer.size >= l2capSduExpectedLen) {
                             completedSdu = l2capSduBuffer.toByteArray()
                             l2capSduExpectedLen = -1
-                            l2capSduBuffer = ByteArrayOutputStream()
+                            l2capSduBuffer = HciByteBuffer()
                         }
                     }
                     if (completedSdu != null && completedSdu.size > 4) {
@@ -481,7 +488,7 @@ class BleHciTransportTest {
             }
         }
 
-        override fun toString(): String = sb.toString().trim()
+        override fun toString(): String = loggerLock.withLock { sb.toString().trim() }
     }
 
     /**
@@ -496,14 +503,14 @@ class BleHciTransportTest {
      * with `HCI_Disconnection_Complete (0x05, reason=0x08 Connection Timeout)` (tested separately via
      * [Endpoint.simulateDisconnect]).
      *
-     * Instead, recoverable protocol retries in [BleCentralManagerImpl] and [MdocTransportStats] occur at the
+     * Instead, recoverable protocol retries in `BleCentralManagerImpl` and [MdocTransportStats] occur at the
      * four pre-connection and handshake boundaries modeled here:
      *
      * 1. **Advertising Broadcast Loss ([dropScanAttempts] -> [MdocTransportStats.bleNumScanRestarts]):**
      *    Advertising PDUs (`ADV_IND` on channels 37/38/39) are unacknowledged broadcasts with no Link Layer
      *    ARQ. For the first [dropScanAttempts] scan windows enabled by the Central (`HCI_LE_Set_Scan_Enable(1)`),
      *    [VirtualHciBus] drops the over-the-air `ADV_IND` so the Central's controller emits no
-     *    `HCI_LE_Advertising_Report` before `scanRestartTimeout` expires, causing [BleCentralManagerImpl] to
+     *    `HCI_LE_Advertising_Report` before `scanRestartTimeout` expires, causing `BleCentralManagerImpl` to
      *    stop and restart scanning [dropScanAttempts] times.
      *
      * 2. **Connection Handshake Failure ([failConnectionAttempts] -> [MdocTransportStats.bleNumGattConnectRetries]):**
@@ -513,7 +520,7 @@ class BleHciTransportTest {
      *    with `HCI_LE_Connection_Complete (subevent=0x01, status=0x3e Connection Failed to be Established)`
      *    (the underlying cause of Android's infamous `BluetoothGatt` `status=133`), while the Peripheral
      *    continues advertising. For the first [failConnectionAttempts] `HCI_LE_Create_Connection` commands,
-     *    [VirtualHciBus] emits `status=0x3e` to the Central, causing [BleCentralManagerImpl] to retry
+     *    [VirtualHciBus] emits `status=0x3e` to the Central, causing `BleCentralManagerImpl` to retry
      *    `connectToPeripheral()` [failConnectionAttempts] times.
      *
      * 3. **Delayed GATT Service Population ([failServiceDiscoveryAttempts] -> [MdocTransportStats.bleNumServiceDiscoveryRetries]):**
@@ -521,7 +528,7 @@ class BleHciTransportTest {
      *    Peripheral's GATT server has finished registering its service table, the Peripheral responds with
      *    `ATT_ERROR_RSP (0x01, reqOpcode=0x06, handle=0x0001, error=0x0a Attribute Not Found)`. For the first
      *    [failServiceDiscoveryAttempts] service discovery requests, [VirtualHciBus] replies with `ATT_ERROR_RSP`
-     *    (`0x0a`), causing [BleCentralManagerImpl] to retry `peripheralDiscoverServices()`
+     *    (`0x0a`), causing `BleCentralManagerImpl` to retry `peripheralDiscoverServices()`
      *    [failServiceDiscoveryAttempts] times.
      *
      * 4. **Transient L2CAP CoC Resource/Server Unavailability ([failL2capConnectAttempts] -> [MdocTransportStats.bleNumL2capConnectRetries]):**
@@ -529,7 +536,7 @@ class BleHciTransportTest {
      *    to accept a channel on the PSM, the Peripheral responds with
      *    `L2CAP_LE_CREDIT_BASED_CONNECTION_RSP (0x15, result=0x0004 No resources available)`. For the first
      *    [failL2capConnectAttempts] L2CAP connection requests, [VirtualHciBus] replies with `result=0x0004`,
-     *    causing [BleCentralManagerImpl] to back off and retry `connectL2cap()` [failL2capConnectAttempts] times.
+     *    causing `BleCentralManagerImpl` to back off and retry `connectL2cap()` [failL2capConnectAttempts] times.
      *
      * 5. **Mid-Handshake Disconnection & GATT Step Faults ([disconnectMidHandshakeAttempts],
      *    [failMtuExchangeAttempts], [failCharacteristicDiscoveryAttempts], [failCharacteristicReadAttempts],
@@ -538,7 +545,7 @@ class BleHciTransportTest {
      *    during GATT setup, as well as `ATT_ERROR_RSP` rejections during MTU exchange, characteristic
      *    discovery (`0x08`), characteristic read (`0x0a`), and CCCD descriptor write (`0x12`).
      */
-    private data class FaultConfig(
+    internal data class FaultConfig(
         val dropScanAttempts: Int = 0,
         val failConnectionAttempts: Int = 0,
         val failServiceDiscoveryAttempts: Int = 0,
@@ -561,7 +568,7 @@ class BleHciTransportTest {
      *
      * See [FaultConfig] for how Link Layer, ATT, and L2CAP signaling faults are deterministically injected.
      */
-    private class VirtualHciBus(
+    internal class VirtualHciBus(
         private val aclDataPacketLength: Int = 27,
         private val totalNumAclDataPackets: Int = 4,
         private val useBrEdrBufferFallback: Boolean = false,
@@ -582,6 +589,7 @@ class BleHciTransportTest {
         private var cccdWriteAttemptCount = 0
         @Volatile
         var l2capCreditIndCount = 0
+        val centralAttResponsesLock = HciLock()
         val centralAttResponsesToPeripheralGapClient = mutableListOf<ByteArray>()
 
         inner class Endpoint(val name: String) : HciPacketIo {
@@ -605,7 +613,7 @@ class BleHciTransportTest {
 
             private var aclReassemblyCid = -1
             private var aclReassemblyLen = -1
-            private var aclReassemblyBuf = ByteArrayOutputStream()
+            private var aclReassemblyBuf = HciByteBuffer()
             private val pendingAclFragments = mutableListOf<ByteArray>()
 
             override suspend fun readPacket(): ByteArray? {
@@ -882,20 +890,20 @@ class BleHciTransportTest {
                             } else {
                                 aclReassemblyCid = cid
                                 aclReassemblyLen = l2capLen
-                                aclReassemblyBuf = ByteArrayOutputStream(l2capLen)
+                                aclReassemblyBuf = HciByteBuffer(l2capLen)
                                 aclReassemblyBuf.write(packet, 9, chunkLen)
                             }
                         }
                     } else if (pbFlag == 0x01 && aclReassemblyLen >= 0) {
                         pendingAclFragments.add(rxPacket)
-                        val needed = aclReassemblyLen - aclReassemblyBuf.size()
+                        val needed = aclReassemblyLen - aclReassemblyBuf.size
                         val toCopy = min(needed, dlen)
                         aclReassemblyBuf.write(packet, 5, toCopy)
-                        if (aclReassemblyBuf.size() >= aclReassemblyLen) {
+                        if (aclReassemblyBuf.size >= aclReassemblyLen) {
                             completedCid = aclReassemblyCid
                             completedPdu = aclReassemblyBuf.toByteArray()
                             aclReassemblyLen = -1
-                            aclReassemblyBuf = ByteArrayOutputStream()
+                            aclReassemblyBuf = HciByteBuffer()
                         }
                     }
                 }
@@ -1038,7 +1046,7 @@ class BleHciTransportTest {
                             BleHciConstants.ATT_OP_READ_BY_TYPE_RSP,
                             BleHciConstants.ATT_OP_ERROR_RSP -> {
                                 if (faultConfig.injectPeripheralGapClientRequestsOnConnect) {
-                                    synchronized(centralAttResponsesToPeripheralGapClient) {
+                                    centralAttResponsesLock.withLock {
                                         centralAttResponsesToPeripheralGapClient.add(completedPdu)
                                     }
                                     pendingAclFragments.clear()
@@ -1101,29 +1109,98 @@ class BleHciTransportTest {
         io: HciPacketIo,
         randomAddress: ByteArray? = null,
         gapDeviceName: String = "Multipaz"
-    ): BleCentralManager =
-        BleCentralManagerImpl(
-            hal = BleCentralHalHci(
-                gapDeviceName = gapDeviceName,
-                randomAddress = randomAddress,
-                packetIoFactory = { io }
+    ): MdocTransportFactory =
+        BtHciMdocTransportFactory(
+            gapDeviceName = gapDeviceName,
+            randomAddress = randomAddress,
+            centralConfig = BleCentralConfig(
+                scanRestartTimeout = 20.milliseconds,
+                postScanDelay = 1.milliseconds,
+                connectRetryDelay = 10.milliseconds,
+                discoverServicesRetryDelay = 10.milliseconds,
+                requireL2capPeripheralConnectedFirst = true,
+                l2capRetryInitialDelay = 10.milliseconds,
+                l2capRetryMaxDelay = 40.milliseconds,
             ),
-            scanRestartTimeout = 20.milliseconds,
-            postScanDelay = 1.milliseconds,
-            connectRetryDelay = 10.milliseconds,
-            discoverServicesRetryDelay = 10.milliseconds,
-            requireL2capPeripheralConnectedFirst = true,
-            l2capRetryInitialDelay = 10.milliseconds,
-            l2capRetryMaxDelay = 40.milliseconds
+            packetIoFactory = { io },
         )
 
     private fun createPeripheralManager(
         io: HciPacketIo,
         randomAddress: ByteArray? = null
-    ): BlePeripheralManager =
-        BlePeripheralManagerImpl(
-            hal = BlePeripheralHalHci(randomAddress = randomAddress, packetIoFactory = { io })
+    ): MdocTransportFactory =
+        BtHciMdocTransportFactory(
+            randomAddress = randomAddress,
+            packetIoFactory = { io },
         )
+
+    private fun BleTransportCentralMdoc(
+        role: MdocRole,
+        options: MdocTransportOptions,
+        centralManager: MdocTransportFactory,
+        uuid: UUID,
+        psm: Int?
+    ): MdocTransport = centralManager.createTransport(
+        MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = uuid,
+            peripheralServerModePsm = psm,
+        ),
+        role,
+        options,
+    )
+
+    private fun BleTransportCentralMdocReader(
+        role: MdocRole,
+        options: MdocTransportOptions,
+        peripheralManager: MdocTransportFactory,
+        uuid: UUID
+    ): MdocTransport = peripheralManager.createTransport(
+        MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = uuid,
+        ),
+        role,
+        options,
+    )
+
+    private fun BleTransportPeripheralMdoc(
+        role: MdocRole,
+        options: MdocTransportOptions,
+        peripheralManager: MdocTransportFactory,
+        uuid: UUID
+    ): MdocTransport = peripheralManager.createTransport(
+        MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = uuid,
+            centralClientModeUuid = null,
+        ),
+        role,
+        options,
+    )
+
+    private fun BleTransportPeripheralMdocReader(
+        role: MdocRole,
+        options: MdocTransportOptions,
+        centralManager: MdocTransportFactory,
+        uuid: UUID,
+        psm: Int?
+    ): MdocTransport = centralManager.createTransport(
+        MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = uuid,
+            centralClientModeUuid = null,
+            peripheralServerModePsm = psm,
+        ),
+        role,
+        options,
+    )
 
     @Test
     fun centralClientModeGattEndToEnd() = runTest {
@@ -1278,8 +1355,8 @@ class BleHciTransportTest {
                     mdocOpen.await()
                 }
 
-                assertTrue(centralManager.usingL2cap)
-                assertTrue(peripheralManager.usingL2cap)
+                assertEquals(true, mdocTransport.stats.bleUsingL2cap)
+                assertEquals(true, readerTransport.stats.bleUsingL2cap)
 
                 // Send large 20 KB payload over L2CAP CoC to exercise K-frame segmentation, ACL slicing,
                 // and L2CAP_FLOW_CONTROL_CREDIT_IND credit replenishment.
@@ -1340,8 +1417,8 @@ class BleHciTransportTest {
                         readerOpen.await()
                     }
 
-                    assertTrue(peripheralManager.usingL2cap)
-                    assertTrue(centralManager.usingL2cap)
+                    assertEquals(true, mdocTransport.stats.bleUsingL2cap)
+                    assertEquals(true, readerTransport.stats.bleUsingL2cap)
 
                     val requestMsg = Random(301).nextBytes(12_000)
                     val responseMsg = Random(302).nextBytes(18_000)
@@ -1448,8 +1525,8 @@ class BleHciTransportTest {
                     readerOpen.await()
                 }
 
-                assertTrue(peripheralManager.usingL2cap)
-                assertTrue(centralManager.usingL2cap)
+                assertEquals(true, mdocTransport.stats.bleUsingL2cap)
+                assertEquals(true, readerTransport.stats.bleUsingL2cap)
 
                 val requestMsg = Random(401).nextBytes(8_000)
                 val responseMsg = Random(402).nextBytes(10_000)
@@ -1526,7 +1603,23 @@ class BleHciTransportTest {
     }
 
     @Test
-    fun mdocTransportFactoryDefaultCreatesBleTransportsOnJvm() = runTest {
+    fun btHciMdocTransportFactoryCreatesBleAndFallbackTransports() = runTest {
+        val bus = VirtualHciBus()
+        val nfcFallbackInvoked = HciAtomicInt(0)
+        val fallbackFactory = object : MdocTransportFactory {
+            override fun createTransport(
+                connectionMethod: org.multipaz.mdoc.connectionmethod.MdocConnectionMethod,
+                role: MdocRole,
+                options: MdocTransportOptions
+            ): MdocTransport {
+                nfcFallbackInvoked.incrementAndGet()
+                return NfcTransportMdocReader(role, options, connectionMethod as MdocConnectionMethodNfc)
+            }
+        }
+        val factory = BtHciMdocTransportFactory(
+            fallbackFactory = fallbackFactory,
+            packetIoFactory = { bus.centralIo }
+        )
         val uuid = UUID.randomUUID()
         val cmCentral = MdocConnectionMethodBle(
             supportsPeripheralServerMode = false,
@@ -1534,12 +1627,12 @@ class BleHciTransportTest {
             peripheralServerModeUuid = null,
             centralClientModeUuid = uuid
         )
-        val t1 = MdocTransportFactory.Default.createTransport(
+        val t1 = factory.createTransport(
             cmCentral,
             MdocRole.MDOC_READER,
             MdocTransportOptions()
         )
-        assertTrue(t1 is BleTransportCentralMdocReader)
+        assertEquals(MdocTransport.State.IDLE, t1.state.value)
         t1.close()
 
         val cmPeripheral = MdocConnectionMethodBle(
@@ -1548,13 +1641,24 @@ class BleHciTransportTest {
             peripheralServerModeUuid = uuid,
             centralClientModeUuid = null
         )
-        val t2 = MdocTransportFactory.Default.createTransport(
+        val t2 = factory.createTransport(
             cmPeripheral,
             MdocRole.MDOC_READER,
             MdocTransportOptions()
         )
-        assertTrue(t2 is BleTransportPeripheralMdocReader)
+        assertEquals(MdocTransport.State.IDLE, t2.state.value)
         t2.close()
+
+        val cmNfc = MdocConnectionMethodNfc(
+            commandDataFieldMaxLength = 0xFF,
+            responseDataFieldMaxLength = 0x100
+        )
+        val t3 = factory.createTransport(cmNfc, MdocRole.MDOC_READER, MdocTransportOptions())
+        assertTrue(t3 is NfcTransportMdocReader)
+        assertEquals(1, nfcFallbackInvoked.get())
+        t3.close()
+        bus.centralIo.close()
+        bus.peripheralIo.close()
     }
 
     private class StaticTestPresentmentSource(
@@ -2638,7 +2742,7 @@ class BleHciTransportTest {
                 peripheralManager = peripheralManager,
                 uuid = serviceUuid
             )
-            var mdocTransport: BleTransportCentralMdoc? = null
+            var mdocTransport: MdocTransport? = null
 
             try {
                 // Start peripheral advertising first so HCI command ordering between Peripheral and Central
@@ -2669,8 +2773,8 @@ class BleHciTransportTest {
                     mdocOpen.await()
                 }
 
-                assertEquals(useL2cap || useL2capInEngagement, centralManager.usingL2cap)
-                assertEquals(useL2cap || useL2capInEngagement, peripheralManager.usingL2cap)
+                assertEquals(useL2cap || useL2capInEngagement, createdMdocTransport.stats.bleUsingL2cap)
+                assertEquals(useL2cap || useL2capInEngagement, readerTransport.stats.bleUsingL2cap)
                 val mdocStats = createdMdocTransport.stats
                 assertEquals(useL2capInEngagement, mdocStats.bleL2capPsmInEngagement)
                 assertEquals(useL2capInEngagement, readerTransport.stats.bleL2capPsmInEngagement)
@@ -3430,111 +3534,6 @@ class BleHciTransportTest {
         }
     }
 
-    /**
-     * Verifies [LinuxHciSocketPacketIo] with a pre-opened file descriptor (`preOpenedHciFd`):
-     * - Adopts an inherited/pre-opened packet socket fd without requiring `CAP_NET_ADMIN`.
-     * - Leaves the pre-opened fd open when the first BLE session closes, sending `HCI_Reset` on close
-     *   and draining any unread `HCI_Command_Complete` bytes from the kernel socket receive buffer
-     *   when the second BLE session opens and reuses the same fd.
-     */
-    @Test
-    fun preOpenedHciFdReusedAcrossMultipleSessionsOnLinux() = runTest {
-        val osName = System.getProperty("os.name") ?: ""
-        if (!osName.contains("Linux", ignoreCase = true)) {
-            return@runTest
-        }
-        withContext(Dispatchers.Default) {
-            val (clientFd, controllerSideFd) = LinuxHciSocketPacketIo.createSocketPairForTesting()
-            try {
-                for (session in 1..2) {
-                    val bus = VirtualHciBus()
-                    val controllerBridgeIo = LinuxHciSocketPacketIo(preOpenedHciFd = controllerSideFd).also {
-                        it.open()
-                    }
-                    val bridgeScope = CoroutineScope(Dispatchers.IO)
-                    val txBridgeJob = bridgeScope.launch {
-                        while (true) {
-                            val pkt = controllerBridgeIo.readPacket() ?: break
-                            bus.centralIo.writePacket(pkt)
-                        }
-                    }
-                    val rxBridgeJob = bridgeScope.launch {
-                        while (true) {
-                            val pkt = bus.centralIo.readPacket() ?: break
-                            try {
-                                controllerBridgeIo.writePacket(pkt)
-                            } catch (_: Throwable) {
-                                break
-                            }
-                        }
-                    }
-
-                    val serviceUuid = UUID.randomUUID()
-                    val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
-
-                    val centralManager = BleCentralManagerImpl(
-                        hal = BleCentralHalHci(
-                            packetIoFactory = {
-                                LinuxHciSocketPacketIo(preOpenedHciFd = clientFd).also { it.open() }
-                            }
-                        ),
-                        scanRestartTimeout = 20.milliseconds,
-                        postScanDelay = 1.milliseconds,
-                        connectRetryDelay = 10.milliseconds,
-                        discoverServicesRetryDelay = 10.milliseconds,
-                        requireL2capPeripheralConnectedFirst = true
-                    )
-                    val peripheralManager = createPeripheralManager(bus.peripheralIo)
-
-                    val mdoc = BleTransportCentralMdoc(
-                        role = MdocRole.MDOC,
-                        options = MdocTransportOptions(bleUseL2CAP = true),
-                        centralManager = centralManager,
-                        uuid = serviceUuid,
-                        psm = null
-                    )
-                    val reader = BleTransportCentralMdocReader(
-                        role = MdocRole.MDOC_READER,
-                        options = MdocTransportOptions(bleUseL2CAP = true),
-                        peripheralManager = peripheralManager,
-                        uuid = serviceUuid
-                    )
-
-                    try {
-                        reader.advertise()
-                        coroutineScope {
-                            val readerOpen = async { reader.open(eSenderKey) }
-                            val mdocOpen = async { mdoc.open(eSenderKey) }
-                            readerOpen.await()
-                            mdocOpen.await()
-                        }
-
-                        val payload = "session-$session-over-preopened-fd".encodeToByteArray()
-                        coroutineScope {
-                            val recvJob = async { reader.waitForMessage() }
-                            mdoc.sendMessage(payload)
-                            assertContentEquals(payload, recvJob.await())
-                        }
-                    } finally {
-                        mdoc.close()
-                        reader.close()
-                        // Allow the close-time HCI_Reset and its HCI_Command_Complete reply to
-                        // traverse the socketpair before tearing down the bridge for this session,
-                        // so session 2 exercises drainPendingInput() on open().
-                        delay(10.milliseconds)
-                        bus.centralIo.close()
-                        bus.peripheralIo.close()
-                        controllerBridgeIo.close()
-                        txBridgeJob.cancel()
-                        rxBridgeJob.cancel()
-                    }
-                }
-            } finally {
-                LinuxHciSocketPacketIo.closeFdForTesting(clientFd)
-                LinuxHciSocketPacketIo.closeFdForTesting(controllerSideFd)
-            }
-        }
-    }
 
     /**
      * Verifies [BleCentralHalHci]'s workaround for AOSP peripherals (such as Pixel 8 Pro) whose
@@ -3599,7 +3598,7 @@ class BleHciTransportTest {
                     assertEquals(0, stats.bleNumMtuRequestRetries)
                     assertEquals(0, stats.bleNumServiceDiscoveryRetries)
 
-                    val gapResponses = synchronized(bus.centralAttResponsesToPeripheralGapClient) {
+                    val gapResponses = bus.centralAttResponsesLock.withLock {
                         bus.centralAttResponsesToPeripheralGapClient.map { it.toHex() }
                     }
                     val resolvedName = expectedDeviceName ?: "Multipaz"
@@ -3764,7 +3763,7 @@ class BleHciTransportTest {
     @Test
     fun l2capEnhancedCreditBasedProbeRejectedAndDisconnUnblocksZeroCreditWrite() = runTest {
         withContext(Dispatchers.Default) {
-            val idCounter = AtomicInteger(255)
+            val idCounter = HciAtomicInt(255)
             assertEquals(255, nextNonZeroL2capIdentifier(idCounter))
             assertEquals(1, nextNonZeroL2capIdentifier(idCounter))
 
@@ -3904,7 +3903,7 @@ class BleHciTransportTest {
     }
 
     /**
-     * Verifies that when [BleCentralManagerImpl]'s `l2capConnectTimeout` expires while `L2CAP_LE_CREDIT_CONN_REQ`
+     * Verifies that when `BleCentralManagerImpl`'s `l2capConnectTimeout` expires while `L2CAP_LE_CREDIT_CONN_REQ`
      * is still awaiting a response:
      * - [BleCentralHalHci.closeConnectedL2capAttempt] immediately cancels the in-flight attempt on `actionQueue`
      *   and rotates the local dynamic SCID (`0x0040` -> `0x0041`).
@@ -3914,6 +3913,7 @@ class BleHciTransportTest {
     fun l2capConnectTimeoutCancelsInFlightAttemptAndRotatesScid() = runTest {
         withContext(Dispatchers.Default) {
             val rxFromController = Channel<ByteArray>(Channel.UNLIMITED)
+            val sentScidsLock = HciLock()
             val sentScids = mutableListOf<Int>()
             var connReqCount = 0
             var firstAttemptId: Byte = 0
@@ -3985,7 +3985,7 @@ class BleHciTransportTest {
                             ) {
                                 val id = packet[10]
                                 val scid = u16le(packet, 15)
-                                synchronized(sentScids) { sentScids.add(scid) }
+                                sentScidsLock.withLock { sentScids.add(scid) }
                                 connReqCount++
                                 if (connReqCount == 1) {
                                     // Attempt #1 gets no response before l2capConnectTimeout expires
@@ -4034,27 +4034,37 @@ class BleHciTransportTest {
                 }
             }
 
-            val manager = BleCentralManagerImpl(
-                hal = BleCentralHalHci(packetIoFactory = { io }),
-                postScanDelay = 1.milliseconds,
-                requireL2capPeripheralConnectedFirst = true,
-                l2capConnectTimeout = 80.milliseconds,
-                l2capRetryInitialDelay = 5.milliseconds
-            )
-            manager.setCallbacks(onError = {}, onClosed = {})
             val svcUuid = UUID(9UL, 9UL)
-            manager.setUuids(UUID(1UL, 1UL), UUID(1UL, 2UL), UUID(1UL, 3UL), null, null)
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val factory = BtHciMdocTransportFactory(
+                centralConfig = BleCentralConfig(
+                    postScanDelay = 1.milliseconds,
+                    requireL2capPeripheralConnectedFirst = true,
+                    l2capConnectTimeout = 80.milliseconds,
+                    l2capRetryInitialDelay = 5.milliseconds,
+                ),
+                packetIoFactory = { io },
+            )
+            val readerTransport = factory.createTransport(
+                MdocConnectionMethodBle(
+                    supportsPeripheralServerMode = true,
+                    supportsCentralClientMode = false,
+                    peripheralServerModeUuid = svcUuid,
+                    centralClientModeUuid = null,
+                    peripheralServerModePsm = 0x0080,
+                ),
+                MdocRole.MDOC_READER,
+                MdocTransportOptions(bleUseL2CAPInEngagement = true),
+            )
 
             try {
-                manager.waitForPowerOn()
-                manager.waitForPeripheralWithUuid(svcUuid)
-                manager.connectL2cap(0x0080)
-                assertTrue(manager.usingL2cap)
-                assertTrue(manager.numL2capConnectRetries >= 1)
-                val scids = synchronized(sentScids) { sentScids.toList() }
+                readerTransport.open(eSenderKey)
+                assertEquals(true, readerTransport.stats.bleUsingL2cap)
+                assertTrue((readerTransport.stats.bleNumL2capConnectRetries ?: 0) >= 1)
+                val scids = sentScidsLock.withLock { sentScids.toList() }
                 assertTrue(scids.size >= 2 && scids[0] == 0x0040 && scids[1] == 0x0041, "Unexpected SCIDs: $scids")
             } finally {
-                manager.close()
+                readerTransport.close()
             }
         }
     }

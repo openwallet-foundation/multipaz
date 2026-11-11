@@ -51,6 +51,7 @@ private class JvmTestAppMdocNdefService : MdocNdefService() {
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
                 bleUseL2CAPInEngagement = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value
             ),
+            transportFactory = TestAppConfiguration.mdocTransportFactory,
         )
     }
 }
@@ -80,6 +81,7 @@ private class JvmTestAppMdocNfcCceService : MdocNfcCceService() {
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
                 bleUseL2CAPInEngagement = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value
             ),
+            transportFactory = TestAppConfiguration.mdocTransportFactory,
         )
     }
 }

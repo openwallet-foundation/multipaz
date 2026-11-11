@@ -37,6 +37,7 @@ import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.util.UUID
 import kotlin.time.Duration.Companion.seconds
@@ -200,6 +201,7 @@ fun IsoMdocProximitySharingScreen(
                     }
                 },
                 eDeviceKeyCurve = settingsModel.presentmentSessionEncryptionCurve.value,
+                transportFactory = TestAppConfiguration.mdocTransportFactory,
                 disablePlatformSpecificImplementation = disablePlatformImplementation,
             )
         }

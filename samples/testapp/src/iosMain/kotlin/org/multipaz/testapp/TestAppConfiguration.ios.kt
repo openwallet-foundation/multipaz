@@ -22,6 +22,7 @@ import org.multipaz.digitalcredentials.DigitalCredentialsIos
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ios.IosStorage
@@ -156,5 +157,7 @@ actual object TestAppConfiguration {
     }
 
     actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
+
+    actual val mdocTransportFactory: MdocTransportFactory = MdocTransportFactory.Default
 }
 

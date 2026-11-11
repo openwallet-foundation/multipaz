@@ -1,4 +1,4 @@
-package org.multipaz.mdoc.transport
+package org.multipaz.bthci
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -7,28 +7,24 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import org.multipaz.mdoc.transport.BlePeripheralHal
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
-import java.io.ByteArrayOutputStream
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 
 /**
- * Direct HCI implementation of [BlePeripheralHal] for Linux JVM.
+ * Direct Bluetooth HCI implementation of [BlePeripheralHal].
  *
  * @param gapDeviceName the GAP Device Name (`0x2A00`) exposed by the mandatory GAP Primary Service
  *   (`0x1800`) on `CID 0x0004` (defaults to `"Multipaz"`).
  * @param randomAddress optional 6-byte static random LE address, or `null` to generate one randomly.
  * @param packetIoFactory factory that opens the [HciPacketIo] transport for each BLE session.
  */
-internal class BlePeripheralHalHci(
+class BlePeripheralHalHci(
     private val gapDeviceName: String = "Multipaz",
     private val randomAddress: ByteArray? = null,
-    private val packetIoFactory: suspend () -> HciPacketIo = {
-        LinuxHciSocketPacketIo().also { it.open() }
-    }
+    private val packetIoFactory: suspend () -> HciPacketIo = ::openDefaultHciPacketIo
 ) : BlePeripheralHal {
     companion object {
         private const val TAG = "BlePeripheralHalHci"
@@ -77,14 +73,14 @@ internal class BlePeripheralHalHci(
     private var activeL2capChannel: HciBleL2capChannel? = null
 
     private val attributes = mutableListOf<GattAttribute>()
-    private val attributesByHandle = ConcurrentHashMap<Int, GattAttribute>()
-    private val valueHandleByCharacteristicUuid = ConcurrentHashMap<UUID, Int>()
+    private val attributesByHandle = HciSyncMap<Int, GattAttribute>()
+    private val valueHandleByCharacteristicUuid = HciSyncMap<UUID, Int>()
 
     @Volatile
     private var serviceGroupEndHandle: Int = 0
 
-    private val nextReadRequestId = AtomicInteger(1)
-    private val pendingReadByRequestId = ConcurrentHashMap<Int, PendingReadRequest>()
+    private val nextReadRequestId = HciAtomicInt(1)
+    private val pendingReadByRequestId = HciSyncMap<Int, PendingReadRequest>()
 
     @Volatile
     private var shuttingDown = false
@@ -553,13 +549,13 @@ internal class BlePeripheralHalHci(
                     val firstVal = matching[0].staticValue
                     val entryLen = (4 + firstVal.size).coerceAtMost(255)
                     val maxRspBytes = (negotiatedMtu - 2).coerceAtLeast(21)
-                    val out = ByteArrayOutputStream()
+                    val out = HciByteBuffer()
                     out.write(BleHciConstants.ATT_OP_READ_BY_GROUP_TYPE_RSP)
                     out.write(entryLen)
                     var count = 0
                     for (attr in matching) {
                         if (4 + attr.staticValue.size != entryLen) break
-                        if (count > 0 && (out.size() - 2) + entryLen > maxRspBytes) break
+                        if (count > 0 && (out.size - 2) + entryLen > maxRspBytes) break
                         out.write(u16leBytes(attr.handle))
                         out.write(u16leBytes(attr.groupEndHandle))
                         out.write(attr.staticValue)
@@ -590,11 +586,11 @@ internal class BlePeripheralHalHci(
                         return@enqueue
                     }
                     val maxRspBytes = (negotiatedMtu - 1).coerceAtLeast(22)
-                    val out = ByteArrayOutputStream()
+                    val out = HciByteBuffer()
                     out.write(BleHciConstants.ATT_OP_FIND_BY_TYPE_VALUE_RSP)
                     var count = 0
                     for (attr in matching) {
-                        if (count > 0 && (out.size() - 1) + 4 > maxRspBytes) break
+                        if (count > 0 && (out.size - 1) + 4 > maxRspBytes) break
                         out.write(u16leBytes(attr.handle))
                         out.write(u16leBytes(attr.groupEndHandle))
                         count++
@@ -632,7 +628,7 @@ internal class BlePeripheralHalHci(
                     val firstValSliceLen = min(firstAttr.staticValue.size, maxValuePerPair)
                     val pairLen = 2 + firstValSliceLen
                     val maxRspBytes = (negotiatedMtu - 2).coerceAtLeast(21)
-                    val out = ByteArrayOutputStream()
+                    val out = HciByteBuffer()
                     out.write(BleHciConstants.ATT_OP_READ_BY_TYPE_RSP)
                     out.write(pairLen)
                     var count = 0
@@ -640,7 +636,7 @@ internal class BlePeripheralHalHci(
                         if ((attr.properties and BleHciConstants.GATT_PROP_READ) == 0) break
                         val valSliceLen = min(attr.staticValue.size, maxValuePerPair)
                         if (2 + valSliceLen != pairLen) break
-                        if (count > 0 && (out.size() - 2) + pairLen > maxRspBytes) break
+                        if (count > 0 && (out.size - 2) + pairLen > maxRspBytes) break
                         out.write(u16leBytes(attr.handle))
                         out.write(attr.staticValue, 0, valSliceLen)
                         count++
@@ -667,14 +663,14 @@ internal class BlePeripheralHalHci(
                     val format = if (firstIs16) 0x01 else 0x02
                     val entryLen = if (firstIs16) 4 else 18
                     val maxRspBytes = (negotiatedMtu - 2).coerceAtLeast(21)
-                    val out = ByteArrayOutputStream()
+                    val out = HciByteBuffer()
                     out.write(BleHciConstants.ATT_OP_FIND_INFO_RSP)
                     out.write(format)
                     var count = 0
                     for (attr in matching) {
                         val is16 = attr.uuid16 != null
                         if (is16 != firstIs16) break
-                        if (count > 0 && (out.size() - 2) + entryLen > maxRspBytes) break
+                        if (count > 0 && (out.size - 2) + entryLen > maxRspBytes) break
                         out.write(u16leBytes(attr.handle))
                         if (is16) {
                             out.write(u16leBytes(attr.uuid16!!))

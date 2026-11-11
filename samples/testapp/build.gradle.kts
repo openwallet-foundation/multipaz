@@ -148,6 +148,7 @@ kotlin {
 
         val jvmMain by getting {
             dependencies {
+                implementation(project(":multipaz-bthci"))
                 implementation(project(":multipaz-nci"))
                 implementation(compose.desktop.currentOs)
                 implementation(libs.kotlinx.coroutines.swing)

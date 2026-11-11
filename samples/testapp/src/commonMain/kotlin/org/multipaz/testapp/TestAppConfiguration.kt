@@ -6,6 +6,7 @@ import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 
@@ -58,4 +59,6 @@ expect object TestAppConfiguration {
     suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean)
 
     fun getPlatformFaceMatchers(): List<FaceMatcher>
+
+    val mdocTransportFactory: MdocTransportFactory
 }

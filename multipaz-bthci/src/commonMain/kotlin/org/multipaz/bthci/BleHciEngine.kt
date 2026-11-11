@@ -1,4 +1,4 @@
-package org.multipaz.mdoc.transport
+package org.multipaz.bthci
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -17,13 +17,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.io.IOException
 import org.multipaz.crypto.Crypto
+import org.multipaz.mdoc.transport.BleL2capChannel
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.time.Duration
@@ -172,7 +170,7 @@ internal fun u16leBytes(value: Int): ByteArray = byteArrayOf(
     ((value ushr 8) and 0xFF).toByte()
 )
 
-internal fun nextNonZeroL2capIdentifier(counter: AtomicInteger): Int {
+internal fun nextNonZeroL2capIdentifier(counter: HciAtomicInt): Int {
     while (true) {
         val id = counter.getAndIncrement() and 0xFF
         if (id != 0) return id
@@ -246,7 +244,7 @@ internal class BleHciEngine(
 
     private val commandMutex = Mutex()
     private val commandCreditsAvailable = MutableStateFlow(1)
-    private val pendingCommandLock = Any()
+    private val pendingCommandLock = HciLock()
     private var pendingCommandOpcode: Int = -1
     private var pendingCommandDeferred: CompletableDeferred<ByteArray>? = null
 
@@ -261,15 +259,16 @@ internal class BleHciEngine(
     private var aclCreditSemaphore = Semaphore(8)
     private val inFlightAclPackets = MutableStateFlow(0)
     private val aclSendMutex = Mutex()
-    private val activeHandles = ConcurrentHashMap.newKeySet<Int>()
-    private val disconnectWaiters = ConcurrentHashMap<Int, CompletableDeferred<Unit>>()
+    private val activeHandles = HciSyncSet<Int>()
+    private val disconnectWaiters = HciSyncMap<Int, CompletableDeferred<Unit>>()
 
     private class AclReassemblyState(
         val cid: Int,
         val expectedLength: Int,
-        val buffer: ByteArrayOutputStream = ByteArrayOutputStream(expectedLength)
+        val buffer: HciByteBuffer = HciByteBuffer(expectedLength)
     )
 
+    private val reassemblyLock = HciLock()
     private val reassemblyByHandle = mutableMapOf<Int, AclReassemblyState>()
     private var readerJob: Job? = null
 
@@ -396,7 +395,7 @@ internal class BleHciEngine(
             "HCI command 0x${opcode.toString(16)} parameter length ${params.size} exceeds 255 bytes"
         }
         val deferred = CompletableDeferred<ByteArray>()
-        synchronized(pendingCommandLock) {
+        pendingCommandLock.withLock {
             pendingCommandOpcode = opcode
             pendingCommandDeferred = deferred
         }
@@ -413,7 +412,7 @@ internal class BleHciEngine(
                 deferred.await()
             }
         } finally {
-            synchronized(pendingCommandLock) {
+            pendingCommandLock.withLock {
                 if (pendingCommandDeferred === deferred) {
                     pendingCommandOpcode = -1
                     pendingCommandDeferred = null
@@ -520,7 +519,7 @@ internal class BleHciEngine(
                     val opcode = u16le(params, 1)
                     if (opcode != 0x0000) {
                         val returnParams = params.copyOfRange(3, params.size)
-                        val deferred = synchronized(pendingCommandLock) {
+                        val deferred = pendingCommandLock.withLock {
                             if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
                         }
                         deferred?.complete(returnParams)
@@ -533,7 +532,7 @@ internal class BleHciEngine(
                     commandCreditsAvailable.value = params[1].toInt() and 0xFF
                     val opcode = u16le(params, 2)
                     if (opcode != 0x0000) {
-                        val deferred = synchronized(pendingCommandLock) {
+                        val deferred = pendingCommandLock.withLock {
                             if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
                         }
                         deferred?.complete(byteArrayOf(status))
@@ -559,7 +558,7 @@ internal class BleHciEngine(
                     val reason = params[3].toInt() and 0xFF
                     if (status == 0x00) {
                         activeHandles.remove(handle)
-                        synchronized(reassemblyByHandle) {
+                        reassemblyLock.withLock {
                             reassemblyByHandle.remove(handle)
                         }
                         if (activeHandles.isEmpty()) {
@@ -698,11 +697,11 @@ internal class BleHciEngine(
         val dlen = u16le(packet, 3)
         if (packet.size < 5 + dlen) return
 
-        val completedPdu: Pair<Int, ByteArray>? = synchronized(reassemblyByHandle) {
+        val completedPdu: Pair<Int, ByteArray>? = reassemblyLock.withLock {
             when (pbFlag) {
                 0x00, 0x02 -> {
                     // Start of L2CAP PDU
-                    if (dlen < 4) return
+                    if (dlen < 4) return@withLock null
                     val l2capLen = u16le(packet, 5)
                     val cid = u16le(packet, 7)
                     val chunkLen = dlen - 4
@@ -718,11 +717,11 @@ internal class BleHciEngine(
                 }
                 0x01 -> {
                     // Continuing fragment
-                    val state = reassemblyByHandle[handle] ?: return
-                    val needed = state.expectedLength - state.buffer.size()
+                    val state = reassemblyByHandle[handle] ?: return@withLock null
+                    val needed = state.expectedLength - state.buffer.size
                     val toCopy = min(needed, dlen)
                     state.buffer.write(packet, 5, toCopy)
-                    if (state.buffer.size() >= state.expectedLength) {
+                    if (state.buffer.size >= state.expectedLength) {
                         reassemblyByHandle.remove(handle)
                         Pair(state.cid, state.buffer.toByteArray())
                     } else {
@@ -804,11 +803,11 @@ internal class BleHciEngine(
         if (closed) return
         closed = true
         activeHandles.clear()
-        for (waiter in disconnectWaiters.values) {
+        for (waiter in disconnectWaiters.valuesCopy()) {
             waiter.cancel()
         }
         disconnectWaiters.clear()
-        synchronized(pendingCommandLock) {
+        pendingCommandLock.withLock {
             pendingCommandDeferred?.cancel()
             pendingCommandDeferred = null
         }
@@ -843,11 +842,11 @@ internal class HciBleL2capChannel(
     private var currentIncomingBuf = ByteArray(0)
     private var currentIncomingPos = 0
 
-    private val sduReassemblyLock = Any()
+    private val sduReassemblyLock = HciLock()
     private var expectedSduLen: Int = -1
-    private var sduBuffer = ByteArrayOutputStream()
+    private var sduBuffer = HciByteBuffer()
     private var creditsConsumedSinceLastGrant = 0
-    private val nextSigIdentifier = AtomicInteger(10)
+    private val nextSigIdentifier = HciAtomicInt(10)
 
     @Volatile
     private var closed = false
@@ -895,7 +894,7 @@ internal class HciBleL2capChannel(
         var creditsToGrant = 0
         var protocolViolation = false
 
-        synchronized(sduReassemblyLock) {
+        sduReassemblyLock.withLock {
             creditsConsumedSinceLastGrant += 1
             if (creditsConsumedSinceLastGrant >= BleHciConstants.L2CAP_CREDIT_REPLENISH_THRESHOLD) {
                 creditsToGrant = creditsConsumedSinceLastGrant
@@ -915,20 +914,20 @@ internal class HciBleL2capChannel(
                         completedSdu = kFrame.copyOfRange(2, 2 + totalLen)
                     } else {
                         expectedSduLen = totalLen
-                        sduBuffer = ByteArrayOutputStream(totalLen)
+                        sduBuffer = HciByteBuffer(totalLen)
                         sduBuffer.write(kFrame, 2, dataLen)
                     }
                 }
             } else {
-                val needed = expectedSduLen - sduBuffer.size()
+                val needed = expectedSduLen - sduBuffer.size
                 if (kFrame.size > needed) {
                     protocolViolation = true
                 } else {
                     sduBuffer.write(kFrame, 0, kFrame.size)
-                    if (sduBuffer.size() == expectedSduLen) {
+                    if (sduBuffer.size == expectedSduLen) {
                         completedSdu = sduBuffer.toByteArray()
                         expectedSduLen = -1
-                        sduBuffer = ByteArrayOutputStream()
+                        sduBuffer = HciByteBuffer()
                     }
                 }
             }

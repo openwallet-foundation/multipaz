@@ -5,9 +5,11 @@ import io.ktor.client.engine.java.Java
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.multipaz.bthci.BtHciMdocTransportFactory
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
@@ -93,4 +95,6 @@ actual object TestAppConfiguration {
     }
 
     actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
+
+    actual val mdocTransportFactory: MdocTransportFactory = BtHciMdocTransportFactory()
 }

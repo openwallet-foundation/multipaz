@@ -1,4 +1,4 @@
-package org.multipaz.mdoc.transport
+package org.multipaz.bthci
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -11,12 +11,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.io.IOException
+import org.multipaz.mdoc.transport.BleCentralHal
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.toHex
-import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.time.Duration
@@ -24,7 +23,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Direct HCI implementation of [BleCentralHal] for Linux JVM.
+ * Direct Bluetooth HCI implementation of [BleCentralHal].
  *
  * @param gapDeviceName the GAP Device Name (`0x2A00`) reported if the connected peripheral queries
  *   the central's GAP server on `CID 0x0004` (defaults to `"Multipaz"`).
@@ -36,15 +35,13 @@ import kotlin.time.Duration.Companion.seconds
  *   retrying (defaults to `3.seconds`).
  * @param packetIoFactory factory that opens the [HciPacketIo] transport for each BLE session.
  */
-internal class BleCentralHalHci(
+class BleCentralHalHci(
     private val gapDeviceName: String = "Multipaz",
     private val randomAddress: ByteArray? = null,
     private val scanInterval: Duration = 60.milliseconds,
     private val scanWindow: Duration = 30.milliseconds,
     private val connectTimeout: Duration = 3.seconds,
-    private val packetIoFactory: suspend () -> HciPacketIo = {
-        LinuxHciSocketPacketIo().also { it.open() }
-    }
+    private val packetIoFactory: suspend () -> HciPacketIo = ::openDefaultHciPacketIo
 ) : BleCentralHal {
     private val scanIntervalUnits: Int = durationToHciScanUnits("scanInterval", scanInterval)
     private val scanWindowUnits: Int = durationToHciScanUnits("scanWindow", scanWindow)
@@ -120,25 +117,25 @@ internal class BleCentralHalHci(
     @Volatile
     private var serviceEndHandle: Int = -1
 
-    private val characteristicsByUuid = ConcurrentHashMap<UUID, DiscoveredCharacteristic>()
-    private val handleToCharacteristicUuid = ConcurrentHashMap<Int, UUID>()
+    private val characteristicsByUuid = HciSyncMap<UUID, DiscoveredCharacteristic>()
+    private val handleToCharacteristicUuid = HciSyncMap<Int, UUID>()
 
     private val attRequestMutex = Mutex()
-    private val pendingAttLock = Any()
+    private val pendingAttLock = HciLock()
     private var pendingAttRequestOpcode: Int = -1
     private var pendingAttDeferred: CompletableDeferred<ByteArray>? = null
 
-    private val pendingConnectLock = Any()
+    private val pendingConnectLock = HciLock()
     private var pendingConnectDeferred: CompletableDeferred<Int>? = null
     private var onConnectedDelivered: Boolean = false
 
-    private val pendingL2capLock = Any()
-    private val l2capAttemptEpoch = AtomicInteger(0)
+    private val pendingL2capLock = HciLock()
+    private val l2capAttemptEpoch = HciAtomicInt(0)
     private var pendingL2capDeferred: CompletableDeferred<HciBleL2capChannel>? = null
     private var pendingL2capIdentifier: Int = -1
     private var pendingL2capScid: Int = BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT
     private var currentL2capScid: Int = BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT
-    private val nextL2capIdentifier = AtomicInteger(1)
+    private val nextL2capIdentifier = HciAtomicInt(1)
 
     @Volatile
     private var activeL2capChannel: HciBleL2capChannel? = null
@@ -264,7 +261,7 @@ internal class BleCentralHalHci(
             negotiatedMtu = 23
             peripheralInitiatedMtu = null
             centralMtuExchanged = false
-            synchronized(pendingConnectLock) {
+            pendingConnectLock.withLock {
                 isConnected = false
                 connectionHandle = -1
                 onConnectedDelivered = false
@@ -292,7 +289,7 @@ internal class BleCentralHalHci(
                 val handle = withTimeout(connectTimeout) {
                     deferred.await()
                 }
-                val deliverConnected = synchronized(pendingConnectLock) {
+                val deliverConnected = pendingConnectLock.withLock {
                     if (isConnected && connectionHandle == handle) {
                         onConnectedDelivered = true
                         true
@@ -312,14 +309,14 @@ internal class BleCentralHalHci(
                     } catch (_: Throwable) {
                     }
                 }
-                synchronized(pendingConnectLock) {
+                pendingConnectLock.withLock {
                     isConnected = false
                     connectionHandle = -1
                     onConnectedDelivered = false
                 }
                 callback.onDisconnected()
             } finally {
-                synchronized(pendingConnectLock) {
+                pendingConnectLock.withLock {
                     if (pendingConnectDeferred === deferred) {
                         pendingConnectDeferred = null
                     }
@@ -664,15 +661,19 @@ internal class BleCentralHalHci(
             }
             val identifier = nextNonZeroL2capIdentifier(nextL2capIdentifier)
             val deferred = CompletableDeferred<HciBleL2capChannel>()
-            val scid = synchronized(pendingL2capLock) {
+            val scid = pendingL2capLock.withLock {
                 if (l2capAttemptEpoch.get() != attemptEpoch) {
-                    return@enqueue
+                    -1
+                } else {
+                    val allocatedScid = currentL2capScid
+                    pendingL2capIdentifier = identifier
+                    pendingL2capScid = allocatedScid
+                    pendingL2capDeferred = deferred
+                    allocatedScid
                 }
-                val allocatedScid = currentL2capScid
-                pendingL2capIdentifier = identifier
-                pendingL2capScid = allocatedScid
-                pendingL2capDeferred = deferred
-                allocatedScid
+            }
+            if (scid < 0) {
+                return@enqueue
             }
             try {
                 val handle = currentActiveHandleOrThrow()
@@ -705,7 +706,7 @@ internal class BleCentralHalHci(
                     callback.onL2capConnected(null, t)
                 }
             } finally {
-                synchronized(pendingL2capLock) {
+                pendingL2capLock.withLock {
                     if (pendingL2capDeferred === deferred) {
                         pendingL2capDeferred = null
                         pendingL2capIdentifier = -1
@@ -719,7 +720,7 @@ internal class BleCentralHalHci(
         val prevChannel = activeL2capChannel
         activeL2capChannel = null
         prevChannel?.disconnectAndClose()
-        synchronized(pendingL2capLock) {
+        pendingL2capLock.withLock {
             l2capAttemptEpoch.incrementAndGet()
             val pending = pendingL2capDeferred
             if ((pending != null && !pending.isCompleted) || prevChannel != null) {
@@ -743,7 +744,7 @@ internal class BleCentralHalHci(
         closed = true
         shuttingDown = true
         scanningForUuid = null
-        synchronized(pendingConnectLock) {
+        pendingConnectLock.withLock {
             isConnected = false
             connectionHandle = -1
             onConnectedDelivered = false
@@ -752,12 +753,12 @@ internal class BleCentralHalHci(
         }
         activeL2capChannel?.close()
         activeL2capChannel = null
-        synchronized(pendingAttLock) {
+        pendingAttLock.withLock {
             pendingAttRequestOpcode = -1
             pendingAttDeferred?.cancel()
             pendingAttDeferred = null
         }
-        synchronized(pendingL2capLock) {
+        pendingL2capLock.withLock {
             pendingL2capIdentifier = -1
             pendingL2capDeferred?.cancel()
             pendingL2capDeferred = null
@@ -768,13 +769,11 @@ internal class BleCentralHalHci(
         scope.cancel()
     }
 
-    private fun currentActiveHandleOrThrow(): Int {
-        synchronized(pendingConnectLock) {
-            if (!isConnected || connectionHandle < 0) {
-                throw DisconnectedAbortException("Not connected to peripheral")
-            }
-            return connectionHandle
+    private fun currentActiveHandleOrThrow(): Int = pendingConnectLock.withLock {
+        if (!isConnected || connectionHandle < 0) {
+            throw DisconnectedAbortException("Not connected to peripheral")
         }
+        connectionHandle
     }
 
     private suspend fun sendAttRequest(reqPdu: ByteArray, timeout: Duration = 5.seconds): ByteArray =
@@ -783,7 +782,7 @@ internal class BleCentralHalHci(
             val handle = currentActiveHandleOrThrow()
             val reqOp = reqPdu[0].toInt() and 0xFF
             val deferred = CompletableDeferred<ByteArray>()
-            synchronized(pendingAttLock) {
+            pendingAttLock.withLock {
                 pendingAttRequestOpcode = reqOp
                 pendingAttDeferred = deferred
             }
@@ -793,7 +792,7 @@ internal class BleCentralHalHci(
                     deferred.await()
                 }
             } finally {
-                synchronized(pendingAttLock) {
+                pendingAttLock.withLock {
                     if (pendingAttDeferred === deferred) {
                         pendingAttRequestOpcode = -1
                         pendingAttDeferred = null
@@ -813,7 +812,7 @@ internal class BleCentralHalHci(
     }
 
     private fun handleLeConnected(handle: Int, peerAddrType: Int, peerAddr: ByteArray) {
-        synchronized(pendingConnectLock) {
+        pendingConnectLock.withLock {
             val deferred = pendingConnectDeferred
             if (deferred != null && !deferred.isCompleted) {
                 connectionHandle = handle
@@ -828,7 +827,7 @@ internal class BleCentralHalHci(
         if (closed || shuttingDown) return
         var failConnectDeferred: CompletableDeferred<Int>? = null
         var notifyDisconnected = false
-        synchronized(pendingConnectLock) {
+        pendingConnectLock.withLock {
             val connectDeferred = pendingConnectDeferred
             if (connectDeferred != null && !connectDeferred.isCompleted) {
                 isConnected = false
@@ -852,12 +851,12 @@ internal class BleCentralHalHci(
             return
         }
         activeL2capChannel?.onPeerDisconnected()
-        synchronized(pendingAttLock) {
+        pendingAttLock.withLock {
             pendingAttDeferred?.completeExceptionally(
                 DisconnectedAbortException("Disconnected (reason=0x${reason.toString(16)})")
             )
         }
-        synchronized(pendingL2capLock) {
+        pendingL2capLock.withLock {
             pendingL2capDeferred?.completeExceptionally(
                 DisconnectedAbortException("Disconnected (reason=0x${reason.toString(16)})")
             )
@@ -1094,7 +1093,7 @@ internal class BleCentralHalHci(
                     sendAttErrorFromCentral(handle, opcode, 0x0000, BleHciConstants.ATT_ERR_REQUEST_NOT_SUPPORTED)
                     return
                 }
-                val deferred = synchronized(pendingAttLock) {
+                val deferred = pendingAttLock.withLock {
                     val expectedReqOp = pendingAttRequestOpcode
                     val isMatchingResponse = expectedReqOp < 0 ||
                         (opcode == expectedReqOp + 1) ||
@@ -1142,7 +1141,7 @@ internal class BleCentralHalHci(
         when (code) {
             BleHciConstants.L2CAP_CMD_REJECT -> {
                 val reason = if (pdu.size >= 6) u16le(pdu, 4) else -1
-                val deferred = synchronized(pendingL2capLock) {
+                val deferred = pendingL2capLock.withLock {
                     if (pendingL2capIdentifier == identifier) pendingL2capDeferred else null
                 }
                 deferred?.completeExceptionally(
@@ -1157,7 +1156,7 @@ internal class BleCentralHalHci(
                     val initialCredits = u16le(pdu, 10)
                     val result = u16le(pdu, 12)
                     var localCid = BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT
-                    val deferred = synchronized(pendingL2capLock) {
+                    val deferred = pendingL2capLock.withLock {
                         if (pendingL2capIdentifier == identifier) {
                             localCid = pendingL2capScid
                             pendingL2capDeferred

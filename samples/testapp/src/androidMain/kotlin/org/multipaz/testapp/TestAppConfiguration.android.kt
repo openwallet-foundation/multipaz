@@ -40,6 +40,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanOmitClaims
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
@@ -208,5 +209,7 @@ actual object TestAppConfiguration {
     actual fun getPlatformFaceMatchers(): List<FaceMatcher> {
         return listOf(CustomUiFaceMatcher())
     }
+
+    actual val mdocTransportFactory: MdocTransportFactory = MdocTransportFactory.Default
 }
 

@@ -4,8 +4,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
-import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.mdoc.transport.toDataItem
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -69,7 +69,7 @@ class MultiDeviceTestsClient(
                 val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
                 val connectionMethod = deviceEngagement.connectionMethods[0]
                 val eDeviceKey = deviceEngagement.eDeviceKey
-                val transport = MdocTransportFactory.Default.createTransport(
+                val transport = TestAppConfiguration.mdocTransportFactory.createTransport(
                     connectionMethod,
                     MdocRole.MDOC_READER,
                     options

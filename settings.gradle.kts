@@ -52,6 +52,7 @@ plugins {
 include(":multipaz-cbor-rpc")
 include(":multipaz")
 include(":multipaz:SwiftBridge")
+include(":multipaz-bthci")
 include(":multipaz-nci")
 include(":multipaz-dcapi-credman")
 include(":multipaz-dcapi-ios")
