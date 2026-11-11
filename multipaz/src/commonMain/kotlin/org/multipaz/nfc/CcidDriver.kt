@@ -1,22 +1,21 @@
 package org.multipaz.nfc
 
-import android.hardware.usb.UsbConstants
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbDeviceConnection
-import android.hardware.usb.UsbEndpoint
-import android.hardware.usb.UsbInterface
-import android.hardware.usb.UsbManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.io.IOException
 import org.multipaz.util.Logger
+import org.multipaz.util.SynchronizedLock
 import org.multipaz.util.toHex
+import org.multipaz.util.withLock
+import kotlin.concurrent.Volatile
 import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
-import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.util.concurrent.atomic.AtomicInteger
 
 internal interface CcidDriverOps {
     val maxCommandLength: Int
@@ -34,25 +33,21 @@ internal interface CcidDriverOps {
  * allowing for sending APDUs (Application Protocol Data Units) to a smart card
  * and receiving responses. It also provides notifications for card insertion and removal.
  *
- * The driver communicates with the CCID reader over bulk and interrupt USB endpoints.
- * It uses a listener interface to notify the application of card events.
+ * The driver communicates with the CCID reader over bulk and interrupt USB endpoints
+ * provided by a platform [CcidUsbTransport].
  *
- * @property usbManager The UsbManager system service, used for accessing USB devices.
- * @property device The UsbDevice representing the CCID reader.
+ * @property transport The underlying USB CCID transport.
+ * @property pollingFrameData Optional custom polling frame bytes (e.g. ECP frame starting with `0x6A`).
+ * @property backgroundScope Coroutine scope used for polling the USB interrupt-IN endpoint.
  */
 internal class CcidDriver(
-    private val usbManager: UsbManager,
-    private val device: UsbDevice,
-    private val interfaceIndex: Int,
+    private val transport: CcidUsbTransport,
     private val pollingFrameData: ByteArray? = null,
+    private val backgroundScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
 ) : CcidDriverOps {
-    private var connection: UsbDeviceConnection? = null
-    private var usbInterface: UsbInterface? = null
-    private var bulkInEndpoint: UsbEndpoint? = null
-    private var bulkOutEndpoint: UsbEndpoint? = null
-    private var interruptEndpoint: UsbEndpoint? = null
-    private val sequence = AtomicInteger(0)
-    private val usbLock = Any()
+    private var nextSequenceNumber: Int = 0
+    private val sequenceLock = SynchronizedLock()
+    private val usbLock = SynchronizedLock()
     @Volatile
     private var isConnected = false
     @Volatile
@@ -64,39 +59,26 @@ internal class CcidDriver(
     private var cachedSupportsCcidChaining: Boolean? = null
     private var cachedMaxCcidDataLength: Int? = null
     private var cachedMaxCommandLength: Int? = null
+    @Volatile
     private var listener: CcidDriverListener? = null
+    private var interruptJob: Job? = null
+
+    private fun nextSequence(): Byte = sequenceLock.withLock {
+        val seq = nextSequenceNumber
+        nextSequenceNumber = (seq + 1) and 0xFF
+        seq.toByte()
+    }
 
     /**
      * Connects to the CCID reader. This method must be called before any other
-     * operations can be performed. It requests permission to access the USB device,
-     * opens a connection, and starts listening for card events.
+     * operations can be performed. It opens the underlying [CcidUsbTransport],
+     * claims the CCID interface, configures contactless polling, and starts listening
+     * for card insertion/removal events.
      *
      * @throws IOException if the connection to the device fails or interface cannot be claimed.
-     * @throws SecurityException if permission to access the device is denied.
      */
     override fun connect() {
-        if (!usbManager.hasPermission(device)) {
-            throw SecurityException("Permission denied for device ${device.deviceName}")
-        }
-        val conn = usbManager.openDevice(device)
-            ?: throw IOException("Could not open device connection")
-        connection = conn
-
-        val iface = findCcidInterface(device, conn)
-            ?: run {
-                conn.close()
-                connection = null
-                throw IOException("CCID interface not found")
-            }
-        usbInterface = iface
-
-        findEndpoints(iface)
-        if (!conn.claimInterface(iface, true)) {
-            conn.close()
-            connection = null
-            usbInterface = null
-            throw IOException("Could not claim CCID interface id=${iface.id}")
-        }
+        transport.open()
         isConnected = true
         val chaining = computeSupportsCcidChaining()
         val maxCcidLen = computeMaxCcidDataLength()
@@ -111,7 +93,7 @@ internal class CcidDriver(
         cachedSupportsCcidChaining = chaining
         cachedMaxCcidDataLength = maxCcidLen
         cachedMaxCommandLength = maxCmdLen
-        Logger.i(TAG, "Connected to CCID device ${device.deviceName} (interface id=${iface.id}), maxCommandLength=$maxCommandLength")
+        Logger.i(TAG, "Connected to CCID device ${transport.deviceName} (interface id=${transport.interfaceId}), maxCommandLength=$maxCommandLength")
         configureContactlessPollingForIsoDep()
         startInterruptListener()
     }
@@ -130,7 +112,7 @@ internal class CcidDriver(
     private fun configureContactlessPollingForIsoDep() {
         var hardwarePollingConfigured = false
         var twoBytePollingType = false
-        if (device.vendorId == VENDOR_ID_ACS) {
+        if (transport.vendorId == VENDOR_ID_ACS) {
             val frame = pollingFrameData
             var ecpPayloadAccepted = false
             if (frame != null && frame.size >= 2 && frame[0] == 0x6A.toByte()) {
@@ -159,6 +141,7 @@ internal class CcidDriver(
                         ecpPayloadAccepted = true
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.d(TAG, "ACS hardware ECP payload configuration not supported: ${e.message}")
                 }
             }
@@ -187,6 +170,7 @@ internal class CcidDriver(
                     Logger.i(TAG, "Configured ACS 2-byte PICC Polling Type: ${resp.toHex()}")
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.d(TAG, "2-byte ACS PICC Polling Type not supported, trying 1-byte command: ${e.message}")
                 if (frame != null) {
                     Logger.i(TAG, "Reader does not support hardware polling frame ${frame.toHex()}")
@@ -199,6 +183,7 @@ internal class CcidDriver(
                     )
                     Logger.i(TAG, "Configured ACS 1-byte PICC Polling Type: ${resp.toHex()}")
                 } catch (e2: Exception) {
+                    if (e2 is CancellationException) throw e2
                     Logger.d(TAG, "Failed to configure ACS PICC Polling Type: ${e2.message}")
                 }
             }
@@ -225,29 +210,26 @@ internal class CcidDriver(
     @Throws(IOException::class, CcidException::class)
     private fun sendEscapeCommandInternal(payload: ByteArray): ByteArray {
         val cmd = createEscapeCommand(payload)
-        val responseBuffer = sendAndReceive(cmd)
-        val messageType = responseBuffer.get(0).toInt() and 0xFF
+        val responseBytes = sendAndReceive(cmd)
+        val messageType = responseBytes[0].toInt() and 0xFF
         if (messageType != (RDR_TO_PC_ESCAPE.toInt() and 0xFF)) {
             throw IOException(
                 "Unexpected response message type for Escape command, expected 0x83 but got 0x${messageType.toString(16)}"
             )
         }
-        val statusByte = responseBuffer.get(7).toInt() and 0xFF
+        val statusByte = responseBytes[7].toInt() and 0xFF
         val commandStatus = statusByte and 0xC0
         if (commandStatus == 0x40) {
-            val errorCode = responseBuffer.get(8).toInt() and 0xFF
+            val errorCode = responseBytes[8].toInt() and 0xFF
             throw CcidException(
                 "CCID Escape command failed with status 0x${statusByte.toString(16)}, error code 0x${errorCode.toString(16)}"
             )
         }
-        val length = responseBuffer.getInt(1)
-        if (length < 0 || length > responseBuffer.limit() - 10) {
+        val length = readInt32Le(responseBytes, 1)
+        if (length < 0 || length > responseBytes.size - 10) {
             throw IOException("Incomplete or invalid Escape response data length: $length")
         }
-        val data = ByteArray(length)
-        responseBuffer.position(10)
-        responseBuffer.get(data)
-        return data
+        return responseBytes.copyOfRange(10, 10 + length)
     }
 
     /**
@@ -272,8 +254,8 @@ internal class CcidDriver(
                 if (!isConnected) return false
                 try {
                     val powerOnCommand = powerOn()
-                    val powerOnResponseBuffer = sendAndReceive(powerOnCommand)
-                    val atr = parseDataBlockResponse(powerOnResponseBuffer)
+                    val powerOnResponse = sendAndReceive(powerOnCommand)
+                    val atr = parseDataBlockResponse(powerOnResponse)
                     if (atr.size > 2) {
                         isCardPoweredOn = true
                         Logger.i(TAG, "Re-powered card on attempt $attempt, ATR=${atr.toHex()}")
@@ -304,14 +286,15 @@ internal class CcidDriver(
         isCardPoweredOn = false
         isHardwarePollingConfigured = false
         usesTwoBytePollingTypeCommand = false
-        synchronized(usbLock) {
-            val iface = usbInterface
-            val conn = connection
-            if (wasConnected && device.vendorId == VENDOR_ID_ACS && conn != null) {
+        interruptJob?.cancel()
+        interruptJob = null
+        usbLock.withLock {
+            if (wasConnected && transport.vendorId == VENDOR_ID_ACS) {
                 if (wasHardwarePolling) {
                     try {
                         sendEscapeCommandInternal(CMD_ACS_DEFAULT_ECP_PAYLOAD)
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Logger.d(TAG, "Ignored error resetting hardware ECP payload on disconnect: ${e.message}")
                     }
                 }
@@ -320,28 +303,12 @@ internal class CcidDriver(
                         val resp = sendEscapeCommandInternal(CMD_ACS_POLLING_TYPE_NONE)
                         Logger.i(TAG, "Disabled ACS PICC polling on disconnect: ${resp.toHex()}")
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Logger.d(TAG, "Ignored error disabling ACS PICC polling on disconnect: ${e.message}")
                     }
                 }
             }
-            usbInterface = null
-            connection = null
-            if (conn != null && iface != null) {
-                try {
-                    conn.releaseInterface(iface)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Logger.w(TAG, "Error releasing USB interface", e)
-                }
-            }
-            if (conn != null) {
-                try {
-                    conn.close()
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Logger.w(TAG, "Error closing USB connection", e)
-                }
-            }
+            transport.close()
         }
     }
 
@@ -366,12 +333,12 @@ internal class CcidDriver(
         val command = createGetSlotStatusCommand()
         val response = sendAndReceive(command)
 
-        val messageType = response.get(0)
-        if (messageType != RDR_TO_PC_SLOTSTATUS.toByte()) {
+        val messageType = response[0]
+        if (messageType != RDR_TO_PC_SLOTSTATUS) {
             throw IOException("Unexpected response for GetSlotStatus: $messageType")
         }
 
-        val statusByte = response.get(7)
+        val statusByte = response[7]
         val iccStatus = statusByte.toInt() and 0x03 // bits 0 and 1
 
         return when (iccStatus) {
@@ -384,7 +351,6 @@ internal class CcidDriver(
 
     /**
      * Sends a command APDU to the smart card and returns the response APDU.
-     * This is a synchronous operation and will block until the response is received.
      *
      * @param commandApdu The command APDU to send, as a ByteArray.
      * @return The response APDU received from the card, as a ByteArray.
@@ -397,8 +363,8 @@ internal class CcidDriver(
 
         if (!isCardPoweredOn) {
             val powerOnCommand = powerOn()
-            val powerOnResponseBuffer = sendAndReceive(powerOnCommand)
-            val powerOnResponse = parseDataBlockResponse(powerOnResponseBuffer)
+            val powerOnResponseBytes = sendAndReceive(powerOnCommand)
+            val powerOnResponse = parseDataBlockResponse(powerOnResponseBytes)
             // The ATR is returned on power on. A valid ATR is typically longer than 2 bytes.
             if (powerOnResponse.size <= 2) {
                 throw CcidException("Failed to power on card. Invalid ATR received.")
@@ -409,8 +375,8 @@ internal class CcidDriver(
         val maxCcidLen = maxCcidDataLength
         val response: ByteArray = if (commandApdu.size <= maxCcidLen) {
             val xfrBlock = createXfrBlock(commandApdu, wLevelParameter = 0)
-            val responseBuffer = sendAndReceive(xfrBlock)
-            parseDataBlockResponse(responseBuffer)
+            val responseBytes = sendAndReceive(xfrBlock)
+            parseDataBlockResponse(responseBytes)
         } else {
             // Send APDU using CCID block chaining
             Logger.i(TAG, "Sending APDU of ${commandApdu.size} bytes using CCID block chaining in chunks of $maxCcidLen")
@@ -427,8 +393,8 @@ internal class CcidDriver(
                     else -> 2    // 0x0002: Last block (continues command APDU and ends command)
                 }
                 val xfrBlock = createXfrBlock(chunkBytes, wLevelParameter = wLevel)
-                val responseBuffer = sendAndReceive(xfrBlock)
-                lastResponse = parseDataBlockResponse(responseBuffer)
+                val responseBytes = sendAndReceive(xfrBlock)
+                lastResponse = parseDataBlockResponse(responseBytes)
             }
             lastResponse
         }
@@ -443,86 +409,80 @@ internal class CcidDriver(
     }
 
     private fun createXfrBlock(data: ByteArray, wLevelParameter: Short = 0): ByteArray {
-        val buffer = ByteBuffer.allocate(10 + data.size).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(PC_TO_RDR_XFRBLOCK)
-        buffer.putInt(data.size)
-        buffer.put(0x00) // bSlot
-        buffer.put(sequence.getAndIncrement().toByte())
-        buffer.put(0x00) // bBWI
-        buffer.putShort(wLevelParameter)
-        buffer.put(data)
-        return buffer.array()
+        val out = ByteArray(10 + data.size)
+        out[0] = PC_TO_RDR_XFRBLOCK
+        writeInt32Le(out, 1, data.size)
+        out[5] = 0x00 // bSlot
+        out[6] = nextSequence()
+        out[7] = 0x00 // bBWI
+        writeInt16Le(out, 8, wLevelParameter.toInt())
+        data.copyInto(out, destinationOffset = 10)
+        return out
     }
+
     private fun powerOn(): ByteArray {
-        val buffer = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(PC_TO_RDR_ICCPOWERON)
-        buffer.putInt(0)
-        buffer.put(0x00) //bSlot
-        buffer.put(sequence.getAndIncrement().toByte())
-        buffer.put(0x00) // bPowerSelect
-        buffer.put(ByteArray(2))
-        return buffer.array()
+        val out = ByteArray(10)
+        out[0] = PC_TO_RDR_ICCPOWERON
+        writeInt32Le(out, 1, 0)
+        out[5] = 0x00 // bSlot
+        out[6] = nextSequence()
+        out[7] = 0x00 // bPowerSelect
+        return out
     }
 
     private fun powerOff(): ByteArray {
-        val buffer = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(PC_TO_RDR_ICCPOWEROFF)
-        buffer.putInt(0)
-        buffer.put(0x00) // bSlot
-        buffer.put(sequence.getAndIncrement().toByte())
-        buffer.put(ByteArray(3)) // abRFU
-        return buffer.array()
+        val out = ByteArray(10)
+        out[0] = PC_TO_RDR_ICCPOWEROFF
+        writeInt32Le(out, 1, 0)
+        out[5] = 0x00 // bSlot
+        out[6] = nextSequence()
+        return out
     }
 
     private fun createEscapeCommand(data: ByteArray): ByteArray {
-        val buffer = ByteBuffer.allocate(10 + data.size).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(PC_TO_RDR_ESCAPE)
-        buffer.putInt(data.size)
-        buffer.put(0x00) // bSlot
-        buffer.put(sequence.getAndIncrement().toByte())
-        buffer.put(ByteArray(3)) // abRFU
-        buffer.put(data)
-        return buffer.array()
+        val out = ByteArray(10 + data.size)
+        out[0] = PC_TO_RDR_ESCAPE
+        writeInt32Le(out, 1, data.size)
+        out[5] = 0x00 // bSlot
+        out[6] = nextSequence()
+        data.copyInto(out, destinationOffset = 10)
+        return out
     }
 
     private fun createGetSlotStatusCommand(): ByteArray {
-        val buffer = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(PC_TO_RDR_GETSLOTSTATUS)
-        buffer.putInt(0) // length
-        buffer.put(0x00) // bSlot
-        buffer.put(sequence.getAndIncrement().toByte())
-        buffer.put(ByteArray(3)) // RFU
-        return buffer.array()
+        val out = ByteArray(10)
+        out[0] = PC_TO_RDR_GETSLOTSTATUS
+        writeInt32Le(out, 1, 0)
+        out[5] = 0x00 // bSlot
+        out[6] = nextSequence()
+        return out
     }
 
-    private fun sendAndReceive(command: ByteArray): ByteBuffer {
-        synchronized(usbLock) {
-            val bytesWritten = connection?.bulkTransfer(bulkOutEndpoint, command, command.size, TIMEOUT)
-                ?: throw IOException("Failed to send command over bulk-out endpoint.")
+    private fun sendAndReceive(command: ByteArray): ByteArray {
+        return usbLock.withLock {
+            val bytesWritten = transport.bulkTransferOut(command, TIMEOUT)
             if (bytesWritten < 0) {
                 throw IOException("Failed to send command over bulk-out endpoint: error $bytesWritten")
             }
-            return readNextResponseBlock()
+            readNextResponseBlock()
         }
     }
 
-    private fun readNextResponseBlock(): ByteBuffer {
+    private fun readNextResponseBlock(): ByteArray {
         while (true) {
             val responseBytes = ByteArray(MAX_RESPONSE_LENGTH)
-            val bytesRead = connection?.bulkTransfer(bulkInEndpoint, responseBytes, responseBytes.size, TIMEOUT)
-                ?: throw IOException("Failed to read response from bulk-in endpoint.")
+            val bytesRead = transport.bulkTransferIn(responseBytes, TIMEOUT)
 
             if (bytesRead < 0) throw IOException("Failed to read response from bulk-in endpoint: error $bytesRead")
             if (bytesRead < 10) throw IOException("Invalid response length: $bytesRead")
 
-            val responseBuffer = ByteBuffer.wrap(responseBytes, 0, bytesRead).order(ByteOrder.LITTLE_ENDIAN)
-            val statusByte = responseBuffer.get(7).toInt() and 0xFF
+            val statusByte = responseBytes[7].toInt() and 0xFF
             val commandStatus = statusByte and 0xC0
             if (commandStatus == 0x80) {
                 // Time Extension requested by reader (bmCommandStatus = 10b), wait for next response
                 continue
             }
-            return responseBuffer
+            return responseBytes.copyOfRange(0, bytesRead)
         }
     }
 
@@ -531,19 +491,16 @@ internal class CcidDriver(
 
     private fun computeSupportsCcidChaining(): Boolean {
         val raw = try {
-            connection?.rawDescriptors
+            transport.rawDescriptors
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             null
         }
-        val ifaceId = usbInterface?.id ?: 0
+        val ifaceId = transport.interfaceId
         if (raw != null) {
             val ccidDesc = getCcidDescriptorForInterface(raw, ifaceId)
             if (ccidDesc != null && ccidDesc.size >= 44) {
-                val dwFeatures = (ccidDesc[40].toInt() and 0xFF) or
-                        ((ccidDesc[41].toInt() and 0xFF) shl 8) or
-                        ((ccidDesc[42].toInt() and 0xFF) shl 16) or
-                        ((ccidDesc[43].toInt() and 0xFF) shl 24)
+                val dwFeatures = readInt32Le(ccidDesc, 40)
                 val exchangeLevel = dwFeatures and 0x000F0000
                 return (exchangeLevel == 0x00040000) || (exchangeLevel == 0x00080000)
             }
@@ -556,19 +513,16 @@ internal class CcidDriver(
 
     private fun computeMaxCcidDataLength(): Int {
         val raw = try {
-            connection?.rawDescriptors
+            transport.rawDescriptors
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             null
         }
-        val ifaceId = usbInterface?.id ?: 0
+        val ifaceId = transport.interfaceId
         if (raw != null) {
             val ccidDesc = getCcidDescriptorForInterface(raw, ifaceId)
             if (ccidDesc != null && ccidDesc.size >= 48) {
-                val maxMsgLen = (ccidDesc[44].toInt() and 0xFF) or
-                        ((ccidDesc[45].toInt() and 0xFF) shl 8) or
-                        ((ccidDesc[46].toInt() and 0xFF) shl 16) or
-                        ((ccidDesc[47].toInt() and 0xFF) shl 24)
+                val maxMsgLen = readInt32Le(ccidDesc, 44)
                 if (maxMsgLen > 10) {
                     return maxMsgLen - 10
                 }
@@ -587,11 +541,11 @@ internal class CcidDriver(
             return if (maxCcidLen > 20) maxCcidLen - 10 else 255
         }
 
-    private fun parseDataBlockResponse(responseBuffer: ByteBuffer): ByteArray {
-        val messageType = responseBuffer.get(0).toInt() and 0xFF
+    private fun parseDataBlockResponse(responseBytes: ByteArray): ByteArray {
+        val messageType = responseBytes[0].toInt() and 0xFF
         if (messageType == RDR_TO_PC_SLOTSTATUS.toInt() and 0xFF) {
-            val statusByte = responseBuffer.get(7).toInt() and 0xFF
-            val errorCode = responseBuffer.get(8).toInt() and 0xFF
+            val statusByte = responseBytes[7].toInt() and 0xFF
+            val errorCode = responseBytes[8].toInt() and 0xFF
             throw CcidException(
                 "CCID reader returned SlotStatus (0x81) instead of DataBlock: status 0x${statusByte.toString(16)}, error 0x${errorCode.toString(16)}"
             )
@@ -601,54 +555,49 @@ internal class CcidDriver(
                 "Unexpected response message type, expected Data Block (0x80) but got 0x${messageType.toString(16)}"
             )
         }
-        val statusByte = responseBuffer.get(7).toInt() and 0xFF
+        val statusByte = responseBytes[7].toInt() and 0xFF
         val commandStatus = statusByte and 0xC0
         if (commandStatus == 0x40) {
-            val errorCode = responseBuffer.get(8).toInt() and 0xFF
+            val errorCode = responseBytes[8].toInt() and 0xFF
             throw CcidException("CCID command failed with status 0x${statusByte.toString(16)}, error code 0x${errorCode.toString(16)}")
         }
-        val length = responseBuffer.getInt(1)
-        if (length < 0 || length > responseBuffer.limit() - 10) {
+        val length = readInt32Le(responseBytes, 1)
+        if (length < 0 || length > responseBytes.size - 10) {
             throw IOException("Incomplete or invalid response data length: $length")
         }
-        val data = ByteArray(length)
-        responseBuffer.position(10)
-        responseBuffer.get(data)
+        val data = responseBytes.copyOfRange(10, 10 + length)
 
         // Handle CCID response block chaining per CCID Spec Rev 1.1 Section 6.2.1:
         // bChainParameter values: 0x01 (First block), 0x03 (Intermediate block).
         // Host requests next block using PC_to_RDR_XfrBlock with wLevelParameter = 0x0010.
-        val bChainParameter = responseBuffer.get(9).toInt() and 0xFF
+        val bChainParameter = responseBytes[9].toInt() and 0xFF
         val isChainedResponse = supportsCcidChaining && (bChainParameter == 0x01 || bChainParameter == 0x03)
         if (isChainedResponse) {
             Logger.i(TAG, "CCID response chaining: length=$length, bChainParameter=0x${bChainParameter.toString(16)}, requesting next chunk with wLevelParameter=0x0010")
             val getNextChunkBlock = createXfrBlock(data = ByteArray(0), wLevelParameter = 0x0010)
-            val nextBuffer = sendAndReceive(getNextChunkBlock)
-            val nextData = parseDataBlockResponse(nextBuffer)
+            val nextBytes = sendAndReceive(getNextChunkBlock)
+            val nextData = parseDataBlockResponse(nextBytes)
             return data + nextData
         }
 
         return data
     }
 
-    private fun hasApduStatusTrailer(data: ByteArray): Boolean {
-        if (data.size < 2) return false
-        val sw1 = data[data.size - 2].toInt() and 0xFF
-        return sw1 == 0x90 || (sw1 in 0x61..0x6F)
-    }
-
     private fun startInterruptListener() {
-        val endpoint = interruptEndpoint ?: run {
-            Logger.i(TAG, "No interrupt endpoint found for interface ${usbInterface?.id}")
+        if (!transport.hasInterruptEndpoint) {
+            Logger.i(TAG, "No interrupt endpoint found for interface ${transport.interfaceId}")
             return
         }
-        Thread {
-            val buffer = ByteArray(endpoint.maxPacketSize)
-            while (isConnected) {
-                val conn = connection ?: break
+        val packetSize = transport.interruptMaxPacketSize.coerceAtLeast(8)
+        interruptJob?.cancel()
+        interruptJob = backgroundScope.launch {
+            val buffer = ByteArray(packetSize)
+            while (isActive && isConnected) {
                 val bytesRead = try {
-                    conn.bulkTransfer(endpoint, buffer, buffer.size, 500)
-                } catch (e: Exception) {
+                    transport.interruptTransferIn(buffer, 500)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
                     -1
                 }
                 if (bytesRead > 0) {
@@ -656,14 +605,14 @@ internal class CcidDriver(
                     handleInterrupt(buffer)
                 } else if (bytesRead < 0) {
                     if (!isConnected) break
-                    try { Thread.sleep(50) } catch (_: InterruptedException) {}
+                    delay(50.milliseconds)
                 }
             }
-        }.start()
+        }
     }
 
     private fun handleInterrupt(data: ByteArray) {
-        if (data[0] == RDR_TO_PC_NOTIFYSLOTCHANGE.toByte()) {
+        if (data.size >= 2 && data[0] == RDR_TO_PC_NOTIFYSLOTCHANGE) {
             val slotState = data[1].toInt() and 0x03
             when (slotState) {
                 0x03 -> { // Change, ICC Present -> Card was inserted
@@ -678,66 +627,13 @@ internal class CcidDriver(
         }
     }
 
-    private fun findCcidInterface(device: UsbDevice, connection: UsbDeviceConnection?): UsbInterface? {
-        val iface = try {
-            device.getInterface(interfaceIndex)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            null
-        }
-        if (iface != null) {
-            Logger.i(TAG, "Using specified USB interface id=${iface.id} for device ${device.deviceName}")
-            return iface
-        }
-        for (i in 0 until device.interfaceCount) {
-            val candidate = device.getInterface(i)
-            if (candidate.interfaceClass == UsbConstants.USB_CLASS_CSCID) {
-                Logger.i(TAG, "Defaulting to first CCID interface id=${candidate.id} for device ${device.deviceName}")
-                return candidate
-            }
-        }
-        return null
-    }
-
-    private fun getCcidDescriptorForInterface(raw: ByteArray, targetIfaceNum: Int): ByteArray? {
-        var idx = 0
-        var currentIfaceNum = -1
-        while (idx < raw.size - 2) {
-            val len = raw[idx].toInt() and 0xFF
-            val type = raw[idx + 1].toInt() and 0xFF
-            if (len <= 0) break
-            if (type == 0x04 && len >= 9 && idx + 9 <= raw.size) {
-                currentIfaceNum = raw[idx + 2].toInt() and 0xFF
-            } else if (type == 0x21 && currentIfaceNum == targetIfaceNum && len >= 0x36 && idx + len <= raw.size) {
-                return raw.copyOfRange(idx, idx + len)
-            }
-            idx += len
-        }
-        return null
-    }
-
-    private fun findEndpoints(iface: UsbInterface) {
-        for (i in 0 until iface.endpointCount) {
-            val endpoint = iface.getEndpoint(i)
-            if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
-                if (endpoint.direction == UsbConstants.USB_DIR_IN) {
-                    bulkInEndpoint = endpoint
-                } else {
-                    bulkOutEndpoint = endpoint
-                }
-            } else if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT) {
-                interruptEndpoint = endpoint
-            }
-        }
-    }
-
     companion object {
         private const val TAG = "CcidDriver"
         private const val TIMEOUT = 5000
         private const val MAX_RESPONSE_LENGTH = 65546
 
         // USB Vendor IDs
-        private const val VENDOR_ID_ACS = 0x072F // Advanced Card Systems Ltd. (1839)
+        internal const val VENDOR_ID_ACS = 0x072F // Advanced Card Systems Ltd. (1839)
 
         // CCID Message Types
         private const val PC_TO_RDR_ICCPOWERON: Byte = 0x62
@@ -757,5 +653,45 @@ internal class CcidDriver(
         private val CMD_ACS_POLLING_TYPE_NONE = byteArrayOf(
             0xE0.toByte(), 0x00, 0x01, 0x20, 0x02, 0x00, 0x00
         )
+
+        internal fun readInt32Le(bytes: ByteArray, offset: Int): Int {
+            return (bytes[offset].toInt() and 0xFF) or
+                ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xFF) shl 24)
+        }
+
+        internal fun writeInt32Le(bytes: ByteArray, offset: Int, value: Int) {
+            bytes[offset] = (value and 0xFF).toByte()
+            bytes[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+            bytes[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+            bytes[offset + 3] = ((value ushr 24) and 0xFF).toByte()
+        }
+
+        internal fun writeInt16Le(bytes: ByteArray, offset: Int, value: Int) {
+            bytes[offset] = (value and 0xFF).toByte()
+            bytes[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+        }
+
+        /**
+         * Extracts the 54-byte class-specific CCID functional descriptor (`bDescriptorType == 0x21`)
+         * belonging to USB interface [targetIfaceNum] from raw USB configuration descriptors.
+         */
+        internal fun getCcidDescriptorForInterface(raw: ByteArray, targetIfaceNum: Int): ByteArray? {
+            var idx = 0
+            var currentIfaceNum = -1
+            while (idx < raw.size - 2) {
+                val len = raw[idx].toInt() and 0xFF
+                val type = raw[idx + 1].toInt() and 0xFF
+                if (len <= 0) break
+                if (type == 0x04 && len >= 9 && idx + 9 <= raw.size) {
+                    currentIfaceNum = raw[idx + 2].toInt() and 0xFF
+                } else if (type == 0x21 && currentIfaceNum == targetIfaceNum && len >= 0x36 && idx + len <= raw.size) {
+                    return raw.copyOfRange(idx, idx + len)
+                }
+                idx += len
+            }
+            return null
+        }
     }
 }

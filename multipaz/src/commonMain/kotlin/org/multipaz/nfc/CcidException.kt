@@ -1,6 +1,6 @@
 package org.multipaz.nfc
 
-import java.io.IOException
+import kotlinx.io.IOException
 
 /**
  * Custom exception class for CCID-specific errors.

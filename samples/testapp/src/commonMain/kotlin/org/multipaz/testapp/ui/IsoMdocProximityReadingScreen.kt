@@ -208,17 +208,18 @@ fun IsoMdocProximityReadingScreen(
     val deviceEngagement = remember { mutableStateOf<ByteString?>(null) }
     var readerJob by remember { mutableStateOf<Job?>(null) }
 
+    val configuredExternalReaders = app.externalNfcReaderStore.readers.collectAsState().value
     val readers = mutableListOf<NfcReaderEntry>()
-    NfcTagReader.getReaders().forEachIndexed { index, reader ->
+    NfcTagReader.getReaders().forEachIndexed { index, _ ->
         readers.add(NfcReaderInternal("Internal NFC Reader", index))
     }
-    app.externalNfcReaderStore.readers.value.forEach { externalReader ->
+    configuredExternalReaders.forEach { externalReader ->
         readers.add(NfcReaderExternal(externalReader.userDisplayName ?: externalReader.displayName, externalReader))
     }
     if (readers.isEmpty()) {
         readers.add(NfcReaderNoneAvailable())
     }
-    val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
+    val readerSelected = remember(readers) { mutableStateOf<NfcReaderEntry>(
         if (lastNfcReaderSelected < readers.size) {
             readers[lastNfcReaderSelected]
         } else {

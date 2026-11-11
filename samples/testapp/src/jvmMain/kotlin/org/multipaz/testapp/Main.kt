@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import org.multipaz.nfc.observeUsbDevices
 import java.awt.Dimension
 import java.awt.GraphicsEnvironment
 
@@ -35,6 +36,10 @@ fun main() = application {
     ) {
         LaunchedEffect(window) {
             window.minimumSize = Dimension(320, 400)
+        }
+        LaunchedEffect(Unit) {
+            app.initialize()
+            app.externalNfcReaderStore.observeUsbDevices()
         }
         app.Content()
     }

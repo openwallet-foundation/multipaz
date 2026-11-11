@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,17 +91,18 @@ fun NfcScreen(
     val dismissableNfcJob = remember { mutableStateOf<Job?>(null) }
     var invisiblePromptMessage by remember { mutableStateOf<String?>(null) }
 
+    val configuredExternalReaders = externalNfcReaderStore.readers.collectAsState().value
     val readers = mutableListOf<NfcReaderEntry>()
-    NfcTagReader.getReaders().forEachIndexed { index, reader ->
+    NfcTagReader.getReaders().forEachIndexed { index, _ ->
         readers.add(NfcReaderInternal("Internal NFC Reader", index))
     }
-    externalNfcReaderStore.readers.value.forEach { externalReader ->
+    configuredExternalReaders.forEach { externalReader ->
         readers.add(NfcReaderExternal(externalReader.userDisplayName ?: externalReader.displayName, externalReader))
     }
     if (readers.isEmpty()) {
         readers.add(NfcReaderNoneAvailable())
     }
-    val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
+    val readerSelected = remember(readers) { mutableStateOf<NfcReaderEntry>(
         if (lastNfcReaderSelected < readers.size) {
             readers[lastNfcReaderSelected]
         } else {

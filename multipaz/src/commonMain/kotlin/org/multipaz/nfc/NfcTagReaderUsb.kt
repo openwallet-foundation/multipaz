@@ -1,7 +1,5 @@
 package org.multipaz.nfc
 
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,10 +9,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.io.IOException
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.util.Logger
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
+import org.multipaz.util.SynchronizedLock
+import org.multipaz.util.withLock
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -28,7 +28,7 @@ private class NfcIsoTagUsb(
     private val driver: CcidDriverOps,
     private val updateMessage: (message: String) -> Unit,
     private val onClose: () -> Unit,
-): NfcIsoTag() {
+) : NfcIsoTag() {
     @Volatile
     var isClosed: Boolean = false
         private set
@@ -59,41 +59,24 @@ private class NfcIsoTagUsb(
     override suspend fun updateDialogMessage(message: String) {
         updateMessage(message)
     }
-
 }
 
 internal class NfcTagReaderUsb internal constructor(
-    internal val device: UsbDevice?,
+    internal val deviceIdentity: Any? = null,
     internal val interfaceIndex: Int,
     private val disconnectDelay: Duration = 5.seconds,
     private val openTagDisconnectDelay: Duration = 30.seconds,
     private val pollInterval: Duration = 100.milliseconds,
     private val backgroundScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val createDriver: (pollingFrameData: ByteArray?) -> CcidDriverOps,
-): NfcTagReader {
-    constructor(
-        manager: UsbManager,
-        device: UsbDevice,
-        interfaceIndex: Int,
-    ) : this(
-        device = device,
-        interfaceIndex = interfaceIndex,
-        createDriver = { pollingFrameData ->
-            CcidDriver(
-                usbManager = manager,
-                device = device,
-                interfaceIndex = interfaceIndex,
-                pollingFrameData = pollingFrameData
-            )
-        }
-    )
+) : NfcTagReader {
 
     private class DriverSession(
         val driver: CcidDriverOps,
-        val isCardPresent: AtomicBoolean = AtomicBoolean(false),
+        @Volatile var isCardPresent: Boolean = false,
         @Volatile var keepConnectedUntilTagClosed: Boolean = false,
         @Volatile var activeTag: NfcIsoTagUsb? = null,
-        val scanCompleted: AtomicBoolean = AtomicBoolean(false),
+        @Volatile var scanCompleted: Boolean = false,
         var waitingForRemovalCount: Int = 0,
         var delayedDisconnectJob: Job? = null,
     ) {
@@ -101,8 +84,8 @@ internal class NfcTagReaderUsb internal constructor(
             get() = keepConnectedUntilTagClosed && activeTag?.isClosed != true
     }
 
-    private val driverLock = Any()
-    private val usbLifecycleLock = Any()
+    private val driverLock = SynchronizedLock()
+    private val usbLifecycleLock = SynchronizedLock()
     private var activeSession: DriverSession? = null
     private var connectedDriver: CcidDriverOps? = null
 
@@ -113,7 +96,7 @@ internal class NfcTagReaderUsb internal constructor(
         get() = false
 
     private fun connectDriver(driver: CcidDriverOps) {
-        synchronized(usbLifecycleLock) {
+        usbLifecycleLock.withLock {
             connectedDriver?.let { previous ->
                 previous.setListener(null)
                 previous.disconnect()
@@ -125,7 +108,7 @@ internal class NfcTagReaderUsb internal constructor(
     }
 
     private fun disconnectDriver(driver: CcidDriverOps) {
-        synchronized(usbLifecycleLock) {
+        usbLifecycleLock.withLock {
             if (connectedDriver === driver) {
                 connectedDriver = null
                 driver.setListener(null)
@@ -135,18 +118,18 @@ internal class NfcTagReaderUsb internal constructor(
     }
 
     internal fun close() {
-        val session = synchronized(driverLock) {
+        val session = driverLock.withLock {
             val current = activeSession
             current?.delayedDisconnectJob?.cancel()
             current?.delayedDisconnectJob = null
             activeSession = null
             current
         }
-        session?.isCardPresent?.set(false)
+        session?.isCardPresent = false
         if (session != null) {
             disconnectDriver(session.driver)
         } else {
-            synchronized(usbLifecycleLock) {
+            usbLifecycleLock.withLock {
                 connectedDriver?.let { previous ->
                     connectedDriver = null
                     previous.setListener(null)
@@ -161,7 +144,7 @@ internal class NfcTagReaderUsb internal constructor(
         lateinit var job: Job
         job = backgroundScope.launch {
             delay(timeout)
-            val shouldDisconnect = synchronized(driverLock) {
+            val shouldDisconnect = driverLock.withLock {
                 if (session.delayedDisconnectJob === job) {
                     session.delayedDisconnectJob = null
                     if (session.waitingForRemovalCount == 0 && activeSession === session) {
@@ -182,7 +165,7 @@ internal class NfcTagReaderUsb internal constructor(
     }
 
     override suspend fun waitUntilRemoved() {
-        val session = synchronized(driverLock) {
+        val session = driverLock.withLock {
             val current = activeSession ?: return
             current.waitingForRemovalCount++
             current.delayedDisconnectJob?.cancel()
@@ -190,8 +173,8 @@ internal class NfcTagReaderUsb internal constructor(
             current
         }
         try {
-            while (session.isCardPresent.get()) {
-                val status = withContext(Dispatchers.IO) {
+            while (session.isCardPresent) {
+                val status = withContext(Dispatchers.Default) {
                     try {
                         session.driver.getCardStatus()
                     } catch (e: IOException) {
@@ -200,13 +183,13 @@ internal class NfcTagReaderUsb internal constructor(
                     }
                 }
                 if (status == CardStatus.ABSENT) {
-                    session.isCardPresent.set(false)
+                    session.isCardPresent = false
                     break
                 }
                 delay(pollInterval)
             }
         } finally {
-            val shouldDisconnect = synchronized(driverLock) {
+            val shouldDisconnect = driverLock.withLock {
                 session.waitingForRemovalCount--
                 if (session.waitingForRemovalCount == 0 && activeSession === session) {
                     session.delayedDisconnectJob?.cancel()
@@ -219,7 +202,7 @@ internal class NfcTagReaderUsb internal constructor(
             }
             if (shouldDisconnect) {
                 withContext(NonCancellable) {
-                    withContext(Dispatchers.IO) {
+                    withContext(Dispatchers.Default) {
                         disconnectDriver(session.driver)
                     }
                 }
@@ -237,7 +220,6 @@ internal class NfcTagReaderUsb internal constructor(
      * @return The result of [tagInteractionFunc].
      * @throws NfcTagLostException if the tag is lost during transaction.
      * @throws IOException if a USB or CCID communication error occurs.
-     * @throws SecurityException if USB permission is denied.
      */
     override suspend fun <T : Any> scan(
         message: String?,
@@ -245,19 +227,19 @@ internal class NfcTagReaderUsb internal constructor(
         options: NfcScanOptions,
         context: CoroutineContext
     ): T {
-        val previousSession = synchronized(driverLock) {
+        val previousSession = driverLock.withLock {
             val prev = activeSession
             prev?.delayedDisconnectJob?.cancel()
             prev?.delayedDisconnectJob = null
             activeSession = null
             prev
         }
-        previousSession?.isCardPresent?.set(false)
+        previousSession?.isCardPresent = false
 
         val driver = createDriver(options.pollingFrameData?.toByteArray())
         connectDriver(driver)
         val session = DriverSession(driver = driver)
-        synchronized(driverLock) {
+        driverLock.withLock {
             activeSession = session
         }
 
@@ -265,27 +247,27 @@ internal class NfcTagReaderUsb internal constructor(
         try {
             return scanNfcWithPromptDialog(message) { updateMessage, resetMessage ->
                 suspendCancellableCoroutine { continuation ->
-                    val stateLock = Any()
+                    val stateLock = SynchronizedLock()
                     var readJob: Job? = null
-                    session.isCardPresent.set(false)
+                    session.isCardPresent = false
 
                     val listener = object : CcidDriverListener {
                         override fun onCardInserted() {
                             Logger.i(TAG, "Card inserted")
-                            synchronized(stateLock) {
-                                session.isCardPresent.set(true)
+                            stateLock.withLock {
+                                session.isCardPresent = true
                                 if (!continuation.isActive || readJob != null) return
                                 readJob = CoroutineScope(context).launch {
                                     val tag = NfcIsoTagUsb(
                                         driver = driver,
                                         updateMessage = updateMessage,
                                         onClose = {
-                                            if (session.scanCompleted.get()) {
-                                                val shouldDisconnect = synchronized(driverLock) {
+                                            if (session.scanCompleted) {
+                                                val shouldDisconnect = driverLock.withLock {
                                                     if (activeSession !== session) {
                                                         false
                                                     } else if (session.waitingForRemovalCount == 0 &&
-                                                        !session.isCardPresent.get()
+                                                        !session.isCardPresent
                                                     ) {
                                                         session.delayedDisconnectJob?.cancel()
                                                         session.delayedDisconnectJob = null
@@ -309,7 +291,7 @@ internal class NfcTagReaderUsb internal constructor(
                                     )
                                     session.activeTag = tag
                                     try {
-                                        while (continuation.isActive && session.isCardPresent.get()) {
+                                        while (continuation.isActive && session.isCardPresent) {
                                             tag.resetClosed()
                                             val funcResult = tagInteractionFunc(tag)
                                             if (funcResult != null) {
@@ -324,7 +306,7 @@ internal class NfcTagReaderUsb internal constructor(
                                             // finishes disabling Observe Mode, then power-cycle the slot so a fresh
                                             // RATS/ATTRIB triggers ISO-DEP activation on the phone.
                                             delay(200.milliseconds)
-                                            if (!continuation.isActive || !session.isCardPresent.get()) break
+                                            if (!continuation.isActive || !session.isCardPresent) break
                                             if (!driver.powerCycleCard()) {
                                                 delay(150.milliseconds)
                                             }
@@ -341,7 +323,7 @@ internal class NfcTagReaderUsb internal constructor(
                                             continuation.resumeWithException(e)
                                         }
                                     } finally {
-                                        synchronized(stateLock) {
+                                        stateLock.withLock {
                                             readJob = null
                                         }
                                     }
@@ -351,8 +333,8 @@ internal class NfcTagReaderUsb internal constructor(
 
                         override fun onCardRemoved() {
                             Logger.i(TAG, "Card removed")
-                            synchronized(stateLock) {
-                                session.isCardPresent.set(false)
+                            stateLock.withLock {
+                                session.isCardPresent = false
                             }
                         }
                     }
@@ -370,8 +352,8 @@ internal class NfcTagReaderUsb internal constructor(
 
                     continuation.invokeOnCancellation {
                         readJob?.cancel()
-                        session.isCardPresent.set(false)
-                        synchronized(driverLock) {
+                        session.isCardPresent = false
+                        driverLock.withLock {
                             session.delayedDisconnectJob?.cancel()
                             session.delayedDisconnectJob = null
                             if (activeSession === session) {
@@ -389,10 +371,10 @@ internal class NfcTagReaderUsb internal constructor(
             scanCancelled = true
             throw e
         } finally {
-            session.scanCompleted.set(true)
+            session.scanCompleted = true
             if (scanCancelled) {
-                session.isCardPresent.set(false)
-                synchronized(driverLock) {
+                session.isCardPresent = false
+                driverLock.withLock {
                     session.delayedDisconnectJob?.cancel()
                     session.delayedDisconnectJob = null
                     if (activeSession === session) {
@@ -403,13 +385,13 @@ internal class NfcTagReaderUsb internal constructor(
             } else {
                 driver.setListener(object : CcidDriverListener {
                     override fun onCardInserted() {
-                        session.isCardPresent.set(true)
+                        session.isCardPresent = true
                     }
 
                     override fun onCardRemoved() {
                         Logger.i(TAG, "Card removed")
-                        session.isCardPresent.set(false)
-                        val disconnectOnRemoval = synchronized(driverLock) {
+                        session.isCardPresent = false
+                        val disconnectOnRemoval = driverLock.withLock {
                             if (session.waitingForRemovalCount == 0 &&
                                 !session.stillNeedsTag &&
                                 activeSession === session
@@ -427,11 +409,11 @@ internal class NfcTagReaderUsb internal constructor(
                         }
                     }
                 })
-                val shouldDisconnectNow = synchronized(driverLock) {
+                val shouldDisconnectNow = driverLock.withLock {
                     if (activeSession !== session) {
                         false
                     } else if (!session.stillNeedsTag &&
-                        !session.isCardPresent.get() &&
+                        !session.isCardPresent &&
                         session.waitingForRemovalCount == 0
                     ) {
                         session.delayedDisconnectJob?.cancel()

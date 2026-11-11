@@ -6,23 +6,172 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.Build
 import androidx.core.app.PendingIntentCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import org.multipaz.context.applicationContext
 import org.multipaz.util.Logger
+import java.io.IOException
+import kotlin.coroutines.resume
 
 private const val TAG = "ExternalNfcReaderUsb"
 
 // Used to trigger intent when USB permission changes
 private const val ACTION_USB_PERMISSION = "org.multipaz.nfc.USB_PERMISSION"
+
+internal class AndroidCcidUsbTransport(
+    private val usbManager: UsbManager,
+    private val device: UsbDevice,
+    private val requestedInterfaceIndex: Int,
+) : CcidUsbTransport {
+    private var connection: UsbDeviceConnection? = null
+    private var usbInterface: UsbInterface? = null
+    private var bulkInEndpoint: UsbEndpoint? = null
+    private var bulkOutEndpoint: UsbEndpoint? = null
+    private var interruptEndpoint: UsbEndpoint? = null
+
+    override val deviceName: String
+        get() = device.deviceName
+
+    override val vendorId: Int
+        get() = device.vendorId
+
+    override val productId: Int
+        get() = device.productId
+
+    override val interfaceId: Int
+        get() = usbInterface?.id ?: requestedInterfaceIndex
+
+    override val rawDescriptors: ByteArray?
+        get() = try {
+            connection?.rawDescriptors
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        }
+
+    override val hasInterruptEndpoint: Boolean
+        get() = interruptEndpoint != null
+
+    override val interruptMaxPacketSize: Int
+        get() = interruptEndpoint?.maxPacketSize ?: 0
+
+    override fun open() {
+        if (!usbManager.hasPermission(device)) {
+            throw SecurityException("Permission denied for device ${device.deviceName}")
+        }
+        val conn = usbManager.openDevice(device)
+            ?: throw IOException("Could not open device connection")
+        connection = conn
+
+        val iface = findCcidInterface(device)
+            ?: run {
+                conn.close()
+                connection = null
+                throw IOException("CCID interface not found")
+            }
+        usbInterface = iface
+
+        findEndpoints(iface)
+        if (!conn.claimInterface(iface, true)) {
+            conn.close()
+            connection = null
+            usbInterface = null
+            throw IOException("Could not claim CCID interface id=${iface.id}")
+        }
+    }
+
+    override fun close() {
+        val iface = usbInterface
+        val conn = connection
+        usbInterface = null
+        connection = null
+        bulkInEndpoint = null
+        bulkOutEndpoint = null
+        interruptEndpoint = null
+        if (conn != null && iface != null) {
+            try {
+                conn.releaseInterface(iface)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error releasing USB interface", e)
+            }
+        }
+        if (conn != null) {
+            try {
+                conn.close()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing USB connection", e)
+            }
+        }
+    }
+
+    override fun bulkTransferOut(data: ByteArray, timeoutMs: Int): Int {
+        val conn = connection ?: throw IOException("Failed to send command over bulk-out endpoint.")
+        val endpoint = bulkOutEndpoint ?: throw IOException("Bulk-out endpoint not available.")
+        return conn.bulkTransfer(endpoint, data, data.size, timeoutMs)
+    }
+
+    override fun bulkTransferIn(buffer: ByteArray, timeoutMs: Int): Int {
+        val conn = connection ?: throw IOException("Failed to read response from bulk-in endpoint.")
+        val endpoint = bulkInEndpoint ?: throw IOException("Bulk-in endpoint not available.")
+        return conn.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
+    }
+
+    override fun interruptTransferIn(buffer: ByteArray, timeoutMs: Int): Int {
+        val conn = connection ?: return -1
+        val endpoint = interruptEndpoint ?: return -1
+        return conn.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
+    }
+
+    private fun findCcidInterface(device: UsbDevice): UsbInterface? {
+        val iface = try {
+            device.getInterface(requestedInterfaceIndex)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        }
+        if (iface != null) {
+            Logger.i(TAG, "Using specified USB interface id=${iface.id} for device ${device.deviceName}")
+            return iface
+        }
+        for (i in 0 until device.interfaceCount) {
+            val candidate = device.getInterface(i)
+            if (candidate.interfaceClass == UsbConstants.USB_CLASS_CSCID) {
+                Logger.i(TAG, "Defaulting to first CCID interface id=${candidate.id} for device ${device.deviceName}")
+                return candidate
+            }
+        }
+        return null
+    }
+
+    private fun findEndpoints(iface: UsbInterface) {
+        for (i in 0 until iface.endpointCount) {
+            val endpoint = iface.getEndpoint(i)
+            if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                if (endpoint.direction == UsbConstants.USB_DIR_IN) {
+                    bulkInEndpoint = endpoint
+                } else {
+                    bulkOutEndpoint = endpoint
+                }
+            } else if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT) {
+                interruptEndpoint = endpoint
+            }
+        }
+    }
+}
 
 internal actual suspend fun ExternalNfcReaderUsb.requestUsbPermission(): Boolean {
     val usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
@@ -98,14 +247,12 @@ internal actual fun ExternalNfcReaderUsb.observeUsbState(): Flow<ExternalNfcRead
     fun checkCurrentUsbState(): ExternalNfcReaderState {
         val deviceList = usbManager.deviceList
         val device = deviceList.values.firstOrNull { it.vendorId == vendorId && it.productId == productId }
-        if (device == null) {
-            return ExternalNfcReaderState.NOT_CONNECTED
+        return if (device == null) {
+            ExternalNfcReaderState.NOT_CONNECTED
+        } else if (usbManager.hasPermission(device)) {
+            ExternalNfcReaderState.CONNECTED
         } else {
-            return if (usbManager.hasPermission(device)) {
-                return ExternalNfcReaderState.CONNECTED
-            } else {
-                return ExternalNfcReaderState.CONNECTED_NO_PERMISSION
-            }
+            ExternalNfcReaderState.CONNECTED_NO_PERMISSION
         }
     }
     trySend(checkCurrentUsbState())
@@ -146,6 +293,11 @@ private data class UsbReaderKey(
     val interfaceIndex: Int,
 )
 
+private data class AndroidDeviceIdentity(
+    val deviceId: Int,
+    val deviceName: String,
+)
+
 private val usbReadersLock = Any()
 private val usbReaders = mutableMapOf<UsbReaderKey, NfcTagReaderUsb>()
 
@@ -155,21 +307,30 @@ internal actual suspend fun ExternalNfcReaderUsb.getUsbNfcTagReader(): NfcTagRea
     val device = deviceList.values.firstOrNull { it.vendorId == vendorId && it.productId == productId }
         ?: throw IllegalStateException("Device is not connected")
     val key = UsbReaderKey(vendorId, productId, interfaceIndex)
+    val identity = AndroidDeviceIdentity(device.deviceId, device.deviceName)
     var staleReader: NfcTagReaderUsb? = null
     val reader = synchronized(usbReadersLock) {
         val existing = usbReaders[key]
         if (existing != null &&
-            existing.device?.deviceId == device.deviceId &&
-            existing.device.deviceName == device.deviceName &&
+            existing.deviceIdentity == identity &&
             existing.interfaceIndex == interfaceIndex
         ) {
             existing
         } else {
             staleReader = existing
             NfcTagReaderUsb(
-                manager = usbManager,
-                device = device,
-                interfaceIndex = interfaceIndex
+                deviceIdentity = identity,
+                interfaceIndex = interfaceIndex,
+                createDriver = { pollingFrameData ->
+                    CcidDriver(
+                        transport = AndroidCcidUsbTransport(
+                            usbManager = usbManager,
+                            device = device,
+                            requestedInterfaceIndex = interfaceIndex
+                        ),
+                        pollingFrameData = pollingFrameData
+                    )
+                }
             ).also { usbReaders[key] = it }
         }
     }
