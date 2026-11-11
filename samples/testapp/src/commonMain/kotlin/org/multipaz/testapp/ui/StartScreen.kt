@@ -43,6 +43,7 @@ fun StartScreen(
     onClickFaceMatcherPrompt: () -> Unit = {},
     onClickQrCodes: () -> Unit = {},
     onClickNfc: () -> Unit = {},
+    onClickNfcObserveMode: () -> Unit = {},
     onClickIsoMdocProximitySharing: () -> Unit = {},
     onClickIsoMdocProximityReading: () -> Unit = {},
     onClickDcRequest: () -> Unit = {},
@@ -227,6 +228,11 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickNfc) {
                         Text("NFC sharing and scanning")
+                    }
+                }
+                item {
+                    TextButton(onClick = onClickNfcObserveMode) {
+                        Text("NFC Observe Mode")
                     }
                 }
                 item {

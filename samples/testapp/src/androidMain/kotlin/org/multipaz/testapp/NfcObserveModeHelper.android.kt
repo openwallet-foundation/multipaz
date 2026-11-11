@@ -13,22 +13,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.core.content.edit
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
+import org.multipaz.testapp.NfcObserveModeHelper.inhibitObserveModeForTransaction
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-import androidx.core.content.edit
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.multipaz.testapp.NfcObserveModeHelper.inhibitObserveModeForTransaction
 
 
 class NfcObserveModeHelperService : HostApduService() {
@@ -51,14 +56,15 @@ class NfcObserveModeHelperService : HostApduService() {
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     override fun processPollingFrames(frames: List<PollingFrame>) {
-        Logger.i(TAG, "processPollingFrames")
+        Logger.i(TAG, "processPollingFrames (${frames.size} frames)")
+        NfcObserveModeHelper.onPollingFramesReceived(frames)
         var foundIdentityReader = false
         for (frame in frames) {
             if (frame.data.toHex().startsWith("6a028103")) {
                 foundIdentityReader = true
             }
         }
-        if (foundIdentityReader) {
+        if (foundIdentityReader && !NfcObserveModeHelper.isForceEnabledAndCapturingAllFrames) {
             Logger.i(TAG, "Detected identity reader and in observe mode: " +
                     "inhibiting observe to allow transaction to go through"
             )
@@ -80,6 +86,7 @@ class NfcObserveModeHelperService : HostApduService() {
 //
 actual object NfcObserveModeHelper {
     private const val TAG = "NfcObserveModeHelper"
+    private const val MAX_RECORDED_FRAMES = 500
 
     private val sharedPreferences: SharedPreferences by lazy {
         applicationContext.getSharedPreferences("NfcObserveModeHelper", 0)
@@ -101,6 +108,69 @@ actual object NfcObserveModeHelper {
             updateObserveMode()
         }
 
+    private var forceEnabledAndCapturingAllFramesValue = false
+
+    actual var isForceEnabledAndCapturingAllFrames: Boolean
+        get() = forceEnabledAndCapturingAllFramesValue
+        set(value) {
+            if (forceEnabledAndCapturingAllFramesValue != value) {
+                forceEnabledAndCapturingAllFramesValue = value
+                updatePollingFiltersForMode()
+                updateObserveMode()
+            }
+        }
+
+    private val _state = MutableStateFlow(NfcObserveModeState())
+    actual val state: StateFlow<NfcObserveModeState> = _state.asStateFlow()
+
+    private var nextFrameId = 1L
+    private val _pollingFrames = MutableStateFlow<List<NfcPollingFrame>>(emptyList())
+    actual val pollingFrames: StateFlow<List<NfcPollingFrame>> = _pollingFrames.asStateFlow()
+
+    actual fun clearPollingFrames() {
+        _pollingFrames.value = emptyList()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    internal fun onPollingFramesReceived(frames: List<PollingFrame>) {
+        val now = Clock.System.now()
+        val converted = frames.map { frame ->
+            val type = when (frame.type) {
+                PollingFrame.POLLING_LOOP_TYPE_A -> NfcPollingFrameType.A
+                PollingFrame.POLLING_LOOP_TYPE_B -> NfcPollingFrameType.B
+                PollingFrame.POLLING_LOOP_TYPE_F -> NfcPollingFrameType.F
+                PollingFrame.POLLING_LOOP_TYPE_ON -> NfcPollingFrameType.REMOTE_FIELD_ON
+                PollingFrame.POLLING_LOOP_TYPE_OFF -> NfcPollingFrameType.REMOTE_FIELD_OFF
+                else -> NfcPollingFrameType.UNKNOWN
+            }
+            NfcPollingFrame(
+                id = nextFrameId++,
+                type = type,
+                data = ByteString(frame.data),
+                vendorSpecificGain = frame.vendorSpecificGain,
+                timestampMicros = frame.timestamp,
+                triggeredAutoTransact = frame.triggeredAutoTransact,
+                observedAt = now,
+            )
+        }
+        for (item in converted) {
+            Logger.i(
+                TAG,
+                "Observed frame #${item.id}: type=${item.type} data=${item.data.toHex()} " +
+                    "gain=${item.vendorSpecificGain} ts=${item.timestampMicros}us " +
+                    "autoTransact=${item.triggeredAutoTransact}"
+            )
+        }
+        _pollingFrames.update { existing ->
+            val combined = existing + converted
+            if (combined.size > MAX_RECORDED_FRAMES) {
+                combined.takeLast(MAX_RECORDED_FRAMES)
+            } else {
+                combined
+            }
+        }
+    }
+
     private var observeModeExplicitlyInhibited = false
     private var inhbitForTransactionUntil: Instant? = null
 
@@ -114,12 +184,21 @@ actual object NfcObserveModeHelper {
 
     internal fun updateObserveMode() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            _state.value = NfcObserveModeState(
+                isSupported = false,
+                isEnabledInSettings = isEnabled,
+                isForceEnabled = forceEnabledAndCapturingAllFramesValue,
+                isEnabledOnAdapter = false,
+                isExplicitlyInhibited = observeModeExplicitlyInhibited,
+                isInhibitedForTransaction = false,
+            )
             return
         }
 
         ensurePollingFiltersRegistered()
 
-        if (!isEnabled) {
+        val effectivelyEnabled = isEnabled || forceEnabledAndCapturingAllFramesValue
+        if (!effectivelyEnabled) {
             if (pollJob != null) {
                 pollJob?.cancel()
                 pollJob = null
@@ -137,14 +216,18 @@ actual object NfcObserveModeHelper {
 
         val adapter = NfcAdapter.getDefaultAdapter(applicationContext)
         if (adapter != null) {
-            val isObserveModeEnabledOnAdapter = adapter.isObserveModeEnabled
-            val observeModeShouldBeEnabled = if (isEnabled) {
+            val isSupported = adapter.isObserveModeSupported
+            var isInhibitedForTx = false
+            val observeModeShouldBeEnabled = if (forceEnabledAndCapturingAllFramesValue) {
+                true
+            } else if (isEnabled) {
                 if (observeModeExplicitlyInhibited) {
                     false
                 } else {
                     inhbitForTransactionUntil?.let {
                         val now = Clock.System.now()
                         if (now < it) {
+                            isInhibitedForTx = true
                             false
                         } else {
                             inhbitForTransactionUntil = null
@@ -155,14 +238,33 @@ actual object NfcObserveModeHelper {
             } else {
                 false
             }
-            if (isObserveModeEnabledOnAdapter != observeModeShouldBeEnabled) {
-                Logger.i(
-                    TAG,
-                    "isObserveModeEnabled=$isObserveModeEnabledOnAdapter changing to $observeModeShouldBeEnabled"
-                )
-                adapter.isObserveModeEnabled = observeModeShouldBeEnabled
+            if (isSupported) {
+                val isObserveModeEnabledOnAdapter = adapter.isObserveModeEnabled
+                if (isObserveModeEnabledOnAdapter != observeModeShouldBeEnabled) {
+                    Logger.i(
+                        TAG,
+                        "isObserveModeEnabled=$isObserveModeEnabledOnAdapter changing to $observeModeShouldBeEnabled"
+                    )
+                    adapter.isObserveModeEnabled = observeModeShouldBeEnabled
+                }
             }
-            //Logger.i(TAG, "observe mode enabled: ${adapter.isObserveModeEnabled}")
+            _state.value = NfcObserveModeState(
+                isSupported = isSupported,
+                isEnabledInSettings = isEnabled,
+                isForceEnabled = forceEnabledAndCapturingAllFramesValue,
+                isEnabledOnAdapter = if (isSupported) adapter.isObserveModeEnabled else false,
+                isExplicitlyInhibited = observeModeExplicitlyInhibited,
+                isInhibitedForTransaction = isInhibitedForTx,
+            )
+        } else {
+            _state.value = NfcObserveModeState(
+                isSupported = false,
+                isEnabledInSettings = isEnabled,
+                isForceEnabled = forceEnabledAndCapturingAllFramesValue,
+                isEnabledOnAdapter = false,
+                isExplicitlyInhibited = observeModeExplicitlyInhibited,
+                isInhibitedForTransaction = false,
+            )
         }
     }
 
@@ -185,6 +287,43 @@ actual object NfcObserveModeHelper {
     }
 
     private var pollingFiltersRegistered = false
+    private var wildcardFilterRegistered = false
+
+    private fun updatePollingFiltersForMode() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            return
+        }
+        val adapter = NfcAdapter.getDefaultAdapter(applicationContext) ?: return
+        if (!adapter.isObserveModeSupported) {
+            return
+        }
+        val componentName = ComponentName(applicationContext, NfcObserveModeHelperService::class.java)
+        val cardEmulation = CardEmulation.getInstance(adapter)
+        if (forceEnabledAndCapturingAllFramesValue && !wildcardFilterRegistered) {
+            try {
+                cardEmulation.registerPollingLoopPatternFilterForService(
+                    componentName,
+                    ".*",
+                    false
+                )
+                wildcardFilterRegistered = true
+                Logger.i(TAG, "Registered wildcard polling loop pattern filter '.*'")
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to register wildcard polling loop pattern filter", e)
+            }
+        } else if (!forceEnabledAndCapturingAllFramesValue && wildcardFilterRegistered) {
+            try {
+                cardEmulation.removePollingLoopPatternFilterForService(
+                    componentName,
+                    ".*"
+                )
+                wildcardFilterRegistered = false
+                Logger.i(TAG, "Removed wildcard polling loop pattern filter '.*'")
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to remove wildcard polling loop pattern filter", e)
+            }
+        }
+    }
 
     private fun ensurePollingFiltersRegistered() {
         if (pollingFiltersRegistered) {
@@ -218,11 +357,25 @@ actual object NfcObserveModeHelper {
             false
         )
 
+        if (forceEnabledAndCapturingAllFramesValue && !wildcardFilterRegistered) {
+            try {
+                cardEmulation.registerPollingLoopPatternFilterForService(
+                    componentName,
+                    ".*",
+                    false
+                )
+                wildcardFilterRegistered = true
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to register wildcard polling loop pattern filter", e)
+            }
+        }
+
         cardEmulation.registerNfcEventCallback(
             applicationContext.mainExecutor,
             object : CardEmulation.NfcEventCallback {
                 override fun onObserveModeStateChanged(isEnabled: Boolean) {
                     Logger.i(TAG, "onObserveModeStateChanged: $isEnabled")
+                    _state.update { it.copy(isEnabledOnAdapter = isEnabled) }
                 }
             }
         )
@@ -248,3 +401,4 @@ actual fun rememberInhibitNfcObserveMode() {
         }
     }
 }
+
