@@ -2,9 +2,40 @@ package org.multipaz.nfc
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.Logger
+import org.multipaz.util.SynchronizedLock
 import org.multipaz.util.toHex
+import org.multipaz.util.withLock
+import kotlin.concurrent.Volatile
 
 private const val TAG = "NfcApduRouter"
+
+/**
+ * Backend interface for routing APDUs to and from an [NfcApduRouter] on platforms without
+ * OS-level Host Card Emulation (such as Desktop/Linux JVM with an NCI controller).
+ */
+interface NfcApduRouterBackend {
+    /**
+     * Called when an [NfcApduRouter] is started via [NfcApduRouter.start].
+     *
+     * @param router the active [NfcApduRouter] instance.
+     */
+    fun onRouterStarted(router: NfcApduRouter)
+
+    /**
+     * Called when an [NfcApduRouter] is stopped via [NfcApduRouter.stop].
+     *
+     * @param router the [NfcApduRouter] instance being stopped.
+     */
+    fun onRouterStopped(router: NfcApduRouter)
+
+    /**
+     * Called when an [NfcApduRouter] (or one of its [NfcApduService]s) sends a [ResponseApdu]
+     * asynchronously via [NfcApduRouter.sendResponseApdu].
+     *
+     * @param responseApdu the [ResponseApdu] to transmit to the remote reader.
+     */
+    fun sendResponseApdu(responseApdu: ResponseApdu)
+}
 
 /**
  * A router which routes incoming NFC [CommandApdu]s by ISO/IEC 7816-4 Application ID (AID) to
@@ -83,12 +114,82 @@ abstract class NfcApduRouter : NfcApduRouterBase() {
             service.sendResponseCallback = ::sendResponseApdu
             service.start()
         }
+        notifyRouterStarted(this)
     }
 
     override fun stop() {
+        notifyRouterStopped(this)
         super.stop()
-        services.forEach { (_, service) ->
-            service.stop()
+        if (::services.isInitialized) {
+            services.forEach { (_, service) ->
+                service.stop()
+            }
+        }
+    }
+
+    companion object {
+        private val registryLock = SynchronizedLock()
+
+        @Volatile
+        private var registeredBackend: NfcApduRouterBackend? = null
+
+        @Volatile
+        private var activeRouter: NfcApduRouter? = null
+
+        /**
+         * Registers an [NfcApduRouterBackend] to handle card emulation for [NfcApduRouter]
+         * instances. If an [NfcApduRouter] has already been started,
+         * [NfcApduRouterBackend.onRouterStarted] is invoked immediately.
+         *
+         * @param backend the [NfcApduRouterBackend] to register.
+         */
+        fun registerBackend(backend: NfcApduRouterBackend) {
+            val currentRouter = registryLock.withLock {
+                registeredBackend = backend
+                activeRouter
+            }
+            currentRouter?.let { backend.onRouterStarted(it) }
+        }
+
+        /**
+         * Unregisters a previously registered [NfcApduRouterBackend].
+         *
+         * @param backend the [NfcApduRouterBackend] to unregister.
+         */
+        fun unregisterBackend(backend: NfcApduRouterBackend) {
+            val routerToStop = registryLock.withLock {
+                if (registeredBackend === backend) {
+                    registeredBackend = null
+                    activeRouter
+                } else {
+                    null
+                }
+            }
+            routerToStop?.let { backend.onRouterStopped(it) }
+        }
+
+        internal fun notifyRouterStarted(router: NfcApduRouter) {
+            val backend = registryLock.withLock {
+                activeRouter = router
+                registeredBackend
+            }
+            backend?.onRouterStarted(router)
+        }
+
+        internal fun notifyRouterStopped(router: NfcApduRouter) {
+            val backend = registryLock.withLock {
+                if (activeRouter === router) {
+                    activeRouter = null
+                }
+                registeredBackend
+            }
+            backend?.onRouterStopped(router)
+        }
+
+        internal fun forwardResponseApduIfHandled(responseApdu: ResponseApdu): Boolean {
+            val backend = registryLock.withLock { registeredBackend } ?: return false
+            backend.sendResponseApdu(responseApdu)
+            return true
         }
     }
 

@@ -1,4 +1,4 @@
-package org.multipaz.nfc
+package org.multipaz.compose.nfc
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +24,13 @@ import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_modal_bottom_sheet_cancel
 import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_modal_bottom_sheet_ready_to_scan
 
+/**
+ * Modal bottom sheet displayed while scanning for an NFC tag.
+ *
+ * @param dialogMessage message displayed in the sheet body.
+ * @param dialogIconPainter icon displayed for the current scan state.
+ * @param onDismissed callback invoked when the user cancels or dismisses the sheet.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NfcTagReaderModalBottomSheet(

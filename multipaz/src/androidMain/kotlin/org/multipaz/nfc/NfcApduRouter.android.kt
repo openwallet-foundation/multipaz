@@ -4,9 +4,9 @@ import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.os.Looper
 import kotlinx.coroutines.CancellationException
-import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.util.Logger
+import kotlin.concurrent.Volatile
 
 private const val TAG = "NfcApduRouterBase"
 
@@ -22,7 +22,7 @@ private fun ensureLooper() {
         if (Looper.myLooper() == null) {
             Looper.prepare()
         }
-    } catch (_: Throwable) {
+    } catch (_: RuntimeException) {
     }
 }
 
@@ -34,9 +34,12 @@ actual abstract class NfcApduRouterBase private constructor(
 ) : HostApduService() {
     actual constructor() : this(ensureLooper())
 
+    @Volatile
+    private var activeSessionIsPlatformHostApdu: Boolean = false
+
     final override fun onCreate() {
         super.onCreate()
-        applicationContext?.let {
+        this.applicationContext?.let {
             initializeApplication(it)
         }
         start()
@@ -44,6 +47,7 @@ actual abstract class NfcApduRouterBase private constructor(
 
     final override fun onDestroy() {
         super.onDestroy()
+        activeSessionIsPlatformHostApdu = false
         stop()
     }
 
@@ -55,6 +59,7 @@ actual abstract class NfcApduRouterBase private constructor(
 
     final override fun processCommandApdu(encodedCommandApdu: ByteArray?, extras: Bundle?): ByteArray? {
         if (encodedCommandApdu == null) return null
+        activeSessionIsPlatformHostApdu = true
         Logger.dHex(TAG, "Handling Command APDU", encodedCommandApdu)
         // With Extended APDUs it's possible we get a partial APDU so gracefully handle if decoding
         // fails. Simply log and discard, we'll likely get hit with an onDeactivated call soon anyway.
@@ -71,6 +76,7 @@ actual abstract class NfcApduRouterBase private constructor(
     actual abstract fun deactivate(reason: NfcDeactivationReason)
 
     final override fun onDeactivated(reason: Int) {
+        activeSessionIsPlatformHostApdu = false
         val deactivationReason = when (reason) {
             DEACTIVATION_DESELECTED -> NfcDeactivationReason.DESELECTED
             else -> NfcDeactivationReason.LINK_LOSS
@@ -79,6 +85,8 @@ actual abstract class NfcApduRouterBase private constructor(
     }
 
     actual open fun sendResponseApdu(responseApdu: ResponseApdu) {
-        sendResponseApdu(responseApdu.encode())
+        if (activeSessionIsPlatformHostApdu || !NfcApduRouter.forwardResponseApduIfHandled(responseApdu)) {
+            sendResponseApdu(responseApdu.encode())
+        }
     }
 }

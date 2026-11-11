@@ -11,6 +11,7 @@ import org.multipaz.prompt.IosPromptModel
 import org.multipaz.prompt.PassphrasePromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.ScanNfcPromptDialogModel
 
 @Composable
 actual fun PromptDialogs(
@@ -22,6 +23,9 @@ actual fun PromptDialogs(
 ) {
     val model = promptModel as IosPromptModel
 
+    if (!excludeTypes.contains(ScanNfcPromptDialogModel.DialogType)) {
+        ScanNfcTagPromptDialog(model.getDialogModel(ScanNfcPromptDialogModel.DialogType))
+    }
     if (!excludeTypes.contains(PassphrasePromptDialogModel.DialogType)) {
         PassphrasePromptDialog(
             model = model.getDialogModel(PassphrasePromptDialogModel.DialogType),

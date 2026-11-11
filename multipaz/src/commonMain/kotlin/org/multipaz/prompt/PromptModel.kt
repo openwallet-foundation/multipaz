@@ -106,6 +106,7 @@ abstract class PromptModel protected constructor(
             addPromptDialogModel(ConsentPromptDialogModel())
             addPromptDialogModel(FaceMatcherPromptDialogModel())
             addPromptDialogModel(FaceMatcherLivenessPromptDialogModel())
+            addPromptDialogModel(ScanNfcPromptDialogModel())
         }
 
         abstract fun build(): PromptModel

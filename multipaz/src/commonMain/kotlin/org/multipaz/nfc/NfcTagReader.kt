@@ -2,6 +2,9 @@ package org.multipaz.nfc
 
 import kotlinx.coroutines.Dispatchers
 import org.multipaz.prompt.PromptDismissedException
+import org.multipaz.util.SynchronizedLock
+import org.multipaz.util.withLock
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -84,13 +87,45 @@ interface NfcTagReader {
     suspend fun waitUntilRemoved() {}
 
     companion object {
+        private val readersLock = SynchronizedLock()
+
+        @Volatile
+        private var registeredReaders: List<NfcTagReader> = emptyList()
+
         /**
-         * Gets the default/built-in readers on the platform, if any.
+         * Registers an additional [NfcTagReader] (for example, an NCI-based NFC reader) so it is
+         * returned by [getReaders].
+         *
+         * @param reader the [NfcTagReader] to register.
+         */
+        fun registerReader(reader: NfcTagReader) {
+            readersLock.withLock {
+                val current = registeredReaders
+                if (current.none { it === reader }) {
+                    registeredReaders = current + reader
+                }
+            }
+        }
+
+        /**
+         * Unregisters a previously registered [NfcTagReader].
+         *
+         * @param reader the [NfcTagReader] to unregister.
+         */
+        fun unregisterReader(reader: NfcTagReader) {
+            readersLock.withLock {
+                registeredReaders = registeredReaders.filter { it !== reader }
+            }
+        }
+
+        /**
+         * Gets the default/built-in and registered readers on the platform, if any.
          *
          * @return a list of [NfcTagReader], empty if the platform does not support NFC.
          */
         fun getReaders(): List<NfcTagReader> {
-            return nfcGetPlatformReaders()
+            val extra = readersLock.withLock { registeredReaders }
+            return nfcGetPlatformReaders() + extra
         }
     }
 }

@@ -10,11 +10,11 @@ presentment protocols.
 The project provides libraries written in [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform.html):
 
 - `multipaz` provides the core building blocks. It works on Android,
-  iOS, and in server-side environments. The library includes support 
-  for ISO mdoc and IETF SD-JWT VC credential formats and also implements
-  proximity presentment using ISO/IEC 18013-5:2021 (for ISO mdoc credentials)
-  and presentment to applications using the W3C Digital Credentials API
-  according to ISO/IEC 18013-7:2025 and OpenID4VP 1.0.
+  iOS, Linux/JVM, Web, and in server-side environments. The library includes
+  support for ISO mdoc and IETF SD-JWT VC credential formats, external USB CCID
+  NFC readers, proximity presentment using ISO/IEC 18013-5:2021 (for ISO mdoc
+  credentials), and presentment to applications using the W3C Digital
+  Credentials API according to ISO/IEC 18013-7:2025 and OpenID4VP 1.0.
 - `multipaz-compose` provides rich UI elements to be used in Compose
   applications.
 - [`multipaz-facenet`](multipaz-facenet/README.md) provides on-device and server-side
@@ -30,6 +30,11 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   according to latest available [ISO/IEC 18013-5 Second Edition draft](https://github.com/ISOWG10/ISO-18013).
 - `multipaz-swiftui` contains SwiftUI components which can be used in
   Swift applications.
+- `multipaz-nci` implements the NFC Forum NFC Controller Interface (NCI) 2.0
+  protocol for both NFC reader/writer (`NfcTagReader`) and NFC card emulation
+  (`NfcApduRouter`) over a transport-agnostic `NciPacketIo` interface,
+  including a Linux I2C + GPIO transport (`LinuxI2cNciPacketIo`, e.g., for NXP
+  PN7160 controllers on Raspberry Pi and embedded Linux systems).
 
 ## Command-line tool
 
