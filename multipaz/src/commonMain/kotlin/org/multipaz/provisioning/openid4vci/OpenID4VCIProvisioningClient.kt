@@ -535,9 +535,10 @@ internal class OpenID4VCIProvisioningClient(
         if (refreshToken == null && authorizationCode == null && preauthorizedCode == null) {
             throw IllegalArgumentException("No authorizations provided")
         }
-        if (preauthorizedCode != null) {
-            maybeObtainClientAttestationChallenge()
-        }
+        // A client attestation challenge is single-use, so every token request needs a fresh
+        // one: an authorization code follows a PAR request that has already spent its
+        // challenge, and a refresh starts without any.
+        maybeObtainClientAttestationChallenge()
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
         var retried = false
         val dpopKey = getDPopKey()
@@ -761,8 +762,8 @@ internal class OpenID4VCIProvisioningClient(
                     throw IllegalStateException("Error getting a challenge")
                 }
                 Logger.i(TAG, "Got successful response for challenge request")
-                // DPoP nonce might or might not be given
-                authorizationDPoPNonce = response.headers["DPoP-Nonce"]
+                // DPoP nonce might or might not be given; keep the one we have if not.
+                response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
                 val responseText = response.readRawBytes().decodeToString()
                 val json = Json.parseToJsonElement(responseText).jsonObject
                 Logger.dJson(TAG, "Received client attestation challenge response", json)
