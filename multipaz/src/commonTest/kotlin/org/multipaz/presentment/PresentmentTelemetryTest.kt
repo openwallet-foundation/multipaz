@@ -4,6 +4,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.nfc.MdocNfcEngagementException
 import org.multipaz.mdoc.role.MdocRole
@@ -17,6 +19,8 @@ import org.multipaz.mdoc.transport.fromDataItem
 import org.multipaz.mdoc.transport.toDataItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.milliseconds
 
 class PresentmentTelemetryTest {
@@ -26,19 +30,23 @@ class PresentmentTelemetryTest {
         val stats = MdocTransportStats(
             transportType = MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE,
             role = MdocRole.MDOC,
-            scanningTime = 120.milliseconds,
-            connectingTime = 340.milliseconds,
             bytesSent = 2048,
             bytesReceived = 512,
             numMessagesSent = 2,
             numMessagesReceived = 2,
+            bleScanningTime = 120.milliseconds,
+            bleConnectingTime = 340.milliseconds,
             bleUsingL2cap = false,
             bleL2capPsmInEngagement = false,
             bleNegotiatedMtu = 515,
             bleMtuInferredFromWrite = true,
             bleNumScanRestarts = 1,
             bleNumGattConnectRetries = 2,
+            bleNumMtuRequestRetries = 1,
             bleNumServiceDiscoveryRetries = 1,
+            bleNumCharacteristicDiscoveryRetries = 1,
+            bleNumCharacteristicReadRetries = 1,
+            bleNumDescriptorWriteRetries = 1,
             bleNumL2capConnectRetries = 0,
             bleNumChunksSent = 5,
             bleNumChunksReceived = 2,
@@ -63,15 +71,65 @@ class PresentmentTelemetryTest {
     }
 
     @Test
+    fun testMdocTransportStatsMinimalCborCompatibility() {
+        val minimalStats = MdocTransportStats(
+            transportType = MdocTransportType.NFC_DATA_TRANSFER_MODE,
+            role = MdocRole.MDOC,
+            bytesSent = 1024,
+            bytesReceived = 256,
+            numMessagesSent = 1,
+            numMessagesReceived = 1,
+        )
+        val cborItem = minimalStats.toDataItem()
+        assertFalse(cborItem.hasKey("bleUsingL2cap"))
+        assertFalse(cborItem.hasKey("bleNumScanRestarts"))
+        assertFalse(cborItem.hasKey("nfcHybridNumSentViaNfc"))
+        assertFalse(cborItem.hasKey("nfcDisconnectedDuringTransaction"))
+
+        val decoded = MdocTransportStats.fromDataItem(cborItem)
+        assertEquals(minimalStats, decoded)
+        assertNull(decoded.bleScanningTime)
+        assertNull(decoded.bleConnectingTime)
+        assertNull(decoded.bleUsingL2cap)
+        assertNull(decoded.bleNumScanRestarts)
+        assertNull(decoded.bleNumGattConnectRetries)
+        assertNull(decoded.bleNumMtuRequestRetries)
+        assertNull(decoded.bleNumServiceDiscoveryRetries)
+        assertNull(decoded.bleNumCharacteristicDiscoveryRetries)
+        assertNull(decoded.bleNumCharacteristicReadRetries)
+        assertNull(decoded.bleNumDescriptorWriteRetries)
+        assertNull(decoded.bleNumL2capConnectRetries)
+        assertNull(decoded.nfcHybridNumSentViaNfc)
+        assertNull(decoded.nfcDisconnectedDuringTransaction)
+
+        // Also verify decoding a hand-crafted older CBOR map that omits newly added fields
+        val legacyCbor = buildCborMap {
+            put("transportType", MdocTransportType.MDOC_CENTRAL_CLIENT_MODE.name)
+            put("role", MdocRole.MDOC.name)
+            put("bytesSent", 512L)
+            put("bytesReceived", 128L)
+            put("numMessagesSent", 1L)
+            put("numMessagesReceived", 1L)
+            putCborArray("warnings") {}
+            put("bleUsingL2cap", true)
+        }
+        val decodedLegacy = MdocTransportStats.fromDataItem(legacyCbor)
+        assertEquals(MdocTransportType.MDOC_CENTRAL_CLIENT_MODE, decodedLegacy.transportType)
+        assertEquals(true, decodedLegacy.bleUsingL2cap)
+        assertNull(decodedLegacy.bleNumMtuRequestRetries)
+        assertNull(decodedLegacy.nfcDisconnectedDuringTransaction)
+    }
+
+    @Test
     fun testPresentmentTelemetryCborRoundTrip() {
         val transportStats = MdocTransportStats(
             transportType = MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE,
             role = MdocRole.MDOC,
-            connectingTime = 180.milliseconds,
             bytesSent = 4096,
             bytesReceived = 256,
             numMessagesSent = 1,
             numMessagesReceived = 1,
+            bleConnectingTime = 180.milliseconds,
             bleNegotiatedMtu = 515,
             bleNumChunksSent = 9,
             bleNumChunksReceived = 1

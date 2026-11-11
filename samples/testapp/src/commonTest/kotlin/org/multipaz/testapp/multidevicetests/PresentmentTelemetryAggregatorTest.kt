@@ -35,7 +35,7 @@ class PresentmentTelemetryAggregatorTest {
                 transportStats = MdocTransportStats(
                     transportType = MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE,
                     role = MdocRole.MDOC,
-                    connectingTime = 200.milliseconds,
+                    bleConnectingTime = 200.milliseconds,
                     bleNumGattConnectRetries = 1,
                     warnings = listOf(
                         TransportWarning(TransportWarningCode.BLE_MTU_INFERRED_FROM_WRITE),

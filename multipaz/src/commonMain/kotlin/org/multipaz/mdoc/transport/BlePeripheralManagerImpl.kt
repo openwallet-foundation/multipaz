@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -124,6 +125,7 @@ internal class BlePeripheralManagerImpl(
     private data class WaitFor(
         val state: WaitState,
         val continuation: CancellableContinuation<Boolean>,
+        val onResumedSuccess: (() -> Unit)? = null,
     )
 
     private val waitFor = MutableStateFlow<WaitFor?>(null)
@@ -131,8 +133,9 @@ internal class BlePeripheralManagerImpl(
     private fun setWaitCondition(
         state: WaitState,
         continuation: CancellableContinuation<Boolean>,
+        onResumedSuccess: (() -> Unit)? = null,
     ) {
-        val entry = WaitFor(state, continuation)
+        val entry = WaitFor(state, continuation, onResumedSuccess)
         check(waitFor.compareAndSet(null, entry)) {
             "waitFor is already set to ${waitFor.value?.state}"
         }
@@ -141,27 +144,28 @@ internal class BlePeripheralManagerImpl(
         }
     }
 
-    private fun claimWaitCondition(expectedState: WaitState): CancellableContinuation<Boolean>? {
+    private fun claimWaitCondition(expectedState: WaitState): WaitFor? {
         while (true) {
             val current = waitFor.value
             if (current == null || current.state != expectedState) {
                 return null
             }
             if (waitFor.compareAndSet(current, null)) {
-                return current.continuation
+                return current
             }
         }
     }
 
     private fun resumeWait(expectedState: WaitState): Boolean {
-        val continuation = claimWaitCondition(expectedState) ?: return false
-        continuation.resume(true)
+        val entry = claimWaitCondition(expectedState) ?: return false
+        entry.onResumedSuccess?.invoke()
+        entry.continuation.resume(true)
         return true
     }
 
     private fun resumeWaitWithException(expectedState: WaitState, exception: Throwable): Boolean {
-        val continuation = claimWaitCondition(expectedState) ?: return false
-        continuation.resumeWithException(exception)
+        val entry = claimWaitCondition(expectedState) ?: return false
+        entry.continuation.resumeWithException(exception)
         return true
     }
 
@@ -174,6 +178,10 @@ internal class BlePeripheralManagerImpl(
     private var _l2capPsm: Int? = null
     @Volatile
     private var l2capChannel: BleL2capChannel? = null
+    @Volatile
+    private var l2capReaderJob: Job? = null
+    @Volatile
+    private var isClosed = false
     @Volatile
     private var clientConnected = false
 
@@ -241,7 +249,8 @@ internal class BlePeripheralManagerImpl(
             if (uuid == identCharacteristicUuid) {
                 val ident = identValue
                 if (ident == null) {
-                    onError(IllegalStateException("Received request for ident before it's set"))
+                    Logger.w(TAG, "Received request for ident before it's set; rejecting read so central can retry")
+                    hal.sendReadResponse(requestId, statusSuccess = false, value = byteArrayOf())
                 } else {
                     hal.sendReadResponse(requestId, statusSuccess = true, value = ident)
                 }
@@ -252,6 +261,7 @@ internal class BlePeripheralManagerImpl(
             } else {
                 Logger.w(TAG, "Read on unexpected characteristic with UUID $uuid")
                 addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
+                hal.sendReadResponse(requestId, statusSuccess = false, value = byteArrayOf())
             }
         }
 
@@ -311,18 +321,35 @@ internal class BlePeripheralManagerImpl(
         }
 
         override fun onL2capClientConnected(channel: BleL2capChannel) {
+            if (isClosed || clientConnected) {
+                Logger.w(TAG, "Rejecting duplicate or late L2CAP client connection")
+                channel.close()
+                return
+            }
             l2capChannel = channel
             clientConnected = true
+            hal.closeL2capServer()
             hal.stopAdvertising()
             resumeWait(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT)
-            CoroutineScope(Dispatchers.Default).launch {
+            l2capReaderJob?.cancel()
+            l2capReaderJob = CoroutineScope(Dispatchers.Default).launch {
                 readFromL2capChannel(channel, incomingMessages) { error ->
-                    onError(IllegalStateException("Accepting/reading from L2CAP socket failed", error))
+                    if (!isClosed) {
+                        onError(IllegalStateException("Accepting/reading from L2CAP socket failed", error))
+                    }
                 }
             }
         }
 
         override fun onCentralDisconnected() {
+            if (!clientConnected) {
+                Logger.w(TAG, "Central disconnected before completing handshake; resetting per-connection state")
+                _negotiatedMtu = -1
+                _mtuInferredFromWrite = false
+                maxCharacteristicSizeMemoized = 0
+                incomingMessage = ByteStringBuilder()
+                return
+            }
             onError(IllegalStateException("Central unexpectedly disconnected"))
         }
 
@@ -440,21 +467,39 @@ internal class BlePeripheralManagerImpl(
         }
     }
 
-    private suspend fun writeToCharacteristic(characteristicUuid: UUID, value: ByteArray) {
+    @Volatile
+    private var _lastSendCompleted = false
+    override val lastSendCompleted: Boolean
+        get() = _lastSendCompleted
+
+    override fun resetLastSendCompleted() {
+        _lastSendCompleted = false
+    }
+
+    private suspend fun writeToCharacteristic(
+        characteristicUuid: UUID,
+        value: ByteArray,
+        onCompleted: (() -> Unit)? = null,
+    ) {
         suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation)
+            setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation, onCompleted)
             hal.notifyCharacteristicChanged(characteristicUuid, value)
         }
     }
 
     override suspend fun writeToStateCharacteristic(value: Int) {
-        writeToCharacteristic(stateCharacteristicUuid, byteArrayOf(value.toByte()))
+        _lastSendCompleted = false
+        writeToCharacteristic(stateCharacteristicUuid, byteArrayOf(value.toByte())) {
+            _lastSendCompleted = true
+        }
     }
 
     override suspend fun sendMessage(message: ByteArray) {
+        _lastSendCompleted = false
         val channel = l2capChannel
         if (channel != null) {
             l2capSendMessage(channel, message)
+            _lastSendCompleted = true
             return
         }
         Logger.i(TAG, "sendMessage ${message.size} length")
@@ -468,14 +513,26 @@ internal class BlePeripheralManagerImpl(
             builder.append(if (moreDataComing) 0x01 else 0x00)
             builder.append(message, offset, offset + size)
             val chunk = builder.toByteString().toByteArray()
-            writeToCharacteristic(server2ClientCharacteristicUuid, chunk)
-            _numChunksSent += 1
+            writeToCharacteristic(server2ClientCharacteristicUuid, chunk) {
+                _numChunksSent += 1
+                if (!moreDataComing) {
+                    _lastSendCompleted = true
+                }
+            }
         }
         Logger.i(TAG, "sendMessage completed")
     }
 
+    override suspend fun shutdown() {
+        hal.shutdown()
+    }
+
     override fun close() {
+        isClosed = true
         clientConnected = false
+        l2capReaderJob?.cancel()
+        l2capReaderJob = null
+        l2capChannel?.close()
         hal.close()
         l2capChannel = null
         incomingMessages.close()

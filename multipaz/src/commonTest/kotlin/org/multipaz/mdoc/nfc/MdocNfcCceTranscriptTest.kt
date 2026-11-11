@@ -2819,8 +2819,8 @@ class MdocNfcCceTranscriptTest {
         readerTransport.close()
         mdocTransport.close()
 
-        assertTrue(readerTransport.stats.nfcDisconnectedDuringTransaction)
-        assertTrue(mdocTransport.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, readerTransport.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, mdocTransport.stats.nfcDisconnectedDuringTransaction)
         assertEquals(1, mdocTransport.stats.nfcHybridNumReceivedFirstOnNfc)
         assertEquals(1, mdocTransport.stats.nfcHybridNumReceivedFirstOnTransport)
         assertEquals(0, readerTransport.stats.nfcHybridNumReceivedFirstOnNfc)
@@ -3154,8 +3154,8 @@ class MdocNfcCceTranscriptTest {
         readerTransport.close()
         mdocTransport.close()
 
-        assertTrue(readerTransport.stats.nfcDisconnectedDuringTransaction)
-        assertTrue(mdocTransport.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, readerTransport.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, mdocTransport.stats.nfcDisconnectedDuringTransaction)
         assertEquals(0, mdocTransport.stats.nfcHybridNumReceivedFirstOnNfc)
         assertEquals(2, mdocTransport.stats.nfcHybridNumReceivedFirstOnTransport)
         assertEquals(0, readerTransport.stats.nfcHybridNumReceivedFirstOnNfc)

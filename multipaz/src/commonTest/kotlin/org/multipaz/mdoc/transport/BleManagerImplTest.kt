@@ -456,7 +456,8 @@ class BleManagerImplTest {
         bridge.centralHal.halCallback.onCharacteristicChanged(s2cUuid, byteArrayOf(0x05, 0x01))
         assertNotNull(centralError)
 
-        // Peripheral receiving read request for Ident before setESenderKey() is called triggers onError
+        // Peripheral receiving read request for Ident before setESenderKey() is called rejects the read
+        // (statusSuccess = false) without failing the peripheral transport, allowing the central to retry
         val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
         var peripheralError: Throwable? = null
         peripheralManager.setCallbacks(onError = { peripheralError = it }, onClosed = {})
@@ -466,8 +467,17 @@ class BleManagerImplTest {
         assertEquals(20, peripheralManager.maxCharacteristicSize)
 
         bridge.peripheralHal.halCallback.onCharacteristicReadRequest(1, identUuid)
-        assertNotNull(peripheralError)
-        peripheralError = null
+        assertNull(peripheralError)
+        assertEquals(false, bridge.peripheralHal.lastReadResponseStatusSuccess)
+
+        // Reading an unexpected characteristic rejects the read via sendReadResponse(statusSuccess = false)
+        // and records BLE_UNEXPECTED_CALLBACK rather than stalling the ATT bearer.
+        bridge.peripheralHal.lastReadResponseStatusSuccess = null
+        bridge.peripheralHal.halCallback.onCharacteristicReadRequest(2, stateUuid)
+        assertEquals(false, bridge.peripheralHal.lastReadResponseStatusSuccess)
+        assertTrue(
+            peripheralManager.warnings.contains(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
+        )
 
         // Malformed chunk on peripheral's Client2Server characteristic triggers onError
         bridge.peripheralHal.halCallback.onCharacteristicWriteRequest(c2sUuid, byteArrayOf(0x09, 0x01), null)
@@ -801,6 +811,364 @@ class BleManagerImplTest {
     }
 
     /**
+     * Verifies retries for [BleCentralHal.Callback.onScanFailed], [BleCentralManagerImpl.requestMtu]
+     * retry and 23-byte default MTU fallback (with [TransportWarningCode.BLE_MTU_NOT_NEGOTIATED]),
+     * and retries for [BleCentralManagerImpl.peripheralDiscoverCharacteristics],
+     * `L2CAP` PSM characteristic reads, and [BleCentralManagerImpl.subscribeToCharacteristics].
+     */
+    @Test
+    fun scanFailureRetriesMtuFallbackAndGattStepRetries() = runTest {
+        var scanAttempts = 0
+        var mtuAttempts = 0
+        var failAllMtuAttempts = false
+        var discoverCharsAttempts = 0
+        var readL2capAttempts = 0
+        val descriptorWriteAttemptsByUuid = mutableMapOf<UUID, Int>()
+        var writeStateStartAttempts = 0
+
+        val stateUuid = UUID(1UL, 1UL)
+        val c2sUuid = UUID(1UL, 2UL)
+        val s2cUuid = UUID(1UL, 3UL)
+        val l2capUuid = UUID(1UL, 5UL)
+
+        val hal = object : BleCentralHal {
+            lateinit var cb: BleCentralHal.Callback
+            override var isConnected: Boolean = false
+
+            override fun setCallback(callback: BleCentralHal.Callback) {
+                cb = callback
+            }
+
+            override fun waitForPowerOn() = cb.onPowerOn(null)
+
+            override fun startScan(serviceUuid: UUID) {
+                scanAttempts++
+                if (scanAttempts <= 2) {
+                    cb.onScanFailed(IllegalStateException("SCAN_FAILED_APPLICATION_REGISTRATION_FAILED ($scanAttempts)"))
+                } else {
+                    cb.onPeripheralDiscovered()
+                }
+            }
+
+            override fun stopScan() {}
+            override fun onScanStoppedAfterDiscovery() {}
+
+            override fun connectToPeripheral() {
+                isConnected = true
+                cb.onConnected()
+            }
+
+            override fun requestMtu(mtu: Int) {
+                mtuAttempts++
+                if (failAllMtuAttempts || mtuAttempts == 1) {
+                    cb.onMtuChanged(23, IllegalStateException("MTU exchange failed ($mtuAttempts)"))
+                } else {
+                    cb.onMtuChanged(247, null)
+                }
+            }
+
+            override fun discoverServices(serviceUuid: UUID) {
+                cb.onServicesDiscovered(hasTargetService = true, error = null)
+            }
+
+            override fun discoverCharacteristics(
+                stateCharacteristicUuid: UUID,
+                client2ServerCharacteristicUuid: UUID,
+                server2ClientCharacteristicUuid: UUID,
+                identCharacteristicUuid: UUID?,
+                l2capCharacteristicUuid: UUID?
+            ) {
+                discoverCharsAttempts++
+                if (discoverCharsAttempts <= 2) {
+                    cb.onCharacteristicsDiscovered(null, false, IllegalStateException("Discover chars failed ($discoverCharsAttempts)"))
+                } else {
+                    cb.onCharacteristicsDiscovered(null, true, null)
+                }
+            }
+
+            override fun readCharacteristic(uuid: UUID) {
+                if (uuid == l2capUuid) {
+                    readL2capAttempts++
+                    if (readL2capAttempts <= 2) {
+                        cb.onCharacteristicRead(uuid, null, IllegalStateException("Read L2CAP failed ($readL2capAttempts)"))
+                    } else {
+                        cb.onCharacteristicRead(uuid, byteArrayOf(0x00, 0x00, 0x00, 0x80.toByte()), null)
+                    }
+                }
+            }
+
+            override fun enableNotifications(characteristicUuid: UUID) {
+                val attempt = (descriptorWriteAttemptsByUuid[characteristicUuid] ?: 0) + 1
+                descriptorWriteAttemptsByUuid[characteristicUuid] = attempt
+                if (attempt <= 2) {
+                    cb.onDescriptorWrite(characteristicUuid, IllegalStateException("CCCD write failed ($attempt)"))
+                } else {
+                    cb.onDescriptorWrite(characteristicUuid, null)
+                }
+            }
+
+            override fun writeCharacteristic(uuid: UUID, value: ByteArray) {
+                if (uuid == stateUuid && value.contentEquals(byteArrayOf(BleTransportConstants.STATE_CHARACTERISTIC_START.toByte()))) {
+                    writeStateStartAttempts++
+                    if (writeStateStartAttempts <= 2) {
+                        cb.onCharacteristicWrite(uuid, IllegalStateException("State=0x01 write failed ($writeStateStartAttempts)"))
+                        return
+                    }
+                }
+                cb.onCharacteristicWrite(uuid, null)
+            }
+
+            override fun connectL2cap(psm: Int) {}
+            override fun closeConnectedL2capAttempt() {}
+            override fun close() {
+                isConnected = false
+            }
+        }
+
+        val manager = BleCentralManagerImpl(
+            hal = hal,
+            postScanDelay = Duration.ZERO,
+            scanFailureRetryDelay = 10.milliseconds,
+            discoverServicesRetryDelay = 10.milliseconds
+        )
+        manager.setCallbacks(onError = {}, onClosed = {})
+        manager.setUuids(stateUuid, c2sUuid, s2cUuid, null, l2capUuid)
+
+        manager.waitForPowerOn()
+        manager.waitForPeripheralWithUuid(serviceUuid)
+        assertEquals(3, scanAttempts)
+        assertEquals(2, manager.numScanRestarts)
+
+        manager.connectToPeripheral()
+
+        // First requestMtu: fails attempt 1, succeeds on retry attempt 2 with MTU 247
+        manager.requestMtu()
+        assertEquals(2, mtuAttempts)
+        assertEquals(1, manager.numMtuRequestRetries)
+        assertEquals(247, manager.negotiatedMtu)
+        assertEquals(244, manager.maxCharacteristicSize)
+        assertTrue(manager.warnings.isEmpty())
+
+        // Second requestMtu with failAllMtuAttempts = true: fails both attempts and falls back to 23-byte MTU
+        mtuAttempts = 0
+        failAllMtuAttempts = true
+        manager.requestMtu()
+        assertEquals(2, mtuAttempts)
+        assertEquals(2, manager.numMtuRequestRetries)
+        assertEquals(23, manager.negotiatedMtu)
+        assertEquals(20, manager.maxCharacteristicSize)
+        assertEquals(listOf(TransportWarning(TransportWarningCode.BLE_MTU_NOT_NEGOTIATED)), manager.warnings)
+
+        manager.peripheralDiscoverServices(serviceUuid)
+        manager.peripheralDiscoverCharacteristics()
+        assertEquals(3, discoverCharsAttempts)
+        assertEquals(2, manager.numCharacteristicDiscoveryRetries)
+        assertEquals(3, readL2capAttempts)
+        assertEquals(2, manager.numCharacteristicReadRetries)
+        assertEquals(128, manager.l2capPsm)
+
+        manager.subscribeToCharacteristics()
+        assertEquals(3, descriptorWriteAttemptsByUuid[stateUuid])
+        assertEquals(3, descriptorWriteAttemptsByUuid[s2cUuid])
+        assertEquals(4, manager.numDescriptorWriteRetries)
+
+        manager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
+        assertEquals(3, writeStateStartAttempts)
+
+        manager.close()
+    }
+
+    /**
+     * Verifies that when a mid-handshake disconnect occurs before `State = 0x01` (or L2CAP
+     * connection completion), both [BleCentralManagerImpl] and [BlePeripheralManagerImpl] reset
+     * their per-connection GATT state (`negotiatedMtu`, `maxCharacteristicSize`, `l2capPsm`, and
+     * `incomingMessage` reassembly buffers) without failing the peripheral transport.
+     */
+    @Test
+    fun midHandshakeDisconnectResetsPerConnectionStateOnCentralAndPeripheral() = runTest {
+        val stateUuid = UUID(1UL, 1UL)
+        val c2sUuid = UUID(1UL, 2UL)
+        val s2cUuid = UUID(1UL, 3UL)
+        val l2capUuid = UUID(1UL, 5UL)
+
+        val bridge = PairedBleHalBridge()
+        var peripheralError: Throwable? = null
+        val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
+        peripheralManager.setCallbacks(onError = { peripheralError = it }, onClosed = {})
+        peripheralManager.setUuids(stateUuid, c2sUuid, s2cUuid, null, l2capUuid, false)
+
+        // Connection 1 on peripheral: negotiates MTU 515, receives a partial continuation chunk,
+        // then disconnects BEFORE State = 0x01 is written.
+        bridge.peripheralHal.halCallback.onMtuChanged(515)
+        assertEquals(515, peripheralManager.negotiatedMtu)
+        assertEquals(512, peripheralManager.maxCharacteristicSize)
+        bridge.peripheralHal.halCallback.onCharacteristicWriteRequest(
+            uuid = c2sUuid,
+            value = byteArrayOf(0x01, 0xAA.toByte(), 0xBB.toByte()),
+            maxWriteSizeForCentral = null
+        )
+        bridge.peripheralHal.halCallback.onCentralDisconnected()
+        // Peripheral must NOT report an error and must reset MTU and partial incomingMessage buffer.
+        assertEquals(null, peripheralError)
+        assertEquals(null, peripheralManager.negotiatedMtu)
+        assertEquals(20, peripheralManager.maxCharacteristicSize)
+
+        // When Connection 2 sends a single final chunk (0x00, 0xCC), it must NOT include the stale
+        // 0xAA, 0xBB bytes from Connection 1.
+        bridge.peripheralHal.halCallback.onCharacteristicWriteRequest(
+            uuid = c2sUuid,
+            value = byteArrayOf(0x00, 0xCC.toByte()),
+            maxWriteSizeForCentral = null
+        )
+        val received = withTimeout(5.seconds) { peripheralManager.incomingMessages.receive() }
+        assertContentEquals(byteArrayOf(0xCC.toByte()), received)
+
+        peripheralManager.close()
+    }
+
+    /**
+     * Verifies that when a central connects and reads the `Ident` characteristic before the
+     * peripheral has called [BlePeripheralManager.setESenderKey], the peripheral rejects the read
+     * without failing the transport and the central retries `checkReaderIdentMatches` until
+     * `setESenderKey` is called.
+     */
+    @Test
+    fun centralRetriesIdentReadUntilPeripheralSetsESenderKey() = runTest {
+        val bridge = PairedBleHalBridge()
+        val centralManager = BleCentralManagerImpl(
+            hal = bridge.centralHal,
+            postScanDelay = Duration.ZERO,
+            discoverServicesRetryDelay = 50.milliseconds
+        )
+        val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
+
+        val mdoc = BleTransportCentralMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(bleUseL2CAP = false),
+            centralManager = centralManager,
+            uuid = serviceUuid,
+            psm = null
+        )
+        val reader = BleTransportCentralMdocReader(
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(bleUseL2CAP = false),
+            peripheralManager = peripheralManager,
+            uuid = serviceUuid
+        )
+
+        // Reader starts advertising before open(eReaderKey) is called
+        reader.advertise()
+
+        // Start mdoc.open(eReaderKey) first and run until it attempts to read Ident and hits the first failure
+        val mdocOpenJob = async(start = CoroutineStart.UNDISPATCHED) { mdoc.open(eReaderKey) }
+        runCurrent()
+        assertEquals(false, bridge.peripheralHal.lastReadResponseStatusSuccess)
+
+        // Now call reader.open(eReaderKey) which sets eSenderKey on peripheralManager; mdoc's retry succeeds
+        val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eReaderKey) }
+        mdocOpenJob.await()
+        readerOpenJob.await()
+
+        assertEquals(MdocTransport.State.CONNECTED, mdoc.state.value)
+        assertEquals(MdocTransport.State.CONNECTED, reader.state.value)
+        assertEquals(true, bridge.peripheralHal.lastReadResponseStatusSuccess)
+
+        mdoc.close()
+        reader.close()
+    }
+
+    /**
+     * Verifies that if the BLE link disconnects mid-handshake (after `onConnected()` has fired)
+     * during GATT setup (`requestMtu`, `peripheralDiscoverServices`, `peripheralDiscoverCharacteristics`,
+     * `checkReaderIdentMatches`, `subscribeToCharacteristics`) or during `connectL2cap` (when
+     * `requireL2capPeripheralConnectedFirst = true`), the transport reconnects and completes `open()`.
+     */
+    @Test
+    fun midHandshakeDisconnectRecoversAndReconnects() = runTest {
+        var disconnectOnFirstMtu = true
+        var disconnectOnFirstDiscoverServices = true
+        var disconnectOnFirstL2cap = true
+
+        val bridge = PairedBleHalBridge(publishedL2capPsm = 192)
+        val wrappingCentralHal = object : BleCentralHal by bridge.centralHal {
+            lateinit var cb: BleCentralHal.Callback
+
+            override fun setCallback(callback: BleCentralHal.Callback) {
+                cb = callback
+                bridge.centralHal.setCallback(callback)
+            }
+
+            override fun requestMtu(mtu: Int) {
+                if (disconnectOnFirstMtu) {
+                    disconnectOnFirstMtu = false
+                    bridge.centralHal.isConnected = false
+                    cb.onDisconnected()
+                } else {
+                    bridge.centralHal.requestMtu(mtu)
+                }
+            }
+
+            override fun discoverServices(serviceUuid: UUID) {
+                if (disconnectOnFirstDiscoverServices) {
+                    disconnectOnFirstDiscoverServices = false
+                    bridge.centralHal.isConnected = false
+                    cb.onDisconnected()
+                } else {
+                    bridge.centralHal.discoverServices(serviceUuid)
+                }
+            }
+
+            override fun connectL2cap(psm: Int) {
+                if (disconnectOnFirstL2cap) {
+                    disconnectOnFirstL2cap = false
+                    bridge.centralHal.isConnected = false
+                    cb.onDisconnected()
+                } else {
+                    bridge.centralHal.connectL2cap(psm)
+                }
+            }
+        }
+
+        val centralManager = BleCentralManagerImpl(
+            hal = wrappingCentralHal,
+            postScanDelay = Duration.ZERO,
+            connectRetryDelay = 10.milliseconds,
+            l2capRetryInitialDelay = 10.milliseconds,
+            requireL2capPeripheralConnectedFirst = true
+        )
+        val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
+
+        val mdoc = BleTransportCentralMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+            centralManager = centralManager,
+            uuid = serviceUuid,
+            psm = null
+        )
+        val reader = BleTransportCentralMdocReader(
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+            peripheralManager = peripheralManager,
+            uuid = serviceUuid
+        )
+
+        reader.advertise()
+        val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eReaderKey) }
+        val mdocOpenJob = async { mdoc.open(eReaderKey) }
+        readerOpenJob.await()
+        mdocOpenJob.await()
+
+        assertEquals(MdocTransport.State.CONNECTED, mdoc.state.value)
+        assertEquals(MdocTransport.State.CONNECTED, reader.state.value)
+        // 2 mid-handshake GATT disconnects + 1 reconnect during L2CAP retry = 3 GATT connect retries
+        assertEquals(3, centralManager.numGattConnectRetries)
+        assertEquals(1, centralManager.numL2capConnectRetries)
+
+        mdoc.close()
+        reader.close()
+    }
+
+    /**
      * In-memory [BleL2capChannel] backed by a pair of coroutine [Channel]s.
      *
      * To test stream reassembly in [readNOctets], [read] returns at most [maxBytesPerRead] bytes per
@@ -972,6 +1340,7 @@ class BleManagerImplTest {
         inner class PeripheralSideHal : BlePeripheralHal {
             lateinit var halCallback: BlePeripheralHal.Callback
             val pendingReadUuidByRequestId = mutableMapOf<Int, UUID>()
+            var lastReadResponseStatusSuccess: Boolean? = null
 
             override fun setCallback(callback: BlePeripheralHal.Callback) {
                 this.halCallback = callback
@@ -1019,6 +1388,7 @@ class BleManagerImplTest {
             }
 
             override fun sendReadResponse(requestId: Int, statusSuccess: Boolean, value: ByteArray) {
+                lastReadResponseStatusSuccess = statusSuccess
                 val uuid = pendingReadUuidByRequestId.remove(requestId) ?: return
                 if (statusSuccess) {
                     centralHal.halCallback.onCharacteristicRead(uuid, value.copyOf(), null)

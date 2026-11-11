@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.multipaz.context.applicationContext
@@ -30,12 +31,216 @@ import org.multipaz.util.UUID
 import org.multipaz.util.fromJavaUuid
 import org.multipaz.util.toHex
 import org.multipaz.util.toJavaUuid
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 internal fun createBlePeripheralManagerAndroid(): BlePeripheralManager =
     BlePeripheralManagerImpl(
         hal = BlePeripheralHalAndroid(),
     )
+
+/**
+ * Coordinates `BluetoothGattServer.addService()` and `BluetoothGattServer.close()` to work around
+ * an AOSP bug in `com.android.bluetooth.gatt.GattServerManager` / `HandleMap`.
+ *
+ * ### Background on the AOSP `GattServerManager` / `HandleMap` Bug
+ * In AOSP's Bluetooth stack:
+ * 1. `btif_gatts_add_service` hops across four thread boundaries (`GattThread -> jni_thread ->
+ *    main_thread -> jni_thread -> GattThread`) before `GattServerManager.onServiceAddedFromNative()`
+ *    runs on `GattThread`.
+ * 2. `GattServerManager.unregisterServer()` (invoked by `BluetoothGattServer.close()`) runs
+ *    `deleteServices(serverIf)` and `serverMap.remove(serverIf)` synchronously on `GattThread`,
+ *    and hops directly `GattThread -> main_thread` (`BTA_GATTS_AppDeregister`).
+ * 3. `GattServerManager.onServiceAddedFromNative()` inserts all service, characteristic, and
+ *    descriptor handles into `handleMap.entries` **before** checking
+ *    `val app = serverMap.getById(serverIf) ?: return`.
+ *
+ * Consequently, if `BluetoothGattServer.close()` is called while `addService()` is still in flight
+ * (before `BluetoothGattServerCallback.onServiceAdded()` fires), `deleteServices(serverIf)` sees no
+ * handles in `handleMap` yet, `serverMap.remove(serverIf)` removes the server registration, and
+ * `onServiceAddedFromNative()` arrives milliseconds later and permanently orphans `(serverIf,
+ * handle=176..186)` in `handleMap.entries`. Because C++ (`GATTS_AddService` in `gatt_api.cc`) frees
+ * the handle range on deregistration and reassigns the exact same starting handle (`176`) to the
+ * next `BluetoothGattServer`, and `HandleMap.getByHandle(handle)` uses
+ * `entries.firstOrNull { it.handle == handle }`, the orphaned `serverIf` entry shadows all future
+ * GATT servers on the device (`BtGatt.ContextMap: Context not found for ID=<serverIf>`) until
+ * Bluetooth is toggled off and on.
+ *
+ * To prevent this, if [releaseActiveServer] is called while `addService()` is in flight, closing
+ * that server is deferred until its [onServiceAdded] callback arrives (or [fallbackTimeout] elapses).
+ */
+internal class GattServerCloseCoordinator<S : Any>(
+    private val closeServer: (S) -> Unit,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val fallbackTimeout: Duration = 5.seconds,
+) {
+    companion object {
+        private const val TAG = "GattServerCloseCoordinator"
+    }
+
+    private val lock = Any()
+    private var activeServer: S? = null
+    private var serviceAddInFlight = false
+    private val deferredCloseJobs = mutableMapOf<S, Job>()
+    private var mtuNegotiatedPeerAddress: String? = null
+    private var gattOrL2capActivitySeenForConnection = false
+
+    fun onAddServiceStarted(server: S) {
+        synchronized(lock) {
+            activeServer = server
+            serviceAddInFlight = true
+        }
+    }
+
+    /**
+     * Handles completion of `onServiceAdded` for [server].
+     *
+     * @return `true` if [server] is still the active GATT server and the caller should forward
+     *   `onServiceAdded` to the transport callback; `false` if [server] was retired while
+     *   `addService()` was in flight and has now been closed.
+     */
+    fun onServiceAdded(server: S, status: Int): Boolean {
+        val deferredJobToCancel: Job?
+        val shouldCloseNow: Boolean
+        val isActive: Boolean
+        synchronized(lock) {
+            val job = deferredCloseJobs.remove(server)
+            if (job != null) {
+                deferredJobToCancel = job
+                shouldCloseNow = true
+                isActive = false
+            } else if (activeServer === server) {
+                serviceAddInFlight = false
+                deferredJobToCancel = null
+                shouldCloseNow = false
+                isActive = true
+            } else {
+                deferredJobToCancel = null
+                shouldCloseNow = false
+                isActive = false
+            }
+        }
+        deferredJobToCancel?.cancel()
+        if (shouldCloseNow) {
+            Logger.w(
+                TAG,
+                "AOSP bug workaround: onServiceAdded(status=$status) completed for deferred-close " +
+                    "BluetoothGattServer; closing gattServer now"
+            )
+            try {
+                closeServer(server)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing deferred BluetoothGattServer", e)
+            }
+        }
+        return isActive
+    }
+
+    /**
+     * Releases the current active server. If `addService()` is still in flight, defers closing
+     * until [onServiceAdded] fires (or [fallbackTimeout] elapses).
+     */
+    fun releaseActiveServer() {
+        val serverToCloseImmediately: S?
+        val serverToDefer: S?
+        synchronized(lock) {
+            val server = activeServer ?: return
+            activeServer = null
+            mtuNegotiatedPeerAddress = null
+            gattOrL2capActivitySeenForConnection = false
+            if (serviceAddInFlight) {
+                serviceAddInFlight = false
+                serverToCloseImmediately = null
+                serverToDefer = server
+                val job = scope.launch {
+                    delay(fallbackTimeout)
+                    val timedOutServer = synchronized(lock) {
+                        deferredCloseJobs.remove(server)
+                    }
+                    if (timedOutServer != null) {
+                        Logger.w(
+                            TAG,
+                            "AOSP bug workaround: timed out waiting $fallbackTimeout for " +
+                                "onServiceAdded() on deferred-close BluetoothGattServer; closing now"
+                        )
+                        try {
+                            closeServer(server)
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            Logger.w(TAG, "Error closing timed-out deferred BluetoothGattServer", e)
+                        }
+                    }
+                }
+                deferredCloseJobs[server] = job
+            } else {
+                serverToCloseImmediately = server
+                serverToDefer = null
+            }
+        }
+        if (serverToDefer != null) {
+            Logger.w(
+                TAG,
+                "AOSP bug workaround: close() called while BluetoothGattServer.addService() is " +
+                    "still in flight; deferring gattServer.close() until onServiceAdded() " +
+                    "completes to avoid poisoning Android GattServerManager HandleMap"
+            )
+        }
+        if (serverToCloseImmediately != null) {
+            try {
+                closeServer(serverToCloseImmediately)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing BluetoothGattServer", e)
+            }
+        }
+    }
+
+    fun onMtuChanged(peerAddress: String) {
+        synchronized(lock) {
+            if (mtuNegotiatedPeerAddress != peerAddress) {
+                gattOrL2capActivitySeenForConnection = false
+            }
+            mtuNegotiatedPeerAddress = peerAddress
+        }
+    }
+
+    fun onGattOrL2capActivity() {
+        synchronized(lock) {
+            gattOrL2capActivitySeenForConnection = true
+        }
+    }
+
+    /**
+     * Checks whether a disconnecting peer had negotiated MTU on this server without any GATT
+     * attribute read/write requests or L2CAP connections ever reaching the app callback, which is
+     * the signature symptom of an already-poisoned `HandleMap` in AOSP's `GattServerManager`.
+     *
+     * @return `true` if the AOSP `HandleMap` shadowing symptom was detected and logged.
+     */
+    fun onPeerDisconnected(peerAddress: String): Boolean {
+        val suspectedHandleMapPoisoning = synchronized(lock) {
+            val noActivityAfterMtu = mtuNegotiatedPeerAddress == peerAddress &&
+                !gattOrL2capActivitySeenForConnection
+            if (mtuNegotiatedPeerAddress == peerAddress) {
+                mtuNegotiatedPeerAddress = null
+            }
+            gattOrL2capActivitySeenForConnection = false
+            noActivityAfterMtu
+        }
+        if (suspectedHandleMapPoisoning) {
+            Logger.w(
+                TAG,
+                "Central $peerAddress disconnected after negotiating MTU without any GATT " +
+                    "characteristic/descriptor requests or L2CAP connection reaching " +
+                    "BluetoothGattServerCallback. This may be caused by an orphaned HandleMap " +
+                    "entry in Android's GattServerManager (AOSP bug); cycling Bluetooth off " +
+                    "and on clears the orphaned entry."
+            )
+        }
+        return suspectedHandleMapPoisoning
+    }
+}
 
 internal class BlePeripheralHalAndroid : BlePeripheralHal {
     companion object {
@@ -50,14 +255,20 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
 
     private lateinit var callback: BlePeripheralHal.Callback
     private val bluetoothManager = applicationContext.getSystemService(BluetoothManager::class.java)
+    @Volatile
     private var gattServer: BluetoothGattServer? = null
     private var service: BluetoothGattService? = null
+    private val gattServerCloseCoordinator = GattServerCloseCoordinator<BluetoothGattServer>(
+        closeServer = { server -> server.close() }
+    )
     private val characteristicsByUuid = mutableMapOf<UUID, BluetoothGattCharacteristic>()
     private var advertiser: BluetoothLeAdvertiser? = null
+    @Volatile
     private var connectedDevice: BluetoothDevice? = null
     private val pendingReadDevices = mutableMapOf<Int, BluetoothDevice>()
     private var l2capServerSocket: BluetoothServerSocket? = null
     private var l2capSocket: BluetoothSocket? = null
+    @Volatile
     private var l2capServerClosedIntentionally = false
 
     init {
@@ -87,9 +298,16 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
         this.callback = callback
     }
 
-    private val gattServerCallback = object : BluetoothGattServerCallback() {
+    private inner class PerServerGattCallback : BluetoothGattServerCallback() {
+        @Volatile
+        var server: BluetoothGattServer? = null
+
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Logger.d(TAG, "onServiceAdded: $status")
+            val srv = server
+            if (srv != null && !gattServerCloseCoordinator.onServiceAdded(srv, status)) {
+                return
+            }
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 callback.onServiceAdded(null)
             } else {
@@ -99,11 +317,19 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             Logger.d(TAG, "onConnectionStateChange: ${device.address} $status + $newState")
-            if (newState == BluetoothProfile.STATE_DISCONNECTED &&
-                device.address == connectedDevice?.address
-            ) {
-                Logger.i(TAG, "Central ${device.address} disconnected")
-                callback.onCentralDisconnected()
+            val srv = server ?: return
+            if (srv !== gattServer) return
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                if (connectedDevice == null) {
+                    connectedDevice = device
+                }
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                gattServerCloseCoordinator.onPeerDisconnected(device.address)
+                if (device.address == connectedDevice?.address) {
+                    connectedDevice = null
+                    Logger.i(TAG, "Central ${device.address} disconnected")
+                    callback.onCentralDisconnected()
+                }
             }
         }
 
@@ -114,6 +340,12 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
             characteristic: BluetoothGattCharacteristic
         ) {
             Logger.d(TAG, "onCharacteristicReadRequest: ${device.address} $requestId $offset ${characteristic.uuid}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
+            if (connectedDevice == null) {
+                connectedDevice = device
+            }
+            gattServerCloseCoordinator.onGattOrL2capActivity()
             pendingReadDevices[requestId] = device
             callback.onCharacteristicReadRequest(requestId, UUID.fromJavaUuid(characteristic.uuid))
         }
@@ -132,8 +364,11 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
                 "onCharacteristicWriteRequest: ${device.address} $requestId $offset " +
                         "${characteristic.uuid} ${value.toHex()}"
             )
+            val srv = server ?: return
+            if (srv !== gattServer) return
+            gattServerCloseCoordinator.onGattOrL2capActivity()
             if (responseNeeded) {
-                gattServer?.sendResponse(
+                srv.sendResponse(
                     device,
                     requestId,
                     BluetoothGatt.GATT_SUCCESS,
@@ -167,8 +402,14 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
                             "$offset ${value.toHex()}"
                 )
             }
+            val srv = server ?: return
+            if (srv !== gattServer) return
+            if (connectedDevice == null) {
+                connectedDevice = device
+            }
+            gattServerCloseCoordinator.onGattOrL2capActivity()
             if (responseNeeded) {
-                gattServer?.sendResponse(
+                srv.sendResponse(
                     device,
                     requestId,
                     BluetoothGatt.GATT_SUCCESS,
@@ -180,11 +421,19 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             Logger.d(TAG, "Negotiated MTU $mtu for ${device.address}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
+            if (connectedDevice == null) {
+                connectedDevice = device
+            }
+            gattServerCloseCoordinator.onMtuChanged(device.address)
             callback.onMtuChanged(mtu)
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
             Logger.d(TAG, "onNotificationSent $status for ${device.address}")
+            val srv = server ?: return
+            if (srv !== gattServer) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 callback.onNotificationSent(
                     UUID(0UL, 0UL),
@@ -232,6 +481,7 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
     private fun l2capAcceptLoop(serverSocket: BluetoothServerSocket) {
         try {
             val socket = serverSocket.accept()
+            gattServerCloseCoordinator.onGattOrL2capActivity()
             l2capSocket = socket
             connectedDevice = socket.remoteDevice
             try {
@@ -292,19 +542,23 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
         l2capCharacteristicUuid: UUID?,
         encodedL2capPsm: ByteArray?
     ) {
-        // Defensively close any previous BluetoothGattServer instance before opening a new one
-        // so we never leak a serverIf registration in Android's Bluetooth daemon.
-        gattServer?.let { prevServer ->
-            try {
-                service?.let { prevServer.removeService(it) }
-            } catch (_: Exception) {
-            }
-            try {
-                prevServer.close()
-            } catch (_: Exception) {
-            }
+        // Defensively release any previous BluetoothGattServer instance before opening a new one
+        // so we never leak a serverIf registration or orphan HandleMap entries in Android's
+        // Bluetooth daemon.
+        gattServerCloseCoordinator.releaseActiveServer()
+        gattServer = null
+        service = null
+
+        val perServerCallback = PerServerGattCallback()
+        val newServer = bluetoothManager.openGattServer(applicationContext, perServerCallback)
+        if (newServer == null) {
+            callback.onServiceAdded(
+                IllegalStateException("BluetoothManager.openGattServer() returned null, is Bluetooth off?")
+            )
+            return
         }
-        gattServer = bluetoothManager.openGattServer(applicationContext, gattServerCallback)
+        perServerCallback.server = newServer
+        gattServer = newServer
         service = BluetoothGattService(
             serviceUuid.toJavaUuid(),
             BluetoothGattService.SERVICE_TYPE_PRIMARY
@@ -341,7 +595,16 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
                 permissions = BluetoothGattCharacteristic.PERMISSION_READ
             )
         }
-        gattServer!!.addService(service!!)
+        gattServerCloseCoordinator.onAddServiceStarted(newServer)
+        if (!newServer.addService(service!!)) {
+            gattServerCloseCoordinator.onServiceAdded(newServer, BluetoothGatt.GATT_FAILURE)
+            gattServerCloseCoordinator.releaseActiveServer()
+            gattServer = null
+            service = null
+            callback.onServiceAdded(
+                IllegalStateException("BluetoothGattServer.addService() returned false")
+            )
+        }
     }
 
     override fun startAdvertising(serviceUuid: UUID) {
@@ -411,8 +674,13 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
         pendingReadDevices.clear()
         advertiser?.stopAdvertising(advertiseCallback)
         advertiser = null
-        gattServer?.removeService(service)
-        gattServer?.close()
+        // Release the BluetoothGattServer via GattServerCloseCoordinator:
+        // - If addService() has already completed, gattServer.close() is called immediately
+        //   (GattServerManager.unregisterServer() already calls deleteServices(serverIf) for all
+        //   services owned by serverIf, so calling removeService() first is redundant).
+        // - If addService() is still in flight, gattServer.close() is deferred until
+        //   onServiceAdded() arrives so we never orphan entries in GattServerManager's HandleMap.
+        gattServerCloseCoordinator.releaseActiveServer()
         gattServer = null
         service = null
         l2capServerClosedIntentionally = true

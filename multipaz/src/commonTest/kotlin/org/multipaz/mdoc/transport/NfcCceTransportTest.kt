@@ -110,7 +110,7 @@ class NfcCceTransportTest {
             assertEquals(1, stats.nfcHybridNumSentViaNfc)
             assertEquals(1, stats.nfcHybridNumSentViaTransport)
             assertEquals(2, stats.numMessagesReceived)
-            assertFalse(stats.nfcDisconnectedDuringTransaction)
+            assertEquals(false, stats.nfcDisconnectedDuringTransaction)
 
             mdoc.close()
             assertEquals(MdocTransport.State.CLOSED, mdoc.state.value)
@@ -150,7 +150,7 @@ class NfcCceTransportTest {
         mdoc.sendMessage(msg2)
 
         assertEquals(1, nfcSentMessages.size)
-        assertTrue(mdoc.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, mdoc.stats.nfcDisconnectedDuringTransaction)
 
         // Now attach secondary transport: backlog of [msg1, msg2] must be flushed in order
         val secondary = FakeSecondaryTransport(role = MdocRole.MDOC)
