@@ -226,7 +226,9 @@ class MdocNfcCceEngagementHelperTest {
         mdocTransport.sendMessage(response)
         assertContentEquals(response, mdocReaderTransport.waitForMessage())
 
-        val sessionTermination = SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+        val sessionTermination = Cbor.encode(buildCborMap {
+            put("status", Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+        })
 
         mdocReaderTransport.sendMessage(sessionTermination)
         // Calling close() twice immediately after sending session termination (as reader flows do via try/finally)
@@ -398,7 +400,9 @@ class MdocNfcCceEngagementHelperTest {
         mdocTransport.sendMessage(response)
         assertContentEquals(response, mdocReaderTransport.waitForMessage())
 
-        val sessionTermination = SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+        val sessionTermination = Cbor.encode(buildCborMap {
+            put("status", Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+        })
 
         mdocReaderTransport.sendMessage(sessionTermination)
         assertContentEquals(sessionTermination, mdocTransport.waitForMessage())

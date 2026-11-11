@@ -18,7 +18,6 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
-import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.document.Document
@@ -35,7 +34,6 @@ import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.NfcCceTransportMdoc
 import org.multipaz.mdoc.transport.TransportWarning
 import org.multipaz.mdoc.transport.TransportWarningCode
-import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
@@ -102,10 +100,6 @@ private class Iso18013PresentmentSession(
     private var sendSessionTermination = false
     private var sessionEncryption: SessionEncryption? = null
     private var activeEReaderKey: EReaderKey? = null
-    private var activeDeviceRequest: DeviceRequest? = null
-    private var cachedSelection: PresentmentSelection? = null
-    private var cachedKeyUnlockDataProvider: KeyUnlockDataProvider? = null
-    private var cachedFaceMatchedCredentials: List<Credential>? = null
     private lateinit var sessionTranscript: DataItem
     private lateinit var encodedSessionTranscript: ByteArray
 
@@ -232,7 +226,9 @@ private class Iso18013PresentmentSession(
 
     private suspend fun finalizeSession() {
         try {
+            val currentSessionEncryption = sessionEncryption
             if (sendSessionTermination &&
+                currentSessionEncryption != null &&
                 currentCoroutineContext().isActive &&
                 (transport !is NfcCceTransportMdoc || !transport.isNfcOnly || transport.isNfcConnected.value)
             ) {
@@ -240,13 +236,9 @@ private class Iso18013PresentmentSession(
                 try {
                     val disconnectNfc = transport is NfcCceTransportMdoc && transport.shouldSendDisconnectNfc
                     transport.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        currentSessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = if (insertSequenceNumbers) {
-                                sessionEncryption?.nextSequenceNumber
-                            } else {
-                                null
-                            },
                             disconnectNfc = disconnectNfc
                         )
                     )
@@ -379,44 +371,23 @@ private class Iso18013PresentmentSession(
                     transport.markResponsePending()
                 }
 
-                val selection: PresentmentSelection
-                val keyUnlockDataProvider: KeyUnlockDataProvider
-                val faceMatchedCredentials: List<Credential>
-
                 val consentStartTime = Clock.System.now()
-                val currentActiveRequest = activeDeviceRequest
-                if (currentActiveRequest != null &&
-                    deviceRequest.isStructurallyEquivalent(currentActiveRequest) &&
-                    cachedSelection != null &&
-                    cachedKeyUnlockDataProvider != null &&
-                    cachedFaceMatchedCredentials != null
-                ) {
-                    Logger.i(TAG, "Reusing existing consent and key authentication for structurally equivalent DeviceRequest on re-tap")
-                    selection = cachedSelection!!
-                    keyUnlockDataProvider = cachedKeyUnlockDataProvider!!
-                    faceMatchedCredentials = cachedFaceMatchedCredentials!!
-                } else {
-                    activeDeviceRequest = deviceRequest
-                    selection = mdocPresentmentObtainConsent(
-                        deviceRequest = deviceRequest,
-                        source = source,
-                        keyAgreementPossible = keyAgreementPossible,
-                        requesterAppId = null,
-                        requesterOrigin = null,
-                        preselectedDocuments = preselectedDocuments,
-                        onWaitingForUserInput = onWaitingForUserInput,
-                        onDocumentsInFocus = onDocumentsInFocus
-                    )
-                    keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
-                    faceMatchedCredentials = mdocPerformFaceMatching(
-                        selection = selection,
-                        source = source,
-                        onWaitingForUserInput = onWaitingForUserInput,
-                    )
-                    cachedSelection = selection
-                    cachedKeyUnlockDataProvider = keyUnlockDataProvider
-                    cachedFaceMatchedCredentials = faceMatchedCredentials
-                }
+                val selection = mdocPresentmentObtainConsent(
+                    deviceRequest = deviceRequest,
+                    source = source,
+                    keyAgreementPossible = keyAgreementPossible,
+                    requesterAppId = null,
+                    requesterOrigin = null,
+                    preselectedDocuments = preselectedDocuments,
+                    onWaitingForUserInput = onWaitingForUserInput,
+                    onDocumentsInFocus = onDocumentsInFocus
+                )
+                val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+                val faceMatchedCredentials = mdocPerformFaceMatching(
+                    selection = selection,
+                    source = source,
+                    onWaitingForUserInput = onWaitingForUserInput,
+                )
                 durationUserConsentAndAuth = (durationUserConsentAndAuth ?: Duration.ZERO) + (Clock.System.now() - consentStartTime)
 
                 onSendingResponse()

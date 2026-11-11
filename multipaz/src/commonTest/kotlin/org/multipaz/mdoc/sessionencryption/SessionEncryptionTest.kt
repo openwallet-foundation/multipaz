@@ -325,9 +325,9 @@ class SessionEncryptionTest {
         assertEquals(2, readerEncryption.nextSequenceNumber)
 
         // 3. Reader encodes status termination with seq = 2 and disconnectNfc = true
-        val termMsg = SessionEncryption.encodeStatus(
+        val termMsg = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
             disconnectNfc = true
         )
         val decodedTerm = Cbor.decode(termMsg)

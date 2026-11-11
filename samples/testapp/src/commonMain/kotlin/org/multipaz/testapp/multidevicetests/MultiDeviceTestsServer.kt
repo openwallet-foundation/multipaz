@@ -241,7 +241,10 @@ class MultiDeviceTestsServer(
                             )
                         )
                         transport.sendMessage(
-                            SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                            sessionEncryption.encryptMessage(
+                                messagePlaintext = null,
+                                statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+                            )
                         )
                     }
                     Test.MDOC_CENTRAL_CLIENT_MODE_HOLDER_TERMINATION_BLE,

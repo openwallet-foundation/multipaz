@@ -304,35 +304,35 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                     add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerPublicKey.toCoseKey().toDataItem()))))
                                     add(updatedParams.handover)
                                 }
-                                val (encodedDeviceRequest, _) = SessionEncryption(
+                                SessionEncryption(
                                     role = MdocRole.MDOC,
                                     eSelfKey = updatedParams.eDeviceKey.duplicate(),
                                     remotePublicKey = readerPublicKey,
                                     encodedSessionTranscript = Cbor.encode(sessionTranscript),
                                     insertSequenceNumbers = true
                                 ).use { sessionEncryption ->
-                                    sessionEncryption.decryptMessage(message.toByteArray())
-                                }
-                                if (encodedDeviceRequest != null) {
-                                    val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
-                                    if (!newDeviceRequest.isStructurallyEquivalent(currentActiveRequest)) {
-                                        Logger.iCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
-                                        Logger.iCbor(TAG, "New request", newDeviceRequest.toDataItem())
-                                        Logger.w(TAG, "Incoming DeviceRequest is NOT structurally equivalent to active request. Killing old session.")
-                                        transactionJob?.cancel()
-                                        activeDeviceRequest = null
-                                        cceTransport = null
-                                        activeEngagement?.sendMessage(
-                                            ByteString(
-                                                SessionEncryption.encodeStatus(
-                                                    statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                                                    sequenceNumber = 1
+                                    val (encodedDeviceRequest, _) = sessionEncryption.decryptMessage(message.toByteArray())
+                                    if (encodedDeviceRequest != null) {
+                                        val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
+                                        if (!newDeviceRequest.isStructurallyEquivalent(currentActiveRequest)) {
+                                            Logger.iCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
+                                            Logger.iCbor(TAG, "New request", newDeviceRequest.toDataItem())
+                                            Logger.w(TAG, "Incoming DeviceRequest is NOT structurally equivalent to active request. Killing old session.")
+                                            transactionJob?.cancel()
+                                            activeDeviceRequest = null
+                                            cceTransport = null
+                                            activeEngagement?.sendMessage(
+                                                ByteString(
+                                                    sessionEncryption.encryptMessage(
+                                                        messagePlaintext = null,
+                                                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+                                                    )
                                                 )
                                             )
-                                        )
-                                        return@MdocNfcCceEngagementHelper
-                                    } else {
-                                        Logger.i(TAG, "Incoming DeviceRequest IS structurally equivalent to active request.")
+                                            return@MdocNfcCceEngagementHelper
+                                        } else {
+                                            Logger.i(TAG, "Incoming DeviceRequest IS structurally equivalent to active request.")
+                                        }
                                     }
                                 }
                             }
