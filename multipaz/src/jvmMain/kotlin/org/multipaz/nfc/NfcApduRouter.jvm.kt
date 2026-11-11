@@ -8,5 +8,7 @@ actual abstract class NfcApduRouterBase actual constructor() {
     actual open fun stop() {}
     actual abstract fun processCommandApdu(commandApdu: CommandApdu): ResponseApdu?
     actual abstract fun deactivate(reason: NfcDeactivationReason)
-    actual open fun sendResponseApdu(responseApdu: ResponseApdu) {}
+    actual open fun sendResponseApdu(responseApdu: ResponseApdu) {
+        NfcApduRouter.forwardResponseApduIfHandled(responseApdu)
+    }
 }

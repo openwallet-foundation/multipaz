@@ -10,6 +10,7 @@ internal interface CcidDriverListener {
      * Called when a smart card is inserted into the reader.
      */
     fun onCardInserted()
+
     /**
      * Called when a smart card is removed from the reader.
      */

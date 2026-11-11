@@ -175,6 +175,7 @@ kotlin {
             dependencies {
                 implementation(libs.ktor.client.java)
                 implementation(libs.android.keyattestation)
+                compileOnly(libs.jna)
             }
         }
 
@@ -213,6 +214,7 @@ kotlin {
                 implementation(libs.nimbus.oauth2.oidc.sdk)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.tink)
+                implementation(libs.jna)
             }
         }
 

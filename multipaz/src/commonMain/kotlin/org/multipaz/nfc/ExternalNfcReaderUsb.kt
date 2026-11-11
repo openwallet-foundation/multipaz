@@ -1,5 +1,6 @@
 package org.multipaz.nfc
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
@@ -18,7 +19,7 @@ data class ExternalNfcReaderUsb(
     val vendorId: Int,
     val productId: Int,
     val interfaceIndex: Int
-): ExternalNfcReader(id, addedAt, displayName, userDisplayName) {
+) : ExternalNfcReader(id, addedAt, displayName, userDisplayName) {
 
     override fun observeState(): Flow<ExternalNfcReaderState> = observeUsbState()
 
@@ -30,6 +31,8 @@ data class ExternalNfcReaderUsb(
         store?.setUserDisplayName(this, userDisplayName)
     }
 }
+
+internal expect val nfcIoDispatcher: CoroutineDispatcher
 
 internal expect fun ExternalNfcReaderUsb.observeUsbState(): Flow<ExternalNfcReaderState>
 

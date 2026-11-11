@@ -9,7 +9,10 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.util.Logger
 import kotlin.time.Clock
+
+private const val TAG = "ExternalNfcReaderStore"
 
 /**
  * A persistent store for externally connected NFC readers.
@@ -127,7 +130,7 @@ class ExternalNfcReaderStore(
     private suspend fun initialize() {
         storageTable = storage.getTable(tableSpec)
         val readers = mutableListOf<ExternalNfcReader>()
-        for ((key, encodedData) in storageTable.enumerateWithData(partitionId = partitionId)) {
+        for ((_, encodedData) in storageTable.enumerateWithData(partitionId = partitionId)) {
             val reader = ExternalNfcReader.fromDataItem(Cbor.decode(encodedData.toByteArray()))
             reader.store = this
             readers.add(reader)
@@ -160,6 +163,130 @@ class ExternalNfcReaderStore(
             val instance = ExternalNfcReaderStore(storage, partitionId)
             instance.initialize()
             return instance
+        }
+    }
+}
+
+/**
+ * Adds a USB device described by [deviceInfo] to the [ExternalNfcReaderStore] if it doesn't
+ * exist already, filtering out non-NFC CCID interfaces (such as SAM/SIM slots or mechanical
+ * contact card slots).
+ */
+internal suspend fun ExternalNfcReaderStore.handleUsbDeviceAttached(
+    deviceInfo: UsbDeviceInfo
+): ExternalNfcReaderUsb {
+    val deviceDisplayName = deviceInfo.getNiceDisplayName()
+    Logger.d(TAG, "USB Device attached: $deviceDisplayName")
+
+    // If at least one interface for this USB device (VID/PID) already exists in the store,
+    // skip examining/adding any new interfaces for this device. When a multi-interface CCID
+    // reader is plugged in for the first time, all candidate NFC CCID interfaces are added to the store
+    // so the user can manually delete any non-NFC interfaces (e.g. SAM or contact card slots)
+    // from the UI. Preserving existing entries allows the user's manual deletions to persist
+    // when the device is re-plugged.
+    val existingReaderForDevice = this.readers.value.find { externalNfcReader ->
+        (externalNfcReader as? ExternalNfcReaderUsb)?.let {
+            it.vendorId == deviceInfo.vendorId && it.productId == deviceInfo.productId
+        } ?: false
+    }
+    if (existingReaderForDevice != null) {
+        Logger.i(
+            TAG,
+            "Device vid=${deviceInfo.vendorId} pid=${deviceInfo.productId} already has interface(s) configured in store, skipping auto-adding interfaces."
+        )
+        return existingReaderForDevice as ExternalNfcReaderUsb
+    }
+
+    val ccidInterfaces = deviceInfo.interfaces.filter {
+        it.interfaceClass == CcidUsbTransport.USB_CLASS_CSCID
+    }
+    val candidateNfcInterfaces = ccidInterfaces.filter {
+        !isDefinitelyNotNfc(it, deviceInfo.rawDescriptors)
+    }
+    val targetInterfaces = when {
+        candidateNfcInterfaces.isNotEmpty() -> candidateNfcInterfaces
+        ccidInterfaces.isNotEmpty() -> ccidInterfaces
+        deviceInfo.interfaces.isNotEmpty() -> listOf(deviceInfo.interfaces.first())
+        else -> listOf(UsbInterfaceInfo(id = 0, interfaceClass = CcidUsbTransport.USB_CLASS_CSCID))
+    }
+
+    var lastAddedReader: ExternalNfcReaderUsb? = null
+    val format = HexFormat {
+        number.prefix = "0x"
+        number.minLength = 2
+    }
+
+    for (iface in targetInterfaces) {
+        val ifaceIndex = iface.id
+        val nameSuffix = if (targetInterfaces.size > 1) {
+            val ifaceName = iface.name?.trim() ?: ""
+            if (ifaceName.isNotEmpty()) " ($ifaceName)" else " (Interface ${iface.id})"
+        } else {
+            ""
+        }
+        val displayName = "$deviceDisplayName$nameSuffix"
+
+        Logger.i(
+            TAG,
+            "Adding USB-connected external NFC reader '$displayName' " +
+                "vid ${deviceInfo.vendorId.toHexString(format)} pid ${deviceInfo.productId.toHexString(format)} " +
+                "interfaceIndex $ifaceIndex to persistent ExternalNfcReaderStore"
+        )
+
+        val reader = this.addUsbReader(
+            displayName = displayName,
+            vendorId = deviceInfo.vendorId,
+            productId = deviceInfo.productId,
+            interfaceIndex = ifaceIndex
+        )
+        lastAddedReader = reader
+    }
+
+    return lastAddedReader!!
+}
+
+internal fun isDefinitelyNotNfc(iface: UsbInterfaceInfo, rawDescriptors: ByteArray?): Boolean {
+    val ifaceName = iface.name?.lowercase()?.trim() ?: ""
+    if (ifaceName.contains("sam") || ifaceName.contains("sim")) {
+        return true
+    }
+    if (ifaceName.contains("contact") && !ifaceName.contains("contactless")) {
+        return true
+    }
+    if (rawDescriptors != null) {
+        val ccidDesc = CcidDriver.getCcidDescriptorForInterface(rawDescriptors, iface.id)
+        if (ccidDesc != null && ccidDesc.size >= 40) {
+            val dwMechanical = CcidDriver.readInt32Le(ccidDesc, 36)
+            if (dwMechanical != 0) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+internal fun UsbDeviceInfo.getNiceDisplayName(): String {
+    val manufacturer = this.manufacturerName?.trim()
+    val product = this.productName?.trim()
+    return when {
+        !manufacturer.isNullOrBlank() && !product.isNullOrBlank() -> {
+            if (product.startsWith(manufacturer, ignoreCase = true)) {
+                product
+            } else {
+                "$manufacturer $product"
+            }
+        }
+        !product.isNullOrBlank() -> product
+        !manufacturer.isNullOrBlank() -> manufacturer
+        else -> {
+            val hexFormat = HexFormat {
+                upperCase = true
+                number.minLength = 4
+                number.removeLeadingZeros = true
+            }
+            val vidHex = (this.vendorId and 0xFFFF).toHexString(hexFormat)
+            val pidHex = (this.productId and 0xFFFF).toHexString(hexFormat)
+            "Unknown USB Device (VID: $vidHex, PID: $pidHex)"
         }
     }
 }
