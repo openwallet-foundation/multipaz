@@ -20,6 +20,7 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
+import org.multipaz.webtoken.WebTokenCheck
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -46,7 +47,7 @@ import kotlin.time.Instant
  * @param httpTimeout Timeout duration for network requests fetching revocation lists.
  * @param cachingDuration how long to keep revocation data in cache
  * @param useETag allow `ETag` header use, mostly exposed for testing only
- * @param useETag allow `Last-Modified` header use, mostly exposed for testing only
+ * @param useLastModified allow `Last-Modified` header use, mostly exposed for testing only
  */
 class CachingRevocationChecker(
     private val storage: Storage,
@@ -222,6 +223,7 @@ class CachingRevocationChecker(
                             first = CompressedStatusList.fromCwt(
                                 cwt = bytes,
                                 trustedRootCert = cert,
+                                checks = mapOf(WebTokenCheck.SUB to status.uri),
                                 atTime = atTime
                             ),
                             second = true
@@ -235,6 +237,15 @@ class CachingRevocationChecker(
                             second = false
                         )
                     }
+                } catch (err: InvalidRequestException) {
+                    if (onlyTrusted) {
+                        throw err
+                    }
+                    Logger.w(TAG, "Status list (CWT) could not be validated, attempt using it anyway", err)
+                    return@fetchOrGetCached Pair(
+                        first = CompressedStatusList.fromCwtNoTrust(bytes),
+                        second = false
+                    )
                 } catch (err: IllegalArgumentException) {
                     if (contentType == STATUSLIST_CWT) {
                         throw err
@@ -249,6 +260,7 @@ class CachingRevocationChecker(
                         first = CompressedStatusList.fromJwt(
                             jwt = jwtString,
                             trustedRootCert = cert,
+                            checks = mapOf(WebTokenCheck.SUB to status.uri),
                             atTime = atTime
                         ),
                         second = true
@@ -319,20 +331,29 @@ class CachingRevocationChecker(
             bypassCache = bypassCache
         ) { bytes, _ ->
             Logger.dCbor(TAG, "Identifier list (CWT) for ${status.uri}", bytes)
-            if (cert != null) {
-                Pair(
-                    first = IdentifierList.fromCwt(
-                        cwt = bytes,
-                        trustedRootCert = cert,
-                        atTime = atTime
-                    ),
-                    second = true
-                )
-            } else if (onlyTrusted) {
-                throw InvalidRequestException("Identifier list could not be validated, no trusted root")
-            } else {
-                Logger.w(TAG, "Identifier list could not be validated, attempt using it anyway")
-                // Trust cannot be verified
+            try {
+                if (cert != null) {
+                    Pair(
+                        first = IdentifierList.fromCwt(
+                            cwt = bytes,
+                            trustedRootCert = cert,
+                            checks = mapOf(WebTokenCheck.SUB to status.uri),
+                            atTime = atTime
+                        ),
+                        second = true
+                    )
+                } else if (onlyTrusted) {
+                    throw InvalidRequestException("Identifier list could not be validated, no trusted root")
+                } else {
+                    Logger.w(TAG, "Identifier list could not be validated, attempt using it anyway")
+                    // Trust cannot be verified
+                    Pair(first = IdentifierList.fromCwtNoTrust(bytes), second = false)
+                }
+            } catch (err: InvalidRequestException) {
+                if (onlyTrusted) {
+                    throw err
+                }
+                Logger.w(TAG, "Identifier list could not be validated, attempt using it anyway", err)
                 Pair(first = IdentifierList.fromCwtNoTrust(bytes), second = false)
             }
         }.let { (item, error) ->

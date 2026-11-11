@@ -230,6 +230,31 @@ class CredentialState(
                 }
 
         /**
+         * Returns the size of the key space for the given bucket (guaranteed to be strictly
+         * greater than all credential indices allocated in the bucket).
+         */
+        suspend fun getKeySpaceSize(bucketId: String): Int {
+            val dataTable = BackendEnvironment.getTable(dataTableSpec)
+            while (true) {
+                val currentKeySpaceSizeLog = keySpaceSizeLog
+                val currentKeySpaceSize = 1 shl currentKeySpaceSizeLog
+                if (dataTable.enumerate(
+                        partitionId = bucketId,
+                        afterKey = encodeIndexToKey(currentKeySpaceSize - 1),
+                        limit = 1
+                    ).isEmpty()
+                ) {
+                    return currentKeySpaceSize
+                }
+                if (keySpaceSizeLog == currentKeySpaceSizeLog && currentKeySpaceSizeLog < 20) {
+                    keySpaceSizeLog = currentKeySpaceSizeLog + 1
+                } else if (currentKeySpaceSizeLog >= 20) {
+                    return currentKeySpaceSize
+                }
+            }
+        }
+
+        /**
          * List credentials with status codes that are not zero (zero represents a valid
          * credential).
          *
