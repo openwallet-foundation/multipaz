@@ -65,7 +65,7 @@ class MultiDeviceTestsClient(
 
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
                 Logger.i(TAG, "Test: $test")
-                Logger.iHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
+                Logger.dHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
                 val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
                 val connectionMethod = deviceEngagement.connectionMethods[0]
                 val eDeviceKey = deviceEngagement.eDeviceKey

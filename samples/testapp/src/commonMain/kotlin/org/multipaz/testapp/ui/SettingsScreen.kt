@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -46,9 +47,9 @@ fun SettingsScreen(
     showToast: (message: String) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    // NFC engagement as an mdoc is only supported on Android.
-    //
-    val nfcAvailable = (TestAppConfiguration.platform == TestAppPlatform.ANDROID)
+    val nciNfcEnabled = app.settingsModel.nciNfcEnabled.collectAsState().value
+    val nfcAvailable = (TestAppConfiguration.platform == TestAppPlatform.ANDROID) ||
+        (TestAppConfiguration.platform == TestAppPlatform.JVM && nciNfcEnabled)
     val negotiatedHandoverOrder = app.settingsModel.presentmentNegotiatedHandoverPreferredOrder.collectAsState().value
 
     LazyColumnWithScrollbar(
@@ -72,10 +73,72 @@ fun SettingsScreen(
             )
         }
         item { SettingHeadline("ISO mdoc NFC Engagement Settings") }
+        if (TestAppConfiguration.platform == TestAppPlatform.JVM) {
+            item {
+                SettingToggle(
+                    title = "Enable NCI NFC Controller (Linux I2C + GPIO)",
+                    isChecked = nciNfcEnabled,
+                    onCheckedChange = { app.settingsModel.nciNfcEnabled.value = it }
+                )
+            }
+            item {
+                val i2cDev = app.settingsModel.nciI2cDevicePath.collectAsState().value
+                val i2cAddr = app.settingsModel.nciI2cAddress.collectAsState().value
+                val gpioChip = app.settingsModel.nciGpioChipPath.collectAsState().value
+                val irqPin = app.settingsModel.nciIrqGpioPin.collectAsState().value
+                val venPin = app.settingsModel.nciVenGpioPin.collectAsState().value
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = i2cDev,
+                            onValueChange = { app.settingsModel.nciI2cDevicePath.value = it },
+                            label = { Text("I2C Device") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).padding(end = 4.dp)
+                        )
+                        OutlinedTextField(
+                            value = i2cAddr,
+                            onValueChange = { app.settingsModel.nciI2cAddress.value = it },
+                            label = { Text("I2C Address (hex)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp)
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        OutlinedTextField(
+                            value = gpioChip,
+                            onValueChange = { app.settingsModel.nciGpioChipPath.value = it },
+                            label = { Text("GPIO Chip") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.4f).padding(end = 4.dp)
+                        )
+                        OutlinedTextField(
+                            value = irqPin,
+                            onValueChange = { app.settingsModel.nciIrqGpioPin.value = it },
+                            label = { Text("IRQ Pin") },
+                            singleLine = true,
+                            modifier = Modifier.weight(0.8f).padding(horizontal = 4.dp)
+                        )
+                        OutlinedTextField(
+                            value = venPin,
+                            onValueChange = { app.settingsModel.nciVenGpioPin.value = it },
+                            label = { Text("VEN Pin") },
+                            singleLine = true,
+                            modifier = Modifier.weight(0.8f).padding(start = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
         item {
             if (!nfcAvailable) {
                 WarningCard {
-                    Text("NFC Engagement as an mdoc is not supported on ${TestAppConfiguration.platform.displayName}")
+                    val msg = if (TestAppConfiguration.platform == TestAppPlatform.JVM) {
+                        "Enable NCI NFC Controller above when an NXP PN7160 is connected over I2C + GPIO"
+                    } else {
+                        "NFC Engagement as an mdoc is not supported on ${TestAppConfiguration.platform.displayName}"
+                    }
+                    Text(msg)
                 }
             }
         }

@@ -37,6 +37,7 @@ actual object TestAppConfiguration {
             Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
             Security.insertProviderAt(BouncyCastleProvider(), 1)
         }
+        JvmNfcControllerManager.init(settingsModel)
     }
 
     actual fun restartApp() {

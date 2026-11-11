@@ -34,7 +34,6 @@ class AndroidPromptModel private constructor(builder: Builder): PromptModel(buil
         override fun addCommonDialogs() = apply {
             super.addCommonDialogs()
             addPromptDialogModel(BiometricPromptDialogModel())
-            addPromptDialogModel(ScanNfcPromptDialogModel())
         }
 
         override fun build(): AndroidPromptModel {

@@ -6,9 +6,12 @@ import kotlinx.coroutines.flow.first
 /**
  * Gives user feedback while NFC scanning is performed.
  */
-class ScanNfcPromptDialogModel:
+class ScanNfcPromptDialogModel :
     PromptDialogModel<ScanNfcPromptDialogModel.NfcDialogParameters, Unit>() {
-    object DialogType: PromptDialogModel.DialogType<ScanNfcPromptDialogModel>
+    /**
+     * Dialog type for [ScanNfcPromptDialogModel].
+     */
+    object DialogType : PromptDialogModel.DialogType<ScanNfcPromptDialogModel>
 
     override val dialogType: DialogType get() = DialogType
 

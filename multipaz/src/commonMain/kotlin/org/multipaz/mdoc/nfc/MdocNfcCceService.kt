@@ -316,8 +316,8 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                 if (encodedDeviceRequest != null) {
                                     val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
                                     if (!newDeviceRequest.isStructurallyEquivalent(currentActiveRequest)) {
-                                        Logger.iCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
-                                        Logger.iCbor(TAG, "New request", newDeviceRequest.toDataItem())
+                                        Logger.dCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
+                                        Logger.dCbor(TAG, "New request", newDeviceRequest.toDataItem())
                                         Logger.w(TAG, "Incoming DeviceRequest is NOT structurally equivalent to active request. Killing old session.")
                                         transactionJob?.cancel()
                                         activeDeviceRequest = null

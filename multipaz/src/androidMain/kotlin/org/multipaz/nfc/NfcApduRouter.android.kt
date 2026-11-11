@@ -79,6 +79,8 @@ actual abstract class NfcApduRouterBase private constructor(
     }
 
     actual open fun sendResponseApdu(responseApdu: ResponseApdu) {
-        sendResponseApdu(responseApdu.encode())
+        if (!NfcApduRouter.forwardResponseApduIfHandled(responseApdu)) {
+            sendResponseApdu(responseApdu.encode())
+        }
     }
 }

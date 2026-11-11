@@ -10,6 +10,7 @@ import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PassphrasePromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.ScanNfcPromptDialogModel
 
 @Composable
 actual fun PromptDialogs(
@@ -19,6 +20,9 @@ actual fun PromptDialogs(
     excludeTypes: List<PromptDialogModel.DialogType<*>>,
     toHumanReadable: ConvertToHumanReadableFn
 ) {
+    if (!excludeTypes.contains(ScanNfcPromptDialogModel.DialogType)) {
+        ScanNfcTagPromptDialog(promptModel.getDialogModel(ScanNfcPromptDialogModel.DialogType))
+    }
     if (!excludeTypes.contains(PassphrasePromptDialogModel.DialogType)) {
         PassphrasePromptDialog(
             model = promptModel.getDialogModel(PassphrasePromptDialogModel.DialogType),

@@ -170,6 +170,7 @@ val detektModules = listOf(
     ":multipaz-dcapi-ios",
     ":multipaz-doctypes",
     ":multipaz-longfellow",
+    ":multipaz-nci",
 )
 
 subprojects {
@@ -195,6 +196,7 @@ dependencies {
     dokka(project(":multipaz-android-legacy"))
     dokka(project(":multipaz-jpeg2000"))
     dokka(project(":multipaz-facenet"))
+    dokka(project(":multipaz-nci"))
 }
 
 subprojects {

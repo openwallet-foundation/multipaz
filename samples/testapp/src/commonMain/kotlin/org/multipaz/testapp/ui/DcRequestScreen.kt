@@ -463,11 +463,11 @@ private suspend fun doDcRequestFlow(
 
     Logger.i(TAG, "clientId: $clientId")
     Logger.i(TAG, "origin: $origin")
-    Logger.iJson(TAG, "Request", dcRequestObject)
+    Logger.dJson(TAG, "Request", dcRequestObject)
     val t0 = Clock.System.now()
     val dcResponseObject = app.digitalCredentials!!.request(dcRequestObject)
     val durationRequestSentToResponseReceived = Clock.System.now() - t0
-    Logger.iJson(TAG, "Response", dcResponseObject)
+    Logger.dJson(TAG, "Response", dcResponseObject)
 
     val presentmentRecord = session.processDcResponse(dcResponse = dcResponseObject)
     val requestJson = Json.encodeToString(dcRequestObject)

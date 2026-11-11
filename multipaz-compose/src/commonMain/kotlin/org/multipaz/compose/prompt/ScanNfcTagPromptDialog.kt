@@ -3,9 +3,12 @@ package org.multipaz.compose.prompt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.launch
-import org.multipaz.compose.R
+import org.jetbrains.compose.resources.painterResource
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_icon_error
+import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_icon_scan
+import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_icon_success
 import org.multipaz.nfc.NfcTagReaderModalBottomSheet
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptDismissedException
@@ -25,14 +28,14 @@ internal fun ScanNfcTagPromptDialog(
     if (dialogStateValue is PromptDialogModel.DialogShownState) {
         val icon = dialogStateValue.parameters.icon.collectAsState().value
         val messageText = dialogStateValue.parameters.message.collectAsState().value
-        val iconId = when (icon) {
-            ScanNfcTagDialogIcon.READY_TO_SCAN -> R.drawable.nfc_tag_reader_icon_scan
-            ScanNfcTagDialogIcon.SUCCESS -> R.drawable.nfc_tag_reader_icon_success
-            ScanNfcTagDialogIcon.ERROR -> R.drawable.nfc_tag_reader_icon_error
+        val iconResource = when (icon) {
+            ScanNfcTagDialogIcon.READY_TO_SCAN -> Res.drawable.nfc_tag_reader_icon_scan
+            ScanNfcTagDialogIcon.SUCCESS -> Res.drawable.nfc_tag_reader_icon_success
+            ScanNfcTagDialogIcon.ERROR -> Res.drawable.nfc_tag_reader_icon_error
         }
         NfcTagReaderModalBottomSheet(
             dialogMessage = messageText,
-            dialogIconPainter = painterResource(iconId),
+            dialogIconPainter = painterResource(iconResource),
             onDismissed = {
                 coroutineScope.launch {
                     dialogStateValue.resultChannel.close(PromptDismissedException())
@@ -41,4 +44,3 @@ internal fun ScanNfcTagPromptDialog(
         )
     }
 }
-
