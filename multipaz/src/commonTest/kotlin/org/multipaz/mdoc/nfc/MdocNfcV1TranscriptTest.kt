@@ -1007,7 +1007,8 @@ class MdocNfcV1TranscriptTest {
                 atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
             )
 
-            val terminationMessage = SessionEncryption.encodeStatus(
+            val terminationMessage = readerEncryption.encryptMessage(
+                messagePlaintext = null,
                 statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
             )
             readerTransport.sendMessage(terminationMessage)
@@ -2019,7 +2020,10 @@ class MdocNfcV1TranscriptTest {
 
             // Session termination
             readerTransport.sendMessage(
-                SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                readerEncryption.encryptMessage(
+                    messagePlaintext = null,
+                    statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                )
             )
 
             withTimeout(5.seconds) {

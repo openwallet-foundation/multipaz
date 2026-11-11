@@ -1551,9 +1551,9 @@ class MdocNfcServiceTest {
 
                     // Reader sends session termination to complete transaction cleanly
                     readerTransport2.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        readerSession2.sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = readerSession2.sessionEncryption.nextSequenceNumber,
                         )
                     )
                     val completedState = withTimeout(5.seconds) {
@@ -1821,9 +1821,9 @@ class MdocNfcServiceTest {
                     assertEquals(1, fixture.biometricPromptCalls)
 
                     readerTransport2.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        readerSession2.sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = readerSession2.sessionEncryption.nextSequenceNumber,
                         )
                     )
                     val completedState = withTimeout(5.seconds) {
@@ -2104,9 +2104,9 @@ class MdocNfcServiceTest {
                     assertEquals(1, deviceResponse.documents.size)
 
                     readerTransport2.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        readerSession2.sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = readerSession2.sessionEncryption.nextSequenceNumber,
                         )
                     )
                     val completedState = withTimeout(5.seconds) {
@@ -2245,9 +2245,9 @@ class MdocNfcServiceTest {
 
                 // Reader sends session termination over BLE
                 bleTransport.incomingMessages.trySend(
-                    SessionEncryption.encodeStatus(
+                    readerSession.sessionEncryption.encryptMessage(
+                        messagePlaintext = null,
                         statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = readerSession.sessionEncryption.nextSequenceNumber,
                     )
                 )
                 val completedState = withTimeout(5.seconds) {
@@ -2438,9 +2438,9 @@ class MdocNfcServiceTest {
                     assertEquals(1, fixture.biometricPromptCalls)
 
                     readerTransport2.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        readerSession2.sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = readerSession2.sessionEncryption.nextSequenceNumber,
                         )
                     )
                     val completedState = withTimeout(5.seconds) {
@@ -2568,9 +2568,9 @@ class MdocNfcServiceTest {
 
                 // Terminate session (sequence number 3)
                 readerTransport.sendMessage(
-                    SessionEncryption.encodeStatus(
+                    readerSession.sessionEncryption.encryptMessage(
+                        messagePlaintext = null,
                         statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = readerSession.sessionEncryption.nextSequenceNumber,
                     )
                 )
                 val completedState = withTimeout(5.seconds) {
@@ -2652,9 +2652,9 @@ class MdocNfcServiceTest {
                 assertTrue(tag1.getResponseCount > 0, "Expected GET RESPONSE commands with maxTransceiveLength=128")
 
                 readerTransport.sendMessage(
-                    SessionEncryption.encodeStatus(
+                    readerSession.sessionEncryption.encryptMessage(
+                        messagePlaintext = null,
                         statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = readerSession.sessionEncryption.nextSequenceNumber,
                     )
                 )
                 val completedState = withTimeout(5.seconds) {
@@ -2796,9 +2796,9 @@ class MdocNfcServiceTest {
                     assertEquals(1, deviceResponse.documents.size)
 
                     readerTransport2.sendMessage(
-                        SessionEncryption.encodeStatus(
+                        readerSession2.sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
                             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                            sequenceNumber = readerSession2.sessionEncryption.nextSequenceNumber,
                         )
                     )
                     val completedState = withTimeout(5.seconds) {
@@ -3020,7 +3020,10 @@ class MdocNfcServiceTest {
                     assertEquals(1, deviceResponse.documents.size)
 
                     readerTransport.sendMessage(
-                        SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                        sessionEncryption.encryptMessage(
+                            messagePlaintext = null,
+                            statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                        )
                     )
                     val completedState = withTimeout(5.seconds) {
                         presentmentModel.state.first { it is PresentmentModel.State.Completed }

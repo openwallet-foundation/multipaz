@@ -179,9 +179,9 @@ class SessionEncryption(
         statusCode: Long?,
         disconnectNfc: Boolean = false
     ): ByteArray {
-        ensureInitialized()
         var messageCiphertext: ByteArray? = null
         if (messagePlaintext != null) {
+            ensureInitialized()
             // The IV and these constants are specified in ISO/IEC 18013-5:2021 clause 9.1.1.5.
             val iv = ByteStringBuilder(12)
             iv.append(0x00000000U)
@@ -288,31 +288,6 @@ class SessionEncryption(
         get() = decryptedCounter - 1
 
     companion object {
-        /**
-         * Create a SessionData message (as defined in ISO/IEC 18013-5 9.1.1.4 Procedure) with a status
-         * code and no data.
-         *
-         * @param statusCode the intended status code, with value as defined in ISO/IEC 18013-5 Table 20.
-         * @param sequenceNumber optional sequence number or `null`
-         * @param disconnectNfc if `true`, includes `"disconnectNfc": true` in the message.
-         * @return a byte array with the encoded CBOR message
-         */
-        fun encodeStatus(
-            statusCode: Long,
-            sequenceNumber: Int? = null,
-            disconnectNfc: Boolean = false
-        ): ByteArray = Cbor.encode(
-            buildCborMap {
-                put("status", statusCode)
-                sequenceNumber?.let {
-                    put("seq", it)
-                }
-                if (disconnectNfc) {
-                    put("disconnectNfc", true)
-                }
-            }
-        )
-
         /**
          * Gets the ephemeral reader key in a `SessionEstablishment` message.
          *

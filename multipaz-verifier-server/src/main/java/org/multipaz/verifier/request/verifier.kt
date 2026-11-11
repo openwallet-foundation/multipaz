@@ -1190,8 +1190,9 @@ private suspend fun handleAnnexARequest(
             }
 
             // In either case, terminate the session
-            val replySessionDataMessage = SessionEncryption.encodeStatus(
-                Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+            val replySessionDataMessage = sessionEncryption.encryptMessage(
+                messagePlaintext = null,
+                statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
             )
             session.annexAMessageCounter += 1
             call.respondBytes(
@@ -1201,8 +1202,10 @@ private suspend fun handleAnnexARequest(
         } else {
             // annexAMessageCounter >= 2
             Logger.e(TAG, "Unexpected annexAMessageCounter")
-            val replySessionDataMessage = SessionEncryption.encodeStatus(
-                Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+            val replySessionDataMessage = Cbor.encode(
+                buildCborMap {
+                    put("status", Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                }
             )
             session.annexAMessageCounter += 1
             call.respondBytes(

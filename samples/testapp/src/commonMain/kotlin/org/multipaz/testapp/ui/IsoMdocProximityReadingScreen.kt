@@ -203,8 +203,6 @@ fun IsoMdocProximityReadingScreen(
     val durationEngagementReceivedToRequestSent = remember { mutableStateOf<Duration?>(null) }
     val durationRequestSentToResponseReceived = remember { mutableStateOf<Duration?>(null) }
     val eReaderKey = remember { mutableStateOf<EcPrivateKey?>(null) }
-    val deviceHandover = remember { mutableStateOf<DataItem?>(null) }
-    val deviceEngagement = remember { mutableStateOf<ByteString?>(null) }
     var readerJob by remember { mutableStateOf<Job?>(null) }
 
     val readers = mutableListOf<NfcReaderEntry>()
@@ -455,13 +453,15 @@ fun IsoMdocProximityReadingScreen(
                         onClick = {
                             coroutineScope.launch {
                                 try {
+                                    val previousRequest =
+                                        readerSession.value!!.find<VerificationSession.Iso18013ProximityRequest>()
                                     val session = TestAppUtils.createProximityVerificationSession(
                                         app = app,
                                         request = requestSelected.value.request,
                                         signRequest = app.settingsModel.signRequest.value,
-                                        handover = deviceHandover.value!!,
+                                        handover = previousRequest.handover,
                                         eReaderKey = eReaderKey.value!!,
-                                        deviceEngagement = deviceEngagement.value!!,
+                                        deviceEngagement = previousRequest.deviceEngagement,
                                         requestSdJwtVc = requestSelected.value.requestSdJwtVc,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                         uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
@@ -494,7 +494,10 @@ fun IsoMdocProximityReadingScreen(
                             coroutineScope.launch {
                                 try {
                                     readerTransport.value!!.sendMessage(
-                                        SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                                        readerSessionEncryption.value!!.encryptMessage(
+                                            messagePlaintext = null,
+                                            statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+                                        )
                                     )
                                     readerTransport.value!!.close()
                                 } catch (error: Exception) {
@@ -1093,9 +1096,9 @@ private suspend fun doReaderFlowWithTransport(
                         "Auto-close is enabled, so sending termination message, closing, and " +
                         "ending reader loop")
                 transport.sendMessage(
-                    SessionEncryption.encodeStatus(
-                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = if (insertSequenceNumbers) sessionEncryption.nextSequenceNumber else null
+                    sessionEncryption.encryptMessage(
+                        messagePlaintext = null,
+                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
                     )
                 )
                 transport.close()

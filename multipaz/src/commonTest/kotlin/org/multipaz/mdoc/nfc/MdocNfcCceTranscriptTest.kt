@@ -859,9 +859,9 @@ class MdocNfcCceTranscriptTest {
                     atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
                 )
 
-                val terminationMessage = SessionEncryption.encodeStatus(
+                val terminationMessage = readerEncryption.encryptMessage(
+                    messagePlaintext = null,
                     statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                    sequenceNumber = readerEncryption.nextSequenceNumber,
                 )
                 readerTransport.sendMessage(terminationMessage)
                 readerTransport.close()
@@ -1120,9 +1120,9 @@ class MdocNfcCceTranscriptTest {
                     atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
                 )
 
-                val terminationMessage = SessionEncryption.encodeStatus(
+                val terminationMessage = readerEncryption.encryptMessage(
+                    messagePlaintext = null,
                     statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                    sequenceNumber = readerEncryption.nextSequenceNumber,
                 )
                 readerTransport.sendMessage(terminationMessage)
                 readerTransport.close()
@@ -1443,9 +1443,9 @@ class MdocNfcCceTranscriptTest {
             }
         }
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -1778,9 +1778,9 @@ class MdocNfcCceTranscriptTest {
             }
         }
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -2125,9 +2125,9 @@ class MdocNfcCceTranscriptTest {
             }
         }
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -2456,9 +2456,9 @@ class MdocNfcCceTranscriptTest {
             }
         }
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -2804,9 +2804,9 @@ class MdocNfcCceTranscriptTest {
         )
         assertEquals(1, deviceResponse.documents.size)
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -3139,9 +3139,9 @@ class MdocNfcCceTranscriptTest {
         )
         assertEquals(1, deviceResponse.documents.size)
 
-        val terminationMessage = SessionEncryption.encodeStatus(
+        val terminationMessage = readerEncryption.encryptMessage(
+            messagePlaintext = null,
             statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-            sequenceNumber = readerEncryption.nextSequenceNumber,
         )
         readerTransport.sendMessage(terminationMessage)
 
@@ -3500,9 +3500,9 @@ class MdocNfcCceTranscriptTest {
                         atTime = validAt,
                     )
 
-                    val terminationMessage = SessionEncryption.encodeStatus(
+                    val terminationMessage = readerEncryption.encryptMessage(
+                        messagePlaintext = null,
                         statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = readerEncryption.nextSequenceNumber,
                     )
                     readerTransport.sendMessage(terminationMessage)
 
@@ -3812,9 +3812,9 @@ class MdocNfcCceTranscriptTest {
                     atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
                 )
 
-                val terminationMessage = SessionEncryption.encodeStatus(
+                val terminationMessage = readerEncryption.encryptMessage(
+                    messagePlaintext = null,
                     statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                    sequenceNumber = readerEncryption.nextSequenceNumber,
                 )
                 readerTransport.sendMessage(terminationMessage)
                 readerTransport.close()
@@ -4104,9 +4104,9 @@ class MdocNfcCceTranscriptTest {
                     atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
                 )
 
-                val terminationMessage = SessionEncryption.encodeStatus(
+                val terminationMessage = readerEncryption.encryptMessage(
+                    messagePlaintext = null,
                     statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                    sequenceNumber = readerEncryption.nextSequenceNumber,
                 )
                 readerTransport.sendMessage(terminationMessage)
                 readerTransport.close()
