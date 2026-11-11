@@ -29,7 +29,10 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
             }
         }
         else -> {
-            throw IllegalArgumentException("$connectionMethod is not supported on JVM")
+            throw IllegalArgumentException(
+                "$connectionMethod is not supported by MdocTransportFactory.Default on JVM; " +
+                    "for Bluetooth HCI use BtHciMdocTransportFactory from multipaz-bthci"
+            )
         }
     }
 }

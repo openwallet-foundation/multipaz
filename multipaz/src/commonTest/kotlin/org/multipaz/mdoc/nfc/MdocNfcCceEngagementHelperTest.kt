@@ -896,7 +896,7 @@ class MdocNfcCceEngagementHelperTest {
             }
         }
         assertEquals(1, tag.closeCount)
-        assertTrue(mdocReaderTransport.stats.nfcDisconnectedDuringTransaction)
+        assertEquals(true, mdocReaderTransport.stats.nfcDisconnectedDuringTransaction)
 
         // Meanwhile, the transaction continues and succeeds over BLE.
         assertContentEquals(request, mdocTransport.waitForMessage())

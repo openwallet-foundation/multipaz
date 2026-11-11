@@ -97,7 +97,11 @@ abstract class MdocTransport {
         get() = MdocTransportStats(
             transportType = MdocTransportType.OTHER,
             role = role,
-            scanningTime = runCatching { scanningTime }.getOrNull(),
+            bleScanningTime = try {
+                scanningTime
+            } catch (_: Exception) {
+                null
+            },
         )
 
     /**

@@ -9,9 +9,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -134,13 +136,13 @@ internal class BleTransportPeripheralMdoc(
         get() = MdocTransportStats(
             transportType = MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE,
             role = role,
-            scanningTime = null,
-            connectingTime = _connectingTime,
             bytesSent = _bytesSent,
             bytesReceived = _bytesReceived,
             numMessagesSent = _numMessagesSent,
             numMessagesReceived = _numMessagesReceived,
             warnings = peripheralManager.warnings,
+            bleScanningTime = null,
+            bleConnectingTime = _connectingTime,
             bleUsingL2cap = peripheralManager.usingL2cap,
             bleL2capPsmInEngagement = options.bleUseL2CAPInEngagement && peripheralManager.l2capPsm != null,
             bleNegotiatedMtu = peripheralManager.negotiatedMtu,
@@ -162,12 +164,12 @@ internal class BleTransportPeripheralMdoc(
                     currentJob = coroutineContext[Job]
                     advertising
                 }
+                peripheralManager.setESenderKey(eSenderKey)
                 if (!wasAdvertising) {
                     // Start advertising if we aren't already...
                     peripheralManager.waitForPowerOn()
                     peripheralManager.advertiseService(uuid)
                 }
-                peripheralManager.setESenderKey(eSenderKey)
                 timeConnectingStarted = Clock.System.now()
                 // Note: It's not really possible to know someone is connecting to us until they're _actually_
                 // connected. I mean, for all we know, someone could be BLE scanning us. So not really possible
@@ -226,6 +228,8 @@ internal class BleTransportPeripheralMdoc(
     }
 
     override suspend fun sendMessage(message: ByteArray) {
+        var sendStarted = false
+        var statsRecorded = false
         try {
             coroutineScope {
                 mutex.withLock {
@@ -233,7 +237,9 @@ internal class BleTransportPeripheralMdoc(
                     if (message.isEmpty() && peripheralManager.usingL2cap) {
                         throw MdocTransportTerminationException("Transport-specific termination not available with L2CAP")
                     }
+                    peripheralManager.resetLastSendCompleted()
                     currentJob = coroutineContext[Job]
+                    sendStarted = true
                 }
                 if (message.isEmpty()) {
                     peripheralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_END)
@@ -241,9 +247,18 @@ internal class BleTransportPeripheralMdoc(
                     peripheralManager.sendMessage(message)
                     _bytesSent += message.size
                     _numMessagesSent += 1
+                    statsRecorded = true
                 }
+                currentJob = null
             }
         } catch (error: Exception) {
+            if (sendStarted && peripheralManager.lastSendCompleted && currentCoroutineContext().isActive) {
+                if (message.isNotEmpty() && !statsRecorded) {
+                    _bytesSent += message.size
+                    _numMessagesSent += 1
+                }
+                return
+            }
             val unwrapped = error.unwrapCancellationException()
             if (unwrapped is CancellationException) {
                 throw unwrapped
@@ -281,6 +296,7 @@ internal class BleTransportPeripheralMdoc(
             if (_state.value == State.FAILED || _state.value == State.CLOSED) {
                 return@withContext
             }
+            peripheralManager.shutdown()
             closeWithoutDelay()
         }
     }

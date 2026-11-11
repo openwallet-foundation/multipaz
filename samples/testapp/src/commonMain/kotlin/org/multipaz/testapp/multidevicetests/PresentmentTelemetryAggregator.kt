@@ -93,7 +93,11 @@ data class RetrySummary(
  * @property bleNegotiatedMtu summary of negotiated BLE ATT MTU values.
  * @property bleScanRestarts summary of BLE scan restarts.
  * @property bleGattConnectRetries summary of BLE GATT connection retries.
+ * @property bleMtuRequestRetries summary of BLE GATT MTU request retries.
  * @property bleServiceDiscoveryRetries summary of BLE GATT service discovery retries.
+ * @property bleCharacteristicDiscoveryRetries summary of BLE GATT characteristic discovery retries.
+ * @property bleCharacteristicReadRetries summary of BLE GATT characteristic read retries.
+ * @property bleDescriptorWriteRetries summary of BLE GATT descriptor (CCCD) write retries.
  * @property bleL2capConnectRetries summary of BLE L2CAP socket connection retries.
  * @property nfcReTaps summary of NFC re-taps.
  */
@@ -112,7 +116,11 @@ data class AggregatedPresentmentTelemetry(
     val bleNegotiatedMtu: MetricSummary = MetricSummary(),
     val bleScanRestarts: RetrySummary = RetrySummary(),
     val bleGattConnectRetries: RetrySummary = RetrySummary(),
+    val bleMtuRequestRetries: RetrySummary = RetrySummary(),
     val bleServiceDiscoveryRetries: RetrySummary = RetrySummary(),
+    val bleCharacteristicDiscoveryRetries: RetrySummary = RetrySummary(),
+    val bleCharacteristicReadRetries: RetrySummary = RetrySummary(),
+    val bleDescriptorWriteRetries: RetrySummary = RetrySummary(),
     val bleL2capConnectRetries: RetrySummary = RetrySummary(),
     val nfcReTaps: RetrySummary = RetrySummary(),
 )
@@ -138,7 +146,11 @@ class PresentmentTelemetryAggregator {
 
     private val bleScanRestartCounts = mutableListOf<Int>()
     private val bleGattConnectRetryCounts = mutableListOf<Int>()
+    private val bleMtuRequestRetryCounts = mutableListOf<Int>()
     private val bleServiceDiscoveryRetryCounts = mutableListOf<Int>()
+    private val bleCharacteristicDiscoveryRetryCounts = mutableListOf<Int>()
+    private val bleCharacteristicReadRetryCounts = mutableListOf<Int>()
+    private val bleDescriptorWriteRetryCounts = mutableListOf<Int>()
     private val bleL2capConnectRetryCounts = mutableListOf<Int>()
     private val nfcReTapCounts = mutableListOf<Int>()
 
@@ -160,7 +172,11 @@ class PresentmentTelemetryAggregator {
         bleNegotiatedMtuSamples.clear()
         bleScanRestartCounts.clear()
         bleGattConnectRetryCounts.clear()
+        bleMtuRequestRetryCounts.clear()
         bleServiceDiscoveryRetryCounts.clear()
+        bleCharacteristicDiscoveryRetryCounts.clear()
+        bleCharacteristicReadRetryCounts.clear()
+        bleDescriptorWriteRetryCounts.clear()
         bleL2capConnectRetryCounts.clear()
         nfcReTapCounts.clear()
     }
@@ -214,8 +230,8 @@ class PresentmentTelemetryAggregator {
     }
 
     private fun recordTransportMetrics(stats: MdocTransportStats) {
-        stats.scanningTime?.let { scanningTimeSamples.add(it.inWholeMilliseconds) }
-        stats.connectingTime?.let { connectingTimeSamples.add(it.inWholeMilliseconds) }
+        stats.bleScanningTime?.let { scanningTimeSamples.add(it.inWholeMilliseconds) }
+        stats.bleConnectingTime?.let { connectingTimeSamples.add(it.inWholeMilliseconds) }
         if (stats.bytesSent > 0) {
             bytesSentSamples.add(stats.bytesSent)
         }
@@ -223,10 +239,14 @@ class PresentmentTelemetryAggregator {
             bytesReceivedSamples.add(stats.bytesReceived)
         }
         stats.bleNegotiatedMtu?.let { bleNegotiatedMtuSamples.add(it.toLong()) }
-        bleScanRestartCounts.add(stats.bleNumScanRestarts)
-        bleGattConnectRetryCounts.add(stats.bleNumGattConnectRetries)
-        bleServiceDiscoveryRetryCounts.add(stats.bleNumServiceDiscoveryRetries)
-        bleL2capConnectRetryCounts.add(stats.bleNumL2capConnectRetries)
+        stats.bleNumScanRestarts?.let { bleScanRestartCounts.add(it) }
+        stats.bleNumGattConnectRetries?.let { bleGattConnectRetryCounts.add(it) }
+        stats.bleNumMtuRequestRetries?.let { bleMtuRequestRetryCounts.add(it) }
+        stats.bleNumServiceDiscoveryRetries?.let { bleServiceDiscoveryRetryCounts.add(it) }
+        stats.bleNumCharacteristicDiscoveryRetries?.let { bleCharacteristicDiscoveryRetryCounts.add(it) }
+        stats.bleNumCharacteristicReadRetries?.let { bleCharacteristicReadRetryCounts.add(it) }
+        stats.bleNumDescriptorWriteRetries?.let { bleDescriptorWriteRetryCounts.add(it) }
+        stats.bleNumL2capConnectRetries?.let { bleL2capConnectRetryCounts.add(it) }
     }
 
     /**
@@ -247,7 +267,11 @@ class PresentmentTelemetryAggregator {
         bleNegotiatedMtu = MetricSummary.fromSamples(bleNegotiatedMtuSamples),
         bleScanRestarts = RetrySummary.fromCounts(bleScanRestartCounts),
         bleGattConnectRetries = RetrySummary.fromCounts(bleGattConnectRetryCounts),
+        bleMtuRequestRetries = RetrySummary.fromCounts(bleMtuRequestRetryCounts),
         bleServiceDiscoveryRetries = RetrySummary.fromCounts(bleServiceDiscoveryRetryCounts),
+        bleCharacteristicDiscoveryRetries = RetrySummary.fromCounts(bleCharacteristicDiscoveryRetryCounts),
+        bleCharacteristicReadRetries = RetrySummary.fromCounts(bleCharacteristicReadRetryCounts),
+        bleDescriptorWriteRetries = RetrySummary.fromCounts(bleDescriptorWriteRetryCounts),
         bleL2capConnectRetries = RetrySummary.fromCounts(bleL2capConnectRetryCounts),
         nfcReTaps = RetrySummary.fromCounts(nfcReTapCounts),
     )

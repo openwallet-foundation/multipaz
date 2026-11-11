@@ -35,6 +35,11 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   (`NfcApduRouter`) over a transport-agnostic `NciPacketIo` interface,
   including a Linux I2C + GPIO transport (`LinuxI2cNciPacketIo`, e.g., for NXP
   PN7160 controllers on Raspberry Pi and embedded Linux systems).
+- `multipaz-bthci` implements a user-space Bluetooth Low Energy HCI, L2CAP
+  (including LE Credit-Based Flow Control Mode), and ATT/GATT stack backing
+  Multipaz's ISO/IEC 18013-5 BLE central and peripheral proximity transports
+  over a transport-agnostic `HciPacketIo` interface, including direct Linux
+  `AF_BLUETOOTH` / `HCI_CHANNEL_USER` socket support (`LinuxHciSocketPacketIo`).
 
 ## Command-line tool
 

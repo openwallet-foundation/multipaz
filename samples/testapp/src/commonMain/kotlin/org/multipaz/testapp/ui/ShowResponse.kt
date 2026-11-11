@@ -264,12 +264,18 @@ private suspend fun parseResponse(
             if (stats.bleNegotiatedMtu != null) {
                 lines.add(Line("BLE negotiated MTU", ValueText("${stats.bleNegotiatedMtu}")))
             }
-            val totalRetries = stats.bleNumScanRestarts + stats.bleNumGattConnectRetries +
-                stats.bleNumServiceDiscoveryRetries + stats.bleNumL2capConnectRetries
+            val totalRetries = (stats.bleNumScanRestarts ?: 0) + (stats.bleNumGattConnectRetries ?: 0) +
+                (stats.bleNumMtuRequestRetries ?: 0) + (stats.bleNumServiceDiscoveryRetries ?: 0) +
+                (stats.bleNumCharacteristicDiscoveryRetries ?: 0) + (stats.bleNumCharacteristicReadRetries ?: 0) +
+                (stats.bleNumDescriptorWriteRetries ?: 0) + (stats.bleNumL2capConnectRetries ?: 0)
             if (totalRetries > 0) {
                 lines.add(Line("BLE retries",
-                    ValueText("scan=${stats.bleNumScanRestarts}, gatt=${stats.bleNumGattConnectRetries}, " +
-                        "svc=${stats.bleNumServiceDiscoveryRetries}, l2cap=${stats.bleNumL2capConnectRetries}")
+                    ValueText(
+                        "scan=${stats.bleNumScanRestarts ?: 0}, gatt=${stats.bleNumGattConnectRetries ?: 0}, " +
+                            "mtu=${stats.bleNumMtuRequestRetries ?: 0}, svc=${stats.bleNumServiceDiscoveryRetries ?: 0}, " +
+                            "char=${stats.bleNumCharacteristicDiscoveryRetries ?: 0}, read=${stats.bleNumCharacteristicReadRetries ?: 0}, " +
+                            "desc=${stats.bleNumDescriptorWriteRetries ?: 0}, l2cap=${stats.bleNumL2capConnectRetries ?: 0}"
+                    )
                 ))
             }
             if (stats.warnings.isNotEmpty()) {

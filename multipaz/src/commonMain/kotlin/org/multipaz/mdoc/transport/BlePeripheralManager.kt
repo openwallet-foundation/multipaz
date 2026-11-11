@@ -43,6 +43,8 @@ internal interface BlePeripheralManager {
 
     suspend fun sendMessage(message: ByteArray)
 
+    suspend fun shutdown() {}
+
     fun close()
 
     // The PSM if listening on L2CAP.
@@ -69,4 +71,9 @@ internal interface BlePeripheralManager {
 
     val warnings: List<TransportWarning>
         get() = emptyList()
+
+    val lastSendCompleted: Boolean
+        get() = false
+
+    fun resetLastSendCompleted() {}
 }

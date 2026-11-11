@@ -9,9 +9,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -104,20 +106,24 @@ internal class BleTransportPeripheralMdocReader(
         get() = MdocTransportStats(
             transportType = MdocTransportType.MDOC_PERIPHERAL_SERVER_MODE,
             role = role,
-            scanningTime = _scanningTime,
-            connectingTime = _connectingTime,
             bytesSent = _bytesSent,
             bytesReceived = _bytesReceived,
             numMessagesSent = _numMessagesSent,
             numMessagesReceived = _numMessagesReceived,
             warnings = centralManager.warnings,
+            bleScanningTime = _scanningTime,
+            bleConnectingTime = _connectingTime,
             bleUsingL2cap = centralManager.usingL2cap,
             bleL2capPsmInEngagement = psm != null,
             bleNegotiatedMtu = centralManager.negotiatedMtu,
             bleMtuInferredFromWrite = false,
             bleNumScanRestarts = centralManager.numScanRestarts,
             bleNumGattConnectRetries = centralManager.numGattConnectRetries,
+            bleNumMtuRequestRetries = centralManager.numMtuRequestRetries,
             bleNumServiceDiscoveryRetries = centralManager.numServiceDiscoveryRetries,
+            bleNumCharacteristicDiscoveryRetries = centralManager.numCharacteristicDiscoveryRetries,
+            bleNumCharacteristicReadRetries = centralManager.numCharacteristicReadRetries,
+            bleNumDescriptorWriteRetries = centralManager.numDescriptorWriteRetries,
             bleNumL2capConnectRetries = centralManager.numL2capConnectRetries,
             bleNumChunksSent = centralManager.numChunksSent,
             bleNumChunksReceived = centralManager.numChunksReceived,
@@ -145,17 +151,24 @@ internal class BleTransportPeripheralMdocReader(
                     // and just connect directly.
                     centralManager.connectL2cap(psm)
                 } else {
-                    centralManager.connectToPeripheral()
-                    centralManager.requestMtu()
-                    centralManager.peripheralDiscoverServices(uuid)
-                    centralManager.peripheralDiscoverCharacteristics()
-                    // NOTE: ident characteristic isn't used when the mdoc is the GATT server so we don't call
-                    // centralManager.checkReaderIdentMatches(eSenderKey)
-                    if (centralManager.l2capPsm != null) {
-                        centralManager.connectL2cap(centralManager.l2capPsm!!)
-                    } else {
-                        centralManager.subscribeToCharacteristics()
-                        centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
+                    while (true) {
+                        try {
+                            centralManager.connectToPeripheral()
+                            centralManager.requestMtu()
+                            centralManager.peripheralDiscoverServices(uuid)
+                            centralManager.peripheralDiscoverCharacteristics()
+                            // NOTE: ident characteristic isn't used when the mdoc is the GATT server so we don't call
+                            // centralManager.checkReaderIdentMatches(eSenderKey)
+                            if (centralManager.l2capPsm != null) {
+                                centralManager.connectL2cap(centralManager.l2capPsm!!)
+                            } else {
+                                centralManager.subscribeToCharacteristics()
+                                centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_START)
+                            }
+                            break
+                        } catch (e: BleReconnectRequiredException) {
+                            Logger.w(TAG, "Disconnected during GATT setup, reconnecting", e)
+                        }
                     }
                 }
                 _connectingTime = Clock.System.now() - timeConnectingStarted!!
@@ -211,6 +224,8 @@ internal class BleTransportPeripheralMdocReader(
     }
 
     override suspend fun sendMessage(message: ByteArray) {
+        var sendStarted = false
+        var statsRecorded = false
         try {
             coroutineScope {
                 mutex.withLock {
@@ -218,7 +233,9 @@ internal class BleTransportPeripheralMdocReader(
                     if (message.isEmpty() && centralManager.usingL2cap) {
                         throw MdocTransportTerminationException("Transport-specific termination not available with L2CAP")
                     }
+                    centralManager.resetLastSendCompleted()
                     currentJob = coroutineContext[Job]
+                    sendStarted = true
                 }
                 if (message.isEmpty()) {
                     centralManager.writeToStateCharacteristic(BleTransportConstants.STATE_CHARACTERISTIC_END)
@@ -226,9 +243,18 @@ internal class BleTransportPeripheralMdocReader(
                     centralManager.sendMessage(message)
                     _bytesSent += message.size
                     _numMessagesSent += 1
+                    statsRecorded = true
                 }
+                currentJob = null
             }
         } catch (error: Exception) {
+            if (sendStarted && centralManager.lastSendCompleted && currentCoroutineContext().isActive) {
+                if (message.isNotEmpty() && !statsRecorded) {
+                    _bytesSent += message.size
+                    _numMessagesSent += 1
+                }
+                return
+            }
             val unwrapped = error.unwrapCancellationException()
             if (unwrapped is CancellationException) {
                 throw unwrapped
@@ -266,6 +292,7 @@ internal class BleTransportPeripheralMdocReader(
             if (_state.value == State.FAILED || _state.value == State.CLOSED) {
                 return@withContext
             }
+            centralManager.shutdown()
             closeWithoutDelay()
         }
     }

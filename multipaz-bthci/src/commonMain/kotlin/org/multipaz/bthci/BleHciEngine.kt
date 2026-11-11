@@ -1,0 +1,1194 @@
+package org.multipaz.bthci
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.io.IOException
+import org.multipaz.crypto.Crypto
+import org.multipaz.mdoc.transport.BleL2capChannel
+import org.multipaz.util.Logger
+import org.multipaz.util.UUID
+import kotlin.concurrent.Volatile
+import kotlin.math.min
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+
+internal object BleHciConstants {
+    // H4 Packet Indicators
+    const val HCI_COMMAND_PKT: Byte = 0x01
+    const val HCI_ACL_DATA_PKT: Byte = 0x02
+    const val HCI_EVENT_PKT: Byte = 0x04
+
+    // HCI Command Opcodes ((OGF shl 10) or OCF)
+    const val HCI_OP_DISCONNECT = 0x0406
+    const val HCI_OP_SET_EVENT_MASK = 0x0C01
+    const val HCI_OP_RESET = 0x0C03
+    const val HCI_OP_READ_BUFFER_SIZE = 0x1005
+    const val HCI_OP_LE_SET_EVENT_MASK = 0x2001
+    const val HCI_OP_LE_READ_BUFFER_SIZE = 0x2002
+    const val HCI_OP_LE_SET_RANDOM_ADDRESS = 0x2005
+    const val HCI_OP_LE_SET_ADVERTISING_PARAMETERS = 0x2006
+    const val HCI_OP_LE_SET_ADVERTISING_DATA = 0x2008
+    const val HCI_OP_LE_SET_SCAN_RESPONSE_DATA = 0x2009
+    const val HCI_OP_LE_SET_ADVERTISE_ENABLE = 0x200A
+    const val HCI_OP_LE_SET_SCAN_PARAMETERS = 0x200B
+    const val HCI_OP_LE_SET_SCAN_ENABLE = 0x200C
+    const val HCI_OP_LE_CREATE_CONNECTION = 0x200D
+    const val HCI_OP_LE_CREATE_CONNECTION_CANCEL = 0x200E
+    const val HCI_OP_LE_LTK_REQ_NEG_REPLY = 0x201B
+    const val HCI_OP_LE_REMOTE_CONN_PARAM_REQ_REPLY = 0x2020
+
+    // HCI Event Codes
+    const val HCI_EV_DISCONN_COMPLETE = 0x05
+    const val HCI_EV_CMD_COMPLETE = 0x0E
+    const val HCI_EV_CMD_STATUS = 0x0F
+    const val HCI_EV_NUM_COMP_PKTS = 0x13
+    const val HCI_EV_LE_META = 0x3E
+
+    // HCI LE Meta Subevent Codes
+    const val HCI_EV_LE_CONN_COMPLETE = 0x01
+    const val HCI_EV_LE_ADVERTISING_REPORT = 0x02
+    const val HCI_EV_LE_CONN_UPDATE_COMPLETE = 0x03
+    const val HCI_EV_LE_READ_REMOTE_FEATURES_COMPLETE = 0x04
+    const val HCI_EV_LE_LTK_REQ = 0x05
+    const val HCI_EV_LE_REMOTE_CONN_PARAM_REQ = 0x06
+    const val HCI_EV_LE_DATA_LEN_CHANGE = 0x07
+    const val HCI_EV_LE_ENHANCED_CONN_COMPLETE = 0x0A
+    const val HCI_EV_LE_EXT_ADVERTISING_REPORT = 0x0D
+
+    // L2CAP Fixed CIDs
+    const val L2CAP_CID_ATT = 0x0004
+    const val L2CAP_CID_LE_SIGNALING = 0x0005
+    const val L2CAP_CID_SMP = 0x0006
+    const val L2CAP_DYNAMIC_CID_DEFAULT = 0x0040
+
+    // L2CAP LE Signaling Codes (CID 0x0005)
+    const val L2CAP_CMD_REJECT = 0x01
+    const val L2CAP_DISCONN_REQ = 0x06
+    const val L2CAP_DISCONN_RSP = 0x07
+    const val L2CAP_CONN_PARAM_UPDATE_REQ = 0x12
+    const val L2CAP_CONN_PARAM_UPDATE_RSP = 0x13
+    const val L2CAP_LE_CREDIT_CONN_REQ = 0x14
+    const val L2CAP_LE_CREDIT_CONN_RSP = 0x15
+    const val L2CAP_FLOW_CONTROL_CREDIT_IND = 0x16
+
+    // L2CAP Connection-Oriented Channel Defaults
+    const val L2CAP_DEFAULT_MTU = 65535
+    const val L2CAP_DEFAULT_MPS = 247
+    const val L2CAP_INITIAL_CREDITS = 256
+    const val L2CAP_CREDIT_REPLENISH_THRESHOLD = 64
+
+    // ATT Opcodes (CID 0x0004)
+    const val ATT_OP_ERROR_RSP = 0x01
+    const val ATT_OP_EXCHANGE_MTU_REQ = 0x02
+    const val ATT_OP_EXCHANGE_MTU_RSP = 0x03
+    const val ATT_OP_FIND_INFO_REQ = 0x04
+    const val ATT_OP_FIND_INFO_RSP = 0x05
+    const val ATT_OP_FIND_BY_TYPE_VALUE_REQ = 0x06
+    const val ATT_OP_FIND_BY_TYPE_VALUE_RSP = 0x07
+    const val ATT_OP_READ_BY_TYPE_REQ = 0x08
+    const val ATT_OP_READ_BY_TYPE_RSP = 0x09
+    const val ATT_OP_READ_REQ = 0x0A
+    const val ATT_OP_READ_RSP = 0x0B
+    const val ATT_OP_READ_BLOB_REQ = 0x0C
+    const val ATT_OP_READ_BLOB_RSP = 0x0D
+    const val ATT_OP_READ_MULTI_REQ = 0x0E
+    const val ATT_OP_READ_MULTI_RSP = 0x0F
+    const val ATT_OP_READ_BY_GROUP_TYPE_REQ = 0x10
+    const val ATT_OP_READ_BY_GROUP_TYPE_RSP = 0x11
+    const val ATT_OP_WRITE_REQ = 0x12
+    const val ATT_OP_WRITE_RSP = 0x13
+    const val ATT_OP_PREPARE_WRITE_REQ = 0x16
+    const val ATT_OP_PREPARE_WRITE_RSP = 0x17
+    const val ATT_OP_EXECUTE_WRITE_REQ = 0x18
+    const val ATT_OP_EXECUTE_WRITE_RSP = 0x19
+    const val ATT_OP_HANDLE_VALUE_NTF = 0x1B
+    const val ATT_OP_HANDLE_VALUE_IND = 0x1D
+    const val ATT_OP_HANDLE_VALUE_CFM = 0x1E
+    const val ATT_OP_READ_MULTI_VAR_REQ = 0x20
+    const val ATT_OP_READ_MULTI_VAR_RSP = 0x21
+    const val ATT_OP_WRITE_CMD = 0x52
+    const val ATT_OP_SIGNED_WRITE_CMD = 0xD2
+
+    // ATT Error Codes
+    const val ATT_ERR_INVALID_HANDLE = 0x01
+    const val ATT_ERR_READ_NOT_PERMITTED = 0x02
+    const val ATT_ERR_WRITE_NOT_PERMITTED = 0x03
+    const val ATT_ERR_INVALID_PDU = 0x04
+    const val ATT_ERR_REQUEST_NOT_SUPPORTED = 0x06
+    const val ATT_ERR_INVALID_OFFSET = 0x07
+    const val ATT_ERR_ATTRIBUTE_NOT_FOUND = 0x0A
+    const val ATT_ERR_INVALID_ATTR_VALUE_LEN = 0x0D
+    const val ATT_ERR_UNLIKELY_ERROR = 0x0E
+    const val ATT_ERR_UNSUPPORTED_GROUP_TYPE = 0x10
+
+    // GATT 16-bit UUIDs
+    const val GAP_UUID_SERVICE = 0x1800
+    const val GAP_UUID_DEVICE_NAME = 0x2A00
+    const val GAP_UUID_APPEARANCE = 0x2A01
+    const val GATT_UUID_PRIMARY_SERVICE = 0x2800
+    const val GATT_UUID_CHARACTERISTIC = 0x2803
+    const val GATT_UUID_CCCD = 0x2902
+
+    // GATT Characteristic Property Bits
+    const val GATT_PROP_READ = 0x02
+    const val GATT_PROP_WRITE_NO_RSP = 0x04
+    const val GATT_PROP_WRITE = 0x08
+    const val GATT_PROP_NOTIFY = 0x10
+    const val GATT_PROP_INDICATE = 0x20
+
+    // AD Types
+    const val AD_TYPE_FLAGS = 0x01
+    const val AD_TYPE_INCOMPLETE_UUID128_LIST = 0x06
+    const val AD_TYPE_COMPLETE_UUID128_LIST = 0x07
+}
+
+internal fun u16le(buf: ByteArray, offset: Int): Int =
+    (buf[offset].toInt() and 0xFF) or ((buf[offset + 1].toInt() and 0xFF) shl 8)
+
+internal fun putU16le(buf: ByteArray, offset: Int, value: Int) {
+    buf[offset] = (value and 0xFF).toByte()
+    buf[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+}
+
+internal fun u16leBytes(value: Int): ByteArray = byteArrayOf(
+    (value and 0xFF).toByte(),
+    ((value ushr 8) and 0xFF).toByte()
+)
+
+internal fun nextNonZeroL2capIdentifier(counter: HciAtomicInt): Int {
+    while (true) {
+        val id = counter.getAndIncrement() and 0xFF
+        if (id != 0) return id
+    }
+}
+
+internal fun UUID.toLittleEndianBytes(): ByteArray = toByteArray().reversedArray()
+
+internal fun uuidFromLittleEndianBytes(bytes: ByteArray, offset: Int = 0): UUID {
+    val be = ByteArray(16)
+    for (i in 0 until 16) {
+        be[i] = bytes[offset + 15 - i]
+    }
+    return UUID.fromByteArray(be)
+}
+
+/**
+ * Checks whether an Advertising Data (AD) payload contains a 128-bit Service UUID (`0x06` or `0x07`)
+ * matching [targetUuid].
+ */
+internal fun adDataContainsServiceUuid(adData: ByteArray, offset: Int, length: Int, targetUuid: UUID): Boolean {
+    val targetLe = targetUuid.toLittleEndianBytes()
+    var pos = offset
+    val end = min(adData.size, offset + length)
+    while (pos < end) {
+        val fieldLen = adData[pos].toInt() and 0xFF
+        if (fieldLen == 0) break
+        val fieldEnd = pos + 1 + fieldLen
+        if (fieldEnd > end) break
+        val adType = adData[pos + 1].toInt() and 0xFF
+        if (adType == BleHciConstants.AD_TYPE_INCOMPLETE_UUID128_LIST ||
+            adType == BleHciConstants.AD_TYPE_COMPLETE_UUID128_LIST
+        ) {
+            var uuidPos = pos + 2
+            while (uuidPos + 16 <= fieldEnd) {
+                var matches = true
+                for (i in 0 until 16) {
+                    if (adData[uuidPos + i] != targetLe[i]) {
+                        matches = false
+                        break
+                    }
+                }
+                if (matches) return true
+                uuidPos += 16
+            }
+        }
+        pos = fieldEnd
+    }
+    return false
+}
+
+/**
+ * Direct HCI engine managing H4 packet multiplexing, sequential HCI command execution,
+ * ACL fragmentation/reassembly, controller buffer credit flow control, and L2CAP CID dispatch.
+ */
+internal class BleHciEngine(
+    private val packetIo: HciPacketIo,
+    private val onAdvertisingReport: (addrType: Int, addr: ByteArray, adData: ByteArray) -> Unit = { _, _, _ -> },
+    private val onConnected: (connectionHandle: Int, peerAddrType: Int, peerAddr: ByteArray) -> Unit = { _, _, _ -> },
+    private val onDisconnected: (connectionHandle: Int, reason: Int) -> Unit = { _, _ -> },
+    private val onAttPdu: (connectionHandle: Int, pdu: ByteArray) -> Unit = { _, _ -> },
+    private val onL2capSignalingPdu: (connectionHandle: Int, pdu: ByteArray) -> Unit = { _, _ -> },
+    private val onL2capCocPdu: (connectionHandle: Int, cid: Int, pdu: ByteArray) -> Unit = { _, _, _ -> },
+    private val onFatalError: (Exception) -> Unit = {}
+) {
+    companion object {
+        private const val TAG = "BleHciEngine"
+    }
+
+    val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    private val commandMutex = Mutex()
+    private val commandCreditsAvailable = MutableStateFlow(1)
+    private val pendingCommandLock = HciLock()
+    private var pendingCommandOpcode: Int = -1
+    private var pendingCommandDeferred: CompletableDeferred<ByteArray>? = null
+
+    @Volatile
+    var leAclDataPacketLength: Int = 27
+        private set
+
+    @Volatile
+    var totalNumLeAclDataPackets: Int = 8
+        private set
+
+    private var aclCreditSemaphore = Semaphore(8)
+    private val inFlightAclPackets = MutableStateFlow(0)
+    private val aclSendMutex = Mutex()
+    private val aclHandleLock = HciLock()
+    private val activeHandles = HciSyncSet<Int>()
+    private val disconnectWaiters = HciSyncMap<Int, CompletableDeferred<Unit>>()
+
+    private class AclReassemblyState(
+        val cid: Int,
+        val expectedLength: Int,
+        val buffer: HciByteBuffer = HciByteBuffer(expectedLength)
+    )
+
+    private val reassemblyLock = HciLock()
+    private val reassemblyByHandle = mutableMapOf<Int, AclReassemblyState>()
+    private var readerJob: Job? = null
+
+    @Volatile
+    private var closed = false
+
+    fun startReaderLoop() {
+        if (readerJob?.isActive == true) return
+        readerJob = scope.launch {
+            try {
+                while (!closed) {
+                    val packet = packetIo.readPacket() ?: break
+                    if (packet.isEmpty()) continue
+                    when (packet[0]) {
+                        BleHciConstants.HCI_EVENT_PKT -> handleHciEvent(packet)
+                        BleHciConstants.HCI_ACL_DATA_PKT -> handleAclPacket(packet)
+                        else -> Logger.w(
+                            TAG,
+                            "Ignoring unexpected H4 packet type 0x${(packet[0].toInt() and 0xFF).toString(16)}"
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!closed) {
+                    Logger.w(TAG, "HCI reader loop failed", e)
+                    val ioErr = e as? IOException ?: IOException("HCI reader loop failed", e)
+                    pendingCommandLock.withLock {
+                        pendingCommandDeferred?.completeExceptionally(ioErr)
+                        pendingCommandDeferred = null
+                        pendingCommandOpcode = -1
+                    }
+                    onFatalError(e)
+                }
+            }
+        }
+    }
+
+    suspend fun initializeController(randomAddress: ByteArray? = null) {
+        commandCreditsAvailable.value = 1
+        aclHandleLock.withLock {
+            activeHandles.clear()
+        }
+        startReaderLoop()
+
+        // 1. HCI_Reset
+        val resetRsp = sendCommand(BleHciConstants.HCI_OP_RESET)
+        checkCommandStatus("HCI_Reset", resetRsp)
+
+        // 2. HCI_Set_Event_Mask (enable Disconnection Complete, Command Complete/Status,
+        // Num Completed Packets, LE Meta)
+        val eventMask = byteArrayOf(
+            0xFF.toByte(),
+            0xFF.toByte(),
+            0xFB.toByte(),
+            0xFF.toByte(),
+            0x07.toByte(),
+            0xF8.toByte(),
+            0xBF.toByte(),
+            0x3D.toByte()
+        )
+        val maskRsp = sendCommand(BleHciConstants.HCI_OP_SET_EVENT_MASK, eventMask)
+        checkCommandStatus("HCI_Set_Event_Mask", maskRsp)
+
+        // 3. HCI_LE_Set_Event_Mask (enable Connection Complete, Adv Report, Remote Conn Param Req,
+        // Enhanced Conn Complete, Ext Adv Report)
+        val leEventMask = byteArrayOf(
+            0xFF.toByte(),
+            0x1F.toByte(),
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00
+        )
+        val leMaskRsp = sendCommand(BleHciConstants.HCI_OP_LE_SET_EVENT_MASK, leEventMask)
+        checkCommandStatus("HCI_LE_Set_Event_Mask", leMaskRsp)
+
+        // 4. HCI_LE_Read_Buffer_Size (with fallback to HCI_Read_Buffer_Size if shared with BR/EDR).
+        // Per Bluetooth Core Spec Vol 4 Part E 7.4.5, HCI_Read_Buffer_Size return parameters are:
+        // [0]=Status, [1..2]=HC_ACL_Data_Packet_Length, [3]=HC_Synchronous_Data_Packet_Length (1 byte),
+        // [4..5]=HC_Total_Num_ACL_Data_Packets (2 bytes), [6..7]=HC_Total_Num_Synchronous_Data_Packets.
+        val leBufRsp = sendCommand(BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE)
+        checkCommandStatus("HCI_LE_Read_Buffer_Size", leBufRsp)
+        var pktLen = if (leBufRsp.size >= 3) u16le(leBufRsp, 1) else 0
+        var numPkts = if (leBufRsp.size >= 4) (leBufRsp[3].toInt() and 0xFF) else 0
+        if (pktLen == 0 || numPkts == 0) {
+            val brBufRsp = sendCommand(BleHciConstants.HCI_OP_READ_BUFFER_SIZE)
+            checkCommandStatus("HCI_Read_Buffer_Size", brBufRsp)
+            if (brBufRsp.size >= 6) {
+                if (pktLen == 0) pktLen = u16le(brBufRsp, 1)
+                if (numPkts == 0) numPkts = u16le(brBufRsp, 4)
+            }
+        }
+        leAclDataPacketLength = if (pktLen > 0) pktLen else 27
+        totalNumLeAclDataPackets = if (numPkts > 0) numPkts else 8
+        aclCreditSemaphore = Semaphore(totalNumLeAclDataPackets)
+        inFlightAclPackets.value = 0
+
+        // 5. HCI_LE_Set_Random_Address (6-byte static random address: top 2 bits of MSB set to 11,
+        // and remaining 46 bits neither all 0s nor all 1s per Core Spec Vol 6 Part B 1.3.2.1).
+        val randomAddr = if (randomAddress != null) {
+            require(randomAddress.size == 6) { "Expected 6-byte random address, got ${randomAddress.size}" }
+            randomAddress.copyOf()
+        } else {
+            var candidate: ByteArray
+            do {
+                candidate = Crypto.secureRandom.nextBytes(6)
+                candidate[5] = (candidate[5].toInt() or 0xC0).toByte()
+                val allZeros = candidate[0] == 0.toByte() &&
+                    candidate[1] == 0.toByte() &&
+                    candidate[2] == 0.toByte() &&
+                    candidate[3] == 0.toByte() &&
+                    candidate[4] == 0.toByte() &&
+                    (candidate[5].toInt() and 0x3F) == 0
+                val allOnes = candidate[0] == 0xFF.toByte() &&
+                    candidate[1] == 0xFF.toByte() &&
+                    candidate[2] == 0xFF.toByte() &&
+                    candidate[3] == 0xFF.toByte() &&
+                    candidate[4] == 0xFF.toByte() &&
+                    (candidate[5].toInt() and 0x3F) == 0x3F
+            } while (allZeros || allOnes)
+            candidate
+        }
+        val randAddrRsp = sendCommand(BleHciConstants.HCI_OP_LE_SET_RANDOM_ADDRESS, randomAddr)
+        checkCommandStatus("HCI_LE_Set_Random_Address", randAddrRsp)
+    }
+
+    suspend fun sendCommand(
+        opcode: Int,
+        params: ByteArray = byteArrayOf(),
+        timeout: Duration = 5.seconds
+    ): ByteArray = commandMutex.withLock {
+        require(params.size <= 255) {
+            "HCI command 0x${opcode.toString(16)} parameter length ${params.size} exceeds 255 bytes"
+        }
+        if (closed) {
+            throw IOException("BleHciEngine is closed")
+        }
+        val deferred = CompletableDeferred<ByteArray>()
+        pendingCommandLock.withLock {
+            pendingCommandOpcode = opcode
+            pendingCommandDeferred = deferred
+        }
+        val packet = ByteArray(4 + params.size)
+        packet[0] = BleHciConstants.HCI_COMMAND_PKT
+        putU16le(packet, 1, opcode)
+        packet[3] = (params.size and 0xFF).toByte()
+        params.copyInto(packet, destinationOffset = 4)
+
+        try {
+            withTimeoutOrNull(timeout) {
+                while (true) {
+                    val cur = commandCreditsAvailable.first { it > 0 }
+                    if (commandCreditsAvailable.compareAndSet(cur, cur - 1)) {
+                        break
+                    }
+                }
+                try {
+                    packetIo.writePacket(packet)
+                } catch (e: Exception) {
+                    // Restore credit if writePacket failed before controller received the command
+                    while (true) {
+                        val cur = commandCreditsAvailable.value
+                        if (commandCreditsAvailable.compareAndSet(cur, cur + 1)) {
+                            break
+                        }
+                    }
+                    throw e
+                }
+                deferred.await()
+            } ?: throw IOException("HCI command 0x${opcode.toString(16)} timed out after $timeout")
+        } finally {
+            pendingCommandLock.withLock {
+                if (pendingCommandDeferred === deferred) {
+                    pendingCommandOpcode = -1
+                    pendingCommandDeferred = null
+                }
+            }
+        }
+    }
+
+    fun checkCommandStatus(commandName: String, returnParams: ByteArray) {
+        if (returnParams.isEmpty()) {
+            throw IOException("$commandName returned empty status")
+        }
+        val status = returnParams[0].toInt() and 0xFF
+        if (status != 0x00) {
+            throw IOException("$commandName failed with HCI status 0x${status.toString(16)}")
+        }
+    }
+
+    suspend fun sendL2capPdu(connectionHandle: Int, cid: Int, payload: ByteArray) {
+        require(payload.size <= 65535) { "L2CAP payload length ${payload.size} exceeds 65535 bytes" }
+        val isActive = aclHandleLock.withLock {
+            !closed && connectionHandle >= 0 && activeHandles.contains(connectionHandle)
+        }
+        if (!isActive) {
+            throw IOException("BLE connection handle $connectionHandle is not active")
+        }
+        val l2capFrame = ByteArray(4 + payload.size)
+        putU16le(l2capFrame, 0, payload.size)
+        putU16le(l2capFrame, 2, cid)
+        payload.copyInto(l2capFrame, destinationOffset = 4)
+
+        val maxSlice = leAclDataPacketLength.coerceAtLeast(27)
+        aclSendMutex.withLock {
+            var offset = 0
+            var first = true
+            while (offset < l2capFrame.size) {
+                if (closed || !activeHandles.contains(connectionHandle)) {
+                    throw IOException("BLE connection handle 0x${connectionHandle.toString(16)} disconnected")
+                }
+                val sliceLen = min(maxSlice, l2capFrame.size - offset)
+                val pbFlag = if (first) 0x00 else 0x01 // 0x00 = LE start of L2CAP PDU, 0x01 = continuing
+                first = false
+                val handleAndFlags = (connectionHandle and 0x0FFF) or (pbFlag shl 12)
+                val aclPacket = ByteArray(5 + sliceLen)
+                aclPacket[0] = BleHciConstants.HCI_ACL_DATA_PKT
+                putU16le(aclPacket, 1, handleAndFlags)
+                putU16le(aclPacket, 3, sliceLen)
+                l2capFrame.copyInto(
+                    aclPacket,
+                    destinationOffset = 5,
+                    startIndex = offset,
+                    endIndex = offset + sliceLen
+                )
+                offset += sliceLen
+
+                aclCreditSemaphore.acquire()
+                val reservedInFlight = aclHandleLock.withLock {
+                    if (closed || !activeHandles.contains(connectionHandle)) {
+                        false
+                    } else {
+                        while (true) {
+                            val cur = inFlightAclPackets.value
+                            if (inFlightAclPackets.compareAndSet(cur, cur + 1)) {
+                                break
+                            }
+                        }
+                        true
+                    }
+                }
+                if (!reservedInFlight) {
+                    aclCreditSemaphore.release()
+                    throw IOException("BLE connection handle 0x${connectionHandle.toString(16)} disconnected")
+                }
+                try {
+                    packetIo.writePacket(aclPacket)
+                } catch (e: Exception) {
+                    releaseAclCredits(1)
+                    throw e
+                }
+            }
+        }
+    }
+
+    private fun releaseAclCredits(count: Int) {
+        aclHandleLock.withLock {
+            for (i in 0 until count) {
+                var released = false
+                while (true) {
+                    val current = inFlightAclPackets.value
+                    if (current <= 0) break
+                    if (inFlightAclPackets.compareAndSet(current, current - 1)) {
+                        released = true
+                        break
+                    }
+                }
+                if (!released) break
+                aclCreditSemaphore.release()
+            }
+        }
+    }
+
+    private fun releaseAllInFlightAclCreditsLocked() {
+        while (true) {
+            val outstanding = inFlightAclPackets.value
+            if (outstanding <= 0) break
+            if (inFlightAclPackets.compareAndSet(outstanding, 0)) {
+                repeat(outstanding) {
+                    aclCreditSemaphore.release()
+                }
+                break
+            }
+        }
+    }
+
+    private fun handleHciEvent(packet: ByteArray) {
+        if (packet.size < 3) return
+        val eventCode = packet[1].toInt() and 0xFF
+        val paramLen = packet[2].toInt() and 0xFF
+        if (packet.size < 3 + paramLen) return
+        val params = packet.copyOfRange(3, 3 + paramLen)
+
+        when (eventCode) {
+            BleHciConstants.HCI_EV_CMD_COMPLETE -> {
+                if (params.size >= 3) {
+                    commandCreditsAvailable.value = params[0].toInt() and 0xFF
+                    val opcode = u16le(params, 1)
+                    if (opcode != 0x0000) {
+                        val returnParams = params.copyOfRange(3, params.size)
+                        val deferred = pendingCommandLock.withLock {
+                            if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                        }
+                        deferred?.complete(returnParams)
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_CMD_STATUS -> {
+                if (params.size >= 4) {
+                    val status = params[0]
+                    commandCreditsAvailable.value = params[1].toInt() and 0xFF
+                    val opcode = u16le(params, 2)
+                    if (opcode != 0x0000) {
+                        val deferred = pendingCommandLock.withLock {
+                            if (pendingCommandOpcode == opcode) pendingCommandDeferred else null
+                        }
+                        deferred?.complete(byteArrayOf(status))
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_NUM_COMP_PKTS -> {
+                if (params.isNotEmpty()) {
+                    val numHandles = params[0].toInt() and 0xFF
+                    var offset = 1
+                    for (i in 0 until numHandles) {
+                        if (offset + 4 > params.size) break
+                        val completed = u16le(params, offset + 2)
+                        releaseAclCredits(completed)
+                        offset += 4
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_DISCONN_COMPLETE -> {
+                if (params.size >= 4) {
+                    val status = params[0].toInt() and 0xFF
+                    val handle = u16le(params, 1) and 0x0FFF
+                    val reason = params[3].toInt() and 0xFF
+                    if (status == 0x00) {
+                        aclHandleLock.withLock {
+                            activeHandles.remove(handle)
+                            if (activeHandles.isEmpty()) {
+                                releaseAllInFlightAclCreditsLocked()
+                            }
+                        }
+                        reassemblyLock.withLock {
+                            reassemblyByHandle.remove(handle)
+                        }
+                    }
+                    disconnectWaiters.remove(handle)?.complete(Unit)
+                    if (status == 0x00) {
+                        onDisconnected(handle, reason)
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_META -> {
+                if (params.isNotEmpty()) {
+                    handleLeMetaEvent(params)
+                }
+            }
+        }
+    }
+
+    private fun handleLeMetaEvent(params: ByteArray) {
+        val subevent = params[0].toInt() and 0xFF
+        when (subevent) {
+            BleHciConstants.HCI_EV_LE_CONN_COMPLETE -> {
+                // [0]=subevent(0x01), [1]=status, [2..3]=handle, [4]=role, [5]=peerAddrType, [6..11]=peerAddr
+                if (params.size >= 12) {
+                    val status = params[1].toInt() and 0xFF
+                    if (status == 0x00) {
+                        val handle = u16le(params, 2) and 0x0FFF
+                        val peerAddrType = params[5].toInt() and 0xFF
+                        val peerAddr = params.copyOfRange(6, 12)
+                        aclHandleLock.withLock {
+                            activeHandles.add(handle)
+                        }
+                        onConnected(handle, peerAddrType, peerAddr)
+                    } else {
+                        onDisconnected(-1, status)
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_ENHANCED_CONN_COMPLETE -> {
+                // [0]=subevent(0x0A), [1]=status, [2..3]=handle, [4]=role, [5]=peerAddrType, [6..11]=peerAddr
+                if (params.size >= 12) {
+                    val status = params[1].toInt() and 0xFF
+                    if (status == 0x00) {
+                        val handle = u16le(params, 2) and 0x0FFF
+                        val peerAddrType = params[5].toInt() and 0xFF
+                        val peerAddr = params.copyOfRange(6, 12)
+                        aclHandleLock.withLock {
+                            activeHandles.add(handle)
+                        }
+                        onConnected(handle, peerAddrType, peerAddr)
+                    } else {
+                        onDisconnected(-1, status)
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_REMOTE_CONN_PARAM_REQ -> {
+                // [0]=subevent(0x06), [1..2]=handle, [3..4]=intervalMin, [5..6]=intervalMax,
+                // [7..8]=latency, [9..10]=timeout
+                if (params.size >= 11) {
+                    val handle = u16le(params, 1) and 0x0FFF
+                    val replyParams = ByteArray(14)
+                    putU16le(replyParams, 0, handle)
+                    params.copyInto(replyParams, destinationOffset = 2, startIndex = 3, endIndex = 11)
+                    putU16le(replyParams, 10, 0x0000) // minCeLength
+                    putU16le(replyParams, 12, 0x0000) // maxCeLength
+                    scope.launch {
+                        try {
+                            sendCommand(BleHciConstants.HCI_OP_LE_REMOTE_CONN_PARAM_REQ_REPLY, replyParams)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.d(TAG, "HCI_LE_Remote_Connection_Parameter_Request_Reply failed", e)
+                        }
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_LTK_REQ -> {
+                if (params.size >= 3) {
+                    val handle = u16le(params, 1) and 0x0FFF
+                    val replyParams = ByteArray(2)
+                    putU16le(replyParams, 0, handle)
+                    scope.launch {
+                        try {
+                            sendCommand(BleHciConstants.HCI_OP_LE_LTK_REQ_NEG_REPLY, replyParams)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.d(TAG, "HCI_LE_Long_Term_Key_Request_Negative_Reply failed", e)
+                        }
+                    }
+                }
+            }
+            BleHciConstants.HCI_EV_LE_ADVERTISING_REPORT -> {
+                // [0]=subevent(0x02), [1]=numReports, followed by sequential report records:
+                // [0]=eventType, [1]=addrType, [2..7]=addr, [8]=dataLen, [9..9+dataLen]=data, [9+dataLen]=RSSI
+                if (params.size < 2) return
+                val numReports = params[1].toInt() and 0xFF
+                var offset = 2
+                for (i in 0 until numReports) {
+                    if (offset + 9 > params.size) break
+                    val eventType = params[offset].toInt() and 0xFF
+                    val addrType = params[offset + 1].toInt() and 0xFF
+                    val addr = params.copyOfRange(offset + 2, offset + 8)
+                    val dataLen = params[offset + 8].toInt() and 0xFF
+                    if (offset + 9 + dataLen > params.size) break
+                    // Ignore non-connectable advertisements (0x02 = ADV_SCAN_IND, 0x03 = ADV_NONCONN_IND)
+                    if (eventType != 0x02 && eventType != 0x03 && addrType in 0x00..0x03) {
+                        val adData = params.copyOfRange(offset + 9, offset + 9 + dataLen)
+                        onAdvertisingReport(addrType, addr, adData)
+                    }
+                    offset += 9 + dataLen + if (offset + 9 + dataLen < params.size) 1 else 0
+                }
+            }
+            BleHciConstants.HCI_EV_LE_EXT_ADVERTISING_REPORT -> {
+                // [0]=subevent(0x0D), [1]=numReports, per report:
+                // [0..1]=eventType, [2]=addrType, [3..8]=addr, ... [23]=dataLen, [24..24+dataLen]=data
+                if (params.size < 2) return
+                val numReports = params[1].toInt() and 0xFF
+                var offset = 2
+                for (i in 0 until numReports) {
+                    if (offset + 24 > params.size) break
+                    val eventType = u16le(params, offset)
+                    val addrType = params[offset + 2].toInt() and 0xFF
+                    val addr = params.copyOfRange(offset + 3, offset + 9)
+                    val dataLen = params[offset + 23].toInt() and 0xFF
+                    if (offset + 24 + dataLen > params.size) break
+                    // Bit 0 of Extended Advertising Event_Type indicates Connectable; 0xFF is anonymous
+                    if ((eventType and 0x0001) != 0 && addrType in 0x00..0x03) {
+                        val adData = params.copyOfRange(offset + 24, offset + 24 + dataLen)
+                        onAdvertisingReport(addrType, addr, adData)
+                    }
+                    offset += 24 + dataLen
+                }
+            }
+        }
+    }
+
+    private fun handleAclPacket(packet: ByteArray) {
+        if (packet.size < 5) return
+        val handleAndFlags = u16le(packet, 1)
+        val handle = handleAndFlags and 0x0FFF
+        if (!activeHandles.contains(handle)) {
+            return
+        }
+        val pbFlag = (handleAndFlags ushr 12) and 0x03
+        val dlen = u16le(packet, 3)
+        if (packet.size < 5 + dlen) return
+
+        val completedPdu: Pair<Int, ByteArray>? = reassemblyLock.withLock {
+            when (pbFlag) {
+                0x00, 0x02 -> {
+                    // Start of L2CAP PDU
+                    if (dlen < 4) return@withLock null
+                    val l2capLen = u16le(packet, 5)
+                    val cid = u16le(packet, 7)
+                    val chunkLen = dlen - 4
+                    if (chunkLen >= l2capLen) {
+                        reassemblyByHandle.remove(handle)
+                        Pair(cid, packet.copyOfRange(9, 9 + l2capLen))
+                    } else {
+                        val state = AclReassemblyState(cid, l2capLen)
+                        state.buffer.write(packet, 9, chunkLen)
+                        reassemblyByHandle[handle] = state
+                        null
+                    }
+                }
+                0x01 -> {
+                    // Continuing fragment
+                    val state = reassemblyByHandle[handle] ?: return@withLock null
+                    val needed = state.expectedLength - state.buffer.size
+                    val toCopy = min(needed, dlen)
+                    state.buffer.write(packet, 5, toCopy)
+                    if (state.buffer.size >= state.expectedLength) {
+                        reassemblyByHandle.remove(handle)
+                        Pair(state.cid, state.buffer.toByteArray())
+                    } else {
+                        null
+                    }
+                }
+                else -> null
+            }
+        }
+
+        if (completedPdu != null) {
+            val (cid, pdu) = completedPdu
+            when (cid) {
+                BleHciConstants.L2CAP_CID_ATT -> onAttPdu(handle, pdu)
+                BleHciConstants.L2CAP_CID_LE_SIGNALING -> onL2capSignalingPdu(handle, pdu)
+                BleHciConstants.L2CAP_CID_SMP -> {
+                    if (pdu.isNotEmpty()) {
+                        val smpCode = pdu[0].toInt() and 0xFF
+                        // 0x01 = Pairing Request, 0x0B = Security Request ->
+                        // reply with 0x05 Pairing Failed (0x05 = Pairing Not Supported)
+                        if (smpCode == 0x01 || smpCode == 0x0B) {
+                            scope.launch {
+                                try {
+                                    sendL2capPdu(handle, BleHciConstants.L2CAP_CID_SMP, byteArrayOf(0x05, 0x05))
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> if (cid >= BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT) {
+                    onL2capCocPdu(handle, cid, pdu)
+                }
+            }
+        }
+    }
+
+    /**
+     * Flushes any in-flight ACL fragments (waiting for `HCI_Number_Of_Completed_Packets`), cleanly
+     * terminates any active LE connections via `HCI_Disconnect` (`0x13` Remote User Terminated
+     * Connection), and—if [packetIo] keeps its descriptor open across sessions—executes `HCI_Reset`
+     * and awaits `HCI_Command_Complete` before [close] runs.
+     */
+    suspend fun flushAndDisconnect(timeout: Duration = 500.milliseconds) {
+        if (closed) return
+        withTimeoutOrNull(timeout) {
+            inFlightAclPackets.first { it == 0 }
+        }
+        for (handle in activeHandles.toList()) {
+            val waiter = CompletableDeferred<Unit>()
+            disconnectWaiters[handle] = waiter
+            try {
+                if (!activeHandles.contains(handle)) continue
+                val params = ByteArray(3)
+                putU16le(params, 0, handle and 0x0FFF)
+                params[2] = 0x13 // Remote User Terminated Connection
+                val statusRsp = sendCommand(BleHciConstants.HCI_OP_DISCONNECT, params, timeout)
+                if (statusRsp.isNotEmpty() && (statusRsp[0].toInt() and 0xFF) == 0x00) {
+                    withTimeoutOrNull(timeout) {
+                        waiter.await()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            } finally {
+                disconnectWaiters.remove(handle)
+            }
+        }
+        if (packetIo.keepsDescriptorOpenOnClose && !closed) {
+            try {
+                val resetRsp = sendCommand(BleHciConstants.HCI_OP_RESET, timeout = timeout)
+                if (resetRsp.isNotEmpty() && (resetRsp[0].toInt() and 0xFF) == 0x00) {
+                    packetIo.markControllerResetCompleted()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun close() {
+        if (closed) return
+        closed = true
+        aclHandleLock.withLock {
+            activeHandles.clear()
+            releaseAllInFlightAclCreditsLocked()
+        }
+        for (waiter in disconnectWaiters.valuesCopy()) {
+            waiter.cancel()
+        }
+        disconnectWaiters.clear()
+        pendingCommandLock.withLock {
+            pendingCommandDeferred?.cancel()
+            pendingCommandDeferred = null
+        }
+        packetIo.close()
+        scope.cancel()
+    }
+}
+
+/**
+ * [BleL2capChannel] implementation over L2CAP LE Credit-Based Flow Control Mode (`0x14` / `0x15` / `0x16`).
+ */
+internal class HciBleL2capChannel(
+    private val engine: BleHciEngine,
+    val connectionHandle: Int,
+    val localCid: Int,
+    val peerCid: Int,
+    val peerMtu: Int,
+    val peerMps: Int,
+    initialPeerCredits: Int
+) : BleL2capChannel {
+    companion object {
+        private const val TAG = "HciBleL2capChannel"
+        private const val MAX_BUFFERED_INCOMING_BYTES = 256 * 1024
+        private const val HARD_MAX_BUFFERED_INCOMING_BYTES = 512 * 1024
+    }
+
+    // Holds >= 0 available peer credits while open, or -1 once closed/disconnected so suspended writers wake immediately.
+    private val peerCreditState = MutableStateFlow(initialPeerCredits.coerceIn(0, 65535))
+    private val writeMutex = Mutex()
+    private val readMutex = Mutex()
+    private val incomingSdus = Channel<ByteArray>(Channel.UNLIMITED)
+
+    private var currentIncomingBuf = ByteArray(0)
+    private var currentIncomingPos = 0
+
+    private val sduReassemblyLock = HciLock()
+    private var expectedSduLen: Int = -1
+    private var sduBuffer = HciByteBuffer()
+    private var localCreditsOutstandingToPeer: Int = BleHciConstants.L2CAP_INITIAL_CREDITS
+    private var creditsConsumedSinceLastGrant = 0
+    private var bufferedIncomingBytes = 0
+    private val nextSigIdentifier = HciAtomicInt(10)
+
+    @Volatile
+    private var closed = false
+
+    private suspend fun acquirePeerCredit() {
+        while (true) {
+            val cur = peerCreditState.first { it != 0 }
+            if (cur < 0 || closed) {
+                throw IOException("L2CAP channel is closed")
+            }
+            if (peerCreditState.compareAndSet(cur, cur - 1)) {
+                return
+            }
+        }
+    }
+
+    /**
+     * Grants [credits] from the peer. Returns `false` if credit count exceeds 65535 (requiring
+     * channel disconnection per Bluetooth Core Spec Vol 3 Part A Section 10.1).
+     */
+    fun onPeerCreditsGranted(credits: Int): Boolean {
+        if (credits <= 0) return true
+        while (true) {
+            val cur = peerCreditState.value
+            if (cur < 0 || closed) return true
+            if (cur + credits > 65535) {
+                Logger.w(TAG, "Peer L2CAP credit overflow ($cur + $credits > 65535); disconnecting channel")
+                disconnectAndClose()
+                return false
+            }
+            if (peerCreditState.compareAndSet(cur, cur + credits)) {
+                return true
+            }
+        }
+    }
+
+    private fun sendCreditIndicationAsync(creditsToGrant: Int) {
+        if (creditsToGrant <= 0 || closed) return
+        engine.scope.launch {
+            try {
+                val sigPdu = ByteArray(8)
+                sigPdu[0] = BleHciConstants.L2CAP_FLOW_CONTROL_CREDIT_IND.toByte()
+                sigPdu[1] = nextNonZeroL2capIdentifier(nextSigIdentifier).toByte()
+                putU16le(sigPdu, 2, 4)
+                putU16le(sigPdu, 4, localCid)
+                putU16le(sigPdu, 6, creditsToGrant)
+                engine.sendL2capPdu(connectionHandle, BleHciConstants.L2CAP_CID_LE_SIGNALING, sigPdu)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun onKFrameReceived(kFrame: ByteArray) {
+        if (closed) return
+        if (kFrame.size > BleHciConstants.L2CAP_DEFAULT_MPS) {
+            Logger.w(
+                TAG,
+                "Received K-frame (${kFrame.size} bytes) exceeding local MPS " +
+                    "(${BleHciConstants.L2CAP_DEFAULT_MPS}); disconnecting"
+            )
+            disconnectAndClose()
+            return
+        }
+        var completedSdu: ByteArray? = null
+        var creditsToGrant = 0
+        var protocolViolation = false
+
+        sduReassemblyLock.withLock {
+            if (localCreditsOutstandingToPeer <= 0) {
+                protocolViolation = true
+                return@withLock
+            }
+            localCreditsOutstandingToPeer -= 1
+            creditsConsumedSinceLastGrant += 1
+
+            if (expectedSduLen < 0) {
+                // First K-frame of SDU begins with 2-byte little-endian SDU length
+                if (kFrame.size < 2) {
+                    protocolViolation = true
+                } else {
+                    val totalLen = u16le(kFrame, 0)
+                    val dataLen = kFrame.size - 2
+                    if (totalLen > BleHciConstants.L2CAP_DEFAULT_MTU || dataLen > totalLen) {
+                        protocolViolation = true
+                    } else if (dataLen == totalLen) {
+                        completedSdu = kFrame.copyOfRange(2, 2 + totalLen)
+                    } else {
+                        expectedSduLen = totalLen
+                        sduBuffer = HciByteBuffer(totalLen)
+                        sduBuffer.write(kFrame, 2, dataLen)
+                    }
+                }
+            } else {
+                val needed = expectedSduLen - sduBuffer.size
+                if (kFrame.size > needed) {
+                    protocolViolation = true
+                } else {
+                    sduBuffer.write(kFrame, 0, kFrame.size)
+                    if (sduBuffer.size == expectedSduLen) {
+                        completedSdu = sduBuffer.toByteArray()
+                        expectedSduLen = -1
+                        sduBuffer = HciByteBuffer()
+                    }
+                }
+            }
+
+            if (!protocolViolation) {
+                completedSdu?.let { sdu ->
+                    if (bufferedIncomingBytes + sdu.size > HARD_MAX_BUFFERED_INCOMING_BYTES) {
+                        protocolViolation = true
+                    } else {
+                        bufferedIncomingBytes += sdu.size
+                    }
+                }
+            }
+
+            if (!protocolViolation &&
+                creditsConsumedSinceLastGrant >= BleHciConstants.L2CAP_CREDIT_REPLENISH_THRESHOLD &&
+                bufferedIncomingBytes < MAX_BUFFERED_INCOMING_BYTES
+            ) {
+                creditsToGrant = creditsConsumedSinceLastGrant
+                creditsConsumedSinceLastGrant = 0
+                localCreditsOutstandingToPeer += creditsToGrant
+            }
+        }
+
+        if (protocolViolation) {
+            Logger.w(TAG, "L2CAP K-frame credit/SDU framing violation; disconnecting channel")
+            disconnectAndClose()
+            return
+        }
+
+        if (creditsToGrant > 0) {
+            sendCreditIndicationAsync(creditsToGrant)
+        }
+
+        if (completedSdu != null) {
+            incomingSdus.trySend(completedSdu!!)
+        }
+    }
+
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        require(offset >= 0 && length >= 0 && offset <= buffer.size - length) {
+            "Invalid offset=$offset length=$length for buffer of size ${buffer.size}"
+        }
+        return readMutex.withLock {
+            if (length == 0) return 0
+            while (currentIncomingPos >= currentIncomingBuf.size) {
+                val next = incomingSdus.receiveCatching().getOrNull() ?: return -1
+                if (next.isNotEmpty()) {
+                    var creditsToGrant = 0
+                    sduReassemblyLock.withLock {
+                        bufferedIncomingBytes = (bufferedIncomingBytes - next.size).coerceAtLeast(0)
+                        if (creditsConsumedSinceLastGrant >= BleHciConstants.L2CAP_CREDIT_REPLENISH_THRESHOLD &&
+                            bufferedIncomingBytes < MAX_BUFFERED_INCOMING_BYTES
+                        ) {
+                            creditsToGrant = creditsConsumedSinceLastGrant
+                            creditsConsumedSinceLastGrant = 0
+                            localCreditsOutstandingToPeer += creditsToGrant
+                        }
+                    }
+                    if (creditsToGrant > 0) {
+                        sendCreditIndicationAsync(creditsToGrant)
+                    }
+                    currentIncomingBuf = next
+                    currentIncomingPos = 0
+                    break
+                }
+            }
+            val available = currentIncomingBuf.size - currentIncomingPos
+            val toRead = min(length, available)
+            currentIncomingBuf.copyInto(
+                destination = buffer,
+                destinationOffset = offset,
+                startIndex = currentIncomingPos,
+                endIndex = currentIncomingPos + toRead
+            )
+            currentIncomingPos += toRead
+            toRead
+        }
+    }
+
+    override suspend fun write(data: ByteArray) = writeMutex.withLock {
+        if (closed) throw IOException("L2CAP channel is closed")
+        val maxSduSize = peerMtu.coerceIn(23, 65535)
+        val mps = peerMps.coerceIn(23, 65533)
+        var sduOffset = 0
+        while (sduOffset < data.size) {
+            if (closed) throw IOException("L2CAP channel is closed")
+            val sduLen = min(maxSduSize, data.size - sduOffset)
+            // First K-frame has 2-byte SDU length prefix
+            val sduWithHeader = ByteArray(2 + sduLen)
+            putU16le(sduWithHeader, 0, sduLen)
+            data.copyInto(
+                sduWithHeader,
+                destinationOffset = 2,
+                startIndex = sduOffset,
+                endIndex = sduOffset + sduLen
+            )
+            sduOffset += sduLen
+
+            var kOffset = 0
+            while (kOffset < sduWithHeader.size) {
+                if (closed) throw IOException("L2CAP channel is closed")
+                val kLen = min(mps, sduWithHeader.size - kOffset)
+                val kFrame = sduWithHeader.copyOfRange(kOffset, kOffset + kLen)
+                kOffset += kLen
+
+                acquirePeerCredit()
+                engine.sendL2capPdu(connectionHandle, peerCid, kFrame)
+            }
+        }
+    }
+
+    fun onPeerDisconnected() {
+        closed = true
+        peerCreditState.value = -1
+        incomingSdus.close()
+    }
+
+    /**
+     * Marks the channel closed locally and returns an `L2CAP_DISCONN_REQ` (`0x06`) signaling PDU
+     * if the channel was still open, allowing the caller to serialize sending the disconnect
+     * request ahead of any subsequent L2CAP connection request.
+     */
+    fun closeAndBuildDisconnectReq(): ByteArray? {
+        if (closed) return null
+        closed = true
+        peerCreditState.value = -1
+        incomingSdus.close()
+        val req = ByteArray(8)
+        req[0] = BleHciConstants.L2CAP_DISCONN_REQ.toByte()
+        req[1] = nextNonZeroL2capIdentifier(nextSigIdentifier).toByte()
+        putU16le(req, 2, 4)
+        putU16le(req, 4, peerCid)
+        putU16le(req, 6, localCid)
+        return req
+    }
+
+    /**
+     * Sends a best-effort `L2CAP_DISCONN_REQ` (`0x06`) to the peer while the ACL link remains up
+     * and closes the channel locally.
+     */
+    fun disconnectAndClose() {
+        val req = closeAndBuildDisconnectReq() ?: return
+        engine.scope.launch {
+            try {
+                engine.sendL2capPdu(connectionHandle, BleHciConstants.L2CAP_CID_LE_SIGNALING, req)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        peerCreditState.value = -1
+        incomingSdus.close()
+    }
+}

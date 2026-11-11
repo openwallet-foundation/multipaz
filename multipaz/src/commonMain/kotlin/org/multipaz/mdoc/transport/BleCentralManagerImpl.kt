@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.io.IOException
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.buildByteString
 import org.multipaz.cbor.Bstr
@@ -42,16 +44,19 @@ import kotlin.time.Duration.Companion.seconds
  *   each time this duration elapses without discovering the peripheral, working around OS scan-frequency
  *   throttling (such as Android's 5-scans-per-30-seconds limit). If `null`, a single continuous scan is
  *   performed until the peripheral is discovered or the coroutine is cancelled.
+ * @param maxScanFailureRetries Maximum number of additional scan attempts in [waitForPeripheralWithUuid]
+ *   if [BleCentralHal.Callback.onScanFailed] is invoked (`0` disables retries).
+ * @param scanFailureRetryDelay Delay before restarting the BLE scan after [BleCentralHal.Callback.onScanFailed].
  * @param postScanDelay Delay inserted after stopping the BLE scan in [waitForPeripheralWithUuid] to give
  *   the Bluetooth radio time to transition out of the scanning state before initiating a connection.
  * @param maxConnectRetries Maximum number of additional connection attempts in [connectToPeripheral] if
  *   an initial connection attempt fails via [BleCentralHal.Callback.onDisconnected] (`0` disables retries).
  * @param connectRetryDelay Delay between connection retry attempts in [connectToPeripheral].
- * @param maxDiscoverServicesRetries Maximum number of additional service discovery attempts in
- *   [peripheralDiscoverServices] if the target service is not immediately found or discovery fails
- *   (`0` disables retries).
- * @param discoverServicesRetryDelay Delay between service discovery retry attempts in
- *   [peripheralDiscoverServices].
+ * @param maxDiscoverServicesRetries Maximum number of additional GATT discovery/read/descriptor-write
+ *   attempts in [peripheralDiscoverServices], [peripheralDiscoverCharacteristics],
+ *   [checkReaderIdentMatches], and [subscribeToCharacteristics] if a GATT operation fails (`0` disables
+ *   retries).
+ * @param discoverServicesRetryDelay Delay between GATT retry attempts.
  * @param requireL2capPeripheralConnectedFirst If `true`, [connectL2cap] ensures a peripheral-level BLE
  *   connection is established via [connectToPeripheral] before calling [BleCentralHal.connectL2cap]
  *   (required by iOS `CBPeripheral.openL2CAPChannel`, whereas Android's
@@ -69,6 +74,8 @@ import kotlin.time.Duration.Companion.seconds
 internal class BleCentralManagerImpl(
     private val hal: BleCentralHal,
     private val scanRestartTimeout: Duration? = 10.seconds,
+    private val maxScanFailureRetries: Int = 10,
+    private val scanFailureRetryDelay: Duration = 500.milliseconds,
     private val postScanDelay: Duration = 150.milliseconds,
     private val maxConnectRetries: Int = 10,
     private val connectRetryDelay: Duration = 500.milliseconds,
@@ -83,6 +90,7 @@ internal class BleCentralManagerImpl(
     companion object {
         private const val TAG = "BleCentralManagerImpl"
         private const val DEFAULT_REQUESTED_MTU = 515
+        private const val DEFAULT_FALLBACK_MTU = 23
         private const val MIN_ACCEPTABLE_MTU = 22
         private const val MAX_CHARACTERISTIC_SIZE_CAP = 512
     }
@@ -136,39 +144,80 @@ internal class BleCentralManagerImpl(
         val state: WaitState,
         val continuation: CancellableContinuation<Boolean>,
         val characteristicUuid: UUID? = null,
+        val onResumedSuccess: (() -> Unit)? = null,
     )
 
-    @Volatile
-    private var waitFor: WaitFor? = null
+    private val waitFor = MutableStateFlow<WaitFor?>(null)
 
     private fun setWaitCondition(
         state: WaitState,
         continuation: CancellableContinuation<Boolean>,
         characteristicUuid: UUID? = null,
+        onResumedSuccess: (() -> Unit)? = null,
     ) {
-        check(waitFor == null) { "waitFor is already set to ${waitFor?.state}" }
-        waitFor = WaitFor(state, continuation, characteristicUuid)
+        val entry = WaitFor(state, continuation, characteristicUuid, onResumedSuccess)
+        check(waitFor.compareAndSet(null, entry)) {
+            "waitFor is already set to ${waitFor.value?.state}"
+        }
         continuation.invokeOnCancellation {
-            if (waitFor?.continuation === continuation) {
-                waitFor = null
-            }
+            waitFor.compareAndSet(entry, null)
         }
     }
 
     private fun clearWaitCondition() {
-        waitFor = null
+        waitFor.value = null
     }
 
-    private fun resumeWait() {
-        val continuation = waitFor!!.continuation
-        waitFor = null
-        continuation.resume(true)
+    private fun claimWaitEntry(
+        expectedState: WaitState,
+        expectedUuid: UUID? = null,
+    ): WaitFor? {
+        while (true) {
+            val current = waitFor.value
+            if (current == null || current.state != expectedState) {
+                return null
+            }
+            if (expectedUuid != null &&
+                current.characteristicUuid != null &&
+                current.characteristicUuid != expectedUuid
+            ) {
+                return null
+            }
+            if (waitFor.compareAndSet(current, null)) {
+                return current
+            }
+        }
     }
 
-    private fun resumeWaitWithException(exception: Throwable) {
-        val continuation = waitFor!!.continuation
-        waitFor = null
+    private fun claimWaitCondition(
+        expectedState: WaitState,
+        expectedUuid: UUID? = null,
+    ): CancellableContinuation<Boolean>? = claimWaitEntry(expectedState, expectedUuid)?.continuation
+
+    private fun claimAnyWaitCondition(): WaitFor? {
+        while (true) {
+            val current = waitFor.value ?: return null
+            if (waitFor.compareAndSet(current, null)) {
+                return current
+            }
+        }
+    }
+
+    private fun resumeWait(expectedState: WaitState, expectedUuid: UUID? = null): Boolean {
+        val entry = claimWaitEntry(expectedState, expectedUuid) ?: return false
+        entry.onResumedSuccess?.invoke()
+        entry.continuation.resume(true)
+        return true
+    }
+
+    private fun resumeWaitWithException(
+        expectedState: WaitState,
+        exception: Throwable,
+        expectedUuid: UUID? = null,
+    ): Boolean {
+        val continuation = claimWaitCondition(expectedState, expectedUuid) ?: return false
         continuation.resumeWithException(exception)
+        return true
     }
 
     override val incomingMessages = Channel<ByteArray>(Channel.UNLIMITED)
@@ -185,7 +234,21 @@ internal class BleCentralManagerImpl(
     @Volatile
     private var l2capChannel: BleL2capChannel? = null
     @Volatile
+    private var l2capReaderJob: Job? = null
+    @Volatile
+    private var isClosed = false
+    @Volatile
     private var isConnectingToPeripheral = false
+    @Volatile
+    private var isConnectingL2cap = false
+    @Volatile
+    private var inGattHandshake = false
+    @Volatile
+    private var disconnectedDuringGattHandshake = false
+    @Volatile
+    private var needsReconnectDelay = false
+    @Volatile
+    private var hasConnectedOnce = false
 
     override val l2capPsm: Int?
         get() = _l2capPsm
@@ -209,9 +272,29 @@ internal class BleCentralManagerImpl(
         get() = _numGattConnectRetries
 
     @Volatile
+    private var _numMtuRequestRetries: Int = 0
+    override val numMtuRequestRetries: Int
+        get() = _numMtuRequestRetries
+
+    @Volatile
     private var _numServiceDiscoveryRetries: Int = 0
     override val numServiceDiscoveryRetries: Int
         get() = _numServiceDiscoveryRetries
+
+    @Volatile
+    private var _numCharacteristicDiscoveryRetries: Int = 0
+    override val numCharacteristicDiscoveryRetries: Int
+        get() = _numCharacteristicDiscoveryRetries
+
+    @Volatile
+    private var _numCharacteristicReadRetries: Int = 0
+    override val numCharacteristicReadRetries: Int
+        get() = _numCharacteristicReadRetries
+
+    @Volatile
+    private var _numDescriptorWriteRetries: Int = 0
+    override val numDescriptorWriteRetries: Int
+        get() = _numDescriptorWriteRetries
 
     @Volatile
     private var _numL2capConnectRetries: Int = 0
@@ -236,27 +319,26 @@ internal class BleCentralManagerImpl(
         _warnings.update { it + warning }
     }
 
+    private class ScanFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
     private class ConnectionFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
     private class ServiceDiscoveryFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
+    private class GattOperationFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
     private val halCallback = object : BleCentralHal.Callback {
         override fun onPowerOn(error: Throwable?) {
-            if (waitFor?.state == WaitState.POWER_ON) {
-                if (error != null) {
-                    resumeWaitWithException(error)
-                } else {
-                    resumeWait()
-                }
+            val resumed = if (error != null) {
+                resumeWaitWithException(WaitState.POWER_ON, error)
             } else {
+                resumeWait(WaitState.POWER_ON)
+            }
+            if (!resumed) {
                 Logger.w(TAG, "onPowerOn callback but not waiting")
             }
         }
 
         override fun onPeripheralDiscovered() {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    resumeWait()
-                } else {
+                if (!resumeWait(WaitState.PERIPHERAL_DISCOVERED)) {
                     Logger.w(TAG, "onPeripheralDiscovered but not waiting")
                 }
             } catch (error: Exception) {
@@ -267,9 +349,8 @@ internal class BleCentralManagerImpl(
 
         override fun onScanFailed(error: Throwable) {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVERED) {
-                    resumeWaitWithException(error)
-                } else {
+                val scanEx = ScanFailedException(error.message ?: "BLE scan failed", error)
+                if (!resumeWaitWithException(WaitState.PERIPHERAL_DISCOVERED, scanEx)) {
                     Logger.w(TAG, "onScanFailed but not waiting")
                 }
             } catch (e: Exception) {
@@ -280,9 +361,7 @@ internal class BleCentralManagerImpl(
 
         override fun onConnected() {
             try {
-                if (waitFor?.state == WaitState.CONNECT_TO_PERIPHERAL) {
-                    resumeWait()
-                } else {
+                if (!resumeWait(WaitState.CONNECT_TO_PERIPHERAL)) {
                     Logger.w(TAG, "onConnected but not waiting")
                 }
             } catch (error: Exception) {
@@ -293,9 +372,14 @@ internal class BleCentralManagerImpl(
 
         override fun onDisconnected() {
             try {
-                if (waitFor?.state == WaitState.CONNECT_TO_PERIPHERAL) {
-                    resumeWaitWithException(ConnectionFailedException("Failed to connect to peripheral"))
-                } else if (isConnectingToPeripheral) {
+                if (resumeWaitWithException(
+                        WaitState.CONNECT_TO_PERIPHERAL,
+                        ConnectionFailedException("Failed to connect to peripheral")
+                    )
+                ) {
+                    return
+                }
+                if (isConnectingToPeripheral) {
                     // On Android, a failed BluetoothGatt connection attempt can fire
                     // onConnectionStateChange(..., STATE_DISCONNECTED) twice in quick succession
                     // (e.g. status=147 followed a few milliseconds later by status=133 when
@@ -305,9 +389,33 @@ internal class BleCentralManagerImpl(
                     // delay(connectRetryDelay) before the next retry attempt. Ignore the duplicate
                     // callback so the retry loop can proceed instead of failing the transport.
                     Logger.w(TAG, "Ignoring duplicate onDisconnected callback while retrying connection")
-                } else {
-                    throw IllegalStateException("Peripheral unexpectedly disconnected")
+                    return
                 }
+                if (resumeWaitWithException(
+                        WaitState.OPEN_L2CAP_CHANNEL,
+                        ConnectionFailedException("Peripheral disconnected while opening L2CAP channel")
+                    )
+                ) {
+                    return
+                }
+                if (isConnectingL2cap) {
+                    Logger.w(TAG, "Ignoring onDisconnected callback while retrying L2CAP connection")
+                    return
+                }
+                if (inGattHandshake) {
+                    needsReconnectDelay = true
+                    val claimed = claimAnyWaitCondition()
+                    if (claimed != null) {
+                        claimed.continuation.resumeWithException(
+                            BleReconnectRequiredException("Peripheral disconnected during ${claimed.state}")
+                        )
+                    } else {
+                        disconnectedDuringGattHandshake = true
+                        Logger.w(TAG, "Peripheral disconnected while waiting between GATT handshake retries")
+                    }
+                    return
+                }
+                throw IllegalStateException("Peripheral unexpectedly disconnected")
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 onError(IllegalStateException("onDisconnected failed", error))
@@ -316,11 +424,14 @@ internal class BleCentralManagerImpl(
 
         override fun onMtuChanged(mtu: Int, error: Throwable?) {
             try {
-                if (waitFor?.state == WaitState.REQUEST_MTU) {
+                val continuation = claimWaitCondition(WaitState.REQUEST_MTU)
+                if (continuation != null) {
                     if (error != null) {
-                        resumeWaitWithException(error)
+                        continuation.resumeWithException(
+                            GattOperationFailedException(error.message ?: "MTU exchange failed", error)
+                        )
                     } else if (mtu < MIN_ACCEPTABLE_MTU) {
-                        resumeWaitWithException(IllegalStateException("Unexpected MTU size $mtu"))
+                        continuation.resumeWithException(IllegalStateException("Unexpected MTU size $mtu"))
                     } else {
                         _negotiatedMtu = mtu
                         if (mtu <= 23) {
@@ -328,7 +439,7 @@ internal class BleCentralManagerImpl(
                         }
                         maxCharacteristicSize = min(mtu - 3, MAX_CHARACTERISTIC_SIZE_CAP)
                         Logger.i(TAG, "MTU is $mtu, using $maxCharacteristicSize as maximum data size for characteristics")
-                        resumeWait()
+                        continuation.resume(true)
                     }
                 } else {
                     Logger.w(TAG, "onMtuChanged but not waiting")
@@ -342,13 +453,18 @@ internal class BleCentralManagerImpl(
 
         override fun onServicesDiscovered(hasTargetService: Boolean, error: Throwable?) {
             try {
-                if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_SERVICES) {
+                val continuation = claimWaitCondition(WaitState.PERIPHERAL_DISCOVER_SERVICES)
+                if (continuation != null) {
                     if (error != null) {
-                        resumeWaitWithException(ServiceDiscoveryFailedException(error.message ?: "Discover services failed", error))
+                        continuation.resumeWithException(
+                            ServiceDiscoveryFailedException(error.message ?: "Discover services failed", error)
+                        )
                     } else if (!hasTargetService) {
-                        resumeWaitWithException(ServiceDiscoveryFailedException("No service with the given UUID"))
+                        continuation.resumeWithException(
+                            ServiceDiscoveryFailedException("No service with the given UUID")
+                        )
                     } else {
-                        resumeWait()
+                        continuation.resume(true)
                     }
                 } else {
                     Logger.w(TAG, "onServicesDiscovered but not waiting")
@@ -365,9 +481,12 @@ internal class BleCentralManagerImpl(
             hasL2capCharacteristic: Boolean,
             error: Throwable?
         ) {
-            if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS) {
+            val continuation = claimWaitCondition(WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS)
+            if (continuation != null) {
                 if (error != null) {
-                    resumeWaitWithException(error)
+                    continuation.resumeWithException(
+                        GattOperationFailedException(error.message ?: "Discover characteristics failed", error)
+                    )
                 } else {
                     if (maxWriteSize != null) {
                         maxCharacteristicSize = min(maxWriteSize, MAX_CHARACTERISTIC_SIZE_CAP)
@@ -376,7 +495,7 @@ internal class BleCentralManagerImpl(
                         }
                     }
                     this@BleCentralManagerImpl.hasL2capCharacteristic = hasL2capCharacteristic
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicsDiscovered but not waiting")
@@ -387,30 +506,36 @@ internal class BleCentralManagerImpl(
         override fun onCharacteristicRead(uuid: UUID, value: ByteArray?, error: Throwable?) {
             try {
                 if (uuid == l2capCharacteristicUuid) {
-                    if (waitFor?.state == WaitState.GET_L2CAP_PSM) {
+                    val continuation = claimWaitCondition(WaitState.GET_L2CAP_PSM, uuid)
+                    if (continuation != null) {
                         if (error != null) {
-                            resumeWaitWithException(error)
+                            continuation.resumeWithException(
+                                GattOperationFailedException(error.message ?: "L2CAP PSM read failed", error)
+                            )
                         } else if (value == null || value.size != 4) {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 IllegalStateException("onCharacteristicRead: Expected four bytes for PSM, got ${value?.size}")
                             )
                         } else {
                             _l2capPsm = value.getUInt32(0).toInt()
                             Logger.i(TAG, "L2CAP PSM is $_l2capPsm")
-                            resumeWait()
+                            continuation.resume(true)
                         }
                     } else {
                         Logger.w(TAG, "onCharacteristicRead for L2CAP PSM but not waiting")
                         addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
                     }
                 } else if (uuid == identCharacteristicUuid) {
-                    if (waitFor?.state == WaitState.GET_READER_IDENT) {
+                    val continuation = claimWaitCondition(WaitState.GET_READER_IDENT, uuid)
+                    if (continuation != null) {
                         if (error != null) {
-                            resumeWaitWithException(error)
+                            continuation.resumeWithException(
+                                GattOperationFailedException(error.message ?: "Ident read failed", error)
+                            )
                         } else if (value != null && expectedIdentValue contentEquals value) {
-                            resumeWait()
+                            continuation.resume(true)
                         } else {
-                            resumeWaitWithException(
+                            continuation.resumeWithException(
                                 IllegalStateException(
                                     "onCharacteristicRead: Expected ${expectedIdentValue?.toHex()} " +
                                             "for ident, got ${value?.toHex()} instead"
@@ -429,11 +554,20 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onCharacteristicWrite(uuid: UUID, error: Throwable?) {
-            if (waitFor?.state == WaitState.CHARACTERISTIC_WRITE_COMPLETED) {
+            val entry = claimWaitEntry(WaitState.CHARACTERISTIC_WRITE_COMPLETED, uuid)
+            if (entry != null) {
+                val continuation = entry.continuation
                 if (error != null) {
-                    resumeWaitWithException(error)
+                    if (inGattHandshake) {
+                        continuation.resumeWithException(
+                            GattOperationFailedException(error.message ?: "Characteristic write failed", error)
+                        )
+                    } else {
+                        continuation.resumeWithException(error)
+                    }
                 } else {
-                    resumeWait()
+                    entry.onResumedSuccess?.invoke()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onCharacteristicWrite for characteristic $uuid but not waiting")
@@ -442,11 +576,14 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onDescriptorWrite(characteristicUuid: UUID, error: Throwable?) {
-            if (waitFor?.state == WaitState.WRITE_TO_DESCRIPTOR) {
+            val continuation = claimWaitCondition(WaitState.WRITE_TO_DESCRIPTOR, characteristicUuid)
+            if (continuation != null) {
                 if (error != null) {
-                    resumeWaitWithException(error)
+                    continuation.resumeWithException(
+                        GattOperationFailedException(error.message ?: "Descriptor write failed", error)
+                    )
                 } else {
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
                 Logger.w(TAG, "onDescriptorWrite but not waiting")
@@ -474,14 +611,16 @@ internal class BleCentralManagerImpl(
         }
 
         override fun onL2capConnected(channel: BleL2capChannel?, error: Throwable?) {
-            if (waitFor?.state == WaitState.OPEN_L2CAP_CHANNEL) {
+            val continuation = claimWaitCondition(WaitState.OPEN_L2CAP_CHANNEL)
+            if (continuation != null) {
                 if (error != null || channel == null) {
-                    resumeWaitWithException(error ?: IllegalStateException("L2CAP channel is null"))
+                    continuation.resumeWithException(error ?: IllegalStateException("L2CAP channel is null"))
                 } else {
                     l2capChannel = channel
-                    resumeWait()
+                    continuation.resume(true)
                 }
             } else {
+                channel?.close()
                 Logger.w(TAG, "onL2capConnected but not waiting")
                 addWarning(TransportWarning(TransportWarningCode.BLE_UNEXPECTED_CALLBACK))
             }
@@ -526,6 +665,19 @@ internal class BleCentralManagerImpl(
         }
     }
 
+    private fun checkNotDisconnectedDuringGattHandshake() {
+        if (disconnectedDuringGattHandshake) {
+            disconnectedDuringGattHandshake = false
+            throw BleReconnectRequiredException("Peripheral disconnected during GATT handshake")
+        }
+    }
+
+    private inline fun <T> withGattHandshake(block: () -> T): T {
+        inGattHandshake = true
+        checkNotDisconnectedDuringGattHandshake()
+        return block()
+    }
+
     override suspend fun waitForPowerOn() {
         suspendCancellableCoroutine { continuation ->
             setWaitCondition(WaitState.POWER_ON, continuation)
@@ -540,10 +692,11 @@ internal class BleCentralManagerImpl(
         //
         //   App 'com.example.appname' is scanning too frequently
         //
-        // to logcat. When [scanRestartTimeout] is configured (10 seconds by default), we work
-        // around this by periodically stopping and restarting the scan if we haven't discovered
-        // the peripheral yet.
+        // to logcat, or invoke ScanCallback.onScanFailed(). When [scanRestartTimeout] is
+        // configured (10 seconds by default) or [BleCentralHal.Callback.onScanFailed] fires,
+        // we work around this by stopping and restarting the scan.
         var retryCount = 0
+        var scanFailureCount = 0
         while (true) {
             val discovered = try {
                 if (scanRestartTimeout != null) {
@@ -561,6 +714,22 @@ internal class BleCentralManagerImpl(
                     }
                     true
                 }
+            } catch (error: ScanFailedException) {
+                if (scanFailureCount < maxScanFailureRetries) {
+                    scanFailureCount++
+                    retryCount++
+                    _numScanRestarts = retryCount
+                    Logger.w(
+                        TAG,
+                        "BLE scan failed on attempt $scanFailureCount, restarting scan in $scanFailureRetryDelay: ${error.message}"
+                    )
+                    if (scanFailureRetryDelay > Duration.ZERO) {
+                        delay(scanFailureRetryDelay)
+                    }
+                    continue
+                } else {
+                    throw IllegalStateException("BLE scan failed after $scanFailureCount attempts", error)
+                }
             } finally {
                 hal.stopScan()
             }
@@ -570,8 +739,8 @@ internal class BleCentralManagerImpl(
             clearWaitCondition()
             retryCount++
             _numScanRestarts = retryCount
-            // Note: we never give up because it's possible this is used by a wallet app which is
-            // simply sitting at the "Show QR code" dialog.
+            // Note: we never give up on scan timeouts because it's possible this is used by a
+            // wallet app which is simply sitting at the "Show QR code" dialog.
             Logger.i(TAG, "Failed to find peripheral after $retryCount attempt(s). Restarting scan.")
         }
         hal.onScanStoppedAfterDiscovery()
@@ -582,14 +751,44 @@ internal class BleCentralManagerImpl(
     }
 
     override suspend fun connectToPeripheral() {
-        var retryCount = 0
+        inGattHandshake = false
+        disconnectedDuringGattHandshake = false
+        if (!isConnectingL2cap) {
+            _negotiatedMtu = null
+            maxCharacteristicSize = -1
+            hasL2capCharacteristic = false
+            _l2capPsm = null
+            incomingMessage = ByteStringBuilder()
+        }
+        val shouldDelayBeforeReconnect = needsReconnectDelay
+        needsReconnectDelay = false
+        var retryCount = _numGattConnectRetries
         isConnectingToPeripheral = true
         try {
+            if (hasConnectedOnce) {
+                if (retryCount >= maxConnectRetries) {
+                    Logger.w(TAG, "Failed connecting to peripheral after $retryCount attempts. Giving up.")
+                    throw IllegalStateException("Failed connecting to peripheral")
+                }
+                retryCount++
+                _numGattConnectRetries = retryCount
+                Logger.w(
+                    TAG,
+                    "Reconnecting to peripheral after disconnect (attempt $retryCount)"
+                )
+                if (shouldDelayBeforeReconnect && connectRetryDelay > Duration.ZERO) {
+                    delay(connectRetryDelay)
+                }
+            }
             while (true) {
                 try {
                     suspendCancellableCoroutine { continuation ->
                         setWaitCondition(WaitState.CONNECT_TO_PERIPHERAL, continuation)
                         hal.connectToPeripheral()
+                    }
+                    hasConnectedOnce = true
+                    if (!isConnectingL2cap) {
+                        inGattHandshake = true
                     }
                     break
                 } catch (error: ConnectionFailedException) {
@@ -611,14 +810,43 @@ internal class BleCentralManagerImpl(
         }
     }
 
-    override suspend fun requestMtu() {
-        suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.REQUEST_MTU, continuation)
-            hal.requestMtu(DEFAULT_REQUESTED_MTU)
+    override suspend fun requestMtu() = withGattHandshake {
+        var retryCount = 0
+        while (true) {
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    setWaitCondition(WaitState.REQUEST_MTU, continuation)
+                    hal.requestMtu(DEFAULT_REQUESTED_MTU)
+                }
+                break
+            } catch (error: GattOperationFailedException) {
+                if (retryCount < 1 && maxDiscoverServicesRetries > 0) {
+                    retryCount++
+                    _numMtuRequestRetries++
+                    Logger.w(
+                        TAG,
+                        "MTU request failed on attempt $retryCount, retrying in $discoverServicesRetryDelay: ${error.message}"
+                    )
+                    if (discoverServicesRetryDelay > Duration.ZERO) {
+                        delay(discoverServicesRetryDelay)
+                    }
+                    checkNotDisconnectedDuringGattHandshake()
+                } else {
+                    _negotiatedMtu = DEFAULT_FALLBACK_MTU
+                    maxCharacteristicSize = DEFAULT_FALLBACK_MTU - 3
+                    addWarning(TransportWarning(TransportWarningCode.BLE_MTU_NOT_NEGOTIATED))
+                    Logger.w(
+                        TAG,
+                        "MTU negotiation failed (${error.message}), falling back to default " +
+                                "$DEFAULT_FALLBACK_MTU-byte MTU (maxCharacteristicSize=$maxCharacteristicSize)"
+                    )
+                    break
+                }
+            }
         }
     }
 
-    override suspend fun peripheralDiscoverServices(uuid: UUID) {
+    override suspend fun peripheralDiscoverServices(uuid: UUID) = withGattHandshake {
         var retryCount = 0
         while (true) {
             try {
@@ -630,7 +858,7 @@ internal class BleCentralManagerImpl(
             } catch (error: ServiceDiscoveryFailedException) {
                 if (retryCount < maxDiscoverServicesRetries) {
                     retryCount++
-                    _numServiceDiscoveryRetries = retryCount
+                    _numServiceDiscoveryRetries++
                     Logger.w(
                         TAG,
                         "Failed discovering service with UUID $uuid after $retryCount attempt(s), " +
@@ -639,6 +867,7 @@ internal class BleCentralManagerImpl(
                     if (discoverServicesRetryDelay > Duration.ZERO) {
                         delay(discoverServicesRetryDelay)
                     }
+                    checkNotDisconnectedDuringGattHandshake()
                 } else {
                     Logger.w(
                         TAG,
@@ -650,31 +879,97 @@ internal class BleCentralManagerImpl(
         }
     }
 
-    override suspend fun peripheralDiscoverCharacteristics() {
-        suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS, continuation)
-            hal.discoverCharacteristics(
-                stateCharacteristicUuid = stateCharacteristicUuid,
-                client2ServerCharacteristicUuid = client2ServerCharacteristicUuid,
-                server2ClientCharacteristicUuid = server2ClientCharacteristicUuid,
-                identCharacteristicUuid = identCharacteristicUuid,
-                l2capCharacteristicUuid = l2capCharacteristicUuid,
-            )
+    override suspend fun peripheralDiscoverCharacteristics() = withGattHandshake {
+        var discoverRetryCount = 0
+        while (true) {
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    setWaitCondition(WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS, continuation)
+                    hal.discoverCharacteristics(
+                        stateCharacteristicUuid = stateCharacteristicUuid,
+                        client2ServerCharacteristicUuid = client2ServerCharacteristicUuid,
+                        server2ClientCharacteristicUuid = server2ClientCharacteristicUuid,
+                        identCharacteristicUuid = identCharacteristicUuid,
+                        l2capCharacteristicUuid = l2capCharacteristicUuid,
+                    )
+                }
+                break
+            } catch (error: GattOperationFailedException) {
+                if (discoverRetryCount < maxDiscoverServicesRetries) {
+                    discoverRetryCount++
+                    _numCharacteristicDiscoveryRetries++
+                    Logger.w(
+                        TAG,
+                        "Failed discovering characteristics after $discoverRetryCount attempt(s), " +
+                                "retrying in $discoverServicesRetryDelay: ${error.message}"
+                    )
+                    if (discoverServicesRetryDelay > Duration.ZERO) {
+                        delay(discoverServicesRetryDelay)
+                    }
+                    checkNotDisconnectedDuringGattHandshake()
+                } else {
+                    throw IllegalStateException("Failed discovering characteristics", error)
+                }
+            }
         }
         if (l2capCharacteristicUuid != null && hasL2capCharacteristic) {
-            suspendCancellableCoroutine { continuation ->
-                setWaitCondition(WaitState.GET_L2CAP_PSM, continuation, l2capCharacteristicUuid)
-                hal.readCharacteristic(l2capCharacteristicUuid!!)
+            var psmRetryCount = 0
+            while (true) {
+                try {
+                    suspendCancellableCoroutine { continuation ->
+                        setWaitCondition(WaitState.GET_L2CAP_PSM, continuation, l2capCharacteristicUuid)
+                        hal.readCharacteristic(l2capCharacteristicUuid!!)
+                    }
+                    break
+                } catch (error: GattOperationFailedException) {
+                    if (psmRetryCount < maxDiscoverServicesRetries) {
+                        psmRetryCount++
+                        _numCharacteristicReadRetries++
+                        Logger.w(
+                            TAG,
+                            "Failed reading L2CAP PSM characteristic after $psmRetryCount attempt(s), " +
+                                    "retrying in $discoverServicesRetryDelay: ${error.message}"
+                        )
+                        if (discoverServicesRetryDelay > Duration.ZERO) {
+                            delay(discoverServicesRetryDelay)
+                        }
+                        checkNotDisconnectedDuringGattHandshake()
+                    } else {
+                        throw IllegalStateException("Failed reading L2CAP PSM characteristic", error)
+                    }
+                }
             }
         }
     }
 
-    override suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey) {
+    override suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey) = withGattHandshake {
         val identUuid = checkNotNull(identCharacteristicUuid) { "identCharacteristicUuid is null" }
         expectedIdentValue = deriveBleIdent(eSenderKey)
-        suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.GET_READER_IDENT, continuation, identUuid)
-            hal.readCharacteristic(identUuid)
+        var retryCount = 0
+        while (true) {
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    setWaitCondition(WaitState.GET_READER_IDENT, continuation, identUuid)
+                    hal.readCharacteristic(identUuid)
+                }
+                break
+            } catch (error: GattOperationFailedException) {
+                if (retryCount < maxDiscoverServicesRetries) {
+                    retryCount++
+                    _numCharacteristicReadRetries++
+                    Logger.w(
+                        TAG,
+                        "Failed reading Ident characteristic after $retryCount attempt(s), " +
+                                "retrying in $discoverServicesRetryDelay: ${error.message}"
+                    )
+                    if (discoverServicesRetryDelay > Duration.ZERO) {
+                        delay(discoverServicesRetryDelay)
+                    }
+                    checkNotDisconnectedDuringGattHandshake()
+                } else {
+                    throw IllegalStateException("Failed reading Ident characteristic", error)
+                }
+            }
         }
     }
 
@@ -683,28 +978,100 @@ internal class BleCentralManagerImpl(
         enableNotifications(server2ClientCharacteristicUuid)
     }
 
-    private suspend fun enableNotifications(characteristicUuid: UUID) {
-        suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.WRITE_TO_DESCRIPTOR, continuation, characteristicUuid)
-            hal.enableNotifications(characteristicUuid)
+    private suspend fun enableNotifications(characteristicUuid: UUID) = withGattHandshake {
+        var retryCount = 0
+        while (true) {
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    setWaitCondition(WaitState.WRITE_TO_DESCRIPTOR, continuation, characteristicUuid)
+                    hal.enableNotifications(characteristicUuid)
+                }
+                break
+            } catch (error: GattOperationFailedException) {
+                if (retryCount < maxDiscoverServicesRetries) {
+                    retryCount++
+                    _numDescriptorWriteRetries++
+                    Logger.w(
+                        TAG,
+                        "Failed enabling notifications on $characteristicUuid after $retryCount attempt(s), " +
+                                "retrying in $discoverServicesRetryDelay: ${error.message}"
+                    )
+                    if (discoverServicesRetryDelay > Duration.ZERO) {
+                        delay(discoverServicesRetryDelay)
+                    }
+                    checkNotDisconnectedDuringGattHandshake()
+                } else {
+                    throw IllegalStateException("Failed enabling notifications on $characteristicUuid", error)
+                }
+            }
         }
     }
 
-    private suspend fun writeToCharacteristic(characteristicUuid: UUID, value: ByteArray) {
+    @Volatile
+    private var _lastSendCompleted = false
+    override val lastSendCompleted: Boolean
+        get() = _lastSendCompleted
+
+    override fun resetLastSendCompleted() {
+        _lastSendCompleted = false
+    }
+
+    private suspend fun writeToCharacteristic(
+        characteristicUuid: UUID,
+        value: ByteArray,
+        onCompleted: (() -> Unit)? = null,
+    ) {
         suspendCancellableCoroutine { continuation ->
-            setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation, characteristicUuid)
+            setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation, characteristicUuid, onCompleted)
             hal.writeCharacteristic(characteristicUuid, value)
         }
     }
 
     override suspend fun writeToStateCharacteristic(value: Int) {
-        writeToCharacteristic(stateCharacteristicUuid, byteArrayOf(value.toByte()))
+        _lastSendCompleted = false
+        if (value == BleTransportConstants.STATE_CHARACTERISTIC_START) {
+            withGattHandshake {
+                var retryCount = 0
+                while (true) {
+                    try {
+                        writeToCharacteristic(stateCharacteristicUuid, byteArrayOf(value.toByte())) {
+                            _lastSendCompleted = true
+                        }
+                        inGattHandshake = false
+                        break
+                    } catch (error: GattOperationFailedException) {
+                        if (retryCount < maxDiscoverServicesRetries) {
+                            retryCount++
+                            Logger.w(
+                                TAG,
+                                "Failed writing STATE_CHARACTERISTIC_START after $retryCount attempt(s), " +
+                                        "retrying in $discoverServicesRetryDelay: ${error.message}"
+                            )
+                            if (discoverServicesRetryDelay > Duration.ZERO) {
+                                delay(discoverServicesRetryDelay)
+                            }
+                            checkNotDisconnectedDuringGattHandshake()
+                        } else {
+                            inGattHandshake = false
+                            throw IllegalStateException("Failed writing to State characteristic", error)
+                        }
+                    }
+                }
+            }
+        } else {
+            writeToCharacteristic(stateCharacteristicUuid, byteArrayOf(value.toByte())) {
+                _lastSendCompleted = true
+            }
+        }
     }
 
     override suspend fun sendMessage(message: ByteArray) {
+        _lastSendCompleted = false
+        inGattHandshake = false
         val channel = l2capChannel
         if (channel != null) {
             l2capSendMessage(channel, message)
+            _lastSendCompleted = true
             return
         }
         Logger.i(TAG, "sendMessage ${message.size} length")
@@ -718,74 +1085,107 @@ internal class BleCentralManagerImpl(
             builder.append(if (moreDataComing) 0x01 else 0x00)
             builder.append(message, offset, offset + size)
             val chunk = builder.toByteString().toByteArray()
-            writeToCharacteristic(client2ServerCharacteristicUuid, chunk)
-            _numChunksSent += 1
+            writeToCharacteristic(client2ServerCharacteristicUuid, chunk) {
+                _numChunksSent += 1
+                if (!moreDataComing) {
+                    _lastSendCompleted = true
+                }
+            }
         }
         Logger.i(TAG, "sendMessage completed")
     }
 
     override suspend fun connectL2cap(psm: Int) {
-        if (requireL2capPeripheralConnectedFirst && !hal.isConnected) {
-            connectToPeripheral()
-        }
         var currentDelay = l2capRetryInitialDelay
         var numTries = 0
-        while (true) {
-            try {
-                numTries++
-                val connected = if (l2capConnectTimeout != null) {
-                    withTimeoutOrNull(l2capConnectTimeout) {
+        isConnectingL2cap = true
+        inGattHandshake = false
+        disconnectedDuringGattHandshake = false
+        try {
+            while (true) {
+                try {
+                    numTries++
+                    if (requireL2capPeripheralConnectedFirst && !hal.isConnected) {
+                        connectToPeripheral()
+                    }
+                    val connected = if (l2capConnectTimeout != null) {
+                        withTimeoutOrNull(l2capConnectTimeout) {
+                            suspendCancellableCoroutine { continuation ->
+                                setWaitCondition(WaitState.OPEN_L2CAP_CHANNEL, continuation)
+                                hal.connectL2cap(psm)
+                            }
+                            true
+                        }
+                    } else {
                         suspendCancellableCoroutine { continuation ->
                             setWaitCondition(WaitState.OPEN_L2CAP_CHANNEL, continuation)
                             hal.connectL2cap(psm)
                         }
                         true
                     }
-                } else {
-                    suspendCancellableCoroutine { continuation ->
-                        setWaitCondition(WaitState.OPEN_L2CAP_CHANNEL, continuation)
-                        hal.connectL2cap(psm)
+                    if (connected == null) {
+                        clearWaitCondition()
+                        throw ConnectionFailedException("L2CAP connection timed out")
                     }
-                    true
-                }
-                if (connected == null) {
-                    clearWaitCondition()
-                    throw ConnectionFailedException("L2CAP connection timed out")
-                }
-                break
-            } catch (e: Exception) {
-                hal.closeConnectedL2capAttempt()
-                l2capChannel = null
-                if (e is CancellationException) throw e
-                if (numTries >= maxL2capConnectRetries) {
-                    throw IllegalStateException("Failed L2CAP connection after $maxL2capConnectRetries attempts", e)
-                }
-                _numL2capConnectRetries += 1
-                Logger.i(TAG, "Failed L2CAP connection (Attempt $numTries), trying again in $currentDelay: ${e.message}")
-                if (currentDelay > Duration.ZERO) {
-                    delay(currentDelay)
-                }
-                currentDelay = (currentDelay.inWholeMilliseconds * 2).milliseconds
-                if (currentDelay > l2capRetryMaxDelay) {
-                    currentDelay = l2capRetryMaxDelay
+                    break
+                } catch (e: Exception) {
+                    hal.closeConnectedL2capAttempt()
+                    l2capChannel = null
+                    if (e is CancellationException) throw e
+                    if (numTries >= maxL2capConnectRetries) {
+                        throw IllegalStateException("Failed L2CAP connection after $maxL2capConnectRetries attempts", e)
+                    }
+                    _numL2capConnectRetries += 1
+                    Logger.i(TAG, "Failed L2CAP connection (Attempt $numTries), trying again in $currentDelay: ${e.message}")
+                    if (currentDelay > Duration.ZERO) {
+                        delay(currentDelay)
+                    }
+                    currentDelay = (currentDelay.inWholeMilliseconds * 2).milliseconds
+                    if (currentDelay > l2capRetryMaxDelay) {
+                        currentDelay = l2capRetryMaxDelay
+                    }
                 }
             }
+        } finally {
+            isConnectingL2cap = false
         }
 
         val channel = checkNotNull(l2capChannel)
-        CoroutineScope(Dispatchers.Default).launch {
+        l2capReaderJob?.cancel()
+        l2capReaderJob = CoroutineScope(Dispatchers.Default).launch {
             readFromL2capChannel(channel, incomingMessages) { error ->
-                onError(IllegalStateException("Reading from L2CAP socket failed", error))
+                if (!isClosed) {
+                    onError(IllegalStateException("Reading from L2CAP socket failed", error))
+                }
             }
         }
     }
 
+    override suspend fun shutdown() {
+        hal.shutdown()
+    }
+
     override fun close() {
+        isClosed = true
+        inGattHandshake = false
+        l2capReaderJob?.cancel()
+        l2capReaderJob = null
+        l2capChannel?.close()
         hal.close()
         l2capChannel = null
         incomingMessages.close()
     }
 }
+
+/**
+ * Thrown when the BLE ACL link disconnects after [BleCentralManager.connectToPeripheral] succeeded
+ * while GATT setup ([BleCentralManager.requestMtu], [BleCentralManager.peripheralDiscoverServices],
+ * [BleCentralManager.peripheralDiscoverCharacteristics], [BleCentralManager.checkReaderIdentMatches],
+ * [BleCentralManager.subscribeToCharacteristics], or writing `0x01` to the `State` characteristic)
+ * is still in progress, signaling that the transport should reconnect via
+ * [BleCentralManager.connectToPeripheral] and restart the GATT handshake.
+ */
+internal class BleReconnectRequiredException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 internal suspend fun deriveBleIdent(eSenderKey: EcPublicKey): ByteArray {
     val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
@@ -808,14 +1208,29 @@ internal suspend fun l2capSendMessage(channel: BleL2capChannel, message: ByteArr
     channel.write(framed)
 }
 
+private const val MAX_L2CAP_MESSAGE_BYTES = 16_777_216U
+private const val L2CAP_READ_CHUNK_BYTES = 16 * 1024
+
 internal suspend fun BleL2capChannel.readNOctets(len: UInt): ByteArray {
-    val bsb = ByteStringBuilder()
-    var remaining = len.toInt()
+    if (len > MAX_L2CAP_MESSAGE_BYTES) {
+        throw IOException("L2CAP read length $len exceeds maximum $MAX_L2CAP_MESSAGE_BYTES bytes")
+    }
+    val totalLen = len.toInt()
+    if (totalLen == 0) {
+        return ByteArray(0)
+    }
+    val chunkSize = min(totalLen, L2CAP_READ_CHUNK_BYTES)
+    val bsb = ByteStringBuilder(chunkSize)
+    val buf = ByteArray(chunkSize)
+    var remaining = totalLen
     while (remaining > 0) {
-        val buf = ByteArray(remaining)
-        val numBytesRead = read(buf, 0, remaining)
-        if (numBytesRead == -1) {
+        val toRead = min(remaining, buf.size)
+        val numBytesRead = read(buf, 0, toRead)
+        if (numBytesRead < 0) {
             throw IllegalStateException("Failed reading from L2CAP channel (EOF)")
+        }
+        if (numBytesRead == 0) {
+            continue
         }
         bsb.append(buf, 0, numBytesRead)
         remaining -= numBytesRead
@@ -832,6 +1247,9 @@ internal suspend fun readFromL2capChannel(
         while (true) {
             val encodedLength = channel.readNOctets(4U)
             val length = encodedLength.getUInt32(0)
+            if (length == 0U || length > MAX_L2CAP_MESSAGE_BYTES) {
+                throw IOException("Invalid L2CAP framed message length: $length")
+            }
             val message = channel.readNOctets(length)
             incomingMessages.send(message)
         }

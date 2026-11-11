@@ -983,7 +983,8 @@ class BleTransportTest {
         ),
         private val impl: BleCentralManagerImpl = BleCentralManagerImpl(
             hal = hal,
-            postScanDelay = Duration.ZERO
+            postScanDelay = Duration.ZERO,
+            scanFailureRetryDelay = Duration.ZERO
         )
     ) : BleCentralManager by impl {
         val closeCalls: Int get() = hal.closeCalls

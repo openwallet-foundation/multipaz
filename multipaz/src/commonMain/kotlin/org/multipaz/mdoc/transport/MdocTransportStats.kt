@@ -73,55 +73,63 @@ data class TransportWarning(
  *
  * @property transportType the type of transport.
  * @property role the mdoc role ([MdocRole.MDOC] or [MdocRole.MDOC_READER]).
- * @property scanningTime time spent scanning/waiting for the peer before connection starts, if applicable.
- * @property connectingTime time spent establishing the transport connection after scanning completes, if applicable.
  * @property bytesSent total application-level payload bytes sent over this transport.
  * @property bytesReceived total application-level payload bytes received over this transport.
  * @property numMessagesSent number of transport messages sent.
  * @property numMessagesReceived number of transport messages received.
  * @property warnings structured warnings recorded during the transport session.
- * @property bleUsingL2cap `true` if BLE L2CAP was used for data transfer.
- * @property bleL2capPsmInEngagement `true` if L2CAP PSM was advertised in engagement rather than via GATT characteristic.
+ * @property bleScanningTime time spent scanning/waiting for the BLE peer before connection starts, if applicable.
+ * @property bleConnectingTime time spent establishing the BLE connection after scanning completes, if applicable.
+ * @property bleUsingL2cap `true` if BLE L2CAP was used for data transfer, or `null` if not a BLE transport.
+ * @property bleL2capPsmInEngagement `true` if L2CAP PSM was advertised in engagement rather than via GATT characteristic, or `null` if not a BLE transport.
  * @property bleNegotiatedMtu negotiated BLE GATT ATT MTU, if GATT was used.
- * @property bleMtuInferredFromWrite `true` if [bleNegotiatedMtu] was inferred from an incoming GATT write rather than `onMtuChanged`.
- * @property bleNumScanRestarts number of times BLE scanning timed out and restarted.
- * @property bleNumGattConnectRetries number of GATT connection retries after initial failure.
- * @property bleNumServiceDiscoveryRetries number of GATT service discovery retries after initial failure.
- * @property bleNumL2capConnectRetries number of L2CAP socket connection retries after initial failure.
- * @property bleNumChunksSent number of GATT characteristic chunks sent.
- * @property bleNumChunksReceived number of GATT characteristic chunks received.
- * @property nfcHybridNumSentViaNfc number of messages sent via the NFC channel in NFC CCE modes.
- * @property nfcHybridNumSentViaTransport number of messages sent via the secondary transport in NFC CCE hybrid modes.
- * @property nfcHybridNumReceivedFirstOnNfc number of messages received first on NFC in NFC CCE modes.
- * @property nfcHybridNumReceivedFirstOnTransport number of messages received first on the secondary transport in NFC CCE hybrid modes.
- * @property nfcDisconnectedDuringTransaction `true` if the NFC field disconnected during the transaction.
+ * @property bleMtuInferredFromWrite `true` if [bleNegotiatedMtu] was inferred from an incoming GATT write rather than `onMtuChanged`, or `null` if not a BLE transport.
+ * @property bleNumScanRestarts number of times BLE scanning timed out or failed and restarted, or `null` if not acting as a BLE central.
+ * @property bleNumGattConnectRetries number of GATT connection retries after initial failure or mid-handshake disconnect, or `null` if not acting as a BLE central.
+ * @property bleNumMtuRequestRetries number of GATT MTU request retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumServiceDiscoveryRetries number of GATT service discovery retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumCharacteristicDiscoveryRetries number of GATT characteristic discovery retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumCharacteristicReadRetries number of GATT characteristic read (`Ident` or `L2CAP` PSM) retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumDescriptorWriteRetries number of GATT descriptor (CCCD) write retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumL2capConnectRetries number of L2CAP socket connection retries after initial failure, or `null` if not acting as a BLE central.
+ * @property bleNumChunksSent number of GATT characteristic chunks sent, or `null` if not a BLE transport.
+ * @property bleNumChunksReceived number of GATT characteristic chunks received, or `null` if not a BLE transport.
+ * @property nfcHybridNumSentViaNfc number of messages sent via the NFC channel in NFC CCE modes, or `null` if not an NFC CCE transport.
+ * @property nfcHybridNumSentViaTransport number of messages sent via the secondary transport in NFC CCE hybrid modes, or `null` if not an NFC CCE transport.
+ * @property nfcHybridNumReceivedFirstOnNfc number of messages received first on NFC in NFC CCE modes, or `null` if not an NFC CCE transport.
+ * @property nfcHybridNumReceivedFirstOnTransport number of messages received first on the secondary transport in NFC CCE hybrid modes, or `null` if not an NFC CCE transport.
+ * @property nfcDisconnectedDuringTransaction `true` if the NFC field disconnected during the transaction in NFC CCE modes, or `null` if not an NFC CCE transport.
  */
 @CborSerializable
 data class MdocTransportStats(
     val transportType: MdocTransportType,
     val role: MdocRole,
-    val scanningTime: Duration? = null,
-    val connectingTime: Duration? = null,
     val bytesSent: Long = 0,
     val bytesReceived: Long = 0,
     val numMessagesSent: Int = 0,
     val numMessagesReceived: Int = 0,
     val warnings: List<TransportWarning> = emptyList(),
-    val bleUsingL2cap: Boolean = false,
-    val bleL2capPsmInEngagement: Boolean = false,
+    val bleScanningTime: Duration? = null,
+    val bleConnectingTime: Duration? = null,
+    val bleUsingL2cap: Boolean? = null,
+    val bleL2capPsmInEngagement: Boolean? = null,
     val bleNegotiatedMtu: Int? = null,
-    val bleMtuInferredFromWrite: Boolean = false,
-    val bleNumScanRestarts: Int = 0,
-    val bleNumGattConnectRetries: Int = 0,
-    val bleNumServiceDiscoveryRetries: Int = 0,
-    val bleNumL2capConnectRetries: Int = 0,
-    val bleNumChunksSent: Int = 0,
-    val bleNumChunksReceived: Int = 0,
-    val nfcHybridNumSentViaNfc: Int = 0,
-    val nfcHybridNumSentViaTransport: Int = 0,
-    val nfcHybridNumReceivedFirstOnNfc: Int = 0,
-    val nfcHybridNumReceivedFirstOnTransport: Int = 0,
-    val nfcDisconnectedDuringTransaction: Boolean = false,
+    val bleMtuInferredFromWrite: Boolean? = null,
+    val bleNumScanRestarts: Int? = null,
+    val bleNumGattConnectRetries: Int? = null,
+    val bleNumMtuRequestRetries: Int? = null,
+    val bleNumServiceDiscoveryRetries: Int? = null,
+    val bleNumCharacteristicDiscoveryRetries: Int? = null,
+    val bleNumCharacteristicReadRetries: Int? = null,
+    val bleNumDescriptorWriteRetries: Int? = null,
+    val bleNumL2capConnectRetries: Int? = null,
+    val bleNumChunksSent: Int? = null,
+    val bleNumChunksReceived: Int? = null,
+    val nfcHybridNumSentViaNfc: Int? = null,
+    val nfcHybridNumSentViaTransport: Int? = null,
+    val nfcHybridNumReceivedFirstOnNfc: Int? = null,
+    val nfcHybridNumReceivedFirstOnTransport: Int? = null,
+    val nfcDisconnectedDuringTransaction: Boolean? = null,
 ) {
     companion object
 }
