@@ -58,6 +58,9 @@ import org.multipaz.mpzpass.MpzPassMetadata
 import org.multipaz.openid.claim.OpenID4VCIClaimDescription
 import org.multipaz.openid.claim.OpenID4VCIClaimDisplay
 import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.storage.Storage
+import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import kotlin.random.Random
@@ -1383,6 +1386,124 @@ class DocumentStoreTest {
         if (addressClaim != null) {
             assertNotNull(addressClaim.attribute)
         }
+    }
+
+    private class CountingStorage(private val delegate: Storage) : Storage {
+        val enumerateCallsByTable = mutableMapOf<String, Int>()
+
+        override suspend fun getTable(spec: StorageTableSpec): StorageTable {
+            val baseTable = delegate.getTable(spec)
+            return object : StorageTable by baseTable {
+                override val storage: Storage get() = this@CountingStorage
+
+                override suspend fun enumerate(
+                    partitionId: String?,
+                    afterKey: String?,
+                    limit: Int,
+                ): List<String> {
+                    enumerateCallsByTable[spec.name] = (enumerateCallsByTable[spec.name] ?: 0) + 1
+                    return baseTable.enumerate(partitionId, afterKey, limit)
+                }
+            }
+        }
+
+        override suspend fun purgeExpired() {
+            delegate.purgeExpired()
+        }
+    }
+
+    @Test
+    fun testListDocumentIdsCachedAndConsistent() = runTest {
+        val rawStorage = EphemeralStorage()
+        val countingStorage = CountingStorage(rawStorage)
+        val softwareSecureArea = SoftwareSecureArea.create(countingStorage)
+        val secureAreaRepository = SecureAreaRepository.Builder().add(softwareSecureArea).build()
+        val store = buildDocumentStore(countingStorage, secureAreaRepository) {}
+
+        val docA = store.createDocument(displayName = "Doc A")
+        val docB = store.createDocument(displayName = "Doc B")
+
+        // First listDocumentIds() enumerates from storage once
+        val ids1 = store.listDocumentIds()
+        assertEquals(listOf(docA.identifier, docB.identifier).sorted(), ids1)
+        assertEquals(1, countingStorage.enumerateCallsByTable["Documents"])
+
+        // Subsequent listDocumentIds() and listDocuments() use the in-memory cache
+        val ids2 = store.listDocumentIds()
+        assertEquals(ids1, ids2)
+        val docs = store.listDocuments()
+        assertEquals(2, docs.size)
+        assertEquals(1, countingStorage.enumerateCallsByTable["Documents"])
+
+        // Creating and deleting documents updates the cached sorted IDs without re-enumerating storage
+        val docC = store.createDocument(displayName = "Doc C")
+        assertEquals(
+            listOf(docA.identifier, docB.identifier, docC.identifier).sorted(),
+            store.listDocumentIds()
+        )
+        store.deleteDocument(docA.identifier)
+        val idsAfterDelete = store.listDocumentIds()
+        assertEquals(listOf(docB.identifier, docC.identifier).sorted(), idsAfterDelete)
+        assertEquals(1, countingStorage.enumerateCallsByTable["Documents"])
+
+        // Verify parity with a freshly opened DocumentStore backed by the same storage
+        val reopenedStore = buildDocumentStore(rawStorage, secureAreaRepository) {}
+        assertEquals(reopenedStore.listDocumentIds(), idsAfterDelete)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun testIncreaseUsageCountEmitsDocumentCredentialUsageUpdated() = runTest {
+        val storage = EphemeralStorage()
+        val softwareSecureArea = SoftwareSecureArea.create(storage)
+        val secureAreaRepository = SecureAreaRepository.Builder().add(softwareSecureArea).build()
+        val store = buildDocumentStore(storage, secureAreaRepository) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { doc -> TestCredential(doc) }
+        }
+        val events = mutableListOf<DocumentEvent>()
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.eventFlow.toList(events)
+        }
+
+        val doc = store.createDocument(displayName = "Usage Doc")
+        assertEquals(DocumentAdded(doc.identifier), events.last())
+
+        val cred = TestCredential(doc, null, CREDENTIAL_DOMAIN)
+        cred.addToDocument()
+        assertEquals(DocumentUpdated(doc.identifier), events.last())
+
+        cred.increaseUsageCount()
+        assertEquals(1, cred.usageCount)
+        assertEquals(
+            DocumentCredentialUsageUpdated(doc.identifier, cred.identifier),
+            events.last()
+        )
+        collectJob.cancel()
+    }
+
+    @Test
+    fun testCertifiedCredentialClaimsCached() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+
+        val mdocCred = harness.docMdl.getCertifiedCredentials().filterIsInstance<MdocCredential>().first()
+        val mdocClaimsWithRepo1 = mdocCred.getClaims(harness.documentTypeRepository)
+        val mdocClaimsWithRepo2 = mdocCred.getClaims(harness.documentTypeRepository)
+        assertSame(mdocClaimsWithRepo1, mdocClaimsWithRepo2)
+
+        val mdocClaimsWithoutRepo = mdocCred.getClaims(null)
+        assertNotSame(mdocClaimsWithRepo1, mdocClaimsWithoutRepo)
+        assertSame(mdocClaimsWithoutRepo, mdocCred.getClaims(null))
+
+        val sdJwtCred = harness.docEuPid.getCertifiedCredentials().filterIsInstance<KeyBoundSdJwtVcCredential>().first()
+        val sdJwtClaimsWithRepo1 = sdJwtCred.getClaims(harness.documentTypeRepository)
+        val sdJwtClaimsWithRepo2 = sdJwtCred.getClaims(harness.documentTypeRepository)
+        assertSame(sdJwtClaimsWithRepo1, sdJwtClaimsWithRepo2)
+
+        val sdJwtClaimsWithoutRepo = sdJwtCred.getClaims(null)
+        assertNotSame(sdJwtClaimsWithRepo1, sdJwtClaimsWithoutRepo)
+        assertSame(sdJwtClaimsWithoutRepo, sdJwtCred.getClaims(null))
     }
 
     data class TestIssuerData(

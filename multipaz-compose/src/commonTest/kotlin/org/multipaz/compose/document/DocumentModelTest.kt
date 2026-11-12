@@ -1,14 +1,28 @@
 package org.multipaz.compose.document
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
+import org.multipaz.document.DocumentBadge
+import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.securearea.KeyInfo
+import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class DocumentModelTest {
 
@@ -95,6 +109,82 @@ class DocumentModelTest {
         // Invalid position throws
         assertFailsWith<IllegalArgumentException> {
             model.setDocumentPosition(docInfo3, 5)
+        }
+        model.close()
+    }
+
+    @Test
+    fun testCloseStopsEventFlowUpdates() = runTest {
+        val store = createTestDocumentStore()
+        val doc1 = store.createDocument(displayName = "Doc 1")
+        val model = DocumentModel.create(store, null)
+        assertEquals(listOf(doc1.identifier), model.documentOrder)
+
+        model.close()
+        store.createDocument(displayName = "Doc 2")
+        // Give Dispatchers.Default collector an opportunity if it were still active
+        withContext(Dispatchers.Default) {
+            delay(50.milliseconds)
+        }
+        yield()
+        assertEquals(listOf(doc1.identifier), model.documentOrder)
+    }
+
+    @Test
+    fun testDocumentCredentialUsageUpdatedRefreshesBadgesOnly() = runTest {
+        val storage = EphemeralStorage()
+        val baseSecureArea = SoftwareSecureArea.create(storage)
+        var getKeyInfoCalls = 0
+        var getKeyInvalidatedCalls = 0
+        val countingSecureArea = object : SecureArea by baseSecureArea {
+            override suspend fun getKeyInfo(alias: String): KeyInfo {
+                getKeyInfoCalls += 1
+                return baseSecureArea.getKeyInfo(alias)
+            }
+
+            override suspend fun getKeyInvalidated(alias: String): Boolean {
+                getKeyInvalidatedCalls += 1
+                return baseSecureArea.getKeyInvalidated(alias)
+            }
+        }
+        val secureAreaRepository = SecureAreaRepository.Builder()
+            .add(countingSecureArea)
+            .build()
+        val store = buildDocumentStore(storage, secureAreaRepository) {}
+        val doc = store.createDocument(displayName = "Doc 1")
+        val cred = MdocCredential.create(
+            document = doc,
+            asReplacementForIdentifier = null,
+            domain = "mdoc",
+            secureArea = countingSecureArea,
+            docType = "org.iso.18013.5.1.mDL",
+            createKeySettings = CreateKeySettings(),
+        )
+
+        val model = DocumentModel.create(
+            documentStore = store,
+            documentTypeRepository = null,
+            badgeFunction = { d ->
+                val uses = d.getCredentials().sumOf { it.usageCount }
+                listOf(DocumentBadge("Uses: $uses", DocumentBadgeColor(0, 128, 0)))
+            }
+        )
+        try {
+            assertEquals("Uses: 0", model.documentInfos.value.single().badges.single().text)
+            val keyInfoCallsBefore = getKeyInfoCalls
+            val keyInvalidatedCallsBefore = getKeyInvalidatedCalls
+
+            cred.increaseUsageCount()
+
+            withTimeout(2.seconds) {
+                model.documentInfos.first { infos ->
+                    infos.singleOrNull()?.badges?.singleOrNull()?.text == "Uses: 1"
+                }
+            }
+            assertEquals(keyInfoCallsBefore, getKeyInfoCalls)
+            assertEquals(keyInvalidatedCallsBefore, getKeyInvalidatedCalls)
+        } finally {
+            model.close()
         }
     }
 }

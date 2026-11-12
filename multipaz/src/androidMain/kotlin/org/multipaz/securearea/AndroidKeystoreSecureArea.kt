@@ -23,6 +23,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
 import androidx.annotation.RequiresApi
@@ -63,6 +64,7 @@ import org.multipaz.util.validateAndroidKeyAttestation
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.InvalidAlgorithmParameterException
+import java.security.InvalidKeyException
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -79,6 +81,7 @@ import java.security.cert.CertificateException
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.InvalidKeySpecException
 import java.sql.Date
+import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.KeyAgreement
 import kotlin.coroutines.coroutineContext
 import kotlin.random.Random
@@ -187,6 +190,7 @@ class AndroidKeystoreSecureArea private constructor(
     ): AndroidKeystoreKeyInfo {
         if (alias != null) {
             // If the key with the given alias exists, it is silently overwritten.
+            keyCache.remove(alias)
             storageTable.delete(alias, partitionId)
         }
 
@@ -417,6 +421,7 @@ class AndroidKeystoreSecureArea private constructor(
      */
     suspend fun createKeyForExistingAlias(existingAlias: String) {
         // If the key with the given alias exists, it is silently overwritten.
+        keyCache.remove(existingAlias)
         storageTable.delete(existingAlias, partitionId)
         storageTable.insert(existingAlias, ByteString(), partitionId)
 
@@ -517,7 +522,16 @@ class AndroidKeystoreSecureArea private constructor(
         Logger.d(TAG, "Existing key with alias '$existingAlias' created")
     }
 
+    private data class CachedKeyEntry(
+        val metadata: AndroidSecureAreaKeyMetadata,
+        val keyInfo: AndroidKeystoreKeyInfo,
+        val privateKey: PrivateKey?,
+    )
+
+    private val keyCache = ConcurrentHashMap<String, CachedKeyEntry>()
+
     override suspend fun deleteKey(alias: String) {
+        keyCache.remove(alias)
         val ks: KeyStore
         try {
             ks = KeyStore.getInstance("AndroidKeyStore")
@@ -561,8 +575,7 @@ class AndroidKeystoreSecureArea private constructor(
         dataToSign: ByteArray,
         keyUnlockData: KeyUnlockData?,
     ): Signature {
-        val (privateKey, data) = loadKey(alias)
-        val decodedData = AndroidSecureAreaKeyMetadata.fromCbor(data)
+        val (privateKey, decodedData) = loadKey(alias)
         val algorithm = decodedData.algorithm
         if (keyUnlockData != null) {
             val unlockData = keyUnlockData as AndroidKeystoreKeyUnlockData
@@ -600,6 +613,15 @@ class AndroidKeystoreSecureArea private constructor(
             }
         } catch (e: UserNotAuthenticatedException) {
             throw KeyLockedException("User not authenticated", e)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            keyCache.remove(alias)
+            throw KeyInvalidatedException("This key is no longer available", e)
+        } catch (e: InvalidKeyException) {
+            keyCache.remove(alias)
+            if (getKeyInvalidated(alias)) {
+                throw KeyInvalidatedException("This key is no longer available", e)
+            }
+            throw IllegalArgumentException(e)
         } catch (e: SignatureException) {
             // This is a work-around for Android Keystore throwing a SignatureException
             // when it should be throwing UserNotAuthenticatedException instead. b/282174161
@@ -652,6 +674,15 @@ class AndroidKeystoreSecureArea private constructor(
             }
         } catch (e: UserNotAuthenticatedException) {
             throw KeyLockedException("User not authenticated", e)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            keyCache.remove(alias)
+            throw KeyInvalidatedException("This key is no longer available", e)
+        } catch (e: InvalidKeyException) {
+            keyCache.remove(alias)
+            if (getKeyInvalidated(alias)) {
+                throw KeyInvalidatedException("This key is no longer available", e)
+            }
+            throw IllegalArgumentException(e)
         } catch (e: ProviderException) {
             // This is a work-around for Android Keystore throwing a ProviderException
             // when it should be throwing UserNotAuthenticatedException instead. b/282174161
@@ -670,16 +701,15 @@ class AndroidKeystoreSecureArea private constructor(
 
     // @throws IllegalArgumentException if the key doesn't exist.
     // @throws KeyInvalidatedException if LSKF was removed and the key is no longer available.
-    private suspend fun loadKey(alias: String): Pair<PrivateKey, ByteArray> {
-        val (privateKey, data) = loadKeyIgnoreKeyInvalidated(alias)
+    private suspend fun loadKey(alias: String): Pair<PrivateKey, AndroidSecureAreaKeyMetadata> {
+        val entry = getOrLoadKeyEntry(alias)
         return Pair(
-            privateKey ?: throw KeyInvalidatedException("This key is no longer available"),
-            data
+            entry.privateKey ?: throw KeyInvalidatedException("This key is no longer available"),
+            entry.metadata
         )
     }
 
     // @throws IllegalArgumentException if the key doesn't exist.
-    // @throws KeyInvalidatedException if LSKF was removed and the key is no longer available.
     private suspend fun loadKeyIgnoreKeyInvalidated(alias: String): Pair<PrivateKey?, ByteArray> {
         val data = storageTable.get(alias, partitionId)
             ?: throw IllegalArgumentException("No key with given alias")
@@ -696,16 +726,28 @@ class AndroidKeystoreSecureArea private constructor(
         // null (or throws UnrecoverableKeyException) — both mean the key is no longer available.
         val privateKey = try {
             ks.getKey(alias, null) as? PrivateKey
-        } catch (e: UnrecoverableKeyException) {
+        } catch (_: UnrecoverableKeyException) {
             null
         }
         return Pair(privateKey, data.toByteArray())
     }
 
     override suspend fun getKeyInvalidated(alias: String): Boolean {
-        try {
-            loadKey(alias)
-        } catch (_: KeyInvalidatedException) {
+        val entry = getOrLoadKeyEntry(alias)
+        if (entry.privateKey == null) {
+            return true
+        }
+        val ks = KeyStore.getInstance("AndroidKeyStore")
+        withContext(Dispatchers.IO) {
+            ks.load(null)
+        }
+        val livePrivateKey = try {
+            ks.getKey(alias, null) as? PrivateKey
+        } catch (_: UnrecoverableKeyException) {
+            null
+        }
+        if (livePrivateKey == null) {
+            keyCache.computeIfPresent(alias) { _, existing -> existing.copy(privateKey = null) }
             return true
         }
         return false
@@ -731,6 +773,11 @@ class AndroidKeystoreSecureArea private constructor(
     }
 
     override suspend fun getKeyInfo(alias: String): AndroidKeystoreKeyInfo {
+        return getOrLoadKeyEntry(alias).keyInfo
+    }
+
+    private suspend fun getOrLoadKeyEntry(alias: String): CachedKeyEntry {
+        keyCache[alias]?.let { return it }
         val (privateKey, data) = loadKeyIgnoreKeyInvalidated(alias)
         return try {
             val keyInfo = if (privateKey != null) {
@@ -739,7 +786,7 @@ class AndroidKeystoreSecureArea private constructor(
                 // which has no dedicated AndroidKeyStore factory, so fall back to "EC".
                 val factory = try {
                     KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
-                } catch (e: NoSuchAlgorithmException) {
+                } catch (_: NoSuchAlgorithmException) {
                     KeyFactory.getInstance("EC", "AndroidKeyStore")
                 }
                 factory.getKeySpec(privateKey, KeyInfo::class.java)
@@ -782,7 +829,7 @@ class AndroidKeystoreSecureArea private constructor(
                 userAuthenticationTypes.add(UserAuthenticationType.LSKF)
                 userAuthenticationTypes.add(UserAuthenticationType.BIOMETRIC)
             }
-            AndroidKeystoreKeyInfo(
+            val resolvedKeyInfo = AndroidKeystoreKeyInfo(
                 alias,
                 keyMetadata.algorithm,
                 publicKey,
@@ -795,6 +842,13 @@ class AndroidKeystoreSecureArea private constructor(
                 validFrom,
                 validUntil
             )
+            val entry = CachedKeyEntry(
+                metadata = keyMetadata,
+                keyInfo = resolvedKeyInfo,
+                privateKey = privateKey,
+            )
+            keyCache[alias] = entry
+            entry
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw IllegalStateException(e)
@@ -806,6 +860,7 @@ class AndroidKeystoreSecureArea private constructor(
         settings: AndroidKeystoreCreateKeySettings,
         attestation: X509CertChain
     ) {
+        keyCache.remove(alias)
         val keyMetadata = AndroidSecureAreaKeyMetadata(
             algorithm = settings.algorithm,
             attestKeyAlias = settings.attestKeyAlias,

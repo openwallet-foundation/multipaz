@@ -88,6 +88,7 @@ import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentBadgeColor
+import org.multipaz.document.DocumentCredentialUsageUpdated
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.document.setIosMdocDoctypes
@@ -930,6 +931,9 @@ class App private constructor (val promptModel: PromptModel) {
                 documentStore.eventFlow
                     .onEach { event ->
                         Logger.i(TAG, "DocumentStore event ${event::class.simpleName} ${event.documentId}")
+                        if (event is DocumentCredentialUsageUpdated) {
+                            return@onEach
+                        }
                         try {
                             dc.register(
                                 documentStore = documentStore,

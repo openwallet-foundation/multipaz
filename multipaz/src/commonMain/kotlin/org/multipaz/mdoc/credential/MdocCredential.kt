@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.credential
 
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.io.bytestring.ByteString
 import kotlin.time.Instant
@@ -38,11 +39,13 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.document.Document
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mpzpass.MpzPass
 import org.multipaz.mpzpass.MpzPassIsoMdoc
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
 import org.multipaz.openid.claim.findDisplayName
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -485,17 +488,33 @@ class MdocCredential : SecureAreaBoundCredential {
         }
     }
 
+    private data class ClaimsCacheKey(
+        val documentType: DocumentType?,
+        val locales: List<String>,
+        val claimDescriptions: List<OpenID4VCIClaimDescription>,
+    )
+
+    @Volatile
+    private var cachedClaims: Pair<ClaimsCacheKey, List<MdocClaim>>? = null
+
     override suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?,
         locales: List<String>
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)
             ?: document.getDocumentType(locales)
-        val namespaces = issuerSigned.getOrNull("nameSpaces")
-            ?: return emptyList()
+        if (!issuerSigned.hasKey("nameSpaces")) {
+            return emptyList()
+        }
         val claimDescriptions = document.openID4VCIClaimDescriptions
+        val cacheKey = ClaimsCacheKey(dt, locales, claimDescriptions)
+        cachedClaims?.let { (existingKey, existingClaims) ->
+            if (existingKey == cacheKey) {
+                return existingClaims
+            }
+        }
         val ret = mutableListOf<MdocClaim>()
-        for ((namespaceName, innerMap) in IssuerNamespaces.fromDataItem(namespaces).data) {
+        for ((namespaceName, innerMap) in issuerNamespaces.data) {
             for ((dataElementName, issuerSignedItem) in innerMap) {
                 val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                 val claim = MdocClaim(
@@ -519,7 +538,11 @@ class MdocCredential : SecureAreaBoundCredential {
                 ret.add(claim)
             }
         }
-        return ret
+        val claims = ret.toList()
+        if (isCertified) {
+            cachedClaims = Pair(cacheKey, claims)
+        }
+        return claims
     }
 
     /**

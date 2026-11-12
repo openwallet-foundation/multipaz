@@ -7,6 +7,8 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -68,6 +70,14 @@ class SecureEnclaveSecureArea internal constructor(
         data object NotEnrolled : BiometryState()
         data object Unavailable : BiometryState()
     }
+
+    private data class CachedKeyEntry(
+        val keyInfo: SecureEnclaveKeyInfo,
+        val keyMetadata: SecureEnclaveAreaKeyMetadata,
+    )
+
+    private val keyCacheLock = Mutex()
+    private val keyCache = mutableMapOf<String, CachedKeyEntry>()
 
     companion object {
         private val TAG = "SecureEnclaveSecureArea"
@@ -136,6 +146,9 @@ class SecureEnclaveSecureArea internal constructor(
 
     override suspend fun createKey(alias: String?, createKeySettings: CreateKeySettings): KeyInfo {
         if (alias != null) {
+            keyCacheLock.withLock {
+                keyCache.remove(alias)
+            }
             // If the key with the given alias exists, it is silently overwritten.
             storageTable.delete(alias, partitionId)
         }
@@ -227,7 +240,27 @@ class SecureEnclaveSecureArea internal constructor(
             keyBlob = ByteString(keyBlob),
             biometryDomainState = biometryDomainState
         )
-        return storageTable.insert(alias, ByteString(keyMetadata.toCbor()), partitionId)
+        val insertedAlias = storageTable.insert(alias, ByteString(keyMetadata.toCbor()), partitionId)
+        val keyInfo = buildKeyInfo(insertedAlias, keyMetadata)
+        keyCacheLock.withLock {
+            keyCache[insertedAlias] = CachedKeyEntry(keyInfo, keyMetadata)
+        }
+        return insertedAlias
+    }
+
+    private fun buildKeyInfo(
+        alias: String,
+        keyMetadata: SecureEnclaveAreaKeyMetadata
+    ): SecureEnclaveKeyInfo {
+        val userAuthenticationTypes =
+            SecureEnclaveUserAuthType.decodeSet(keyMetadata.userAuthenticationTypes)
+        return SecureEnclaveKeyInfo(
+            alias,
+            keyMetadata.algorithm,
+            keyMetadata.publicKey,
+            keyMetadata.userAuthenticationRequired,
+            userAuthenticationTypes
+        )
     }
 
     private fun isKeyInvalidated(keyMetadata: SecureEnclaveAreaKeyMetadata): Boolean {
@@ -245,20 +278,19 @@ class SecureEnclaveSecureArea internal constructor(
     private suspend fun loadKeyIgnoreKeyInvalidated(
         alias: String
     ): Triple<ByteArray, SecureEnclaveKeyInfo, SecureEnclaveAreaKeyMetadata> {
+        keyCacheLock.withLock {
+            keyCache[alias]?.let { entry ->
+                return Triple(entry.keyMetadata.keyBlob.toByteArray(), entry.keyInfo, entry.keyMetadata)
+            }
+        }
         val data = storageTable.get(alias, partitionId)
             ?: throw IllegalArgumentException("No key with given alias")
 
         val keyMetadata = SecureEnclaveAreaKeyMetadata.fromCbor(data.toByteArray())
-        val userAuthenticationTypes =
-            SecureEnclaveUserAuthType.decodeSet(keyMetadata.userAuthenticationTypes)
-
-        val keyInfo = SecureEnclaveKeyInfo(
-            alias,
-            keyMetadata.algorithm,
-            keyMetadata.publicKey,
-            keyMetadata.userAuthenticationRequired,
-            userAuthenticationTypes
-        )
+        val keyInfo = buildKeyInfo(alias, keyMetadata)
+        keyCacheLock.withLock {
+            keyCache[alias] = CachedKeyEntry(keyInfo, keyMetadata)
+        }
 
         return Triple(keyMetadata.keyBlob.toByteArray(), keyInfo, keyMetadata)
     }
@@ -272,6 +304,9 @@ class SecureEnclaveSecureArea internal constructor(
     }
 
     override suspend fun deleteKey(alias: String) {
+        keyCacheLock.withLock {
+            keyCache.remove(alias)
+        }
         storageTable.delete(alias, partitionId)
     }
 

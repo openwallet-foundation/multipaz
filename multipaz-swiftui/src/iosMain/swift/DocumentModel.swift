@@ -106,6 +106,22 @@ public class DocumentModel {
                     if document != nil {
                         await self._documentInfos.append(try getDocumentInfo(document!))
                     }
+                } else if event is DocumentCredentialUsageUpdated {
+                    let index = self._documentInfos.firstIndex { documentInfo in
+                        documentInfo.document.identifier == event.documentId
+                    }
+                    if let index = index {
+                        let existing = self._documentInfos[index]
+                        let newBadges = await self.getCardBadges(existing.document)
+                        if existing.badges != newBadges {
+                            self._documentInfos[index] = DocumentInfo(
+                                document: existing.document,
+                                cardArt: existing.cardArt,
+                                badges: newBadges,
+                                credentialInfos: existing.credentialInfos
+                            )
+                        }
+                    }
                 } else if event is DocumentUpdated {
                     let index = self._documentInfos.firstIndex { documentInfo in
                         documentInfo.document.identifier == event.documentId
@@ -227,6 +243,19 @@ public class DocumentModel {
         try await setDocumentOrder(documentOrder: currentOrder)
     }
 
+    private func getCardBadges(_ document: MultipazDocument) async -> [CardBadge] {
+        return await badgeFunction(document).map { docBadge in
+            CardBadge(
+                text: docBadge.text,
+                color: Color(
+                    red: Double(docBadge.color.red)/255.0,
+                    green: Double(docBadge.color.green)/255.0,
+                    blue: Double(docBadge.color.blue)/255.0
+                )
+            )
+        }
+    }
+
     private func getDocumentInfo(_ document: MultipazDocument) async throws -> DocumentInfo {
         var credentialInfos: [CredentialInfo] = []
         for credential in try await document.getCredentials() {
@@ -235,16 +264,7 @@ public class DocumentModel {
         return DocumentInfo(
             document: document,
             cardArt: document.renderCardArt(),
-            badges: await badgeFunction(document).map { docBadge in
-                CardBadge(
-                    text: docBadge.text,
-                    color: Color(
-                        red: Double(docBadge.color.red)/255.0,
-                        green: Double(docBadge.color.green)/255.0,
-                        blue: Double(docBadge.color.blue)/255.0
-                    )
-                )
-            },
+            badges: await getCardBadges(document),
             credentialInfos: credentialInfos
         )
     }

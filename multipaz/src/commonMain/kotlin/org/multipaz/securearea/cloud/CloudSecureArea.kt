@@ -7,6 +7,8 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
@@ -142,6 +144,9 @@ open class CloudSecureArea protected constructor(
     private var deviceAttestationId: String? = null
     private var registrationContext: ByteString? = null
 
+    private val keyInfoCacheLock = Mutex()
+    private val keyInfoCache = mutableMapOf<String, CloudKeyInfo>()
+
     /**
      * Loads persisted Cloud Secure Area state and initializes its platform secure area.
      *
@@ -260,6 +265,9 @@ open class CloudSecureArea protected constructor(
                     partitionId = identifier
                 )
             }
+            keyInfoCacheLock.withLock {
+                keyInfoCache.clear()
+            }
 
             clientId = registeredClientId
             deviceAttestationId = deviceAttestationResult.deviceAttestationId
@@ -307,6 +315,9 @@ open class CloudSecureArea protected constructor(
     }
 
     suspend fun unregister() {
+        keyInfoCacheLock.withLock {
+            keyInfoCache.clear()
+        }
         storageTable.delete(key = CLIENT_ID, partitionId = identifier)
         storageTable.delete(key = DEVICE_ATTESTATION_ID, partitionId = identifier)
         storageTable.delete(key = REGISTRATION_CONTEXT, partitionId = identifier)
@@ -376,6 +387,9 @@ open class CloudSecureArea protected constructor(
         createKeySettings: CreateKeySettings
     ): CloudKeyInfo {
         if (alias != null) {
+            keyInfoCacheLock.withLock {
+                keyInfoCache.remove(alias)
+            }
             // If the key with the given alias exists, it is silently overwritten.
             storageTable.delete(
                 key = alias,
@@ -461,6 +475,9 @@ open class CloudSecureArea protected constructor(
     }
 
     override suspend fun deleteKey(alias: String) {
+        keyInfoCacheLock.withLock {
+            keyInfoCache.remove(alias)
+        }
         platformSecureArea.deleteKey(getLocalKeyAlias(alias))
         storageTable.delete(
             key = alias,
@@ -717,10 +734,7 @@ open class CloudSecureArea protected constructor(
         }
     }
 
-    override suspend fun getKeyInfo(alias: String): CloudKeyInfo {
-        val data = storageTable.get(key = METADATA_PREFIX + alias, partitionId = identifier)
-            ?: throw IllegalArgumentException("No key with given alias")
-        val keyMetadata = KeyMetadata.fromCbor(data.toByteArray())
+    private fun buildCloudKeyInfo(alias: String, keyMetadata: KeyMetadata): CloudKeyInfo {
         val userAuthenticationTypes = CloudUserAuthType.decodeSet(keyMetadata.userAuthenticationTypes)
         return CloudKeyInfo(
             alias,
@@ -735,6 +749,20 @@ open class CloudSecureArea protected constructor(
             keyMetadata.validUntil?.let { Instant.fromEpochMilliseconds(it) },
             keyMetadata.isPassphraseRequired,
         )
+    }
+
+    override suspend fun getKeyInfo(alias: String): CloudKeyInfo {
+        keyInfoCacheLock.withLock {
+            keyInfoCache[alias]?.let { return it }
+        }
+        val data = storageTable.get(key = METADATA_PREFIX + alias, partitionId = identifier)
+            ?: throw IllegalArgumentException("No key with given alias")
+        val keyMetadata = KeyMetadata.fromCbor(data.toByteArray())
+        val keyInfo = buildCloudKeyInfo(alias, keyMetadata)
+        keyInfoCacheLock.withLock {
+            keyInfoCache[alias] = keyInfo
+        }
+        return keyInfo
     }
 
     override suspend fun getKeyInvalidated(alias: String): Boolean {
@@ -791,6 +819,10 @@ open class CloudSecureArea protected constructor(
             partitionId = identifier,
             data = ByteString(keyMetadata.toCbor())
         )
+        val keyInfo = buildCloudKeyInfo(alias, keyMetadata)
+        keyInfoCacheLock.withLock {
+            keyInfoCache[alias] = keyInfo
+        }
     }
 
     internal fun getLocalKeyAlias(alias: String): String {

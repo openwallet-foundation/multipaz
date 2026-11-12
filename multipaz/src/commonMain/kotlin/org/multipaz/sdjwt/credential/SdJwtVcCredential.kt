@@ -1,13 +1,17 @@
 package org.multipaz.sdjwt.credential
 
+import kotlin.concurrent.Volatile
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
 import org.multipaz.openid.claim.findDisplayName
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.validation.ValidationFinding
@@ -185,6 +189,77 @@ interface SdJwtVcCredential {
             }
         }
     }
+}
+
+/**
+ * Internal cache for verified SD-JWT VC payloads and resolved [JsonClaim] lists on certified credentials.
+ */
+internal class SdJwtVcClaimsCache {
+    data class ClaimsCacheKey(
+        val issuerData: ByteString,
+        val documentType: DocumentType?,
+        val locales: List<String>,
+        val claimDescriptions: List<OpenID4VCIClaimDescription>,
+    )
+
+    @Volatile
+    var verifiedPayload: Pair<ByteString, JsonObject>? = null
+
+    @Volatile
+    var cachedClaims: Pair<ClaimsCacheKey, List<JsonClaim>>? = null
+}
+
+internal suspend fun SdJwtVcCredential.getCachedClaimsImpl(
+    cache: SdJwtVcClaimsCache,
+    documentTypeRepository: DocumentTypeRepository?,
+    locales: List<String> = emptyList(),
+): List<JsonClaim> {
+    val data = issuerProvidedData
+    val credential = this as? Credential
+    val claimDescriptions = credential?.document?.openID4VCIClaimDescriptions ?: emptyList()
+    val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
+        ?: otherVcts.firstNotNullOfOrNull { documentTypeRepository?.getDocumentTypeForJson(it) }
+        ?: credential?.document?.getDocumentType(locales)
+
+    val cacheKey = SdJwtVcClaimsCache.ClaimsCacheKey(data, dt, locales, claimDescriptions)
+    cache.cachedClaims?.let { (existingKey, existingClaims) ->
+        if (existingKey == cacheKey) {
+            return existingClaims
+        }
+    }
+
+    val processedJwt = cache.verifiedPayload?.takeIf { it.first == data }?.second ?: run {
+        val sdJwt = SdJwt.fromCompactSerialization(data.decodeToString())
+        val x5c = sdJwt.x5c
+            ?: throw IllegalStateException("Only X509-certified keys are supported in SD-JWT")
+        val issuerKey = x5c.certificates.first().publicKey
+        val verified = sdJwt.verify(issuerKey)
+        if (credential == null || credential.isCertified) {
+            cache.verifiedPayload = Pair(data, verified)
+        }
+        verified
+    }
+
+    val ret = ArrayList<JsonClaim>(processedJwt.size)
+    for ((claimName, claimValue) in processedJwt) {
+        val attribute = dt?.jsonDocumentType?.claims?.get(claimName)
+        val claimPath = buildJsonArray { add(claimName) }
+        ret.add(
+            JsonClaim(
+                displayName = attribute?.displayName
+                    ?: claimDescriptions.findDisplayName(claimPath, locales)
+                    ?: claimName,
+                attribute = attribute,
+                vct = vct,
+                claimPath = claimPath,
+                value = claimValue
+            )
+        )
+    }
+    if (credential == null || credential.isCertified) {
+        cache.cachedClaims = Pair(cacheKey, ret)
+    }
+    return ret
 }
 
 /**

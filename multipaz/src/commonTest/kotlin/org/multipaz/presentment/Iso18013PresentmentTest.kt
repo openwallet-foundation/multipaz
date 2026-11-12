@@ -23,6 +23,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
+import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -30,6 +31,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -68,7 +70,9 @@ import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.Reason
 import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
@@ -77,6 +81,7 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.util.Constants
+import org.multipaz.util.Logger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -1412,5 +1417,310 @@ class Iso18013PresentmentTest {
         assertEquals(PresentmentOutcome.OTHER_ERROR, callbackTelemetry!!.outcome)
         val loggedEvent = assertIs<EventPresentmentIso18013Proximity>(eventLogger.events.single())
         assertEquals(PresentmentOutcome.OTHER_ERROR, loggedEvent.telemetry?.outcome)
+    }
+
+    @Test
+    fun testLogsDeviceResponseReadyDurationAtInfoLevel() = runTest {
+        val presentmentSource = createTestPresentmentSource()
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem()
+        val encryptedRequest = buildEncryptedReaderSessionData(eDeviceKey, deviceEngagement) {
+            buildTestDeviceRequest(it)
+        }
+
+        val infoLogs = mutableListOf<Pair<String, String>>()
+        var loggedBeforeSendMessage = false
+        var messageCount = 0
+        val transport = object : MdocTransport() {
+            private val _state = MutableStateFlow(State.CONNECTED)
+            override val state: StateFlow<State> = _state
+            override val role: MdocRole = MdocRole.MDOC
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val scanningTime: Duration? = null
+
+            override suspend fun advertise() {}
+            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun sendMessage(message: ByteArray) {
+                loggedBeforeSendMessage = infoLogs.any { (tag, msg) ->
+                    tag == "Iso180135Presentment" && msg.startsWith("DeviceResponse ready to send in ")
+                }
+            }
+            override suspend fun waitForMessage(): ByteArray {
+                return if (messageCount++ == 0) encryptedRequest else byteArrayOf()
+            }
+            override suspend fun close() {
+                _state.value = State.CLOSED
+            }
+        }
+
+        val previousLogPrinter = Logger.logPrinter
+        val previousDebugEnabled = Logger.isDebugEnabled
+        Logger.isDebugEnabled = false
+        Logger.logPrinter = Logger.LogPrinter { level, tag, msg, _ ->
+            if (level == Logger.LogPrinter.Level.INFO) {
+                infoLogs.add(tag to msg)
+            }
+        }
+        try {
+            Iso18013Presentment(
+                transport = transport,
+                eDeviceKey = eDeviceKey,
+                deviceEngagement = deviceEngagement,
+                handover = Simple.NULL,
+                source = presentmentSource,
+                keyAgreementPossible = listOf(EcCurve.P256),
+            )
+        } finally {
+            Logger.logPrinter = previousLogPrinter
+            Logger.isDebugEnabled = previousDebugEnabled
+        }
+
+        assertTrue(loggedBeforeSendMessage, "Expected INFO timing log before transport.sendMessage()")
+        val timingLog = infoLogs.singleOrNull { (tag, msg) ->
+            tag == "Iso180135Presentment" && msg.startsWith("DeviceResponse ready to send in ")
+        }
+        assertNotNull(timingLog)
+        val expectedPattern = Regex(
+            """^DeviceResponse ready to send in \d+ ms \(DeviceRequest: \d+ bytes, DeviceResponse: \d+ bytes\)$"""
+        )
+        assertTrue(
+            expectedPattern.matches(timingLog.second),
+            "Unexpected log message format: ${timingLog.second}"
+        )
+    }
+
+    private class RecordingRequesterHistory : RequesterHistory {
+        var recordShareCalls = 0
+        override suspend fun getEntry(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+        ): RequesterHistoryEntry? = null
+
+        override suspend fun recordShare(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+        ) {
+            recordShareCalls += 1
+        }
+
+        override suspend fun deleteAll() {}
+    }
+
+    private class CountingPresentmentSource(
+        private val delegate: PresentmentSource,
+    ) : PresentmentSource(
+        documentStore = delegate.documentStore,
+        documentTypeRepository = delegate.documentTypeRepository,
+        zkSystemRepository = delegate.zkSystemRepository,
+        eventLogger = delegate.eventLogger,
+        requesterHistory = delegate.requesterHistory,
+    ) {
+        var resolveTrustCalls = 0
+
+        override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? {
+            resolveTrustCalls += 1
+            return delegate.resolveTrust(requester)
+        }
+
+        override suspend fun showConsentPrompt(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+            presentmentData: PresentmentData,
+            preselectedDocuments: List<Document>,
+            onDocumentsInFocus: (documents: List<Document>) -> Unit,
+        ): PresentmentSelection? = delegate.showConsentPrompt(
+            requester,
+            trustedRequesterIdentity,
+            presentmentData,
+            preselectedDocuments,
+            onDocumentsInFocus,
+        )
+
+        override suspend fun selectCredential(
+            document: Document,
+            requestedClaims: List<RequestedClaim>,
+            keyAgreementPossible: List<EcCurve>,
+            credential: Credential?,
+        ): Credential? = delegate.selectCredential(
+            document,
+            requestedClaims,
+            keyAgreementPossible,
+            credential,
+        )
+
+        override suspend fun getBadges(document: Document): List<DocumentBadge> =
+            delegate.getBadges(document)
+    }
+
+    @Test
+    fun testUsageCountAndRequesterHistoryDeferredUntilAfterSendMessage() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        val requesterHistory = RecordingRequesterHistory()
+        val baseSource = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            requesterHistory = requesterHistory,
+            showConsentPromptFn = ::promptModelSilentConsent,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val countingSource = CountingPresentmentSource(baseSource)
+        val mdlCredentials = harness.docMdl.getCertifiedCredentials()
+
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem()
+        val encryptedRequest = buildEncryptedReaderSessionData(eDeviceKey, deviceEngagement) {
+            buildTestDeviceRequest(it)
+        }
+
+        var usageSumDuringSendMessage = -1
+        var recordShareCallsDuringSendMessage = -1
+        var resolveTrustCallsDuringSendMessage = -1
+        var messageCount = 0
+        val transport = object : MdocTransport() {
+            private val _state = MutableStateFlow(State.CONNECTED)
+            override val state: StateFlow<State> = _state
+            override val role: MdocRole = MdocRole.MDOC
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val scanningTime: Duration? = null
+
+            override suspend fun advertise() {}
+            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun sendMessage(message: ByteArray) {
+                usageSumDuringSendMessage = mdlCredentials.sumOf { it.usageCount }
+                recordShareCallsDuringSendMessage = requesterHistory.recordShareCalls
+                resolveTrustCallsDuringSendMessage = countingSource.resolveTrustCalls
+            }
+            override suspend fun waitForMessage(): ByteArray {
+                return if (messageCount++ == 0) encryptedRequest else byteArrayOf()
+            }
+            override suspend fun close() {
+                _state.value = State.CLOSED
+            }
+        }
+
+        Iso18013Presentment(
+            transport = transport,
+            eDeviceKey = eDeviceKey,
+            deviceEngagement = deviceEngagement,
+            handover = Simple.NULL,
+            source = countingSource,
+            keyAgreementPossible = listOf(EcCurve.P256),
+        )
+
+        assertEquals(0, usageSumDuringSendMessage, "usageCount must not be incremented before sendMessage()")
+        assertEquals(0, recordShareCallsDuringSendMessage, "recordShare() must not run before sendMessage()")
+        assertEquals(1, resolveTrustCallsDuringSendMessage, "resolveTrust() should only run once")
+        assertEquals(1, mdlCredentials.sumOf { it.usageCount }, "usageCount must be incremented after sendMessage()")
+        assertEquals(1, requesterHistory.recordShareCalls, "recordShare() must run after sendMessage()")
+        assertEquals(1, countingSource.resolveTrustCalls, "resolveTrust() total calls should remain 1")
+    }
+
+    @Test
+    fun testUsageCountAndRequesterHistoryNotIncrementedWhenSendMessageFails() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        val requesterHistory = RecordingRequesterHistory()
+        val source = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            requesterHistory = requesterHistory,
+            showConsentPromptFn = ::promptModelSilentConsent,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val mdlCredentials = harness.docMdl.getCertifiedCredentials()
+
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem()
+        val encryptedRequest = buildEncryptedReaderSessionData(eDeviceKey, deviceEngagement) {
+            buildTestDeviceRequest(it)
+        }
+
+        val transport = object : MdocTransport() {
+            private val _state = MutableStateFlow(State.CONNECTED)
+            override val state: StateFlow<State> = _state
+            override val role: MdocRole = MdocRole.MDOC
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val scanningTime: Duration? = null
+
+            override suspend fun advertise() {}
+            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun sendMessage(message: ByteArray) {
+                throw MdocTransportException("NFC field lost mid-transmission")
+            }
+            override suspend fun waitForMessage(): ByteArray = encryptedRequest
+            override suspend fun close() {
+                _state.value = State.CLOSED
+            }
+        }
+
+        assertFailsWith<MdocTransportException> {
+            Iso18013Presentment(
+                transport = transport,
+                eDeviceKey = eDeviceKey,
+                deviceEngagement = deviceEngagement,
+                handover = Simple.NULL,
+                source = source,
+                keyAgreementPossible = listOf(EcCurve.P256),
+            )
+        }
+
+        assertEquals(0, mdlCredentials.sumOf { it.usageCount })
+        assertEquals(0, requesterHistory.recordShareCalls)
+    }
+
+    @Test
+    fun testResolveTrustDeduplicatedAndReEvaluatedWhenRequesterChanges() = runTest {
+        val baseSource = createTestPresentmentSource()
+        val countingSource = CountingPresentmentSource(baseSource)
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                ),
+            )
+        }
+
+        val selection = mdocPresentmentObtainConsent(
+            deviceRequest = deviceRequest,
+            source = countingSource,
+        )
+        assertEquals(1, countingSource.resolveTrustCalls)
+
+        val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+        withContext(keyUnlockDataProvider) {
+            mdocPresentmentGenerateResponse(
+                selection = selection,
+                deviceRequest = deviceRequest,
+                eReaderKey = null,
+                sessionTranscript = sessionTranscript,
+                source = countingSource,
+            )
+        }
+        // Same DeviceRequest and requester parameters -> cached trust reused
+        assertEquals(1, countingSource.resolveTrustCalls)
+
+        // Different requester origin -> must re-evaluate resolveTrust()
+        withContext(keyUnlockDataProvider) {
+            mdocPresentmentGenerateResponse(
+                selection = selection,
+                deviceRequest = deviceRequest,
+                eReaderKey = null,
+                sessionTranscript = sessionTranscript,
+                source = countingSource,
+                requesterOrigin = "https://other-verifier.example.com",
+            )
+        }
+        assertEquals(2, countingSource.resolveTrustCalls)
     }
 }
