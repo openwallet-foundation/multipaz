@@ -211,11 +211,13 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     override val credentialType: String
         get() = CREDENTIAL_TYPE
 
+    private val claimsCache = SdJwtVcClaimsCache()
+
     override suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?,
         locales: List<String>
     ): List<JsonClaim> {
-        return getClaimsImpl(documentTypeRepository, locales)
+        return getCachedClaimsImpl(claimsCache, documentTypeRepository, locales)
     }
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =

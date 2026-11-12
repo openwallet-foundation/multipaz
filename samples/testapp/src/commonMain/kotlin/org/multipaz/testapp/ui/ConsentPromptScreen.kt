@@ -10,6 +10,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -251,6 +252,12 @@ fun ConsentPromptScreen(
     var requesterHistory by remember { mutableStateOf<RequesterHistory?>(null) }
     var onDocumentsInFocus by remember { mutableStateOf<List<Document>?>(null) }
     var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
+    DisposableEffect(documentModel) {
+        val currentDocumentModel = documentModel
+        onDispose {
+            currentDocumentModel?.close()
+        }
+    }
     var paShowConsent by remember { mutableStateOf(true) }
     var paRequireAuth by remember { mutableStateOf(false) }
     var paRequireFaceMatch by remember { mutableStateOf(false) }

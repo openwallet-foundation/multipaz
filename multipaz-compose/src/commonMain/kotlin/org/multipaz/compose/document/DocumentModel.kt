@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,12 +27,12 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentAdded
 import org.multipaz.document.DocumentBadge
+import org.multipaz.document.DocumentCredentialUsageUpdated
 import org.multipaz.document.DocumentDeleted
 import org.multipaz.document.DocumentEvent
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.DocumentUpdated
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.storage.StorageTable
 import org.multipaz.util.Logger
 import org.multipaz.util.LruCache
 
@@ -83,11 +85,17 @@ class DocumentModel private constructor(
     private val documentTypeRepository: DocumentTypeRepository?,
     private val documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
     private val badgeFunction: suspend (document: Document) -> List<DocumentBadge>,
-) {
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+) : AutoCloseable {
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _documentInfos = MutableStateFlow<List<DocumentInfo>>(emptyList())
-    private lateinit var table: StorageTable
     private lateinit var storageData: DocumentModelStorageData
+
+    /**
+     * Cancels live event collection for this [DocumentModel].
+     */
+    override fun close() {
+        scope.cancel()
+    }
 
     /**
      * A list of [DocumentInfo] for the documents in [documentStore].
@@ -162,6 +170,33 @@ class DocumentModel private constructor(
                                     }
                                 }
                             }.sorted()
+                    }
+                }
+            }
+            is DocumentCredentialUsageUpdated -> {
+                documentStore.lookupDocument(id)?.let { document ->
+                    try {
+                        val newBadges = badgeFunction(document).map { docBadge ->
+                            CardBadge.fromDocumentBadge(docBadge)
+                        }
+                        _documentInfos.update { current ->
+                            val existingIndex = current.indexOfFirst { it.document.identifier == id }
+                            if (existingIndex < 0) {
+                                current
+                            } else {
+                                val existing = current[existingIndex]
+                                if (existing.badges == newBadges) {
+                                    current
+                                } else {
+                                    current.toMutableList().apply {
+                                        this[existingIndex] = existing.copy(badges = newBadges)
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Logger.w(TAG, "Error updating badges for DocumentInfo", e)
                     }
                 }
             }

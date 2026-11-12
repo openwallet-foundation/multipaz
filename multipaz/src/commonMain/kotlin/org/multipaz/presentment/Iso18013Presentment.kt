@@ -225,6 +225,7 @@ private class Iso18013PresentmentSession(
         if (status == Constants.SESSION_DATA_STATUS_SESSION_TERMINATION || encodedRetapRequest == null) {
             throw IllegalStateException("No DeviceRequest in message from reader on NFC re-tap")
         }
+        lastRequestSizeBytes = encodedRetapRequest.size
         val retapDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedRetapRequest))
         lastDeviceRequest = retapDeviceRequest
         retapDeviceRequest.verifyReaderAuthentication(sessionTranscript)
@@ -322,8 +323,9 @@ private class Iso18013PresentmentSession(
                     break
                 }
 
+                val requestReceivedTime = Clock.System.now()
                 if (durationConnectedToRequestReceived == null) {
-                    durationConnectedToRequestReceived = Clock.System.now() - connectedTime!!
+                    durationConnectedToRequestReceived = requestReceivedTime - connectedTime!!
                 }
 
                 val currentParams = engagementParams.value
@@ -421,8 +423,8 @@ private class Iso18013PresentmentSession(
                 val sessionEncryptionToUse = sessionEncryption!!
 
                 val genStartTime = Clock.System.now()
-                val responseObject = withContext(keyUnlockDataProvider) {
-                    mdocPresentmentGenerateResponse(
+                val (responseObject, commitState) = withContext(keyUnlockDataProvider) {
+                    mdocPresentmentGenerateResponseInternal(
                         selection = selection,
                         deviceRequest = effectiveDeviceRequest,
                         eReaderKey = activeEReaderKey!!.publicKey,
@@ -431,6 +433,7 @@ private class Iso18013PresentmentSession(
                         requesterAppId = null,
                         requesterOrigin = null,
                         faceMatchedCredentials = faceMatchedCredentials,
+                        deferStateCommit = true,
                     )
                 }
                 val encodedResponsePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem())
@@ -440,9 +443,17 @@ private class Iso18013PresentmentSession(
                     statusCode = null,
                     disconnectNfc = disconnectNfc
                 )
-                durationResponseGeneration = (durationResponseGeneration ?: Duration.ZERO) + (Clock.System.now() - genStartTime)
+                val responseReadyTime = Clock.System.now()
+                val durationRequestToResponseReady = responseReadyTime - requestReceivedTime
+                durationResponseGeneration =
+                    (durationResponseGeneration ?: Duration.ZERO) + (responseReadyTime - genStartTime)
                 lastResponseSizeBytes = encodedResponsePlaintext.size
                 lastRequesterInTrustList = responseObject.eventData.trustMetadata != null
+                Logger.i(
+                    TAG,
+                    "DeviceResponse ready to send in ${durationRequestToResponseReady.inWholeMilliseconds} ms " +
+                        "(DeviceRequest: $lastRequestSizeBytes bytes, DeviceResponse: $lastResponseSizeBytes bytes)"
+                )
 
                 val txStartTime = Clock.System.now()
                 transport.sendMessage(encryptedResponse)
@@ -457,6 +468,9 @@ private class Iso18013PresentmentSession(
                         sessionTranscript = sessionTranscriptToUse,
                     )
                 )
+                withContext(NonCancellable) {
+                    commitState()
+                }
 
                 Logger.i(TAG, "Response sent, keeping connection open")
             }

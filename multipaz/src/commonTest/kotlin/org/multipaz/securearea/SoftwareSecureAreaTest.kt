@@ -27,17 +27,23 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.securearea.software.SoftwareUserAuthType
+import org.multipaz.storage.Storage
+import org.multipaz.storage.StorageTable
+import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.prompt.Reason
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -674,6 +680,57 @@ class SoftwareSecureAreaTest {
             assertTrue(result is SoftwareKeyUnlockData)
             assertTrue((result as SoftwareKeyUnlockData).userAuthenticated)
         }
+    }
+
+    @Test
+    fun testKeyInfoCachingAndInvalidation() = runTest {
+        var getCalls = 0
+        val baseStorage = EphemeralStorage()
+        val countingStorage = object : Storage {
+            override suspend fun getTable(spec: StorageTableSpec): StorageTable {
+                val outerStorage: Storage = this
+                val baseTable = baseStorage.getTable(spec)
+                return object : StorageTable by baseTable {
+                    override val storage: Storage get() = outerStorage
+                    override suspend fun get(key: String, partitionId: String?): ByteString? {
+                        getCalls += 1
+                        return baseTable.get(key, partitionId)
+                    }
+                }
+            }
+            override suspend fun purgeExpired() = baseStorage.purgeExpired()
+        }
+
+        val sa = SoftwareSecureArea.create(countingStorage)
+        val createdInfo = sa.createKey("cachedKey", CreateKeySettings())
+        val callsAfterCreate = getCalls
+
+        val info1 = sa.getKeyInfo("cachedKey")
+        val info2 = sa.getKeyInfo("cachedKey")
+        assertSame(createdInfo, info1)
+        assertSame(info1, info2)
+        assertEquals(callsAfterCreate, getCalls, "Cached getKeyInfo() must not read from storage")
+
+        // Overwriting the alias updates the cached KeyInfo
+        val overwrittenInfo = sa.createKey("cachedKey", CreateKeySettings())
+        assertNotEquals(createdInfo.publicKey, overwrittenInfo.publicKey)
+        assertSame(overwrittenInfo, sa.getKeyInfo("cachedKey"))
+
+        // Deleting the key evicts the cache so subsequent getKeyInfo() throws
+        sa.deleteKey("cachedKey")
+        assertFailsWith<IllegalArgumentException> {
+            sa.getKeyInfo("cachedKey")
+        }
+
+        // Reopening SoftwareSecureArea on existing storage populates cache on first getKeyInfo()
+        sa.createKey("persistedKey", CreateKeySettings())
+        val reopenedSa = SoftwareSecureArea.create(countingStorage)
+        val beforeFirstLoad = getCalls
+        val loaded1 = reopenedSa.getKeyInfo("persistedKey")
+        assertEquals(beforeFirstLoad + 1, getCalls)
+        val loaded2 = reopenedSa.getKeyInfo("persistedKey")
+        assertSame(loaded1, loaded2)
+        assertEquals(beforeFirstLoad + 1, getCalls)
     }
 
     private class MockKeyUnlockDataProvider(

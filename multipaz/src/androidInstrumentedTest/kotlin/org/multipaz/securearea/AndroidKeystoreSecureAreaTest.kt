@@ -697,4 +697,64 @@ class AndroidKeystoreSecureAreaTest {
         Assert.assertArrayEquals(challenge.toByteArray(), parser.attestationChallenge)
         ks.deleteKey("testKey")
     }
+
+    @Test
+    fun testKeyInfoAndPrivateKeyCaching() = runTest {
+        val ks = secureAreaProvider.get()
+        ks.deleteKey("cachedSignKey")
+        ks.deleteKey("cachedEcdhKey")
+
+        val createdSignInfo = ks.createKey(
+            "cachedSignKey",
+            AndroidKeystoreCreateKeySettings.Builder(ByteString(1, 2, 3))
+                .setAlgorithm(Algorithm.ESP256)
+                .build()
+        )
+        Assert.assertSame(createdSignInfo, ks.getKeyInfo("cachedSignKey"))
+        Assert.assertFalse(ks.getKeyInvalidated("cachedSignKey"))
+
+        val dataToSign = byteArrayOf(9, 8, 7)
+        val sig1 = ks.sign("cachedSignKey", dataToSign)
+        val sig2 = ks.sign("cachedSignKey", dataToSign)
+        Crypto.checkSignature(createdSignInfo.publicKey, dataToSign, Algorithm.ES256, sig1)
+        Crypto.checkSignature(createdSignInfo.publicKey, dataToSign, Algorithm.ES256, sig2)
+
+        // Overwrite alias -> must evict old entry and return new key
+        val overwrittenInfo = ks.createKey(
+            "cachedSignKey",
+            AndroidKeystoreCreateKeySettings.Builder(ByteString(4, 5, 6))
+                .setAlgorithm(Algorithm.ESP256)
+                .build()
+        )
+        Assert.assertNotEquals(createdSignInfo.publicKey, overwrittenInfo.publicKey)
+        Assert.assertSame(overwrittenInfo, ks.getKeyInfo("cachedSignKey"))
+
+        // ECDH key agreement repeated calls using cached handle
+        val ecdhInfo = ks.createKey(
+            "cachedEcdhKey",
+            AndroidKeystoreCreateKeySettings.Builder(ByteString(7, 8, 9))
+                .setAlgorithm(Algorithm.ECDH_P256)
+                .build()
+        )
+        val peerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val shared1 = ks.keyAgreement("cachedEcdhKey", peerKey.publicKey)
+        val shared2 = ks.keyAgreement("cachedEcdhKey", peerKey.publicKey)
+        val expectedShared = Crypto.keyAgreement(peerKey, ecdhInfo.ecPublicKey)
+        Assert.assertArrayEquals(expectedShared.encoded, shared1.encoded)
+        Assert.assertArrayEquals(expectedShared.encoded, shared2.encoded)
+        shared1.close()
+        shared2.close()
+        expectedShared.close()
+        peerKey.close()
+
+        // Deletion evicts cache
+        ks.deleteKey("cachedSignKey")
+        ks.deleteKey("cachedEcdhKey")
+        try {
+            ks.getKeyInfo("cachedSignKey")
+            Assert.fail("Expected IllegalArgumentException after deleteKey")
+        } catch (_: IllegalArgumentException) {
+            // Expected
+        }
+    }
 }

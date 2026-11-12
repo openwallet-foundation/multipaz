@@ -116,6 +116,10 @@ suspend fun mdocPresentmentObtainConsent(
     if (selection == null) {
         throw PresentmentCanceledException("User canceled consent prompt")
     }
+    selection.resolvedSource = source
+    selection.resolvedDeviceRequest = deviceRequest
+    selection.resolvedRequester = requester
+    selection.resolvedTrustedRequesterIdentity = trustedRequesterIdentity
     return selection
 }
 
@@ -268,15 +272,59 @@ suspend fun mdocPresentmentGenerateResponse(
     creationTime: Instant = Clock.System.now(),
     faceMatchedCredentials: List<Credential> = emptyList(),
 ): Iso18013Response {
-    val genStartTime = Clock.System.now()
-    val requester = Requester(
-        requesterIdentities = deviceRequest.getRequesterIdentities(),
-        appId = requesterAppId,
-        origin = requesterOrigin,
+    val (response, _) = mdocPresentmentGenerateResponseInternal(
+        selection = selection,
+        deviceRequest = deviceRequest,
+        eReaderKey = eReaderKey,
+        sessionTranscript = sessionTranscript,
+        source = source,
+        requesterAppId = requesterAppId,
+        requesterOrigin = requesterOrigin,
+        creationTime = creationTime,
+        faceMatchedCredentials = faceMatchedCredentials,
+        deferStateCommit = false,
     )
-    val trustedRequesterIdentity = source.resolveTrust(requester)
+    return response
+}
 
-    val credentialsPresented = mutableSetOf<SecureAreaBoundCredential>()
+internal suspend fun mdocPresentmentGenerateResponseInternal(
+    selection: PresentmentSelection,
+    deviceRequest: DeviceRequest,
+    eReaderKey: EcPublicKey?,
+    sessionTranscript: DataItem,
+    source: PresentmentSource,
+    requesterAppId: String? = null,
+    requesterOrigin: String? = null,
+    creationTime: Instant = Clock.System.now(),
+    faceMatchedCredentials: List<Credential> = emptyList(),
+    deferStateCommit: Boolean = false,
+): Pair<Iso18013Response, suspend () -> Unit> {
+    val genStartTime = Clock.System.now()
+    val cachedRequester = selection.resolvedRequester
+    val canReuseSameDeviceRequest = selection.resolvedSource === source &&
+        selection.resolvedDeviceRequest === deviceRequest &&
+        cachedRequester != null &&
+        cachedRequester.appId == requesterAppId &&
+        cachedRequester.origin == requesterOrigin
+    val requester = if (canReuseSameDeviceRequest) {
+        cachedRequester
+    } else {
+        Requester(
+            requesterIdentities = deviceRequest.getRequesterIdentities(),
+            appId = requesterAppId,
+            origin = requesterOrigin,
+        )
+    }
+    val trustedRequesterIdentity = if (
+        canReuseSameDeviceRequest ||
+        (selection.resolvedSource === source && cachedRequester == requester)
+    ) {
+        selection.resolvedTrustedRequesterIdentity
+    } else {
+        source.resolveTrust(requester)
+    }
+
+    val credentialsPresented = mutableListOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
 
     val deviceResponse = try {
@@ -457,7 +505,9 @@ suspend fun mdocPresentmentGenerateResponse(
                 else -> throw IllegalStateException("No support for presenting credential of type ${match.credential.credentialType}")
             }
 
-            match.credential.increaseUsageCount()
+            if (!deferStateCommit) {
+                match.credential.increaseUsageCount()
+            }
             credentialsPresented.add(match.credential)
         }
 
@@ -470,7 +520,19 @@ suspend fun mdocPresentmentGenerateResponse(
     } catch (e: KeyLockedException) {
         throw AuthenticationFailedException("User authentication failed", e)
     }
-    if (selection.matches.isNotEmpty()) {
+
+    val commitState: suspend () -> Unit = {
+        for (credential in credentialsPresented) {
+            credential.increaseUsageCount()
+        }
+        if (selection.matches.isNotEmpty()) {
+            source.requesterHistory?.recordShare(
+                requester = requester,
+                trustedRequesterIdentity = trustedRequesterIdentity,
+            )
+        }
+    }
+    if (!deferStateCommit && selection.matches.isNotEmpty()) {
         source.requesterHistory?.recordShare(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
@@ -479,11 +541,12 @@ suspend fun mdocPresentmentGenerateResponse(
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
     }
-    return Iso18013Response(
+    val response = Iso18013Response(
         deviceResponse = deviceResponse,
         eventData = eventData,
         durationResponseGeneration = Clock.System.now() - genStartTime,
     )
+    return Pair(response, commitState)
 }
 
 /**

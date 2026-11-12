@@ -1,6 +1,10 @@
 package org.multipaz.presentment
 
+import kotlin.concurrent.Volatile
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.KeyUnlockData
 
 /**
@@ -19,6 +23,17 @@ data class PresentmentSelection(
     val matches: List<PresentmentCredentialMatch>,
     val preloadedKeyUnlockData: List<KeyUnlockData> = emptyList(),
 ) {
+    @Volatile
+    internal var resolvedSource: PresentmentSource? = null
+
+    @Volatile
+    internal var resolvedDeviceRequest: DeviceRequest? = null
+
+    @Volatile
+    internal var resolvedRequester: Requester? = null
+
+    @Volatile
+    internal var resolvedTrustedRequesterIdentity: TrustedRequesterIdentity? = null
 
     /**
      * Returns the highest sensitivity level of the claims in all the credentials in this object.

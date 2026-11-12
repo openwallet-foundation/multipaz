@@ -87,6 +87,7 @@ class DocumentStore private constructor(
     // Cache is protected by the lock. Once the document is loaded it is never evicted.
     private val lock = Mutex()
     private val documentCache = mutableMapOf<String, Document>()
+    private var cachedDocumentIds: MutableList<String>? = null
 
     init {
         check(!documentTableSpec.supportExpiration)
@@ -173,15 +174,19 @@ class DocumentStore private constructor(
             metadata = metadata?.serialize(),
             openID4VCIClaimDescriptions = openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor()
         )
-        // NB: insertion in the storage is when the document is actually added, it may be
-        // inserted in the cache before we manage to call lock.withLock below
         val documentIdentifier = table.insert(key = null, ByteString(data.toCbor()))
-        emitOnDocumentAdded(documentIdentifier)
         val document = lock.withLock {
+            cachedDocumentIds?.let { ids ->
+                val insertIndex = ids.binarySearch(documentIdentifier)
+                if (insertIndex < 0) {
+                    ids.add(-insertIndex - 1, documentIdentifier)
+                }
+            }
             documentCache.getOrPut(documentIdentifier) {
                 Document(this, documentIdentifier, data, metadata)
             }
         }
+        emitOnDocumentAdded(documentIdentifier)
         return document
     }
 
@@ -214,8 +219,16 @@ class DocumentStore private constructor(
      * @return list of all the document identifiers in the store.
      */
     suspend fun listDocumentIds(): List<String> {
-        // right now lock is not required
-        return storage.getTable(documentTableSpec).enumerate()
+        return lock.withLock {
+            val existing = cachedDocumentIds
+            if (existing != null) {
+                existing.toList()
+            } else {
+                val enumerated = storage.getTable(documentTableSpec).enumerate()
+                cachedDocumentIds = enumerated.toMutableList()
+                enumerated
+            }
+        }
     }
 
     /**
@@ -225,8 +238,7 @@ class DocumentStore private constructor(
      * @return list of all the documents in the store.
      */
     suspend fun listDocuments(sort: Boolean = true): List<Document> {
-        // right now lock is not required
-        val list = storage.getTable(documentTableSpec).enumerate().mapNotNull {
+        val list = listDocumentIds().mapNotNull {
             lookupDocument(it)
         }
         return if (sort) {
@@ -248,6 +260,7 @@ class DocumentStore private constructor(
             lock.withLock {
                 document.deleteDocument()
                 documentCache.remove(identifier)
+                cachedDocumentIds?.remove(identifier)
             }
             document.authorizationData?.let {
                 Provisioning.cleanupAuthorizationData(
@@ -281,6 +294,10 @@ class DocumentStore private constructor(
 
     internal suspend fun emitOnDocumentChanged(documentId: String) {
         _eventFlow.emit(DocumentUpdated(documentId))
+    }
+
+    internal suspend fun emitOnCredentialUsageUpdated(documentId: String, credentialId: String) {
+        _eventFlow.emit(DocumentCredentialUsageUpdated(documentId, credentialId))
     }
 
     internal suspend fun getDocumentTable(): StorageTable {

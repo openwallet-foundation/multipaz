@@ -277,7 +277,10 @@ class ViewModel {
                 print("Error registering with DigitalCredentials API: \(error)")
             }
             Task {
-                for await _ in documentStore.eventFlow {
+                for await event in documentStore.eventFlow {
+                    if event is DocumentCredentialUsageUpdated {
+                        continue
+                    }
                     do {
                         try await dcApi.register(
                             documentStore: documentStore,

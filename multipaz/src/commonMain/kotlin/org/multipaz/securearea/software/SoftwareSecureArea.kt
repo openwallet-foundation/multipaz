@@ -17,6 +17,8 @@ package org.multipaz.securearea.software
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
@@ -88,12 +90,16 @@ class SoftwareSecureArea private constructor(
     override val supportedAlgorithms: List<Algorithm>
         get() = supportedAlgorithms_
 
+    private val keyInfoCacheLock = Mutex()
+    private val keyInfoCache = mutableMapOf<String, SoftwareKeyInfo>()
+
     override suspend fun createKey(
         alias: String?,
         createKeySettings: org.multipaz.securearea.CreateKeySettings
     ): SoftwareKeyInfo {
         if (alias != null) {
             // If the key with the given alias exists, it is silently overwritten.
+            keyInfoCacheLock.withLock { keyInfoCache.remove(alias) }
             storageTable.delete(alias)
         }
 
@@ -200,6 +206,7 @@ class SoftwareSecureArea private constructor(
     }
 
     override suspend fun deleteKey(alias: String) {
+        keyInfoCacheLock.withLock { keyInfoCache.remove(alias) }
         storageTable.delete(alias)
     }
 
@@ -380,11 +387,14 @@ class SoftwareSecureArea private constructor(
     }
 
     override suspend fun getKeyInfo(alias: String): SoftwareKeyInfo {
+        keyInfoCacheLock.withLock {
+            keyInfoCache[alias]?.let { return it }
+        }
         val data = storageTable.get(alias)
             ?: throw IllegalArgumentException("No key with the given alias '$alias'")
         val keyMetadata = KeyMetadata.fromCbor(data.toByteArray())
         val publicKey = PublicKey.fromDataItem(Cbor.decode(keyMetadata.encodedPublicKey.toByteArray()))
-        return SoftwareKeyInfo(
+        val keyInfo = SoftwareKeyInfo(
             alias,
             publicKey,
             KeyAttestation(publicKey, null),
@@ -394,6 +404,10 @@ class SoftwareSecureArea private constructor(
             keyMetadata.userAuthenticationRequired ?: false,
             keyMetadata.userAuthenticationTypes ?: emptySet()
         )
+        keyInfoCacheLock.withLock {
+            keyInfoCache[alias] = keyInfo
+        }
+        return keyInfo
     }
 
     override suspend fun getKeyInvalidated(alias: String): Boolean {

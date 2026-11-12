@@ -3,6 +3,8 @@ package org.multipaz.storage.android
 import android.content.ContentValues
 import android.database.AbstractWindowedCursor
 import android.database.CursorWindow
+import android.database.sqlite.SQLiteBlobTooBigException
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.NoRecordStorageException
@@ -33,35 +35,44 @@ internal class AndroidStorageTable(
         }
     }
 
+    private fun querySingleBlob(
+        database: SQLiteDatabase,
+        key: String,
+        partitionId: String?,
+        useLargeWindow: Boolean,
+    ): ByteString? {
+        val cursor = database.query(
+            sql.tableName,
+            arrayOf("data"),
+            sql.conditionWithExpiration(storage.clock.now().epochSeconds),
+            whereArgs(key, partitionId),
+            null,
+            null,
+            null
+        )
+        if (useLargeWindow && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // The default window size of 2MB is not the limit we want to be constrained by.
+            (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
+                "Larger Window",
+                CURSOR_WINDOW_SIZE
+            )
+        }
+        return cursor.use {
+            if (it.moveToFirst()) {
+                ByteString(it.getBlob(0))
+            } else {
+                null
+            }
+        }
+    }
+
     override suspend fun get(key: String, partitionId: String?): ByteString? {
         checkPartition(partitionId)
         return storage.withDatabase { database ->
-            val cursor = database.query(
-                sql.tableName,
-                arrayOf("data"),
-                sql.conditionWithExpiration(storage.clock.now().epochSeconds),
-                whereArgs(key, partitionId),
-                null,
-                null,
-                null
-            )
-            // TODO: Older OS versions don't support setting the cursor window size.
-            //  What should we do with older OS versions?
-            //  Also note that a large window size may lead to longer delays when loading from the
-            //  database.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // The default window size of 2MB which is not the limit we want to be
-                // constrained by.
-                (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
-                    "Larger Window", CURSOR_WINDOW_SIZE)
-            }
-            cursor.use {
-                if (it.moveToFirst()) {
-                    val bytes = it.getBlob(0)
-                    ByteString(bytes)
-                } else {
-                    null
-                }
+            try {
+                querySingleBlob(database, key, partitionId, useLargeWindow = false)
+            } catch (_: SQLiteBlobTooBigException) {
+                querySingleBlob(database, key, partitionId, useLargeWindow = true)
             }
         }
     }
@@ -204,6 +215,38 @@ internal class AndroidStorageTable(
         }
     }
 
+    private fun queryMultipleBlobs(
+        database: SQLiteDatabase,
+        partitionId: String?,
+        afterKey: String?,
+        limit: Int,
+        useLargeWindow: Boolean,
+    ): List<Pair<String, ByteString>> {
+        val cursor = database.query(
+            sql.tableName,
+            arrayOf("id", "data"),
+            sql.enumerateConditionWithExpiration(storage.clock.now().epochSeconds),
+            whereArgs(afterKey ?: "", partitionId),
+            null,
+            null,
+            "id",
+            if (limit < Int.MAX_VALUE) "0, $limit" else null
+        )
+        if (useLargeWindow && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
+                "Larger Window",
+                CURSOR_WINDOW_SIZE
+            )
+        }
+        return cursor.use {
+            val list = mutableListOf<Pair<String, ByteString>>()
+            while (it.moveToNext()) {
+                list.add(Pair(it.getString(0), ByteString(it.getBlob(1))))
+            }
+            list
+        }
+    }
+
     override suspend fun enumerateWithData(
         partitionId: String?,
         afterKey: String?,
@@ -215,26 +258,10 @@ internal class AndroidStorageTable(
             return listOf()
         }
         return storage.withDatabase { database ->
-            val cursor = database.query(
-                sql.tableName,
-                arrayOf("id", "data"),
-                sql.enumerateConditionWithExpiration(storage.clock.now().epochSeconds),
-                whereArgs(afterKey ?: "", partitionId),
-                null,
-                null,
-                "id",
-                if (limit < Int.MAX_VALUE) "0, $limit" else null
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
-                    "Larger Window", CURSOR_WINDOW_SIZE)
-            }
-            cursor.use {
-                val list = mutableListOf<Pair<String, ByteString>>()
-                while (it.moveToNext()) {
-                    list.add(Pair(it.getString(0), ByteString(it.getBlob(1))))
-                }
-                list
+            try {
+                queryMultipleBlobs(database, partitionId, afterKey, limit, useLargeWindow = false)
+            } catch (_: SQLiteBlobTooBigException) {
+                queryMultipleBlobs(database, partitionId, afterKey, limit, useLargeWindow = true)
             }
         }
     }

@@ -11,6 +11,7 @@ import android.service.quickaccesswallet.QuickAccessWalletService
 import android.view.Window
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -54,10 +55,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -83,13 +85,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.function.Consumer
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.CardBadge
 import org.multipaz.compose.cards.CardBadges
+import org.multipaz.compose.cards.CardInfo
 import org.multipaz.compose.cards.CardView
 import org.multipaz.compose.cards.VerticalCardList
+import org.multipaz.compose.decodeImage
 import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PresentmentActivity.Companion.getPendingIntent
@@ -350,36 +357,86 @@ fun PresentmentActivityContent(
     val currentBranding = Branding.Current.collectAsState().value
 
     var startFadeIn by remember { mutableStateOf(false) }
-    val fadeInAlpha by animateFloatAsState(
+    val fadeInAlphaState = animateFloatAsState(
         targetValue = if (startFadeIn) 1.0f else 0.0f,
         animationSpec = tween(
             durationMillis = 300
         ),
-        finishedListener = { onFadedIn() }
+        finishedListener = {
+            if (startFadeIn) {
+                onFadedIn()
+            }
+        }
     )
     var startFadeOut by remember { mutableStateOf(false) }
-    val fadeOutAlpha by animateFloatAsState(
+    val fadeOutAlphaState = animateFloatAsState(
         targetValue = if (startFadeOut) 0.0f else 1.0f,
         animationSpec = tween(
             durationMillis = 300
         ),
-        finishedListener = { onFinish(switchToAppOnFinishPendingIntent) }
+        finishedListener = {
+            if (startFadeOut) {
+                onFinish(switchToAppOnFinishPendingIntent)
+            }
+        }
     )
-    var blurAvailable by remember { mutableStateOf(true) }
+    var blurAvailable by remember(window) {
+        mutableStateOf(
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                Api31WindowBlurHelper.isCrossWindowBlurEnabled(window)
+        )
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        DisposableEffect(window) {
+            val listener = Consumer<Boolean> { enabled ->
+                blurAvailable = enabled
+                if (!enabled) {
+                    Api31WindowBlurHelper.setBackgroundBlurRadius(window, 0)
+                }
+            }
+            Api31WindowBlurHelper.addCrossWindowBlurEnabledListener(window, listener)
+            onDispose {
+                Api31WindowBlurHelper.removeCrossWindowBlurEnabledListener(window, listener)
+                Api31WindowBlurHelper.setBackgroundBlurRadius(window, 0)
+            }
+        }
+        LaunchedEffect(window, blurAvailable) {
+            if (!blurAvailable) {
+                Api31WindowBlurHelper.setBackgroundBlurRadius(window, 0)
+                return@LaunchedEffect
+            }
+            snapshotFlow {
+                (80.0 * fadeOutAlphaState.value * fadeInAlphaState.value).roundToInt()
+            }
+                .distinctUntilChanged()
+                .collect { radius ->
+                    Api31WindowBlurHelper.setBackgroundBlurRadius(window, radius)
+                }
+        }
+    }
 
     // We do the initializations that require suspend functions here and fade in when done...
     LaunchedEffect(Unit) {
-        presentmentModel = getPresentmentModel()
-        documentModel = DocumentModel.create(
-            documentStore = presentmentModel!!.source.documentStore,
-            documentTypeRepository = presentmentModel!!.source.documentTypeRepository,
-            badgeFunction = { document -> presentmentModel!!.source.getBadges(document) }
-        )
+        val model = getPresentmentModel()
+        presentmentModel = model
+        if (model.showDocumentChooser != null) {
+            documentModel = DocumentModel.create(
+                documentStore = model.source.documentStore,
+                documentTypeRepository = model.source.documentTypeRepository,
+                badgeFunction = { document -> model.source.getBadges(document) }
+            )
+        }
         startFadeIn = true
+    }
+    DisposableEffect(documentModel) {
+        val currentDocumentModel = documentModel
+        onDispose {
+            currentDocumentModel?.close()
+        }
     }
     if (!startFadeIn) {
         Scaffold(
-            modifier = Modifier.alpha(0f),
+            modifier = Modifier.graphicsLayer { alpha = 0f },
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {}
         }
@@ -389,12 +446,6 @@ fun PresentmentActivityContent(
     val state = presentmentModel!!.state.collectAsState().value
     val numRequestsServed = presentmentModel!!.numRequestsServed.collectAsState().value
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        window.setBackgroundBlurRadius((80.0 * fadeOutAlpha * fadeInAlpha).roundToInt())
-    } else {
-        blurAvailable = false
-    }
-
     when (state) {
         is PresentmentModel.State.Reset -> {}
         is PresentmentModel.State.Connecting -> {}
@@ -402,9 +453,13 @@ fun PresentmentActivityContent(
         is PresentmentModel.State.WaitingForUserInput -> {}
         is PresentmentModel.State.Sending -> {}
         is PresentmentModel.State.Completed -> {
-            LaunchedEffect(Unit) {
+            val canceledSilently = state.error is PresentmentCanceledException &&
+                state.error?.message == null
+            LaunchedEffect(canceledSilently) {
                 if (!startFadeOut) {
-                    delay(2.seconds)
+                    if (!canceledSilently) {
+                        delay(2.seconds)
+                    }
                     startFadeOut = true
                 }
             }
@@ -421,8 +476,10 @@ fun PresentmentActivityContent(
     // If blur is available, also make this slightly transparent
     val backgroundAlpha = if (blurAvailable) 0.8f else 1.0f
     Scaffold(
-        modifier = Modifier.alpha(fadeOutAlpha * fadeInAlpha),
-        containerColor = backgroundColor.copy(alpha = backgroundAlpha * fadeOutAlpha * fadeInAlpha)
+        modifier = Modifier.graphicsLayer {
+            alpha = fadeOutAlphaState.value * fadeInAlphaState.value
+        },
+        containerColor = backgroundColor.copy(alpha = backgroundAlpha)
     ) { innerPadding ->
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurface
@@ -507,15 +564,11 @@ fun PresentmentActivityContent(
                             }
                         )
                     } else {
-                        val docsToShow = presentmentModel!!.documentsSelected.collectAsState().value
-                        val docIdsToShow = if (docsToShow.isNotEmpty()) {
-                            docsToShow.map { it.identifier }.distinct()
-                        } else {
-                            listOfNotNull(selectedDocIdFromCardChooser.value)
-                        }
                         ShowCard(
-                            documentModel = documentModel!!,
-                            documentIds = docIdsToShow,
+                            source = presentmentModel!!.source,
+                            selectedDocuments = docsToShow,
+                            fallbackDocumentId = selectedDocIdFromCardChooser.value,
+                            documentModel = documentModel,
                             paddingTop = innerPadding.calculateTopPadding() + 16.dp,
                             contentBelow = {
                                 val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
@@ -548,8 +601,6 @@ fun PresentmentActivityContent(
                                                             ShowFailure(stringResource(
                                                                 Res.string.presentment_activity_canceled
                                                             ))
-                                                        } else {
-                                                            startFadeOut = true
                                                         }
                                                     }
                                                     is PresentmentCannotSatisfyRequestException -> {
@@ -594,29 +645,89 @@ fun PresentmentActivityContent(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.S)
+private object Api31WindowBlurHelper {
+    fun isCrossWindowBlurEnabled(window: Window): Boolean =
+        window.windowManager.isCrossWindowBlurEnabled
+
+    fun addCrossWindowBlurEnabledListener(window: Window, listener: Consumer<Boolean>) {
+        window.windowManager.addCrossWindowBlurEnabledListener(listener)
+    }
+
+    fun removeCrossWindowBlurEnabledListener(window: Window, listener: Consumer<Boolean>) {
+        window.windowManager.removeCrossWindowBlurEnabledListener(listener)
+    }
+
+    fun setBackgroundBlurRadius(window: Window, blurRadius: Int) {
+        window.setBackgroundBlurRadius(blurRadius)
+    }
+}
+
 private const val STACKED_CARD_SCALE_PERCENT = 85
+
+private data class PresentmentCardInfo(
+    override val identifier: String,
+    override val cardArt: ImageBitmap,
+    override val badges: List<CardBadge>,
+) : CardInfo
 
 @Composable
 private fun ShowCard(
-    documentModel: DocumentModel,
-    documentIds: List<String>,
+    source: PresentmentSource,
+    selectedDocuments: List<Document>,
+    fallbackDocumentId: String?,
+    documentModel: DocumentModel?,
     paddingTop: Dp = 16.dp,
     contentBelow: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
+    val currentBranding = Branding.Current.collectAsState().value
 
-    val docInfos by documentModel.documentInfos.collectAsState()
-    val matchingDocInfos = remember(docInfos, documentIds) {
-        documentIds.mapNotNull { id -> docInfos.find { it.document.identifier == id } }.distinctBy { it.document.identifier }
+    val chooserDocInfos = documentModel?.documentInfos?.collectAsState()?.value
+    val cardArtCache = remember { mutableMapOf<String, ImageBitmap>() }
+    var directCardInfos by remember { mutableStateOf<List<CardInfo>>(emptyList()) }
+
+    val matchingCardInfos: List<CardInfo> = if (chooserDocInfos != null) {
+        val docIds = if (selectedDocuments.isNotEmpty()) {
+            selectedDocuments.map { it.identifier }.distinct()
+        } else {
+            listOfNotNull(fallbackDocumentId)
+        }
+        remember(chooserDocInfos, docIds) {
+            docIds.mapNotNull { id -> chooserDocInfos.find { it.document.identifier == id } }
+                .distinctBy { it.identifier }
+        }
+    } else {
+        LaunchedEffect(selectedDocuments, fallbackDocumentId, source, currentBranding) {
+            val effectiveDocs = if (selectedDocuments.isNotEmpty()) {
+                selectedDocuments.distinctBy { it.identifier }
+            } else if (fallbackDocumentId != null) {
+                listOfNotNull(source.documentStore.lookupDocument(fallbackDocumentId))
+            } else {
+                emptyList()
+            }
+            directCardInfos = effectiveDocs.map { doc ->
+                val art = cardArtCache.getOrPut(doc.identifier) {
+                    doc.cardArt?.let { decodeImage(it.toByteArray()) }
+                        ?: currentBranding.renderFallbackCardArt(doc)
+                }
+                val badges = source.getBadges(doc).map { CardBadge.fromDocumentBadge(it) }
+                PresentmentCardInfo(
+                    identifier = doc.identifier,
+                    cardArt = art,
+                    badges = badges
+                )
+            }
+        }
+        directCardInfos
     }
 
-    if (matchingDocInfos.isNotEmpty()) {
+    if (matchingCardInfos.isNotEmpty()) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
-            val density = LocalDensity.current
             val maxWidthDp = maxWidth
             var cardWidthDp = maxWidthDp - 32.dp
             var cardHeightDp = cardWidthDp / 1.586f
@@ -636,27 +747,27 @@ private fun ShowCard(
                         .height(cardHeightDp),
                     contentAlignment = Alignment.TopStart
                 ) {
-                    if (matchingDocInfos.size == 1) {
-                        val documentInfo = matchingDocInfos.first()
+                    if (matchingCardInfos.size == 1) {
+                        val cardInfo = matchingCardInfos.first()
                         CardView(
-                            cardInfo = documentInfo,
+                            cardInfo = cardInfo,
                             modifier = Modifier.fillMaxSize(),
                             shape = RoundedCornerShape(24.dp),
                             elevation = 12.dp
                         )
                     } else {
-                        val cardCount = matchingDocInfos.size
+                        val cardCount = matchingCardInfos.size
                         val scale = STACKED_CARD_SCALE_PERCENT / 100f
                         val cardW = cardWidthDp * scale
                         val cardH = cardHeightDp * scale
                         val maxXOffset = cardWidthDp * (1.0f - scale)
                         val maxYOffset = cardHeightDp * (1.0f - scale)
 
-                        matchingDocInfos.forEachIndexed { index, documentInfo ->
+                        matchingCardInfos.forEachIndexed { index, cardInfo ->
                             val offsetX = maxXOffset * (index.toFloat() / (cardCount - 1))
                             val offsetY = maxYOffset * (index.toFloat() / (cardCount - 1))
                             CardView(
-                                cardInfo = documentInfo,
+                                cardInfo = cardInfo,
                                 modifier = Modifier
                                     .offset(x = offsetX, y = offsetY)
                                     .width(cardW)

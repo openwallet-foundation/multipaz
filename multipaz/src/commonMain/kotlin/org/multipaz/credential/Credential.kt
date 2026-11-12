@@ -297,7 +297,7 @@ abstract class Credential {
             usageCount += 1
             save()
         }
-        document.store.emitOnDocumentChanged(document.identifier)
+        document.store.emitOnCredentialUsageUpdated(document.identifier, identifier)
     }
 
     /**

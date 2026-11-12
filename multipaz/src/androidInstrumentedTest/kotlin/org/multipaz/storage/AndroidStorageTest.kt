@@ -444,6 +444,7 @@ class AndroidStorageTest {
             val data = ByteString(Random.nextBytes(LARGE_DATA_SIZE))
             val key = table.insert(key = null, data = data)
             assertEquals(data, table.get(key))
+            assertEquals(listOf(key to data), table.enumerateWithData())
         }
     }
 
