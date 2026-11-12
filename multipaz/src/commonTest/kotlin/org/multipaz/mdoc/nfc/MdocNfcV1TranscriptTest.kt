@@ -1593,55 +1593,23 @@ class MdocNfcV1TranscriptTest {
             #       Status Code: 0
             R-APDU: d102015465009000
 
-            # The mdoc reader writes the NDEF Handover Request message (NLEN=168).
-            # NDEF Message (4 record(s), 168 bytes):
-            #   Record #1:
-            #     TNF: WELL_KNOWN
-            #     Type: "Hr" (Hex: 4872)
-            #     Payload Size: 21 bytes
-            #     Handover Request:
-            #       Version: 21
-            #       Embedded NDEF Message:
-            #         Record #1:
-            #           TNF: WELL_KNOWN
-            #           Type: "ac" (Hex: 6163)
-            #           Payload Size: 4 bytes
-            #           Alternative Carrier:
-            #             Carrier Power State: 1
-            #             Carrier Data Reference: "0"
-            #             Auxiliary Data References: []
-            #         Record #2:
-            #           TNF: WELL_KNOWN
-            #           Type: "ac" (Hex: 6163)
-            #           Payload Size: 6 bytes
-            #           Alternative Carrier:
-            #             Carrier Power State: 1
-            #             Carrier Data Reference: "nfc"
-            #             Auxiliary Data References: []
-            #   Record #2:
-            #     TNF: EXTERNAL_TYPE
-            #     Type: "iso.org:18013:readerengagement" (Hex: 69736f2e6f72673a31383031333a726561646572656e676167656d656e74)
-            #     ID: "mdocreader" (Hex: 6d646f63726561646572)
-            #     Payload Size: 6 bytes
-            #     ReaderEngagement CBOR:
-            #       {
-            #         0: "1.0"
-            #       }
-            #   Record #3:
-            #     TNF: MIME_MEDIA
-            #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
-            #     ID: "0" (Hex: 30)
-            #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6
-            #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
-            #   Record #4:
-            #     TNF: EXTERNAL_TYPE
-            #     Type: "iso.org:18013:nfc" (Hex: 69736f2e6f72673a31383031333a6e6663)
-            #     ID: "nfc" (Hex: 6e6663)
-            #     Payload Size: 10 bytes
-            #     Carrier Configuration: nfc:cmd_max_length=65535:resp_max_length=65536
-            #     Payload Hex: 01 03 01 ff ff 04 02 01 00 00
-            C-APDU: 00d60000aa00a8910215487215910204616301013000510206616301036e6663001c1e060a69736f2e6f72673a31383031333a726561646572656e676167656d656e746d646f63726561646572a10063312e301a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c001107e6733397764c6b89ce4823a1010000005c110a0369736f2e6f72673a31383031333a6e66636e6663010301ffff0402010000
+            # The mdoc reader updates binary data at offset 0 (2 bytes).
+            C-APDU: 00d60000020000
+            # The mdoc acknowledges the NDEF write.
+            R-APDU: 9000
+
+            # The mdoc reader updates binary data at offset 2 (128 bytes).
+            C-APDU: 00d6000280910215487215910204616301013000510206616301036e6663001c1e060a69736f2e6f72673a31383031333a726561646572656e676167656d656e746d646f63726561646572a10063312e301a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c001107e6733397764c6b89ce48
+            # The mdoc acknowledges the NDEF write.
+            R-APDU: 9000
+
+            # The mdoc reader updates binary data at offset 130 (40 bytes).
+            C-APDU: 00d600822823a1010000005c110a0369736f2e6f72673a31383031333a6e66636e6663010301ffff0402010000
+            # The mdoc acknowledges the NDEF write.
+            R-APDU: 9000
+
+            # The mdoc reader updates binary data at offset 0 (2 bytes).
+            C-APDU: 00d600000200a8
             # The mdoc acknowledges the NDEF write.
             R-APDU: 9000
 

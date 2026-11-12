@@ -26,6 +26,21 @@ abstract class NfcIsoTag {
     abstract val maxTransceiveLength: Int
 
     /**
+     * Maximum payload length to use in an ISO/IEC 7816-4 `UPDATE BINARY` command while writing
+     * an NDEF message.
+     *
+     * Some contactless readers - for example the ACS ACR122U - are not reliable when receiving
+     * a large `UPDATE BINARY` command, for example the 176-byte message of NFC Forum Negotiated
+     * Handover. Since ISO 7816-4 allows any payload size up to 255 bytes and the NDEF write
+     * procedure supports writing in chunks, a conservative default is used for all readers;
+     * the cost is at most one additional round-trip for larger messages. Must be in the range
+     * 2..255 since the NDEF write procedure needs to write a two-byte length and [ndefTransact]
+     * additionally caps this by [maxTransceiveLength] minus the five-byte APDU header.
+     */
+    internal open val maxNdefUpdateBinaryPayloadLength: Int
+        get() = 128
+
+    /**
      * Sends an APDU to the tag and waits for a response APDU.
      *
      * @param command the [CommandApdu] to send.
@@ -197,6 +212,16 @@ abstract class NfcIsoTag {
     ): NdefMessage {
         val encodedNdefMessage = ndefMessage.encode()
         Logger.dHex(TAG, "ndefTransact: Sending NDEF message", encodedNdefMessage)
+        val configuredLimit = maxNdefUpdateBinaryPayloadLength
+        require(configuredLimit in 2..255) {
+            "maxNdefUpdateBinaryPayloadLength must be in 2..255, not $configuredLimit"
+        }
+        // An UPDATE BINARY command with a short Lc field has a five byte header, so the payload
+        // must additionally fit within [maxTransceiveLength].
+        val maxUpdateBinaryPayloadLength = configuredLimit.coerceAtMost(maxTransceiveLength - 5)
+        require(maxUpdateBinaryPayloadLength >= 2) {
+            "maxTransceiveLength $maxTransceiveLength is too small for NDEF UPDATE BINARY commands"
+        }
 
         // See Type 4 Tag Technical Specification Version 1.2 section 7.5.5 NDEF Write Procedure
         // for how this is done.
@@ -212,7 +237,9 @@ abstract class NfcIsoTag {
         //   UPDATE_BINARY Command.
         //
         // For debugging, this optimization can be turned off by setting this to |true|:
-        if (!NDEF_TRANSACT_BYPASS_UPDATE_BINARY_OPTIMIZATION && encodedNdefMessage.size < 256 - 2) {
+        if (!NDEF_TRANSACT_BYPASS_UPDATE_BINARY_OPTIMIZATION &&
+            encodedNdefMessage.size <= maxUpdateBinaryPayloadLength - 2
+        ) {
             updateBinary(
                 0, buildByteString { appendUInt16(encodedNdefMessage.size).append(encodedNdefMessage) }.toByteArray()
             )
@@ -221,11 +248,11 @@ abstract class NfcIsoTag {
             updateBinary(0, buildByteString { appendUInt16(0) }.toByteArray())
 
             // Subsequent commands are UPDATE_BINARY with payload, chopped into bits no longer
-            // than 255 bytes each
+            // than maxUpdateBinaryPayloadLength bytes each
             var offset = 0
             var remaining = encodedNdefMessage.size
             while (remaining > 0) {
-                val numBytesToWrite = remaining.coerceAtMost(255)
+                val numBytesToWrite = remaining.coerceAtMost(maxUpdateBinaryPayloadLength)
                 val bytesToWrite = encodedNdefMessage.copyOfRange(offset, offset + numBytesToWrite)
                 updateBinary(offset + 2, bytesToWrite)
                 remaining -= numBytesToWrite

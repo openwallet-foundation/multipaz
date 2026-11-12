@@ -395,51 +395,60 @@ internal class CcidDriver(
     override fun transceive(commandApdu: ByteArray): ByteArray {
         if (!isConnected) throw IOException("Driver is not connected.")
 
-        if (!isCardPoweredOn) {
-            val powerOnCommand = powerOn()
-            val powerOnResponseBuffer = sendAndReceive(powerOnCommand)
-            val powerOnResponse = parseDataBlockResponse(powerOnResponseBuffer)
-            // The ATR is returned on power on. A valid ATR is typically longer than 2 bytes.
-            if (powerOnResponse.size <= 2) {
-                throw CcidException("Failed to power on card. Invalid ATR received.")
-            }
-            isCardPoweredOn = true
-        }
-
-        val maxCcidLen = maxCcidDataLength
-        val response: ByteArray = if (commandApdu.size <= maxCcidLen) {
-            val xfrBlock = createXfrBlock(commandApdu, wLevelParameter = 0)
-            val responseBuffer = sendAndReceive(xfrBlock)
-            parseDataBlockResponse(responseBuffer)
-        } else {
-            // Send APDU using CCID block chaining
-            Logger.i(TAG, "Sending APDU of ${commandApdu.size} bytes using CCID block chaining in chunks of $maxCcidLen")
-            val offsets = 0 until commandApdu.size step maxCcidLen
-            var lastResponse = ByteArray(0)
-            for (offset in offsets) {
-                val isFirst = (offset == 0)
-                val isLast = (offset + maxCcidLen >= commandApdu.size)
-                val chunkSize = min(maxCcidLen, commandApdu.size - offset)
-                val chunkBytes = commandApdu.copyOfRange(offset, offset + chunkSize)
-                val wLevel: Short = when {
-                    isFirst -> 1 // 0x0001: First block of command APDU
-                    !isLast -> 3 // 0x0003: Intermediate block (another block is to follow)
-                    else -> 2    // 0x0002: Last block (continues command APDU and ends command)
+        try {
+            if (!isCardPoweredOn) {
+                val powerOnCommand = powerOn()
+                val powerOnResponseBuffer = sendAndReceive(powerOnCommand)
+                val powerOnResponse = parseDataBlockResponse(powerOnResponseBuffer)
+                // The ATR is returned on power on. A valid ATR is typically longer than 2 bytes.
+                if (powerOnResponse.size <= 2) {
+                    throw CcidException("Failed to power on card. Invalid ATR received.")
                 }
-                val xfrBlock = createXfrBlock(chunkBytes, wLevelParameter = wLevel)
-                val responseBuffer = sendAndReceive(xfrBlock)
-                lastResponse = parseDataBlockResponse(responseBuffer)
+                isCardPoweredOn = true
             }
-            lastResponse
-        }
 
-        if (response.size < 2) {
-            // If response is invalid, the card might have been removed.
+            val maxCcidLen = maxCcidDataLength
+            val response: ByteArray = if (commandApdu.size <= maxCcidLen) {
+                val xfrBlock = createXfrBlock(commandApdu, wLevelParameter = 0)
+                val responseBuffer = sendAndReceive(xfrBlock)
+                parseDataBlockResponse(responseBuffer)
+            } else {
+                // Send APDU using CCID block chaining
+                Logger.i(TAG, "Sending APDU of ${commandApdu.size} bytes using CCID block chaining in chunks of $maxCcidLen")
+                val offsets = 0 until commandApdu.size step maxCcidLen
+                var lastResponse = ByteArray(0)
+                for (offset in offsets) {
+                    val isFirst = (offset == 0)
+                    val isLast = (offset + maxCcidLen >= commandApdu.size)
+                    val chunkSize = min(maxCcidLen, commandApdu.size - offset)
+                    val chunkBytes = commandApdu.copyOfRange(offset, offset + chunkSize)
+                    val wLevel: Short = when {
+                        isFirst -> 1 // 0x0001: First block of command APDU
+                        !isLast -> 3 // 0x0003: Intermediate block (another block is to follow)
+                        else -> 2    // 0x0002: Last block (continues command APDU and ends command)
+                    }
+                    val xfrBlock = createXfrBlock(chunkBytes, wLevelParameter = wLevel)
+                    val responseBuffer = sendAndReceive(xfrBlock)
+                    lastResponse = parseDataBlockResponse(responseBuffer)
+                }
+                lastResponse
+            }
+
+            if (response.size < 2) {
+                // If response is invalid, the card might have been removed.
+                isCardPoweredOn = false
+                throw CcidException("Invalid response from card")
+            }
+
+            return response
+        } catch (e: IOException) {
+            // A failed exchange leaves the contactless session state unspecified. Forget any
+            // cached ICC power-on so the next interaction performs a fresh ICC power-on: reusing
+            // a power-on from before a failed exchange makes subsequent APDUs fail on readers
+            // such as the ACR122U until the reader is power-cycled.
             isCardPoweredOn = false
-            throw CcidException("Invalid response from card")
+            throw e
         }
-
-        return response
     }
 
     private fun createXfrBlock(data: ByteArray, wLevelParameter: Short = 0): ByteArray {
