@@ -19,11 +19,15 @@ import kotlinx.serialization.json.putJsonObject
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
@@ -485,6 +489,13 @@ class DeviceResponseTest {
         checkPoisonDeviceSignature(encodedDeviceResponse, sessionTranscript)
         checkPoisonIssuerSignedItem(encodedDeviceResponse, sessionTranscript)
         checkChangedDoctype(encodedDeviceResponse, sessionTranscript)
+        checkDeviceSignatureByOtherKey(encodedDeviceResponse, sessionTranscript)
+        checkDeviceAuthenticationWithOtherDoctype(encodedDeviceResponse, sessionTranscript)
+        checkDeviceKeyWithInconsistentKeyType(encodedDeviceResponse)
+        checkReencodedIssuerSignedItem(encodedDeviceResponse, sessionTranscript)
+        checkTruncatedDigest(encodedDeviceResponse, sessionTranscript)
+        checkMissingDigestId(encodedDeviceResponse, sessionTranscript)
+        checkSha1DigestAlgorithm(encodedDeviceResponse)
     }
 
     private suspend fun checkPoisonIssueSignature(
@@ -564,6 +575,328 @@ class DeviceResponseTest {
                 )
             }.message
         )
+    }
+
+    private suspend fun assertVerifyFails(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem,
+        expectedMessage: String
+    ) {
+        val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        assertEquals(
+            expectedMessage,
+            assertFailsWith(IllegalStateException::class) {
+                drParsed.verify(
+                    sessionTranscript = sessionTranscript,
+                    atTime = mdlTimeValidityBegin
+                )
+            }.message
+        )
+    }
+
+    private fun firstDocument(deviceResponse: DataItem): CborMap =
+        deviceResponse["documents"].asArray[0] as CborMap
+
+    // Signs DeviceAuthentication for the given docType with the given key and puts the result
+    // in place of the device signature of the first document.
+    private suspend fun replaceDeviceSignature(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem,
+        docType: String,
+        signingKey: AsymmetricKey
+    ): ByteArray {
+        val deviceResponse = Cbor.decode(encodedDeviceResponse)
+        val deviceSigned = firstDocument(deviceResponse)["deviceSigned"]
+        val deviceAuth = deviceSigned["deviceAuth"] as CborMap
+        val deviceSignature = deviceAuth["deviceSignature"].asCoseSign1
+        val deviceAuthentication = buildCborArray {
+            add("DeviceAuthentication")
+            add(sessionTranscript)
+            add(docType)
+            add(deviceSigned["nameSpaces"])
+        }
+        deviceAuth.items[Tstr("deviceSignature")] = Cose.coseSign1Sign(
+            signingKey = signingKey,
+            message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(deviceAuthentication)))),
+            includeMessageInPayload = false,
+            protectedHeaders = deviceSignature.protectedHeaders,
+            unprotectedHeaders = deviceSignature.unprotectedHeaders
+        ).toDataItem()
+        return Cbor.encode(deviceResponse)
+    }
+
+    private suspend fun checkDeviceSignatureByOtherKey(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem
+    ) {
+        // Signing again with the device key gives a response which verifies...
+        val deviceKey = AsymmetricKey.anonymous(mdlCredentialSignature.secureArea, mdlCredentialSignature.alias)
+        DeviceResponse.fromDataItem(Cbor.decode(
+            replaceDeviceSignature(encodedDeviceResponse, sessionTranscript, DrivingLicense.MDL_DOCTYPE, deviceKey)
+        )).verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
+
+        // ... but the same signature made with a key other than the one in the MSO is rejected.
+        val otherKey = AsymmetricKey.anonymous(Crypto.createEcPrivateKey(EcCurve.P256))
+        assertVerifyFails(
+            replaceDeviceSignature(encodedDeviceResponse, sessionTranscript, DrivingLicense.MDL_DOCTYPE, otherKey),
+            sessionTranscript,
+            "Device authentication signature failed to verify"
+        )
+    }
+
+    private suspend fun checkDeviceAuthenticationWithOtherDoctype(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem
+    ) {
+        // A signature by the device key over DeviceAuthentication naming another docType than
+        // the one of the document is rejected.
+        val deviceKey = AsymmetricKey.anonymous(mdlCredentialSignature.secureArea, mdlCredentialSignature.alias)
+        assertVerifyFails(
+            replaceDeviceSignature(encodedDeviceResponse, sessionTranscript, PhotoID.PHOTO_ID_DOCTYPE, deviceKey),
+            sessionTranscript,
+            "Device authentication signature failed to verify"
+        )
+    }
+
+    // Applies the given change to the MSO of the first document and signs the MSO again with
+    // the document signing key, so the change is the only difference.
+    private suspend fun changeMso(
+        encodedDeviceResponse: ByteArray,
+        change: suspend (CborMap) -> Unit
+    ): ByteArray {
+        val deviceResponse = Cbor.decode(encodedDeviceResponse)
+        val issuerSigned = firstDocument(deviceResponse)["issuerSigned"] as CborMap
+        val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
+        val mso = Cbor.decode(Cbor.decode(issuerAuth.payload!!).asTagged.asBstr) as CborMap
+        change(mso)
+        issuerSigned.items[Tstr("issuerAuth")] = Cose.coseSign1Sign(
+            signingKey = AsymmetricKey.anonymous(mdlDsKey),
+            message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(mso)))),
+            includeMessageInPayload = true,
+            protectedHeaders = issuerAuth.protectedHeaders,
+            unprotectedHeaders = issuerAuth.unprotectedHeaders
+        ).toDataItem()
+        return Cbor.encode(deviceResponse)
+    }
+
+    private fun givenNameDigestId(encodedDeviceResponse: ByteArray): DataItem {
+        val issuerSigned = firstDocument(Cbor.decode(encodedDeviceResponse))["issuerSigned"]
+        return issuerSigned["nameSpaces"][DrivingLicense.MDL_NAMESPACE].asArray
+            .map { it.asTaggedEncodedCbor }
+            .first { it["elementIdentifier"].asTstr == "given_name" }["digestID"]
+    }
+
+    private suspend fun checkDeviceKeyWithInconsistentKeyType(encodedDeviceResponse: ByteArray) {
+        // RFC 9053 section 7.1 requires the key type and the curve of a key to be consistent.
+        // Mark the P-256 device key in the MSO as an OKP key and check it's rejected.
+        val dr = changeMso(encodedDeviceResponse) { mso ->
+            val deviceKey = mso["deviceKeyInfo"]["deviceKey"] as CborMap
+            deviceKey.items[Cose.COSE_KEY_KTY.toDataItem()] = Cose.COSE_KEY_TYPE_OKP.toDataItem()
+        }
+        assertEquals(
+            "Unsupported curve P256",
+            assertFailsWith(IllegalArgumentException::class) {
+                DeviceResponse.fromDataItem(Cbor.decode(dr))
+            }.message
+        )
+    }
+
+    private suspend fun checkReencodedIssuerSignedItem(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem
+    ) {
+        // Write the digestID in the IssuerSignedItem for given_name in four bytes instead of the
+        // shortest form. The item decodes to the same values but its bytes, and so its digest,
+        // are no longer the ones in the MSO.
+        val deviceResponse = Cbor.decode(encodedDeviceResponse)
+        val issuerSigned = firstDocument(deviceResponse)["issuerSigned"]
+        val issuerSignedItems = issuerSigned["nameSpaces"][DrivingLicense.MDL_NAMESPACE] as CborArray
+        val index = issuerSignedItems.items.indexOfFirst {
+            it.asTaggedEncodedCbor["elementIdentifier"].asTstr == "given_name"
+        }
+        val issuerSignedItem = issuerSignedItems.items[index].asTaggedEncodedCbor as CborMap
+        assertContentEquals(issuerSignedItems.items[index].asTagged.asBstr, Cbor.encode(issuerSignedItem))
+        val digestId = issuerSignedItem["digestID"].asNumber
+        issuerSignedItem.items[Tstr("digestID")] = RawCbor(
+            byteArrayOf(0x1a) + ByteArray(4) { (digestId shr (24 - 8 * it)).toByte() }
+        )
+        issuerSignedItems.items[index] = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(issuerSignedItem)))
+        assertVerifyFails(
+            Cbor.encode(deviceResponse),
+            sessionTranscript,
+            "Digest mismatch for data element given_name in org.iso.18013.5.1"
+        )
+    }
+
+    private suspend fun checkTruncatedDigest(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem
+    ) {
+        // Signing the unchanged MSO again gives a response which verifies...
+        DeviceResponse.fromDataItem(Cbor.decode(changeMso(encodedDeviceResponse) {})).verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
+
+        // ... but cutting the digest for given_name to its first 20 bytes is caught.
+        val digestId = givenNameDigestId(encodedDeviceResponse)
+        assertVerifyFails(
+            changeMso(encodedDeviceResponse) { mso ->
+                val digests = mso["valueDigests"][DrivingLicense.MDL_NAMESPACE] as CborMap
+                digests.items[digestId] = Bstr(digests[digestId].asBstr.copyOf(20))
+            },
+            sessionTranscript,
+            "Digest mismatch for data element given_name in org.iso.18013.5.1"
+        )
+    }
+
+    private suspend fun checkMissingDigestId(
+        encodedDeviceResponse: ByteArray,
+        sessionTranscript: DataItem
+    ) {
+        // An MSO without the digest ID of a disclosed data element is caught.
+        val digestId = givenNameDigestId(encodedDeviceResponse)
+        assertVerifyFails(
+            changeMso(encodedDeviceResponse) { mso ->
+                (mso["valueDigests"][DrivingLicense.MDL_NAMESPACE] as CborMap).items.remove(digestId)
+            },
+            sessionTranscript,
+            "No digests ID for data element given_name in org.iso.18013.5.1"
+        )
+    }
+
+    private suspend fun checkSha1DigestAlgorithm(encodedDeviceResponse: ByteArray) {
+        // An MSO using SHA-1 is rejected, even with correct SHA-1 digests for the disclosed
+        // data elements.
+        val issuerSigned = firstDocument(Cbor.decode(encodedDeviceResponse))["issuerSigned"]
+        val issuerSignedItems = issuerSigned["nameSpaces"][DrivingLicense.MDL_NAMESPACE].asArray
+        val dr = changeMso(encodedDeviceResponse) { mso ->
+            mso.items[Tstr("digestAlgorithm")] = Tstr("SHA-1")
+            val digests = mso["valueDigests"][DrivingLicense.MDL_NAMESPACE] as CborMap
+            for (issuerSignedItemBytes in issuerSignedItems) {
+                digests.items[issuerSignedItemBytes.asTaggedEncodedCbor["digestID"]] =
+                    Bstr(Crypto.digest(Algorithm.INSECURE_SHA1, Cbor.encode(issuerSignedItemBytes)))
+            }
+        }
+        assertEquals(
+            "Unsupported digest algorithm SHA-1",
+            assertFailsWith(IllegalArgumentException::class) {
+                DeviceResponse.fromDataItem(Cbor.decode(dr))
+            }.message
+        )
+    }
+
+    // The SessionTranscript for OpenID4VP according to OpenID4VP 1.0 Appendix B.2.6.
+    private suspend fun openId4VpSessionTranscript(
+        handover: String,
+        handoverInfo: DataItem
+    ): DataItem {
+        val handoverInfoHash = Crypto.digest(Algorithm.SHA256, Cbor.encode(handoverInfo))
+        return buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                add(handover)
+                add(handoverInfoHash)
+            }
+        }
+    }
+
+    // OpenID4VP 1.0 B.2.6.1, invocation via redirects.
+    private suspend fun redirectSessionTranscript(
+        audience: String,
+        nonce: String,
+        jwkThumbprint: DataItem,
+        responseUri: String
+    ) = openId4VpSessionTranscript(
+        handover = "OpenID4VPHandover",
+        handoverInfo = buildCborArray {
+            add(audience)
+            add(nonce)
+            add(jwkThumbprint)
+            add(responseUri)
+        }
+    )
+
+    // OpenID4VP 1.0 B.2.6.2, invocation via the Digital Credentials API.
+    private suspend fun dcApiSessionTranscript(
+        origin: String,
+        nonce: String,
+        jwkThumbprint: DataItem
+    ) = openId4VpSessionTranscript(
+        handover = "OpenID4VPDCAPIHandover",
+        handoverInfo = buildCborArray {
+            add(origin)
+            add(nonce)
+            add(jwkThumbprint)
+        }
+    )
+
+    private suspend fun encodedResponseFor(sessionTranscript: DataItem): ByteArray {
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                )
+            )
+        }
+        return Cbor.encode(deviceResponse.toDataItem())
+    }
+
+    @Test
+    fun openId4VpHandovers() = runTest {
+        provisionDocuments()
+        val audience = "x509_san_dns:verifier.example"
+        val responseUri = "https://verifier.example/response"
+        val origin = "https://verifier.example"
+        val nonce = "mG3v7Rz0qLw5Hc1TfYb8Nd"
+        val thumbprint = Bstr(
+            Crypto.createEcPrivateKey(EcCurve.P256).publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
+        )
+        val otherThumbprint = Bstr(
+            Crypto.createEcPrivateKey(EcCurve.P256).publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
+        )
+        val redirect = redirectSessionTranscript(audience, nonce, thumbprint, responseUri)
+        val dcApi = dcApiSessionTranscript(origin, nonce, thumbprint)
+
+        // A response made for the SessionTranscript the verifier expects verifies...
+        for (sessionTranscript in listOf(redirect, dcApi)) {
+            DeviceResponse.fromDataItem(Cbor.decode(encodedResponseFor(sessionTranscript))).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+
+        // ... and one made for a SessionTranscript with one value changed is rejected.
+        val mismatches = listOf(
+            redirect to redirectSessionTranscript(audience, "other-nonce", thumbprint, responseUri),
+            redirect to redirectSessionTranscript(audience, nonce, thumbprint, "https://verifier.example/other"),
+            redirect to redirectSessionTranscript(audience, nonce, otherThumbprint, responseUri),
+            redirect to redirectSessionTranscript(audience, nonce, Simple.NULL, responseUri),
+            redirect to dcApiSessionTranscript(origin, nonce, thumbprint),
+            dcApi to redirectSessionTranscript(audience, nonce, thumbprint, responseUri),
+            dcApi to dcApiSessionTranscript("origin:$origin", nonce, thumbprint),
+            dcApi to dcApiSessionTranscript("https://other.example", nonce, thumbprint),
+        )
+        for ((verifierSessionTranscript, responseSessionTranscript) in mismatches) {
+            assertVerifyFails(
+                encodedResponseFor(responseSessionTranscript),
+                verifierSessionTranscript,
+                "Device authentication signature failed to verify"
+            )
+        }
     }
 
     @Test
