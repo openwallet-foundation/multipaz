@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.claim.Claim
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
+import org.multipaz.openid.dcql.DcqlQuery
 
 /**
  * Helper object that organizes verified presentation response, so that presentation
@@ -28,14 +29,30 @@ class DcqlProcessedResponse(
     presentations: List<VerifiedPresentation>
 ) {
     /**
+     * Set of DCQL credential query ids that have `multiple` set to `true`.
+     */
+    val multipleQueryIds: Set<String>
+
+    /**
+     * Mapping of DCQL credential query id to the list of verified credential presentations returned
+     * for that query.
+     */
+    val credentialLists: Map<String, List<Credential>>
+
+    /**
      * Mapping of DCQL credential query id to the verified credential presentation returned for that
      * query.
      */
-    val credentials: Map<String, Credential> = buildMap {
+    val credentials: Map<String, Credential>
+
+    init {
+        val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
+        val dcqlQuery = DcqlQuery.fromJson(dcqlJson)
+        multipleQueryIds = dcqlQuery.credentialQueries.filter { it.multiple }.map { it.id }.toSet()
         val byDocType = mutableMapOf<String, MutableList<JsonObject>>()
         val byVct = mutableMapOf<String, MutableList<JsonObject>>()
         val byId = mutableMapOf<String, JsonObject>()
-        for (query in Json.parseToJsonElement(dcql).jsonObject["credentials"]!!.jsonArray) {
+        for (query in dcqlJson["credentials"]!!.jsonArray) {
             query as JsonObject
             val meta = query["meta"]!!.jsonObject
             byId[query["id"]!!.jsonPrimitive.content] = query
@@ -51,6 +68,8 @@ class DcqlProcessedResponse(
                 else -> throw IllegalArgumentException("unknown format: '$format'")
             }
         }
+        val presentationsByQueryId = mutableMapOf<String, MutableList<VerifiedPresentation>>()
+        val credentialListsMap = mutableMapOf<String, MutableList<Credential>>()
         for (presentation in presentations) {
             val query = if (presentation.vpTokenIdentifier != null) {
                 byId[presentation.vpTokenIdentifier]
@@ -65,8 +84,13 @@ class DcqlProcessedResponse(
                 }
                 list.first()
             }
-            put(query["id"]!!.jsonPrimitive.content, Credential(presentation, query))
+            val queryId = query["id"]!!.jsonPrimitive.content
+            presentationsByQueryId.getOrPut(queryId) { mutableListOf() }.add(presentation)
+            credentialListsMap.getOrPut(queryId) { mutableListOf() }.add(Credential(presentation, query))
         }
+        dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
+        credentialLists = credentialListsMap
+        credentials = credentialListsMap.mapValues { (_, list) -> list.last() }
     }
 
     /**

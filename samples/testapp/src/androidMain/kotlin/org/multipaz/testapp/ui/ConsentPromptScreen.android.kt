@@ -10,14 +10,14 @@ import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
 import org.multipaz.documenttype.knowntypes.SampleData
 import org.multipaz.presentment.AuthenticationFailedException
-import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.FaceNotMatchedException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.prompt.AndroidPromptModel
-import org.multipaz.prompt.promptModelRequestConsent
+import org.multipaz.prompt.PlatformConsentOptions
 import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.prompt.Reason
@@ -26,21 +26,28 @@ import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.UserAuthenticationType as PromptUserAuthenticationType
 import org.multipaz.util.fromBase64Url
 
+actual fun createPlatformConsentOptions(
+    showOnBiometricPrompt: Boolean
+): PlatformConsentOptions? = PlatformConsentOptions(
+    showOnBiometricPrompt = showOnBiometricPrompt
+)
+
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection? {
+): PresentmentSelection? {
     PresentmentActivity.presentmentModel.reset(
         source = source,
         preselectedDocuments = paData.preselectedDocuments
     )
     PresentmentActivity.startActivity()
 
+    var completedSuccessfully = false
     val consentAndAuthJob = CoroutineScope(Dispatchers.IO + PresentmentActivity.promptModel).launch {
         try {
             PresentmentActivity.presentmentModel.setWaitingForReader()
@@ -48,10 +55,12 @@ actual suspend fun launchAndroidPresentmentActivity(
             PresentmentActivity.presentmentModel.setWaitingForUserInput()
 
             if (paData.showConsent) {
-                val selection = promptModelRequestConsent(
+                // Ask through the source, as presentment does, so its consent prompt function and
+                // the app's transaction data renderers are used.
+                val selection = source.showConsentPrompt(
                     requester = requester,
                     trustedRequesterIdentity = trustedRequesterIdentity,
-                    consentData = consentData,
+                    presentmentData = presentmentData,
                     preselectedDocuments = paData.preselectedDocuments,
                     onDocumentsInFocus = { documents ->
                         PresentmentActivity.presentmentModel.setDocumentsSelected(selectedDocuments = documents)
@@ -62,7 +71,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                 }
             } else {
                 PresentmentActivity.presentmentModel.setDocumentsSelected(
-                    selectedDocuments = consentData.credentialQueryResult.select(emptyList())
+                    selectedDocuments = presentmentData.select(emptyList())
                         .matches.map { it.credential.document }
                 )
             }
@@ -90,7 +99,8 @@ actual suspend fun launchAndroidPresentmentActivity(
                     ?: throw IllegalStateException("No face matcher configured")
                 if (!(PresentmentActivity.promptModel as AndroidPromptModel).showFaceMatcherPrompt(
                     matcher = faceMatcher,
-                    referencePortrait = portrait
+                    referencePortrait = portrait,
+                    requireConfirmation = paData.faceMatchRequireConfirmation
                 )) {
                     throw FaceNotMatchedException("Presentment cancelled because user dismissed face matcher prompt")
                 }
@@ -98,6 +108,7 @@ actual suspend fun launchAndroidPresentmentActivity(
 
             PresentmentActivity.presentmentModel.setSending()
             delay(paData.sendResponseDuration)
+            completedSuccessfully = true
             PresentmentActivity.presentmentModel.setCompleted(null)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -116,5 +127,5 @@ actual suspend fun launchAndroidPresentmentActivity(
     consentAndAuthJob.join()
     listenForCancellationFromUiJob.cancel()
 
-    return consentData.credentialQueryResult.select(emptyList())
+    return if (completedSuccessfully) presentmentData.select(emptyList()) else null
 }

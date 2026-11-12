@@ -38,10 +38,28 @@ import kotlinx.coroutines.yield
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemDateTimeString
+import org.multipaz.claim.JsonClaim
+import org.multipaz.documenttype.DocumentAttributeGroup
+import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.Icon
+import org.multipaz.documenttype.MdocPortraitEquivalenceData
+import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mpzpass.MpzPassClaimMetadata
+import org.multipaz.mpzpass.MpzPassGroupMetadata
+import org.multipaz.mpzpass.MpzPassMetadata
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.OpenID4VCIClaimDisplay
+import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -210,12 +228,18 @@ class DocumentStoreTest {
             }
         }
 
-        // Test DocumentStore iOS mdoc doctypes tag
+        // Test DocumentStore iOS mdoc doctypes and SD-JWT VC types tags
         assertNull(documentStore.getIosMdocDoctypes())
+        assertNull(documentStore.getIosSdJwtVcTypes())
         documentStore.setIosMdocDoctypes(listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"))
+        documentStore.setIosSdJwtVcTypes(listOf("urn:eudi:pid:1"))
         assertEquals(
             listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
             documentStore.getIosMdocDoctypes()
+        )
+        assertEquals(
+            listOf("urn:eudi:pid:1"),
+            documentStore.getIosSdJwtVcTypes()
         )
 
         // Check persistence across reload
@@ -232,10 +256,16 @@ class DocumentStoreTest {
             listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
             documentStore2.getIosMdocDoctypes()
         )
+        assertEquals(
+            listOf("urn:eudi:pid:1"),
+            documentStore2.getIosSdJwtVcTypes()
+        )
 
         // Test clearing tags
         documentStore2.setIosMdocDoctypes(null)
+        documentStore2.setIosSdJwtVcTypes(null)
         assertNull(documentStore2.getIosMdocDoctypes())
+        assertNull(documentStore2.getIosSdJwtVcTypes())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -1104,6 +1134,257 @@ class DocumentStoreTest {
         assertEquals(customData, document.metadata!!.serialize())
     }
 
+    @Test
+    fun testGetDocumentTypeFromMpzPassMetadata() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+        )
+        DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "sdjwt_kb",
+        )
+        assertNull(doc.getDocumentType())
+
+        val nameGroupMetadata = MpzPassGroupMetadata(
+            displayName = mapOf("en-US" to "Name", "ja-JP" to "氏名"),
+            description = mapOf("en-US" to "Full name", "ja-JP" to "フルネーム"),
+            icon = Icon.PERSON,
+            sensitivity = DocumentAttributeSensitivity.PII,
+            minClaimsToGroup = 2
+        )
+        val addressGroupMetadata = MpzPassGroupMetadata(
+            displayName = mapOf("en-US" to "Residential Address"),
+            icon = Icon.PLACE,
+            minClaimsToGroup = 1
+        )
+        val familyNameMetadata = MpzPassClaimMetadata(
+            displayName = mapOf("en-US" to "Family Name", "ja-JP" to "氏"),
+            description = mapOf("en-US" to "Last name or surname", "ja-JP" to "姓"),
+            icon = Icon.PERSON,
+            sensitivity = DocumentAttributeSensitivity.PII,
+            groupId = "name"
+        )
+        val ageOver18Metadata = MpzPassClaimMetadata(
+            displayName = mapOf("en" to "Older Than 18", "da" to "Over 18 år"),
+            description = null,
+            icon = null,
+            sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION
+        )
+        val streetAddressMetadata = MpzPassClaimMetadata(
+            displayName = mapOf("en-US" to "Street Address"),
+            description = mapOf("en-US" to "Street and house number"),
+            icon = Icon.HOUSE,
+            groupId = "residential_address"
+        )
+        val portraitEquivalenceData = MdocPortraitEquivalenceData(
+            namespace = DrivingLicense.MDL_NAMESPACE,
+            dataElementName = "portrait"
+        )
+        val metadata = MpzPassMetadata(
+            claimGroupsMetadata = mapOf(
+                "name" to nameGroupMetadata,
+                "residential_address" to addressGroupMetadata
+            ),
+            isoMdocClaimsMetadata = mapOf(
+                DrivingLicense.MDL_NAMESPACE to mapOf(
+                    "family_name" to familyNameMetadata,
+                    "age_over_18" to ageOver18Metadata
+                )
+            ),
+            isoMdocPortraitEquivalenceData = portraitEquivalenceData,
+            sdJwtVcClaimsMetadata = mapOf(
+                buildJsonArray { add("given_name") } to MpzPassClaimMetadata(
+                    displayName = mapOf("en" to "Given Name", "ja" to "名"),
+                    icon = Icon.PERSON,
+                    groupId = "name"
+                ),
+                buildJsonArray {
+                    add("address")
+                    add("street_address")
+                } to streetAddressMetadata
+            )
+        )
+
+        doc.edit { mpzPassMetadata = metadata }
+
+        val expectedNameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = "Name",
+            description = "Full name",
+            icon = Icon.PERSON,
+            sensitivity = DocumentAttributeSensitivity.PII,
+            minClaimsToGroup = 2
+        )
+        val expectedAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = "Residential Address",
+            description = "",
+            icon = Icon.PLACE,
+            sensitivity = DocumentAttributeSensitivity.PII,
+            minClaimsToGroup = 1
+        )
+
+        val synthesizedDt = assertNotNull(doc.getDocumentType())
+        // Verify lazy caching returns same instance when data/credentials haven't changed
+        assertSame(synthesizedDt, doc.getDocumentType())
+        assertEquals("Utopia driving license", synthesizedDt.displayName)
+        assertEquals(DrivingLicense.MDL_DOCTYPE, synthesizedDt.mdocDocumentType?.docType)
+        assertEquals(portraitEquivalenceData, synthesizedDt.mdocDocumentType?.supportsPortraitImageEquivalence)
+        val mdocFamilyName = synthesizedDt.mdocDocumentType?.namespaces?.get(DrivingLicense.MDL_NAMESPACE)
+            ?.dataElements?.get("family_name")?.attribute
+        assertNotNull(mdocFamilyName)
+        assertEquals("Family Name", mdocFamilyName.displayName)
+        assertEquals("Last name or surname", mdocFamilyName.description)
+        assertEquals(Icon.PERSON, mdocFamilyName.icon)
+        assertEquals(DocumentAttributeSensitivity.PII, mdocFamilyName.sensitivity)
+        assertEquals(expectedNameGroup, mdocFamilyName.group)
+
+        val mdocAge = synthesizedDt.mdocDocumentType?.namespaces?.get(DrivingLicense.MDL_NAMESPACE)
+            ?.dataElements?.get("age_over_18")?.attribute
+        assertNotNull(mdocAge)
+        assertEquals(DocumentAttributeSensitivity.AGE_INFORMATION, mdocAge.sensitivity)
+        assertNull(mdocAge.group)
+
+        assertEquals(EUPersonalID.EUPID_VCT, synthesizedDt.jsonDocumentType?.vct)
+        assertEquals(true, synthesizedDt.jsonDocumentType?.keyBound)
+        val jsonGivenName = synthesizedDt.jsonDocumentType?.getDocumentAttribute("given_name")
+        assertNotNull(jsonGivenName)
+        assertEquals("Given Name", jsonGivenName.displayName)
+        assertEquals(Icon.PERSON, jsonGivenName.icon)
+        assertEquals(expectedNameGroup, jsonGivenName.group)
+
+        val jsonStreet = synthesizedDt.jsonDocumentType?.getDocumentAttribute("address.street_address")
+        assertNotNull(jsonStreet)
+        assertEquals("Street Address", jsonStreet.displayName)
+        assertEquals("Street and house number", jsonStreet.description)
+        assertEquals(Icon.HOUSE, jsonStreet.icon)
+        assertEquals(expectedAddressGroup, jsonStreet.group)
+
+        // Updating mpzPassMetadata invalidates cache and recalculates documentType
+        doc.edit {
+            mpzPassMetadata = MpzPassMetadata(
+                claimGroupsMetadata = mapOf("name" to nameGroupMetadata),
+                isoMdocClaimsMetadata = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "family_name" to familyNameMetadata
+                    )
+                )
+            )
+        }
+        assertNull(doc.getDocumentType()?.mdocDocumentType?.supportsPortraitImageEquivalence)
+        assertNull(doc.getDocumentType()?.jsonDocumentType)
+    }
+
+    @Test
+    fun testGetDocumentTypeFromOpenID4VCIClaimDescriptionsAndPortraitEquivalence() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val peData = MdocPortraitEquivalenceData(DrivingLicense.MDL_NAMESPACE, "portrait")
+        val claimDescriptions = listOf(
+            OpenID4VCIClaimDescription(
+                path = buildJsonArray {
+                    add(DrivingLicense.MDL_NAMESPACE)
+                    add("family_name")
+                },
+                display = listOf(OpenID4VCIClaimDisplay("Family Name (OID4VCI)", "en"))
+            ),
+            OpenID4VCIClaimDescription(
+                path = buildJsonArray { add("given_name") },
+                display = listOf(OpenID4VCIClaimDisplay("Given Name (OID4VCI)", "en"))
+            ),
+            OpenID4VCIClaimDescription(
+                path = buildJsonArray {
+                    add("address")
+                    add("locality")
+                },
+                display = listOf(OpenID4VCIClaimDisplay("City (OID4VCI)", "en"))
+            )
+        )
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "My Doc",
+            typeDisplayName = "Custom Type",
+            openID4VCIClaimDescriptions = claimDescriptions
+        )
+        doc.edit { portraitEquivalenceData = peData }
+        DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        UtopiaMovieTicket.getDocumentType().createKeylessSdJwtVcCredentialWithSampleData(
+            document = doc,
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "sdjwt_keyless",
+        )
+
+        val dt = assertNotNull(doc.getDocumentType())
+        assertEquals("Custom Type", dt.displayName)
+        assertEquals(DrivingLicense.MDL_DOCTYPE, dt.mdocDocumentType?.docType)
+        assertEquals(peData, dt.mdocDocumentType?.supportsPortraitImageEquivalence)
+        assertEquals(
+            "Family Name (OID4VCI)",
+            dt.mdocDocumentType?.namespaces?.get(DrivingLicense.MDL_NAMESPACE)
+                ?.dataElements?.get("family_name")?.attribute?.displayName
+        )
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_VCT, dt.jsonDocumentType?.vct)
+        assertEquals(false, dt.jsonDocumentType?.keyBound)
+        assertEquals(
+            "Given Name (OID4VCI)",
+            dt.jsonDocumentType?.getDocumentAttribute("given_name")?.displayName
+        )
+        assertEquals(
+            "City (OID4VCI)",
+            dt.jsonDocumentType?.getDocumentAttribute("address.locality")?.displayName
+        )
+
+        // Verify MdocCredential.getClaims() and SdJwtVcCredential.getClaims() fall back to Document.getDocumentType()
+        val emptyRepo = DocumentTypeRepository()
+        val mdocClaims = doc.getCredentials().filterIsInstance<MdocCredential>().single()
+            .getClaims(emptyRepo)
+        val familyNameMdocClaim = mdocClaims.first { it.dataElementName == "family_name" }
+        assertEquals("Family Name (OID4VCI)", familyNameMdocClaim.displayName)
+        assertEquals("Family Name (OID4VCI)", familyNameMdocClaim.attribute?.displayName)
+
+        val sdJwtClaims = doc.getCredentials().filter { it !is MdocCredential }.single()
+            .getClaims(emptyRepo)
+        val addressClaim = sdJwtClaims.firstOrNull { (it as? JsonClaim)?.claimPath?.firstOrNull()?.let { el -> (el as? JsonPrimitive)?.content } == "address" }
+        if (addressClaim != null) {
+            assertNotNull(addressClaim.attribute)
+        }
+    }
+
     data class TestIssuerData(
         val validFrom: Instant,
         val validUntil: Instant,
@@ -1141,7 +1422,10 @@ class DocumentStoreTest {
             return Pair(parsed.validFrom, parsed.validUntil)
         }
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
 
@@ -1186,7 +1470,10 @@ class DocumentStoreTest {
         override val credentialType: String
             get() = CREDENTIAL_TYPE
 
-        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(
+            documentTypeRepository: DocumentTypeRepository?,
+            locales: List<String>
+        ): List<Claim> {
             throw NotImplementedError()
         }
 

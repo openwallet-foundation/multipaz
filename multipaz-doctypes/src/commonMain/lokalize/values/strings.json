@@ -404,5 +404,13 @@
   "multi_request_payment_and_age_over_18": "Payment and age over 18",
   "multi_request_age_over_18_mdl_or_pid": "Age over 18 through mDL or PID + transaction",
   "age_verification_attribute_older_than_years": "Older than {age} years",
-  "age_verification_description_older_than_years": "Indication whether the mDL holder is as old or older than {age}"
+  "age_verification_description_older_than_years": "Indication whether the mDL holder is as old or older than {age}",
+  "group_name": "Name",
+  "group_alias_name": "Alias name",
+  "group_name_at_birth": "Name at birth",
+  "group_name_initials": "Name initials",
+  "group_residential_address": "Residential address",
+  "group_place_of_birth": "Place of birth",
+  "group_date_of_birth": "Date of birth",
+  "group_passport_data": "Passport data"
 }

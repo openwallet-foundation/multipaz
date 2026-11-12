@@ -52,6 +52,7 @@ import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -60,11 +61,14 @@ import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toNumericDateInstant
 import org.multipaz.util.zlibInflate
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 private const val TAG = "VerificationUtil"
@@ -733,6 +737,48 @@ object VerificationUtil {
     }
 
     /**
+     * Injects `"multiple": true` into each credential in a DCQL query if [multiple] is `true` and
+     * the credential does not already specify `"multiple"`.
+     *
+     * @param dcql the DCQL query.
+     * @param multiple whether to inject `"multiple": true`.
+     * @return the updated DCQL query, or [dcql] unchanged if [multiple] is `false`.
+     */
+    fun injectMultipleIntoDcql(
+        dcql: JsonObject,
+        multiple: Boolean
+    ): JsonObject {
+        if (!multiple) {
+            return dcql
+        }
+        val credentialsArray = dcql["credentials"]?.jsonArray ?: return dcql
+        val newCredentials = buildJsonArray {
+            for (cred in credentialsArray) {
+                val credObj = cred.jsonObject
+                if (credObj.containsKey("multiple")) {
+                    add(credObj)
+                } else {
+                    addJsonObject {
+                        for ((k, v) in credObj) {
+                            put(k, v)
+                        }
+                        put("multiple", true)
+                    }
+                }
+            }
+        }
+        return buildJsonObject {
+            for ((k, v) in dcql) {
+                if (k == "credentials") {
+                    put("credentials", newCredentials)
+                } else {
+                    put(k, v)
+                }
+            }
+        }
+    }
+
+    /**
      * Decrypts a W3C Digital Credentials response.
      *
      * @param response the W3C Digital Credentials API response.
@@ -874,6 +920,9 @@ object VerificationUtil {
      *  for that credential
      * @param queryData maps credential id in the query to information about the credential query
      *  in the request.
+     * @param expectedAudience the expected Key Binding JWT `aud` claim value.
+     * @param dcqlQuery the parsed [DcqlQuery] from the request to enforce claim and credential-set
+     *  constraints.
      * @return a list of [VerifiedPresentation], one for each credential in the response.
      */
     suspend fun verifyOpenID4VPResponse(
@@ -884,39 +933,72 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
         transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
-        queryData: Map<String, QueryData>
+        queryData: Map<String, QueryData>,
+        expectedAudience: String?,
+        dcqlQuery: DcqlQuery,
     ): List<VerifiedPresentation> {
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
+        val presentationsByQueryId = mutableMapOf<String, MutableList<VerifiedPresentation>>()
         for ((credId, credValue) in vpToken.entries) {
+            val credQueryData = queryData[credId]
+                ?: throw IllegalStateException("Unknown credential query id '$credId' in vp_token")
             val creds = credValue as? JsonArray ?: JsonArray(listOf(credValue))
+            if (creds.isEmpty()) {
+                throw IllegalStateException("Empty presentation list for credential query '$credId' in vp_token")
+            }
+            if (!credQueryData.multiple && creds.size > 1) {
+                throw IllegalStateException(
+                    "Multiple presentations (${creds.size}) returned for credential query '$credId' with multiple=false"
+                )
+            }
             val transactionData = transactionDataMap[credId] ?: listOf()
+            val queryPresentations = presentationsByQueryId.getOrPut(credId) { mutableListOf() }
             for (cred in creds) {
                 val credBase64 = cred.jsonPrimitive.content
-                val isSdJwt = queryData.let { it[credId] is SdJwtQueryData }
-                if (isSdJwt) {
-                    val sdjwtVerifiedPresentations = verifySdJwtPresentation(
-                        compactSerialization = credBase64,
-                        nonce = nonce,
-                        documentTypeRepository = documentTypeRepository,
-                        transactionData = transactionData,
-                        identifier = credId
-                    )
-                    verifiedPresentations.add(sdjwtVerifiedPresentations)
-                } else {
-                    val mdocVerifiedPresentations = verifySingleDocMdocDeviceResponse(
-                        now = now,
-                        deviceResponse = Cbor.decode(credBase64.fromBase64Url()),
-                        sessionTranscript = sessionTranscript!!,
-                        documentTypeRepository = documentTypeRepository,
-                        zkSystemRepository = zkSystemRepository,
-                        transactionData = transactionData,
-                        vpTokenIdentifier = credId
-                    )
-                    check(mdocVerifiedPresentations.size == 1)
-                    verifiedPresentations.addAll(mdocVerifiedPresentations)
+                when (credQueryData) {
+                    is SdJwtQueryData -> {
+                        val sdjwtVerifiedPresentation = verifySdJwtPresentation(
+                            compactSerialization = credBase64,
+                            nonce = nonce,
+                            documentTypeRepository = documentTypeRepository,
+                            transactionData = transactionData,
+                            identifier = credId,
+                            now = now,
+                            expectedAudience = expectedAudience,
+                            requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
+                        ) as JsonVerifiedPresentation
+                        if (sdjwtVerifiedPresentation.vct !in credQueryData.vct) {
+                            throw IllegalStateException(
+                                "Presented SD-JWT vct '${sdjwtVerifiedPresentation.vct}' is not in allowed vct_values ${credQueryData.vct} for query '$credId'"
+                            )
+                        }
+                        verifiedPresentations.add(sdjwtVerifiedPresentation)
+                        queryPresentations.add(sdjwtVerifiedPresentation)
+                    }
+                    is MdocQueryData -> {
+                        val mdocVerifiedPresentations = verifySingleDocMdocDeviceResponse(
+                            now = now,
+                            deviceResponse = Cbor.decode(credBase64.fromBase64Url()),
+                            sessionTranscript = sessionTranscript!!,
+                            documentTypeRepository = documentTypeRepository,
+                            zkSystemRepository = zkSystemRepository,
+                            transactionData = transactionData,
+                            vpTokenIdentifier = credId
+                        )
+                        check(mdocVerifiedPresentations.size == 1)
+                        val mdocPresentation = mdocVerifiedPresentations.single() as MdocVerifiedPresentation
+                        if (mdocPresentation.docType != credQueryData.docType) {
+                            throw IllegalStateException(
+                                "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '${credQueryData.docType}' for query '$credId'"
+                            )
+                        }
+                        verifiedPresentations.add(mdocPresentation)
+                        queryPresentations.add(mdocPresentation)
+                    }
                 }
             }
         }
+        dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
         return verifiedPresentations
     }
 
@@ -926,6 +1008,12 @@ object VerificationUtil {
      * @param compactSerialization the compact serialization of the SD-JWT or SD-JWT+KB.
      * @param nonce the nonce used in the request.
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param transactionData transaction data associated with the credential query.
+     * @param identifier optional VP token credential query identifier.
+     * @param now the time at which to evaluate credential and KB-JWT validity.
+     * @param expectedAudience the expected KB-JWT `aud` claim value.
+     * @param requireCryptographicHolderBinding whether a Key Binding JWT is required even if the
+     *  credential does not contain a `cnf` claim.
      * @return a [VerifiedPresentation] instance.
      */
     suspend fun verifySdJwtPresentation(
@@ -933,7 +1021,10 @@ object VerificationUtil {
         nonce: String,
         documentTypeRepository: DocumentTypeRepository?,
         transactionData: List<TransactionData<*>>,
-        identifier: String? = null
+        identifier: String? = null,
+        now: Instant = Clock.System.now(),
+        expectedAudience: String?,
+        requireCryptographicHolderBinding: Boolean = true,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
             Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
@@ -942,14 +1033,30 @@ object VerificationUtil {
             Pair(sdJwtKb.sdJwt, sdJwtKb)
         }
 
+        if (sdJwtKb == null) {
+            if (sdJwt.jwtBody.containsKey("cnf")) {
+                throw IllegalStateException("`cnf` claim present in SD-JWT, but no Key Binding JWT was provided")
+            }
+            if (requireCryptographicHolderBinding) {
+                throw IllegalStateException(
+                    "Cryptographic holder binding is required, but no Key Binding JWT was provided"
+                )
+            }
+        }
+
         val issuerCertChain = sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")
         val processedPayload = if (sdJwtKb != null) {
             sdJwtKb.verify(
                 issuerKey = issuerCertChain.certificates.first().ecPublicKey,
                 checkNonce = { nonceInCredential -> nonceInCredential == nonce },
-                checkAudience = { true }, // TODO
-                checkCreationTime = { true },
+                checkAudience = { audienceInCredential ->
+                    expectedAudience != null && audienceInCredential == expectedAudience
+                },
+                checkCreationTime = { creationTime ->
+                    val drift = (now - creationTime).absoluteValue
+                    drift < 5.minutes
+                },
                 transactionData = transactionData
             )
         } else {
@@ -959,9 +1066,15 @@ object VerificationUtil {
         }
 
         val vct = processedPayload["vct"]!!.jsonPrimitive.content
-        val validFrom = processedPayload["nbf"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
-        val validUntil = processedPayload["exp"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
-        val signedAt = processedPayload["iat"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
+        val validFrom = processedPayload["nbf"]?.toNumericDateInstant("nbf")
+        val validUntil = processedPayload["exp"]?.toNumericDateInstant("exp")
+        val signedAt = processedPayload["iat"]?.toNumericDateInstant("iat")
+        if (validFrom != null && now < validFrom) {
+            throw IllegalStateException("SD-JWT is not yet valid")
+        }
+        if (validUntil != null && now >= validUntil) {
+            throw IllegalStateException("SD-JWT is not valid anymore")
+        }
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
 
         val claims = mutableListOf<JsonClaim>()
@@ -1032,7 +1145,8 @@ object VerificationUtil {
      * @param eReaderKey the ephemeral reader key, if 18013-5 session encryption is used.
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @param zkSystemRepository a [ZkSystemRepository] used for verifying ZKP proofs or `null`.
-     * @param request request that produced this response, only required for transaction processing
+     * @param request request that produced this response, required if the response contains
+     *  `dc+sd-jwt` `OtherDocument`s or if transaction data was sent in the request.
      * @return a list of [VerifiedPresentation], one for each document in the response.
      */
     suspend fun verifyMdocDeviceResponse(
@@ -1053,6 +1167,7 @@ object VerificationUtil {
             atTime = now
         )
         return createVerifiedPresentationList(
+            now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
@@ -1086,6 +1201,7 @@ object VerificationUtil {
             atTime = now
         )
         return createVerifiedPresentationList(
+            now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
@@ -1095,6 +1211,7 @@ object VerificationUtil {
     }
 
     private suspend fun createVerifiedPresentationList(
+        now: Instant,
         deviceResponse: DeviceResponse,
         sessionTranscript: DataItem,
         documentTypeRepository: DocumentTypeRepository?,
@@ -1248,7 +1365,9 @@ object VerificationUtil {
                     compactSerialization = sdJwtKbCompactSerialization,
                     nonce = nonce.toBase64Url(),
                     documentTypeRepository = documentTypeRepository,
-                    transactionData = document.transactionData
+                    transactionData = document.transactionData,
+                    now = now,
+                    expectedAudience = document.expectedAudience,
                 )
             )
         }
@@ -1298,7 +1417,9 @@ object VerificationUtil {
         deviceEngagement: ByteString? = null,
         handover: DataItem? = null,
         eReaderKey: EcPrivateKey? = null,
-        state: String? = null
+        state: String? = null,
+        uniqueDocSetRequired: Boolean = true,
+        multiple: Boolean = false
     ): VerificationSession {
         val encryptionPrivateKey = if (encryptResponse) {
             Crypto.createEcPrivateKey(EcCurve.P256)
@@ -1306,6 +1427,8 @@ object VerificationUtil {
             null
         }
         val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
+        val openIDDcqlJson = injectMultipleIntoDcql(dcqlJson, multiple)
+        val iso18013DcqlJson = injectMultipleIntoDcql(dcqlJson, !uniqueDocSetRequired)
         val nonceStr = nonce.toByteArray().toBase64Url()
 
         val docRequestTransactions = if (transactionData.isNullOrEmpty()) {
@@ -1331,7 +1454,7 @@ object VerificationUtil {
             verifierIdentities: List<VerifierIdentity>
         ): String = OpenID4VP.generateRequest(
             version = version,
-            dcqlQuery = dcqlJson,
+            dcqlQuery = openIDDcqlJson,
             jsonTransactionData = transactionData ?: emptyList(),
             nonce = nonceStr,
             state = state,
@@ -1347,7 +1470,7 @@ object VerificationUtil {
             sessionTranscript: DataItem
         ): DataItem = buildDeviceRequestFromDcql(
             sessionTranscript = sessionTranscript,
-            dcql = dcqlJson,
+            dcql = iso18013DcqlJson,
             transactions = docRequestTransactions?.value ?: emptyMap()
         ) {
             verifierIdentities.forEach { addReaderAuthAll(it.key) }

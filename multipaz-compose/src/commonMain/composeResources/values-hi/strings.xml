@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">पासफ्रेज कमजोर है, कृपया दूसरा चुनें</string>
     <string name="credential_presentment_button_cancel">रद्द करें</string>
     <string name="credential_presentment_button_more">अधिक</string>
-    <string name="credential_presentment_button_share">साझा करें</string>
+    <string name="credential_presentment_button_continue">जारी रखें</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">अज्ञात अनुरोधकर्ता</string>
     <string name="credential_presentment_share_with_known_requester">यह डेटा %1$s के साथ साझा किया जाएगा:</string>
     <string name="credential_presentment_share_with_unknown_requester">यह डेटा साझा किया जाएगा:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">चेतावनी आइकन</string>
     <string name="credential_presentment_select_document">दस्तावेज़ चुनें</string>
     <string name="credential_presentment_requester_information">अनुरोधकर्ता जानकारी</string>
+    <string name="credential_presentment_details">विवरण</string>
+    <string name="credential_presentment_back">वापस</string>
     <string name="certificate_viewer_sub_basic_info">बुनियादी जानकारी</string>
     <string name="certificate_viewer_k_type">प्रकार</string>
     <string name="certificate_viewer_k_serial_number">सीरियल नंबर</string>
@@ -226,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">अनुमति दें</string>
     <string name="face_matcher_prompt_cancel">रद्द करें</string>
     <string name="face_matcher_prompt_confirm">पुष्टि करें</string>
+    <string name="certificate_viewer_tab_leaf">लीफ़</string>
+    <string name="certificate_viewer_tab_intermediate">मध्यवर्ती</string>
+    <string name="certificate_viewer_tab_intermediate_n">मध्य. %1$d</string>
+    <string name="certificate_viewer_tab_root">रूट</string>
 </resources>

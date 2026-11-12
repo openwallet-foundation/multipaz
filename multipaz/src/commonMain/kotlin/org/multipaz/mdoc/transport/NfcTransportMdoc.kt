@@ -135,14 +135,14 @@ class NfcTransportMdoc(
                 payload = chunk
             )
         } else {
-            if (outgoingChunksRemainingBytesAvailable <= leReceived + 255) {
+            if (outgoingChunksRemainingBytesAvailable <= 255) {
                 /* If Le < the number of available bytes ≤ Le + 255, the mdoc shall
                  * include as many bytes in the response as indicated by Le and shall
                  * set the status words to ’61 XX’, where XX is the number of available
                  * bytes remaining. The mdoc reader shall respond with a GET RESPONSE
                  * command where Le is set to XX.
                  */
-                val numBytesRemaining = outgoingChunksRemainingBytesAvailable - leReceived
+                val numBytesRemaining = outgoingChunksRemainingBytesAvailable
                 return ResponseApdu(
                     status = Nfc.RESPONSE_STATUS_CHAINING_RESPONSE_BYTES_STILL_AVAILABLE + numBytesRemaining.and(0xff),
                     payload = chunk
@@ -207,15 +207,31 @@ class NfcTransportMdoc(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
+            if (_state.value == State.FAILED) {
+                throw MdocTransportException("Transport already failed")
+            }
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
             Logger.i(TAG, "waitForMessage")
         }
-        val msg = incomingMessages.receive().toByteArray()
-        if (msg.isNotEmpty()) {
-            _bytesReceived += msg.size
-            _numMessagesReceived += 1
+        try {
+            val msg = incomingMessages.receive().toByteArray()
+            if (msg.isNotEmpty()) {
+                _bytesReceived += msg.size
+                _numMessagesReceived += 1
+            }
+            return msg
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (_state.value == State.CLOSED) {
+                throw MdocTransportClosedException("Transport was closed while waiting for message")
+            } else {
+                mutex.withLock {
+                    failTransport(error)
+                }
+                throw MdocTransportException("Failed while waiting for message", error)
+            }
         }
-        return msg
     }
 
     override suspend fun close() {

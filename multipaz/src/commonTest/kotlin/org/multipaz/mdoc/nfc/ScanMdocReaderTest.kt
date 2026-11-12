@@ -13,13 +13,12 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
-import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
-import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
+import org.multipaz.mdoc.transport.NfcCceTransportMdoc
+import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -54,11 +53,11 @@ import kotlin.time.Duration
  * 2. Invoking [NfcTagReader.scan], which polls tapped [NfcIsoTag] instances and runs [mdocReaderNfcHandover]
  *    inside `tagInteractionFunc` until a non-null result is returned.
  * 3. Selecting or creating the appropriate [MdocTransport] (reusing a warmed-up transport on Negotiated Handover,
- *    creating a new transport on Static Handover, or wrapping in [NfcHybridTransportMdocReader] on NFCv2 Handover),
+ *    creating a new transport on Static Handover, or wrapping in [NfcCceTransportMdocReader] on NFC CCE Handover),
  *    and closing all unused warmed-up transports.
  * 4. Running `onHandover` either:
- *    - **Inside** `tagInteractionFunc` for NFCv2 NFC-only engagements ([MdocConnectionMethodNfcV2]), so that if
- *      the tag is lost mid-transaction, the NFC dialog stays open and automatically retries on the next tap.
+ *    - **Inside** `tagInteractionFunc` for NFC CCE NFC-only engagements, so that if the tag is lost
+ *      mid-transaction, the NFC dialog stays open and automatically retries on the next tap.
  *    - **Outside** [NfcTagReader.scan] for all other engagement types, so the NFC dialog is dismissed immediately
  *      after the initial tap.
  *
@@ -69,7 +68,7 @@ import kotlin.time.Duration
  *   lifecycle events on reader transports, while returning a real [NfcTransportMdocReader] when
  *   [MdocConnectionMethodNfc] is selected so `setTag()` can be verified.
  * - Loopback [NfcIsoTag] implementations backed by [MdocNfcEngagementHelper] (for NDEF Static and Negotiated
- *   Handover) and [MdocNfcV2EngagementHelper] (for NFCv2 Handover).
+ *   Handover) and [MdocNfcCceEngagementHelper] (for NFC CCE Handover).
  */
 class ScanMdocReaderTest {
 
@@ -214,13 +213,13 @@ class ScanMdocReaderTest {
     }
 
     /**
-     * Loopback [NfcIsoTag] backed by [MdocNfcV2EngagementHelper] (for NFCv2 Handover).
+     * Loopback [NfcIsoTag] backed by [MdocNfcCceEngagementHelper] (for NFC CCE Handover).
      *
      * @param failAfterHandoverWithTagLost if `true`, any `ENVELOPE` command after handover completion
      *   throws [NfcTagLostException] to simulate the user removing the phone prematurely during data transfer.
      */
-    private class NfcV2LoopbackIsoTag(
-        private val engagementHelper: MdocNfcV2EngagementHelper,
+    private class NfcCceLoopbackIsoTag(
+        private val engagementHelper: MdocNfcCceEngagementHelper,
         private val failAfterHandoverWithTagLost: Boolean = false,
     ) : NfcIsoTag() {
         var closed: Boolean = false
@@ -239,7 +238,7 @@ class ScanMdocReaderTest {
             if (command.ins == Nfc.INS_ENVELOPE) {
                 envelopeCommandsSeen += 1
                 if (failAfterHandoverWithTagLost && envelopeCommandsSeen > 1) {
-                    throw NfcTagLostException("Tag lost during NFCv2 data transfer")
+                    throw NfcTagLostException("Tag lost during NFC CCE data transfer")
                 }
             }
             return engagementHelper.processApdu(command)
@@ -453,14 +452,14 @@ class ScanMdocReaderTest {
     }
 
     @Test
-    fun nfcV2HandoverWithBleWrapsWarmedUpTransportAndRunsOnHandoverOutsideScan() = runTest {
+    fun nfcCceHandoverWithBleWrapsWarmedUpTransportAndRunsOnHandoverOutsideScan() = runTest {
         val bleUuid = UUID(10UL, 20UL)
         val bleCc = createBleCentralClientMethod(bleUuid)
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
-        val engagementHelper = MdocNfcV2EngagementHelper(
+        val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
             onError = { error -> fail("Unexpected engagement error: $error") },
             handoverPicker = { methods ->
@@ -468,7 +467,7 @@ class ScanMdocReaderTest {
                 methods.filterIsInstance<MdocConnectionMethodBle>().first()
             }
         )
-        val tag = NfcV2LoopbackIsoTag(engagementHelper)
+        val tag = NfcCceLoopbackIsoTag(engagementHelper)
         val factory = FakeMdocTransportFactory()
         val reader = FakeNfcTagReader(tags = listOf(tag))
 
@@ -476,68 +475,69 @@ class ScanMdocReaderTest {
         val customResult = reader.scanMdocReader(
             message = "Hold near mdoc",
             options = MdocTransportOptions(),
-            handoverOptions = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
             transportFactory = factory,
             selectConnectionMethod = { fail("Single method should not invoke selectConnectionMethod") },
             negotiatedHandoverConnectionMethods = listOf(bleCc),
             context = coroutineContext,
             onHandover = { scanResult ->
                 wasScanningDuringOnHandover = reader.isScanning
-                assertEquals(MdocHandoverType.V2_HANDOVER, scanResult.type)
-                val hybridTransport = assertIs<NfcHybridTransportMdocReader>(scanResult.transport)
-                assertEquals(bleCc, hybridTransport.connectionMethod)
-                "ble-hybrid-complete"
+                assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
+                assertNotNull(scanResult.eReaderKey)
+                val cceTransport = assertIs<NfcCceTransportMdocReader>(scanResult.transport)
+                assertEquals(bleCc, cceTransport.connectionMethod)
+                "ble-cce-complete"
             }
         )
 
-        assertEquals("ble-hybrid-complete", customResult)
-        // For NFCv2 with BLE, the NFC scanning dialog is dismissed immediately after the first tap,
+        assertEquals("ble-cce-complete", customResult)
+        // For NFC CCE with BLE, the NFC scanning dialog is dismissed immediately after the first tap,
         // so onHandover runs AFTER scan() has finished (isScanning == false).
         assertEquals(false, wasScanningDuringOnHandover)
-        // The warmed-up BLE transport was reused inside NfcHybridTransportMdocReader, not closed
+        // The warmed-up BLE transport was reused inside NfcCceTransportMdocReader, not closed
         assertEquals(1, factory.createdFakeTransports.size)
         assertFalse(factory.createdFakeTransports.first().closed)
     }
 
     @Test
-    fun nfcV2NfcOnlyRetriesOnTagLostAndSucceedsOnSecondTap() = runTest {
+    fun nfcCceNfcOnlyRetriesOnTagLostAndSucceedsOnSecondTap() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
         // Tap 1: Wallet engagement helper whose tag loses connection right after handover when the reader
         // sends the DeviceRequest ENVELOPE APDU
-        val helperTap1 = MdocNfcV2EngagementHelper(
+        val helperTap1 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
             onError = { error -> fail("Unexpected error on Tap 1: $error") },
-            handoverPicker = { methods -> methods.first() }
+            handoverPicker = { null }
         )
-        val tagTap1 = NfcV2LoopbackIsoTag(
+        val tagTap1 = NfcCceLoopbackIsoTag(
             engagementHelper = helperTap1,
             failAfterHandoverWithTagLost = true
         )
 
-        // Tap 2: Wallet engagement helper wired to a real NfcHybridTransportMdoc for end-to-end APDU exchange
-        lateinit var mdocTransportTap2: NfcHybridTransportMdoc
-        lateinit var helperTap2: MdocNfcV2EngagementHelper
-        helperTap2 = MdocNfcV2EngagementHelper(
+        // Tap 2: Wallet engagement helper wired to a real NfcCceTransportMdoc for end-to-end APDU exchange
+        lateinit var mdocTransportTap2: NfcCceTransportMdoc
+        lateinit var helperTap2: MdocNfcCceEngagementHelper
+        helperTap2 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = { message ->
                 mdocTransportTap2.onMessageReceivedViaNfc(message)
             },
             onError = { error -> fail("Unexpected error on Tap 2: $error") },
-            handoverPicker = { methods -> methods.first() }
+            handoverPicker = { null }
         )
-        mdocTransportTap2 = NfcHybridTransportMdoc(
+        mdocTransportTap2 = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
                 helperTap2.sendMessage(message)
                 true
             }
         )
         mdocTransportTap2.open(eDeviceKey.publicKey)
-        val tagTap2 = NfcV2LoopbackIsoTag(helperTap2)
+        val tagTap2 = NfcCceLoopbackIsoTag(helperTap2)
 
         val reader = FakeNfcTagReader(tags = listOf(tagTap1, tagTap2))
         var onHandoverAttempts = 0
@@ -547,7 +547,7 @@ class ScanMdocReaderTest {
         val outcome = reader.scanMdocReader(
             message = "Keep holding phone near reader",
             options = MdocTransportOptions(),
-            handoverOptions = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
             transportFactory = FakeMdocTransportFactory(),
             selectConnectionMethod = { methods -> methods.first() },
             negotiatedHandoverConnectionMethods = emptyList(),
@@ -556,7 +556,7 @@ class ScanMdocReaderTest {
                 onHandoverAttempts += 1
                 scanningStatesDuringHandover.add(reader.isScanning)
                 seenTransports.add(scanResult.transport)
-                assertIs<MdocConnectionMethodNfcV2>(scanResult.transport.connectionMethod)
+                assertNull(scanResult.transport.connectionMethod)
 
                 val request = Cbor.encode(
                     buildCborMap {
@@ -582,14 +582,14 @@ class ScanMdocReaderTest {
                 assertContentEquals(request, mdocTransportTap2.waitForMessage())
                 assertContentEquals(response, receivedResponse)
                 scanResult.transport.close()
-                "nfcv2-retry-succeeded"
+                "nfccce-retry-succeeded"
             }
         )
 
-        assertEquals("nfcv2-retry-succeeded", outcome)
+        assertEquals("nfccce-retry-succeeded", outcome)
         assertEquals(2, onHandoverAttempts)
         assertEquals(2, reader.tagsPresentedCount)
-        // For NFCv2 NFC-only, onHandover executes INSIDE the active scan loop on both taps
+        // For NFC CCE NFC-only, onHandover executes INSIDE the active scan loop on both taps
         assertEquals(listOf(true, true), scanningStatesDuringHandover)
         // Tap 1's transport failed with NfcTagLostException and its tag was closed when scanMdocReader cleaned up
         assertEquals(MdocTransport.State.FAILED, seenTransports[0].state.value)
@@ -599,23 +599,23 @@ class ScanMdocReaderTest {
     }
 
     @Test
-    fun nfcV2NfcOnlyRethrowsNonTransportExceptionAndClosesTransport() = runTest {
+    fun nfcCceNfcOnlyRethrowsNonTransportExceptionAndClosesTransport() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val helper = MdocNfcV2EngagementHelper(
+        val helper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
-            onHandoverComplete = { _, _, _ -> },
+            onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
             onError = { error -> fail("Unexpected engagement error: $error") },
-            handoverPicker = { methods -> methods.first() }
+            handoverPicker = { null }
         )
-        val tag = NfcV2LoopbackIsoTag(helper)
+        val tag = NfcCceLoopbackIsoTag(helper)
         val reader = FakeNfcTagReader(tags = listOf(tag))
 
         val exception = assertFailsWith<IllegalArgumentException> {
             reader.scanMdocReader<String>(
                 message = "Keep holding phone near reader",
                 options = MdocTransportOptions(),
-                handoverOptions = MdocReaderNfcHandoverOptions(useNfcV2 = true),
+                handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
                 transportFactory = FakeMdocTransportFactory(),
                 selectConnectionMethod = { methods -> methods.first() },
                 negotiatedHandoverConnectionMethods = emptyList(),

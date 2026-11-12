@@ -8,6 +8,7 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.openid.claim.findDisplayName
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.validation.ValidationFinding
 import org.multipaz.validation.ValidationResult
@@ -32,6 +33,15 @@ interface SdJwtVcCredential {
     val vct: String
 
     /**
+     * Other Verifiable Credential Types (VCTs) that can be used for matching in addition to [vct].
+     *
+     * For example, a national PID credential with [vct] set to `urn:eudi:pid:de:1` may extend the
+     * base PID credential type `urn:eudi:pid:1` and include `urn:eudi:pid:1` in [otherVcts] so
+     * that requests for `urn:eudi:pid:1` also match this credential.
+     */
+    val otherVcts: List<String>
+
+    /**
      * The issuer-provided data associated with the credential, see [Credential.issuerProvidedData].
      *
      * This data must be the encoded string containing the SD-JWT VC. The SD-JWT VC itself is by
@@ -47,9 +57,21 @@ interface SdJwtVcCredential {
         return sdJwt.x5c
     }
 
+    /**
+     * Gets the top-level claims in the credential, see [Credential.getClaims].
+     *
+     * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param locales BCP 47 language tags, most preferred first, used to pick display names from
+     *   [org.multipaz.document.Document.openID4VCIClaimDescriptions]. If empty, the current platform
+     *   locale is used.
+     * @return a list of claims with values.
+     * @throws IllegalStateException if the credential is not signed with an X.509-certified key.
+     */
     suspend fun getClaimsImpl(
-        documentTypeRepository: DocumentTypeRepository?
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String> = emptyList()
     ): List<JsonClaim> {
+        val claimDescriptions = (this as? Credential)?.document?.openID4VCIClaimDescriptions ?: emptyList()
         val ret = mutableListOf<JsonClaim>()
         val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
         // We only support keys that are certified with the certificate chain. Web-based resolution
@@ -62,14 +84,19 @@ interface SdJwtVcCredential {
 
         // By design, we only include the top-level claims.
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
+            ?: otherVcts.firstNotNullOfOrNull { documentTypeRepository?.getDocumentTypeForJson(it) }
+            ?: (this as? Credential)?.document?.getDocumentType(locales)
         for ((claimName, claimValue) in processedJwt) {
             val attribute = dt?.jsonDocumentType?.claims?.get(claimName)
+            val claimPath = buildJsonArray { add(claimName) }
             ret.add(
                 JsonClaim(
-                    displayName = dt?.jsonDocumentType?.claims?.get(claimName)?.displayName ?: claimName,
+                    displayName = dt?.jsonDocumentType?.claims?.get(claimName)?.displayName
+                        ?: claimDescriptions.findDisplayName(claimPath, locales)
+                        ?: claimName,
                     attribute = attribute,
                     vct = vct,
-                    claimPath = buildJsonArray { add(claimName) },
+                    claimPath = claimPath,
                     value = claimValue
                 )
             )

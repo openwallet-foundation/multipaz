@@ -16,6 +16,7 @@ import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 import kotlin.time.Instant
 
@@ -527,6 +528,37 @@ class StatusListTest {
             fail()
         } catch (_: IllegalArgumentException) {
             // expected
+        }
+    }
+
+    @Test
+    fun outOfBoundsIndex() {
+        val builder = StatusList.Builder(1)
+        builder.addStatus(3, 1)
+        val statusList = builder.build()
+        assertEquals(0, statusList[0])
+        assertEquals(1, statusList[3])
+        assertEquals(0, statusList[7])
+        assertFailsWith<IndexOutOfBoundsException> {
+            statusList[-1]
+        }
+        assertFailsWith<IndexOutOfBoundsException> {
+            statusList[8]
+        }
+        assertFailsWith<IndexOutOfBoundsException> {
+            statusList[100000]
+        }
+    }
+
+    @Test
+    fun minSize() {
+        val builder = StatusList.Builder(1, minSize = 16)
+        builder.addStatus(3, 1)
+        val statusList = builder.build()
+        assertEquals(1, statusList[3])
+        assertEquals(0, statusList[15])
+        assertFailsWith<IndexOutOfBoundsException> {
+            statusList[16]
         }
     }
 

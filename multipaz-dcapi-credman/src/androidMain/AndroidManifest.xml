@@ -15,4 +15,7 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:exported="true">
+
+    <!-- Used by CredentialManagerProvisioningActivity to return to the calling application. -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
 </manifest>

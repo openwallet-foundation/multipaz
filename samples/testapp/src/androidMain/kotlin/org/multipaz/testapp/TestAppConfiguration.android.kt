@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import com.jakewharton.processphoenix.ProcessPhoenix
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.android.Android
@@ -32,12 +34,15 @@ import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.DigitalCredentialsCredman
 import org.multipaz.digitalcredentials.getAppOrigin
+import org.multipaz.digitalcredentials.registerForCredmanCredentialOffers
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanOmitClaims
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
+import java.io.ByteArrayOutputStream
 import java.net.NetworkInterface
 import java.security.Security
 
@@ -170,12 +175,38 @@ actual object TestAppConfiguration {
         return DigitalCredentialsCredman.create()
     }
 
+    actual val supportedCreateProtocols: Set<String> = setOf("openid4vci-v1")
+
+    actual suspend fun registerForCredentialOffers(protocols: Set<String>) {
+        registerForCredmanCredentialOffers(
+            title = appName,
+            subtitle = null,
+            icon = applicationIconPng(),
+            protocols = protocols,
+        )
+    }
+
+    private fun applicationIconPng(): ByteArray {
+        val drawable = applicationContext.applicationInfo.loadIcon(applicationContext.packageManager)
+        val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+        drawable.draw(Canvas(bitmap))
+        return ByteArrayOutputStream().use { stream ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            stream.toByteArray()
+        }
+    }
+
     actual fun getAndroidCredmanOmitClaims(document: Document): Boolean {
         return document.androidCredmanOmitClaims
     }
 
     actual suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean) {
         document.setAndroidCredmanOmitClaims(value)
+    }
+
+    actual fun getPlatformFaceMatchers(): List<FaceMatcher> {
+        return listOf(CustomUiFaceMatcher())
     }
 }
 

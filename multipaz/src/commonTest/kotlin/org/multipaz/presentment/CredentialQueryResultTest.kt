@@ -3,6 +3,7 @@ package org.multipaz.presentment
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
@@ -14,10 +15,16 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.response.Iso18015ResponseException
+import org.multipaz.mdoc.request.DeviceRequestInfo
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.UseCase
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
@@ -258,13 +265,12 @@ class CredentialQueryResultTest {
         )
 
         val result = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        assertEquals(1, result.credentialSets[0].options.size)
-        assertEquals(1, result.credentialSets[0].options[0].members.size)
-        val member = result.credentialSets[0].options[0].members[0]
-        assertEquals(1, member.matches.size)
-        assertEquals(1, member.matches[0].transactionData.size)
-        assertEquals(PingTransaction, member.matches[0].transactionData[0].type)
+        assertEquals(1, result.useCases.size)
+        assertEquals(1, result.useCases[0].solutions.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        assertEquals(1, solution.matches[0].transactionData.size)
+        assertEquals(PingTransaction, solution.matches[0].transactionData[0].type)
     }
 
     private object DummyPaymentTransaction: TransactionType<String>(
@@ -426,10 +432,217 @@ class CredentialQueryResultTest {
         )
 
         val result = deviceRequest.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        val member = result.credentialSets[0].options[0].members[0]
-        assertEquals(1, member.matches.size)
-        assertEquals(1, member.matches[0].transactionData.size)
-        assertEquals(PaymentTransaction, member.matches[0].transactionData[0].type)
+        assertEquals(1, result.useCases.size)
+        val solution = result.useCases[0].solutions[0]
+        assertEquals(1, solution.matches.size)
+        assertEquals(1, solution.matches[0].transactionData.size)
+        assertEquals(PaymentTransaction, solution.matches[0].transactionData[0].type)
+    }
+
+    @Test
+    fun testPurposeHints() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdl_with_AgeOver_AgeInYears_BirthDate(harness)
+
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("session"); add("transcript") },
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = mapOf("org.iso.jtc1.sc17" to 3)
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "age_over_18" to false
+                    )
+                )
+            )
+        }
+
+        val presentmentData = deviceRequest.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(
+            listOf(PresentmentPurposeHintIso18013("org.iso.jtc1.sc17", 3)),
+            presentmentData.useCases[0].purposeHints
+        )
+        assertEquals(
+            """
+                useCases:
+                  useCase:
+                    optional: false
+                    purposeHints:
+                      iso18013: org.iso.jtc1.sc17 -> 3
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: age_over_18
+                                  displayName: Older than 18 years
+                                  value: True
+            """.trimIndent() + "\n",
+            presentmentData.prettyPrint()
+        )
+    }
+
+    @Test
+    fun testMultipleAndUniqueDocSetRequired() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        for (idx in 1..3) {
+            harness.provisionMdoc(
+                displayName = "mDL-$idx",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to Tstr("Holder $idx"),
+                        "age_over_18" to true.toDataItem(),
+                        "portrait" to byteArrayOf().toDataItem(),
+                    )
+                )
+            )
+        }
+
+        // 1. ISO 18013-5 DeviceRequest with uniqueDocSetRequired = false
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("session"); add("transcript") },
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap(),
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)
+                ),
+                docRequestInfo = DocRequestInfo(uniqueDocSetRequired = false)
+            )
+        }
+
+        val mdocPresentmentData = deviceRequest.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(1, mdocPresentmentData.useCases.size)
+        val mdocUseCase = mdocPresentmentData.useCases[0]
+        assertEquals(true, mdocUseCase.allowMultiple)
+        assertEquals(3, mdocUseCase.solutions.size)
+        assertEquals(listOf(listOf(0, 1, 2)), mdocPresentmentData.defaultSelections())
+
+        val allThreeSelection = mdocPresentmentData.toPresentmentSelection(mdocPresentmentData.defaultSelections())
+        assertEquals(
+            listOf("mDL-1", "mDL-2", "mDL-3"),
+            allThreeSelection.matches.map { it.credential.document.displayName }
+        )
+        val subsetSelection = mdocPresentmentData.toPresentmentSelection(listOf(listOf(0, 2)))
+        assertEquals(
+            listOf("mDL-1", "mDL-3"),
+            subsetSelection.matches.map { it.credential.document.displayName }
+        )
+
+        // 2. Round-trip DeviceRequest -> DCQL -> DeviceRequest preserves multiple / uniqueDocSetRequired = false
+        val dcqlObj = deviceRequest.toDcql()
+        val dcqlQuery = DcqlQuery.fromJson(dcqlObj)
+        assertEquals(true, dcqlQuery.credentialQueries[0].multiple)
+
+        val dcqlPresentmentData = dcqlQuery.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(true, dcqlPresentmentData.useCases[0].allowMultiple)
+        assertEquals(listOf(listOf(0, 1, 2)), dcqlPresentmentData.defaultSelections())
+
+        val roundTrippedDeviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("session"); add("transcript") },
+            dcql = dcqlObj
+        )
+        assertEquals(false, roundTrippedDeviceRequest.docRequests[0].docRequestInfo?.uniqueDocSetRequired)
+
+        // 3. When allowMultiple is false, selecting multiple solutions throws IllegalArgumentException
+        val singleOnlyData = ageAndPortraitQuery().execute(presentmentSource = harness.presentmentSource)
+        assertEquals(false, singleOnlyData.useCases[0].allowMultiple)
+        assertEquals(listOf(listOf(0)), singleOnlyData.defaultSelections())
+        assertFailsWith<IllegalArgumentException> {
+            singleOnlyData.toPresentmentSelection(listOf(listOf(0, 1)))
+        }
+
+        // 4. Compound option mixing multiple = false (PID) and multiple = true (mDL):
+        //    Deduplicates the single-select credential when selecting multiple solutions or preselectedDocuments
+        val pid1 = harness.provisionSdJwtVc(
+            displayName = "PID-1",
+            vct = EUPersonalID.EUPID_VCT,
+            data = listOf("given_name" to JsonPrimitive("Erika"))
+        )
+        val pid2 = harness.provisionSdJwtVc(
+            displayName = "PID-2",
+            vct = EUPersonalID.EUPID_VCT,
+            data = listOf("given_name" to JsonPrimitive("Max"))
+        )
+        val compoundDcql = DcqlQuery.fromJsonString(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "pid",
+                      "format": "dc+sd-jwt",
+                      "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+                      "claims": [{ "path": ["given_name"] }]
+                    },
+                    {
+                      "id": "mdl",
+                      "format": "mso_mdoc",
+                      "multiple": true,
+                      "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                      "claims": [{ "path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"] }]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "options": [["pid", "mdl"]]
+                    }
+                  ]
+                }
+            """.trimIndent()
+        )
+        val compoundData = compoundDcql.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(1, compoundData.useCases.size)
+        assertEquals(true, compoundData.useCases[0].allowMultiple)
+        assertEquals(6, compoundData.useCases[0].solutions.size)
+
+        val mdlDocs = harness.documentStore.listDocuments()
+            .filter { it.displayName?.startsWith("mDL-") == true }
+            .sortedBy { it.displayName }
+        val preselectedWithPid2 = listOf(pid2) + mdlDocs
+        assertEquals(listOf(listOf(3, 4, 5)), compoundData.defaultSelections(preselectedWithPid2))
+        val selectionFromDefaults = compoundData.toPresentmentSelection(
+            compoundData.defaultSelections(preselectedWithPid2)
+        )
+        assertEquals(
+            listOf("PID-2", "mDL-1", "mDL-2", "mDL-3"),
+            selectionFromDefaults.matches.map { it.credential.document.displayName }
+        )
+        val selectionFromSelect = compoundData.select(preselectedWithPid2)
+        assertEquals(
+            listOf("PID-2", "mDL-1", "mDL-2", "mDL-3"),
+            selectionFromSelect.matches.map { it.credential.document.displayName }
+        )
+        assertEquals(
+            listOf("PID-1", "mDL-1", "mDL-2", "mDL-3"),
+            compoundData.select(listOf(pid1) + mdlDocs).matches.map { it.credential.document.displayName }
+        )
     }
 }

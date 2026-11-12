@@ -77,9 +77,9 @@ abstract class MdocTransport {
     abstract val role: MdocRole
 
     /**
-     * A [MdocConnectionMethod] which can be sent to the other peer to connect to.
+     * A [MdocConnectionMethod] which can be sent to the other peer to connect to, or `null` if not applicable.
      */
-    abstract val connectionMethod: MdocConnectionMethod
+    abstract val connectionMethod: MdocConnectionMethod?
 
     /**
      * The time spent scanning for the other peer.

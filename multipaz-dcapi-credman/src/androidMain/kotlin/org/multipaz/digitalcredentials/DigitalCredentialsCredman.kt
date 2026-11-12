@@ -28,7 +28,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.MapBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -43,10 +42,12 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.androidCredmanBitmap
 import org.multipaz.document.androidCredmanExchangeProtocols
+import org.multipaz.document.androidCredmanNoClaimsRequestedText
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.androidCredmanSubtitle
 import org.multipaz.document.androidCredmanTitle
 import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
@@ -62,11 +63,9 @@ private const val CREDMAN_DB_SHA256_KEY = "org.multipaz.CredmanDbSha256"
 private const val CREDMAN_MATCHER_SHA256_KEY = "org.multipaz.CredmanMatcherSha256"
 
 private fun getAttributeForJsonClaim(
-    documentTypeRepository: DocumentTypeRepository,
-    vct: String,
+    documentType: DocumentType?,
     path: JsonArray,
 ): DocumentAttribute? {
-    val documentType = documentTypeRepository.getDocumentTypeForJson(vct)
     if (documentType != null) {
         val flattenedPath = path
             .filter { it is JsonPrimitive && it.isString }
@@ -77,15 +76,13 @@ private fun getAttributeForJsonClaim(
 }
 
 private fun getDataElementDisplayName(
-    documentTypeRepository: DocumentTypeRepository,
-    docTypeName: String,
+    documentType: DocumentType?,
     nameSpaceName: String,
     dataElementName: String
 ): String {
-    val documentType = documentTypeRepository.getDocumentTypeForMdoc(docTypeName)
     if (documentType != null) {
-        val mdocDataElement = documentType.mdocDocumentType!!
-            .namespaces[nameSpaceName]?.dataElements?.get(dataElementName)
+        val mdocDataElement = documentType.mdocDocumentType
+            ?.namespaces?.get(nameSpaceName)?.dataElements?.get(dataElementName)
         if (mdocDataElement != null) {
             return mdocDataElement.attribute.displayName
         }
@@ -222,6 +219,7 @@ private suspend fun exportMdocCredential(
     documentTypeRepository: DocumentTypeRepository
 ): DataItem {
     val credentialType = documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
+        ?: document.getDocumentType()
 
     val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
     val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
@@ -238,6 +236,7 @@ private suspend fun exportMdocCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        document.androidCredmanNoClaimsRequestedText?.let { put("noClaimsRequestedText", it) }
         if (exchangeProtocols != null) {
             putCborArray("protocols") {
                 exchangeProtocols.forEach { add(it) }
@@ -273,7 +272,7 @@ private suspend fun exportMdocCredential(
                         "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
                     emptyList()
                 }
-                val peData = credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
+                val peData = credential.document.portraitEquivalenceData ?: credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
                 val hasPortrait = peData != null && claims.any {
                     it.namespaceName == peData.namespace && it.dataElementName == peData.dataElementName
                 }
@@ -311,8 +310,7 @@ private suspend fun exportMdocCredential(
                                     ?: Cbor.toDiagnostics(claim.value)
 
                                 val dataElementDisplayName = getDataElementDisplayName(
-                                    documentTypeRepository,
-                                    credential.docType,
+                                    credentialType,
                                     claim.namespaceName,
                                     claim.dataElementName
                                 )
@@ -342,6 +340,10 @@ private suspend fun exportSdJwtVcCredential(
     credential: SdJwtVcCredential,
     documentTypeRepository: DocumentTypeRepository
 ): DataItem {
+    val documentType = documentTypeRepository.getDocumentTypeForJson(credential.vct)
+        ?: credential.otherVcts.firstNotNullOfOrNull { documentTypeRepository.getDocumentTypeForJson(it) }
+        ?: document.getDocumentType()
+
     val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
     val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
     val displayNameSub = document.androidCredmanSubtitle ?: document.typeDisplayName ?: "Unknown Document Type"
@@ -357,6 +359,7 @@ private suspend fun exportSdJwtVcCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        document.androidCredmanNoClaimsRequestedText?.let { put("noClaimsRequestedText", it) }
         if (exchangeProtocols != null) {
             putCborArray("protocols") {
                 exchangeProtocols.forEach { add(it) }
@@ -365,6 +368,11 @@ private suspend fun exportSdJwtVcCredential(
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)
+            if (credential.otherVcts.isNotEmpty()) {
+                putCborArray("otherVcts") {
+                    credential.otherVcts.forEach { add(it) }
+                }
+            }
             if (issuerIdentifiers.isNotEmpty()) {
                 putCborArray("issuerIdentifiers") {
                     issuerIdentifiers.forEach { add(it) }
@@ -378,9 +386,7 @@ private suspend fun exportSdJwtVcCredential(
             if (omitClaims) {
                 put("omitClaims", true)
                 putCborMap("claimDisplayNames") {
-                    val jsonDocumentType = documentTypeRepository
-                        .getDocumentTypeForJson(credential.vct)?.jsonDocumentType
-                    jsonDocumentType?.claims?.forEach { (claimName, attribute) ->
+                    documentType?.jsonDocumentType?.claims?.forEach { (claimName, attribute) ->
                         exportJsonAttributeDisplayNames(claimName, attribute)
                     }
                 }
@@ -397,8 +403,7 @@ private suspend fun exportSdJwtVcCredential(
                     for (claim in claims) {
                         val claimName = claim.claimPath[0].jsonPrimitive.content
                         val claimAttr = getAttributeForJsonClaim(
-                            documentTypeRepository,
-                            credential.vct,
+                            documentType,
                             claim.claimPath,
                         )
                         val claimDisplayName = claimAttr?.displayName ?: claimName

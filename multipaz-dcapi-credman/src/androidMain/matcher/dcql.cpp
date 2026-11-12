@@ -123,6 +123,7 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
             }
         }
 
+        bool multiple = cJSON_IsTrue(cJSON_GetObjectItem(credential, "multiple"));
         std::vector<std::vector<uint8_t>> readerAuthAkis;
         dcqlCredentialQueries.push_back(DcqlCredentialQuery(
                 id,
@@ -132,7 +133,9 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
                 issuerIdentifiers,
                 readerAuthAkis,
                 requestedClaims,
-                claimSets
+                claimSets,
+                false,
+                multiple
         ));
     }
 
@@ -176,6 +179,7 @@ void DcqlQuery::log() {
         LOG("  {");
         LOG("    id %s", q.id.c_str());
         LOG("    format %s", q.format.c_str());
+        LOG("    multiple %d", q.multiple);
         LOG("    mdocDocType %s", q.mdocDocType.c_str());
         LOG("    vctValues %s", joinStrings(q.vctValues).c_str());
         LOG("    claims = [");
@@ -250,7 +254,16 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                     continue;
                 }
             } else if (query.format == "dc+sd-jwt") {
-                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) == query.vctValues.end()) {
+                bool matchesVct = std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) != query.vctValues.end();
+                if (!matchesVct) {
+                    for (const auto& otherVct : cred.vcOtherVcts) {
+                        if (std::find(query.vctValues.begin(), query.vctValues.end(), otherVct) != query.vctValues.end()) {
+                            matchesVct = true;
+                            break;
+                        }
+                    }
+                }
+                if (!matchesVct) {
                     continue;
                 }
             }
@@ -378,12 +391,20 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                 LOG("No matches for credential query with id %s", pair.second.query->id.c_str());
                 return std::nullopt;
             }
-            std::vector<DcqlResponseCredentialSetOptionMemberMatch> matches;
-            for (const auto& match : pair.second.matches) {
-                matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(match.credential, match.claims));
-            }
             std::vector<DcqlResponseCredentialSetOptionMember> members;
-            members.push_back(DcqlResponseCredentialSetOptionMember(matches));
+            if (pair.second.query->multiple) {
+                for (const auto& match : pair.second.matches) {
+                    members.push_back(DcqlResponseCredentialSetOptionMember({
+                            DcqlResponseCredentialSetOptionMemberMatch(match.credential, match.claims)
+                    }));
+                }
+            } else {
+                std::vector<DcqlResponseCredentialSetOptionMemberMatch> matches;
+                for (const auto& match : pair.second.matches) {
+                    matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(match.credential, match.claims));
+                }
+                members.push_back(DcqlResponseCredentialSetOptionMember(matches));
+            }
             std::vector<DcqlResponseCredentialSetOption> options;
             options.push_back(DcqlResponseCredentialSetOption(members));
             credentialSets.push_back(DcqlResponseCredentialSet(
@@ -414,7 +435,13 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                 std::vector<DcqlResponseCredentialSetOptionMember> members;
                 for (const auto& credentialId: option.credentialIds) {
                     const auto& response = credentialQueryIdToResponse[credentialId];
-                    members.push_back(DcqlResponseCredentialSetOptionMember(response.matches));
+                    if (response.query->multiple) {
+                        for (const auto& match : response.matches) {
+                            members.push_back(DcqlResponseCredentialSetOptionMember({match}));
+                        }
+                    } else {
+                        members.push_back(DcqlResponseCredentialSetOptionMember(response.matches));
+                    }
                 }
                 options.push_back(DcqlResponseCredentialSetOption(members));
                 satisfiedCsq = true;

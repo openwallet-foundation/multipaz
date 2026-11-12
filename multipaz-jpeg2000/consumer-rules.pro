@@ -1,0 +1,1 @@
+-keep class org.multipaz.jpeg2000.OpenJpegJni { *; }

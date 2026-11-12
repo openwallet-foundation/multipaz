@@ -34,6 +34,16 @@ data class OtherDocument(
      */
     lateinit var transactionData: List<TransactionData<*>>
 
+    private var _expectedAudience: String? = null
+
+    /**
+     * The expected audience value that was verified against the Key Binding JWT's `aud` claim,
+     * or `null` if [DeviceResponse.verify] (or [EncryptedDocuments.decrypt]) has not been called
+     * yet or if [docFormat] is not `"dc+sd-jwt"`.
+     */
+    val expectedAudience: String?
+        get() = _expectedAudience
+
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
         put("data", data.toByteArray())
@@ -44,13 +54,16 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        expectedAudience: String?,
     ) {
+        _expectedAudience = null
         when (docFormat) {
             "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
-                atTime = atTime
+                atTime = atTime,
+                expectedAudience = expectedAudience
             )
         }
     }
@@ -60,6 +73,7 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        expectedAudience: String?,
     ) {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())
 
@@ -78,8 +92,7 @@ data class OtherDocument(
                 expectedNonce == nonce
             },
             checkAudience = { audience ->
-                // TODO: check audience when DeviceResponse.verify() takes a DeviceRequest.
-                true
+                expectedAudience != null && expectedAudience == audience
             },
             checkCreationTime = { creationTime ->
                 val drift = (atTime - creationTime).absoluteValue
@@ -93,10 +106,11 @@ data class OtherDocument(
         if (atTime < validFrom) {
             throw IllegalStateException("SD-JWT is not yet valid")
         }
-        if (atTime > validUntil) {
+        if (atTime >= validUntil) {
             throw IllegalStateException("SD-JWT is not valid anymore")
         }
         this.transactionData = transactionData
+        this._expectedAudience = expectedAudience
     }
 
     companion object {

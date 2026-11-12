@@ -16,12 +16,11 @@
 package org.multipaz.document
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.openid.claim.OpenID4VCIClaimDescription
+import org.multipaz.openid.claim.decodeOpenID4VCIClaimDescriptions
+import org.multipaz.openid.claim.encodeToCbor
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import kotlinx.coroutines.sync.Mutex
@@ -29,13 +28,24 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.DocumentAttributeType
+import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.MdocPortraitEquivalenceData
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mpzpass.MpzPassMetadata
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.tags.Tags
+import org.multipaz.util.currentLocale
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.concurrent.Volatile
+import kotlin.experimental.ExperimentalObjCName
+import kotlin.native.ObjCName
 
 /**
  * This class represents a document created in [DocumentStore].
@@ -90,6 +100,8 @@ import kotlin.concurrent.Volatile
  * @param store the [DocumentStore] that holds this [Document].
  * @param identifier the persistent id of the document which can be used with [DocumentStore].
  */
+@OptIn(ExperimentalObjCName::class)
+@ObjCName("MultipazDocument")
 class Document internal constructor(
     internal val store: DocumentStore,
     val identifier: String,
@@ -165,6 +177,11 @@ class Document internal constructor(
     val mpzPassVersion: Long? get() = data.mpzPassVersion
 
     /**
+     * Metadata if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     */
+    val mpzPassMetadata: MpzPassMetadata? get() = data.mpzPassMetadata
+
+    /**
      * A list of reader identifiers for reader authentication.
      *
      * If non-empty, the document is only accessible to readers using reader authentication
@@ -172,6 +189,140 @@ class Document internal constructor(
      * in this list.
      */
     val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
+
+    /**
+     * Descriptions of the claims in the document, including their display names, as provided by the issuer in
+     * its OpenID4VCI metadata.
+     *
+     * These are used by [Credential.getClaims] to name claims for which the
+     * [org.multipaz.documenttype.DocumentTypeRepository] has no entry. An empty list is returned if the issuer
+     * did not provide any.
+     */
+    val openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription>
+        get() = data.openID4VCIClaimDescriptions?.let { decodeOpenID4VCIClaimDescriptions(it) } ?: emptyList()
+
+    /**
+     * The portrait equivalence data for this document, if any. This is used to determine whether a
+     * document type supports portrait equivalence and what data elements are used for that purpose.
+     * If this is `null`, the document type does not support portrait equivalence.
+     */
+    val portraitEquivalenceData: MdocPortraitEquivalenceData? get() = data.portraitEquivalenceData
+
+    @Volatile
+    private var cachedDocumentTypeKey: Triple<DocumentData, List<Credential>, List<String>>? = null
+    @Volatile
+    private var cachedDocumentType: DocumentType? = null
+
+    /**
+     * Returns a [DocumentType] synthesized from metadata obtained at provisioning time, typically
+     * from the document issuer (such as [mpzPassMetadata], [openID4VCIClaimDescriptions], or
+     * [portraitEquivalenceData]), or `null` if no such metadata is available on this document.
+     *
+     * Looking up a [DocumentType] from a [org.multipaz.documenttype.DocumentTypeRepository] is the
+     * preferred path; if no matching entry exists in the repository, this method may be used as a
+     * fallback.
+     *
+     * @param locales BCP 47 language tags, most preferred first (e.g., `["ja-JP", "en-US"]`).
+     *   If empty, the current platform locale is used.
+     */
+    suspend fun getDocumentType(locales: List<String> = emptyList()): DocumentType? {
+        val currentData = data
+        val credentials = getCredentials()
+        val effectiveLocales = locales.ifEmpty { listOf(currentLocale) }
+        val key = Triple(currentData, credentials, effectiveLocales)
+        if (cachedDocumentTypeKey != key) {
+            cachedDocumentType = buildSynthesizedDocumentType(currentData, credentials, effectiveLocales)
+            cachedDocumentTypeKey = key
+        }
+        return cachedDocumentType
+    }
+
+    private fun buildSynthesizedDocumentType(
+        currentData: DocumentData,
+        credentials: List<Credential>,
+        locales: List<String>
+    ): DocumentType? {
+        val typeName = currentData.typeDisplayName ?: currentData.displayName ?: ""
+        val mdocCred = credentials.filterIsInstance<MdocCredential>().firstOrNull()
+        val sdJwtCred = credentials.filterIsInstance<SdJwtVcCredential>().firstOrNull()
+        val passMetadata = currentData.mpzPassMetadata
+        if (passMetadata != null) {
+            return passMetadata.buildDocumentType(typeName, mdocCred, sdJwtCred, locales)
+        }
+
+        val claimDescriptions = currentData.openID4VCIClaimDescriptions?.let {
+            decodeOpenID4VCIClaimDescriptions(it)
+        } ?: emptyList()
+        val peData = currentData.portraitEquivalenceData
+        if (claimDescriptions.isEmpty() && peData == null) {
+            return null
+        }
+
+        val builder = DocumentType.Builder(typeName)
+        val twoElementStringPaths = claimDescriptions.filter { desc ->
+            desc.path.size == 2 && desc.path.all { it is JsonPrimitive && it.isString }
+        }
+        val oneElementStringPaths = claimDescriptions.filter { desc ->
+            desc.path.size == 1 && desc.path.all { it is JsonPrimitive && it.isString }
+        }
+
+        if (mdocCred != null && (twoElementStringPaths.isNotEmpty() || peData != null)) {
+            builder.addMdocDocumentType(mdocCred.docType)
+            builder.setSupportsPortraitImageEquivalence(peData)
+            for (desc in twoElementStringPaths) {
+                val namespace = (desc.path[0] as JsonPrimitive).content
+                val dataElementName = (desc.path[1] as JsonPrimitive).content
+                builder.addMdocAttribute(
+                    type = DocumentAttributeType.String,
+                    identifier = dataElementName,
+                    displayName = desc.getDisplayName(locales) ?: dataElementName,
+                    description = "",
+                    mandatory = false,
+                    mdocNamespace = namespace
+                )
+            }
+        }
+
+        if (sdJwtCred != null && (oneElementStringPaths.isNotEmpty() || twoElementStringPaths.isNotEmpty())) {
+            builder.addJsonDocumentType(
+                type = sdJwtCred.vct,
+                keyBound = sdJwtCred is KeyBoundSdJwtVcCredential
+            )
+            val jsonBuilder = builder.jsonBuilder!!
+            for (desc in oneElementStringPaths) {
+                val id = (desc.path[0] as JsonPrimitive).content
+                jsonBuilder.addClaim(
+                    type = DocumentAttributeType.String,
+                    identifier = id,
+                    displayName = desc.getDisplayName(locales) ?: id,
+                    description = ""
+                )
+            }
+            for (desc in twoElementStringPaths) {
+                val parentId = (desc.path[0] as JsonPrimitive).content
+                val childId = (desc.path[1] as JsonPrimitive).content
+                if (!jsonBuilder.claims.containsKey(parentId)) {
+                    jsonBuilder.addClaim(
+                        type = DocumentAttributeType.ComplexType,
+                        identifier = parentId,
+                        displayName = parentId,
+                        description = ""
+                    )
+                }
+                jsonBuilder.addEmbeddedAttribute(
+                    parentIdentifier = parentId,
+                    type = DocumentAttributeType.String,
+                    identifier = childId,
+                    displayName = desc.getDisplayName(locales) ?: childId,
+                    description = ""
+                )
+            }
+        }
+        if (builder.mdocBuilder == null && builder.jsonBuilder == null) {
+            return null
+        }
+        return builder.build()
+    }
 
     /**
      * A [Tags] for storing application-specific data.
@@ -194,13 +345,16 @@ class Document internal constructor(
                     appData = data.appData,
                     mpzPassId = data.mpzPassId,
                     mpzPassVersion = data.mpzPassVersion,
+                    mpzPassMetadata = data.mpzPassMetadata,
                     readerIdentifiers = data.readerIdentifiers,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
                         null
                     } else {
                         ByteString(Cbor.encode(newData))
-                    }
+                    },
+                    openID4VCIClaimDescriptions = data.openID4VCIClaimDescriptions,
+                    portraitEquivalenceData = data.portraitEquivalenceData
                 )
                 // Emit events only if something actually changed.
                 if (data != this.data) {
@@ -459,9 +613,12 @@ class Document internal constructor(
                 appData = data.appData,
                 mpzPassId = data.mpzPassId,
                 mpzPassVersion = data.mpzPassVersion,
+                mpzPassMetadata = data.mpzPassMetadata,
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
-                tags = Tags.Editor(this@Document.tags._tags)
+                tags = Tags.Editor(this@Document.tags._tags),
+                openID4VCIClaimDescriptions = openID4VCIClaimDescriptions,
+                portraitEquivalenceData = data.portraitEquivalenceData
             )
             editAction.invoke(editor)
             val newTagsData = if (editor.tags.tags.isEmpty()) {
@@ -482,9 +639,12 @@ class Document internal constructor(
                 appData = editor.appData,
                 mpzPassId = editor.mpzPassId,
                 mpzPassVersion = editor.mpzPassVersion,
+                mpzPassMetadata = editor.mpzPassMetadata,
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
-                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
+                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
+                openID4VCIClaimDescriptions = editor.openID4VCIClaimDescriptions.ifEmpty { null }?.encodeToCbor(),
+                portraitEquivalenceData = editor.portraitEquivalenceData
             )
             // Emit events only if something actually changed.
             if (data != this.data) {
@@ -514,9 +674,13 @@ class Document internal constructor(
      * @property appData Application-specific data.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property mpzPassMetadata Metadata for claims if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
+     * @property openID4VCIClaimDescriptions Descriptions of the claims in the document as provided by the issuer
+     *  in its OpenID4VCI metadata.
+     * @property portraitEquivalenceData The portrait equivalence data for this document, if any.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -529,9 +693,12 @@ class Document internal constructor(
         var appData: ByteString?,
         var mpzPassId: String?,
         var mpzPassVersion: Long?,
+        var mpzPassMetadata: MpzPassMetadata? = null,
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
-        val tags: Tags.Editor
+        val tags: Tags.Editor,
+        var openID4VCIClaimDescriptions: List<OpenID4VCIClaimDescription> = emptyList(),
+        var portraitEquivalenceData: MdocPortraitEquivalenceData?
     )
 
     /**

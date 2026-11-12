@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">מילת המעבר חלשה, אנא בחר מילה אחרת</string>
     <string name="credential_presentment_button_cancel">ביטול</string>
     <string name="credential_presentment_button_more">עוד</string>
-    <string name="credential_presentment_button_share">שתף</string>
+    <string name="credential_presentment_button_continue">המשך</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">מבקש לא ידוע</string>
     <string name="credential_presentment_share_with_known_requester">נתונים אלה ישותפו עם %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">נתונים אלה ישותפו:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">סמל אזהרה</string>
     <string name="credential_presentment_select_document">בחר מסמך</string>
     <string name="credential_presentment_requester_information">מידע על המבקש</string>
+    <string name="credential_presentment_details">פרטים</string>
+    <string name="credential_presentment_back">חזרה</string>
     <string name="certificate_viewer_sub_basic_info">מידע בסיסי</string>
     <string name="certificate_viewer_k_type">סוג</string>
     <string name="certificate_viewer_k_serial_number">מספר סידורי</string>
@@ -242,4 +244,8 @@
     <string name="face_matcher_prompt_grant_permission">הענק הרשאה</string>
     <string name="face_matcher_prompt_cancel">ביטול</string>
     <string name="face_matcher_prompt_confirm">אשר</string>
+    <string name="certificate_viewer_tab_leaf">קצה</string>
+    <string name="certificate_viewer_tab_intermediate">ביניים</string>
+    <string name="certificate_viewer_tab_intermediate_n">ביניים %1$d</string>
+    <string name="certificate_viewer_tab_root">שורש</string>
 </resources>

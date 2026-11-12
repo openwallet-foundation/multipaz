@@ -44,6 +44,9 @@ struct Credential {
     // This is the empty string if not available as a VC.
     std::string vcVct;
 
+    // Additional VCTs that can be used for matching in addition to vcVct.
+    std::vector<std::string> vcOtherVcts;
+
     // This is the set of protocols the credential can be exported on.
     std::vector<std::string> protocols;
 
@@ -64,6 +67,10 @@ struct Credential {
     // Maps from claimName to displayName when omitClaims is true.
     std::map<std::string, std::string> claimDisplayNames;
 
+    // The text of the one field shown when a request names no claim to show, or the empty
+    // string to use the default text.
+    std::string noClaimsRequestedText;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 
@@ -77,6 +84,7 @@ struct Credential {
         std::string documentId_,
         std::string mdocDocType_,
         std::string vcVct_,
+        std::vector<std::string> vcOtherVcts_,
         std::vector<std::string> protocols_,
         std::vector<std::vector<uint8_t>> issuerIdentifiers_,
         std::vector<std::vector<uint8_t>> readerIdentifiers_,
@@ -85,13 +93,15 @@ struct Credential {
         std::map<std::string, Claim> claims_,
         bool supportsPortraitImageEquivalence_ = false,
         bool omitClaims_ = false,
-        std::map<std::string, std::string> claimDisplayNames_ = {}
+        std::map<std::string, std::string> claimDisplayNames_ = {},
+        std::string noClaimsRequestedText_ = ""
     ) : title(std::move(title_)),
         subtitle(std::move(subtitle_)),
         bitmap(std::move(bitmap_)),
         documentId(std::move(documentId_)),
         mdocDocType(std::move(mdocDocType_)),
         vcVct(std::move(vcVct_)),
+        vcOtherVcts(std::move(vcOtherVcts_)),
         protocols(std::move(protocols_)),
         issuerIdentifiers(std::move(issuerIdentifiers_)),
         readerIdentifiers(std::move(readerIdentifiers_)),
@@ -100,7 +110,8 @@ struct Credential {
         claims(std::move(claims_)),
         supportsPortraitImageEquivalence(supportsPortraitImageEquivalence_),
         omitClaims(omitClaims_),
-        claimDisplayNames(std::move(claimDisplayNames_)) {}
+        claimDisplayNames(std::move(claimDisplayNames_)),
+        noClaimsRequestedText(std::move(noClaimsRequestedText_)) {}
 
     std::string lookupClaimDisplayName(const std::vector<std::string>& path) const;
 

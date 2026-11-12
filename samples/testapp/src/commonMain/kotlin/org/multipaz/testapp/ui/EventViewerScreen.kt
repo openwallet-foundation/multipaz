@@ -59,9 +59,9 @@ import org.multipaz.compose.decodeImage
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.eventlogger.SimpleEventLoggerModel
 import org.multipaz.compose.getOutlinedImageVector
-import org.multipaz.compose.items.FloatingItemCenteredText
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.SegmentedItemCenteredText
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
 import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.compose.sharemanager.ShareManager
 import org.multipaz.compose.text.fromMarkdown
@@ -69,6 +69,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
 import org.multipaz.mdoc.transport.MdocTransportType
 import org.multipaz.datetime.formatLocalized
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
 import org.multipaz.eventlogger.Event
@@ -295,8 +296,8 @@ private fun EventViewer(
             )
         }
         is EventSimple -> {
-           FloatingItemList(title = "EventSimple") {
-               FloatingItemCenteredText(text = "${event.data.size} bytes of data")
+           SegmentedItemList(title = "EventSimple") {
+               SegmentedItemCenteredText(text = "${event.data.size} bytes of data")
            }
         }
     }
@@ -351,32 +352,32 @@ private fun EventViewerProvisioning(
             timeStyle = FormatStyle.LONG
         )
 
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
         ) {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Date and time",
                 text = eventDateTimeString
             )
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Issuer name",
                 text = event.issuerData.display.text
             )
             when (event.issuerData) {
                 is EventProvisioningIssuerDataOpenID4VCI -> {
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "OpenID4VCI server",
                         text = (event.issuerData as EventProvisioningIssuerDataOpenID4VCI).url
                     )
                 }
             }
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Type",
                 text = if (event.initialProvisioning) "Initial provisioning" else "Credential refresh"
             )
             var numCredentials = 0
             event.credentialsFetched.forEach { (domain, credentials) -> numCredentials += credentials.size }
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Credentials",
                 text = if (numCredentials == 1) {
                     "1 credential downloaded"
@@ -443,10 +444,10 @@ private fun EventViewerPresentment(
             fontWeight = FontWeight.Bold,
         )
 
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
         ) {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Date and time",
                 text = eventDateTimeString
             )
@@ -467,17 +468,17 @@ private fun EventViewerPresentment(
                 is EventPresentmentIso18013Proximity -> {
                     val handover = event.sessionTranscript?.asArray?.getOrNull(2)
                     if (handover == Simple.NULL) {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using QR code"
                         )
                     } else if (handover != null) {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using NFC"
                         )
                     } else {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Shared in-person",
                             text = event.telemetry?.engagementType?.name ?: "Proximity"
                         )
@@ -485,24 +486,24 @@ private fun EventViewerPresentment(
                 }
             }
 
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Presentment protocol",
                 text =  protocol
             )
 
             event.telemetry?.let { telemetry ->
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Outcome",
                     text = telemetry.outcome.name
                 )
                 telemetry.durationTotal?.let {
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Total duration",
                         text = "${it.inWholeMilliseconds} ms"
                     )
                 }
                 if (telemetry.warnings.isNotEmpty()) {
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Warnings",
                         text = telemetry.warnings.joinToString(", ") { it.code.name }
                     )
@@ -510,12 +511,12 @@ private fun EventViewerPresentment(
             }
 
             if (presentmentData?.trustMetadata != null) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Requester trusted",
                     text =  "Yes, in trust list"
                 )
             } else if (presentmentData != null) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Requester trusted",
                     text = buildAnnotatedString {
                         withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
@@ -526,7 +527,7 @@ private fun EventViewerPresentment(
             }
 
             presentmentData?.requesterCertChain?.let {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Click to view",
                     modifier = Modifier.clickable {
@@ -534,14 +535,14 @@ private fun EventViewerPresentment(
                     }
                 )
             } ?: if (presentmentData != null) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Not available",
                 )
             } else Unit
 
             presentmentData?.trustMetadata?.privacyPolicyUrl?.let {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Requester privacy policy",
                     text = AnnotatedString.fromMarkdown(
                         markdownString = "[$it]($it)"
@@ -553,6 +554,10 @@ private fun EventViewerPresentment(
         presentmentData?.requestedDocuments?.forEach { requestedDocument ->
             val info = documentModel.documentInfos.collectAsState().value.find {
                 it.document.identifier == requestedDocument.documentId
+            }
+            var fallbackDocType by remember(info?.document) { mutableStateOf<DocumentType?>(null) }
+            LaunchedEffect(info?.document) {
+                fallbackDocType = info?.document?.getDocumentType()
             }
             if (info != null) {
                 Image(
@@ -572,11 +577,11 @@ private fun EventViewerPresentment(
                 if (requestedClaim is MdocRequestedClaim) !requestedClaim.intentToRetain else true
             }
             if (sharedClaims.isNotEmpty()) {
-                FloatingItemList(
+                SegmentedItemList(
                     modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                     title = "This info was shared",
                 ) {
-                    ExtractClaimsItems(sharedClaims, documentTypeRepository)
+                    ExtractClaimsItems(sharedClaims, documentTypeRepository, fallbackDocType)
                 }
             }
 
@@ -584,11 +589,11 @@ private fun EventViewerPresentment(
                 if (requestedClaim is MdocRequestedClaim) requestedClaim.intentToRetain else false
             }
             if (sharedAndStoredClaims.isNotEmpty()) {
-                FloatingItemList(
+                SegmentedItemList(
                     modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                     title = "This info was shared and stored",
                 ) {
-                    ExtractClaimsItems(sharedAndStoredClaims, documentTypeRepository)
+                    ExtractClaimsItems(sharedAndStoredClaims, documentTypeRepository, fallbackDocType)
                 }
             }
         }
@@ -601,25 +606,25 @@ private fun OriginAndAppIdItem(
     appId: String?,
 ) {
     if (origin != null && origin.isNotEmpty() && (origin.startsWith("http://") || origin.startsWith("https://"))) {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Shared with website",
             text = AnnotatedString.fromMarkdown("[$origin]($origin)")
         )
     } else if (origin != null && origin.isNotEmpty()) {
         if (appId != null) {
             // TODO: look up details about the application
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Shared with application",
                 text = appId
             )
         } else {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Shared with application",
                 text = "Unknown application"
             )
         }
     } else {
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = "Shared with website",
             text = "Unknown website"
         )
@@ -629,15 +634,17 @@ private fun OriginAndAppIdItem(
 @Composable
 private fun ExtractClaimsItems(
     requestedClaims: Map<RequestedClaim, Claim>,
-    documentTypeRepository: DocumentTypeRepository
+    documentTypeRepository: DocumentTypeRepository,
+    fallbackDocumentType: DocumentType? = null
 ) {
     requestedClaims.forEach { (requestedClaim, claim) ->
         // Make sure claim.attribute is set, if we know the document type
         val claim = Claim.fromDataItem(
             dataItem = claim.toDataItem(),
-            documentTypeRepository = documentTypeRepository
+            documentTypeRepository = documentTypeRepository,
+            fallbackDocumentType = fallbackDocumentType
         )
-        FloatingItemHeadingAndText(
+        SegmentedItemHeadingAndText(
             heading = claim.displayName,
             text = claim.render(),
             image = {
@@ -742,10 +749,10 @@ private fun EventViewerVerification(
             fontWeight = FontWeight.Bold,
         )
 
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
         ) {
-            FloatingItemHeadingAndText(
+            SegmentedItemHeadingAndText(
                 heading = "Date and time",
                 text = eventDateTimeString
             )
@@ -753,17 +760,17 @@ private fun EventViewerVerification(
             when (event) {
                 is EventVerificationDigitalCredentials -> {
                     OriginAndAppIdItem(event.origin, event.appId)
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Presentment protocol",
                         text = protocol
                     )
                     event.durationRequestSentToResponseReceived?.let {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Latency",
                             text = "${it.inWholeMilliseconds} ms"
                         )
                     }
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Request JSON",
                         text = "Click to view",
                         modifier = Modifier.clickable {
@@ -771,7 +778,7 @@ private fun EventViewerVerification(
                             jsonDialogContent = formatJson(event.requestJson)
                         }
                     )
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Response JSON",
                         text = "Click to view",
                         modifier = Modifier.clickable {
@@ -787,34 +794,34 @@ private fun EventViewerVerification(
                         EngagementType.NFC_NEGOTIATED_HANDOVER -> "NFC Negotiated Handover"
                         EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT -> "NFC Concurrent Channel Engagement"
                     }
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Engagement channel",
                         text = engagementText
                     )
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Presentment protocol",
                         text = protocol
                     )
                     event.durationNfcTapToEngagement?.let {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "NFC tap to engagement",
                             text = "${it.inWholeMilliseconds} ms"
                         )
                     }
                     event.durationEngagementReceivedToRequestSent?.let {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Engagement to request sent",
                             text = "${it.inWholeMilliseconds} ms"
                         )
                     }
                     event.durationRequestSentToResponseReceived?.let {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Request sent to response received",
                             text = "${it.inWholeMilliseconds} ms"
                         )
                     }
                     event.durationScanningTime?.let {
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Transport scanning time",
                             text = "${it.inWholeMilliseconds} ms"
                         )
@@ -823,7 +830,7 @@ private fun EventViewerVerification(
                         val isNfcHybrid =
                             stats.transportType == MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE ||
                                 stats.transportType == MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = "Transport stats (${stats.transportType.name})",
                             text = buildString {
                                 append("Sent: ${stats.numMessagesSent} msgs (${stats.bytesSent} B)")
@@ -842,7 +849,7 @@ private fun EventViewerVerification(
                     }
                 }
                 else -> {
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Presentment protocol",
                         text = protocol
                     )
@@ -850,7 +857,7 @@ private fun EventViewerVerification(
             }
 
             if (verificationError != null) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Verification status",
                     text = buildAnnotatedString {
                         withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
@@ -859,12 +866,12 @@ private fun EventViewerVerification(
                     }
                 )
             } else if (verifiedPresentations == null) {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Verification status",
                     text = "Verifying..."
                 )
             } else {
-                FloatingItemHeadingAndText(
+                SegmentedItemHeadingAndText(
                     heading = "Verification status",
                     text = "Verified successfully"
                 )
@@ -880,12 +887,12 @@ private fun EventViewerVerification(
                 is MdocVerifiedPresentation -> "Document ${index + 1}: ${vp.docType} ($formatText)"
                 is JsonVerifiedPresentation -> "Document ${index + 1}: ${vp.vct} ($formatText)"
             }
-            FloatingItemList(
+            SegmentedItemList(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                 title = titleText
             ) {
                 vp.documentSignerCertChain?.let { certChain ->
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "Issuer certificate chain",
                         text = "Click to view",
                         modifier = Modifier.clickable {
@@ -895,7 +902,7 @@ private fun EventViewerVerification(
                 }
 
                 if (vp.zkpUsed) {
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         heading = "ZK proof",
                         text = "Successfully verified \uD83E\uDE84"
                     )
@@ -913,7 +920,7 @@ private fun EventViewerVerification(
                             documentTypeRepository = documentTypeRepository
                         )
                         val textValue = typedClaim.render()
-                        FloatingItemHeadingAndText(
+                        SegmentedItemHeadingAndText(
                             heading = typedClaim.displayName + suffix,
                             text = textValue,
                             image = {

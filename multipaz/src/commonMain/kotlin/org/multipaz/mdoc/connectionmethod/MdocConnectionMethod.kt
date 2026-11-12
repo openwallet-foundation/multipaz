@@ -80,10 +80,6 @@ abstract class MdocConnectionMethod {
                 MdocConnectionMethodHttp.METHOD_TYPE -> return MdocConnectionMethodHttp.fromDeviceEngagement(
                     encodedDeviceRetrievalMethod
                 )
-
-                MdocConnectionMethodNfcV2.METHOD_TYPE -> return MdocConnectionMethodNfcV2.fromDeviceEngagement(
-                    encodedDeviceRetrievalMethod
-                )
             }
             Logger.w(TAG, "Unsupported ConnectionMethod type $type in DeviceEngagement")
             return null

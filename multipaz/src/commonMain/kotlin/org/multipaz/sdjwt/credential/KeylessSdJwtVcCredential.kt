@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
+import org.multipaz.cbor.putCborArray
 import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.document.Document
@@ -20,21 +21,27 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
     override lateinit var vct: String
         private set
 
+    override lateinit var otherVcts: List<String>
+        private set
+
     /**
-     * Constructs a new [KeyBoundSdJwtVcCredential].
+     * Constructs a new [KeylessSdJwtVcCredential].
      *
      * @param document the document to add the credential to.
-     * @param asReplacementFor the credential this credential will replace, if not null
+     * @param asReplacementForIdentifier the credential this credential will replace, if not null
      * @param domain the domain of the credential
      * @param vct the Verifiable Credential Type.
+     * @param otherVcts other Verifiable Credential Types that can be used for matching in addition to [vct].
      */
     private constructor(
         document: Document,
         asReplacementForIdentifier: String?,
         domain: String,
         vct: String,
+        otherVcts: List<String>,
     ) : super(document, asReplacementForIdentifier, domain) {
         this.vct = vct
+        this.otherVcts = otherVcts
         // Only the leaf constructors for keyless credentials should add the credential to
         // the document.
         check (this::class == KeylessSdJwtVcCredential::class)
@@ -55,15 +62,24 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
     override suspend fun deserialize(dataItem: DataItem) {
         super.deserialize(dataItem)
         vct = dataItem["vct"].asTstr
+        otherVcts = dataItem.getOrNull("otherVcts")?.asArray?.map { it.asTstr } ?: emptyList()
     }
 
     override fun addSerializedData(builder: MapBuilder<CborBuilder>) {
         super.addSerializedData(builder)
         builder.put("vct", vct)
+        if (otherVcts.isNotEmpty()) {
+            builder.putCborArray("otherVcts") {
+                otherVcts.forEach { add(it) }
+            }
+        }
     }
 
-    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
-        return getClaimsImpl(documentTypeRepository)
+    override suspend fun getClaims(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
+    ): List<JsonClaim> {
+        return getClaimsImpl(documentTypeRepository, locales)
     }
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
@@ -79,6 +95,7 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            metadata = document.mpzPassMetadata,
             readerIdentifiers = document.readerIdentifiers,
             sdJwtVc = listOf(MpzPassSdJwtVc(
                 vct = vct,
@@ -92,25 +109,28 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
         const val CREDENTIAL_TYPE: String = "KeylessSdJwtVcCredential"
 
         /**
-         * Create a [KeyBoundSdJwtVcCredential].
+         * Create a [KeylessSdJwtVcCredential].
          *
          * @param document The document to add the credential to.
          * @param asReplacementForIdentifier the identifier for the [Credential] this will replace when certified.
          * @param domain The domain for the credential.
          * @param vct The Verifiable Credential Type for the credential.
+         * @param otherVcts Other Verifiable Credential Types that can be used for matching in addition to [vct].
          * @return an uncertified [Credential] which has been added to [document].
          */
         suspend fun create(
             document: Document,
             asReplacementForIdentifier: String?,
             domain: String,
-            vct: String
+            vct: String,
+            otherVcts: List<String> = emptyList(),
         ): KeylessSdJwtVcCredential {
             return KeylessSdJwtVcCredential(
                 document,
                 asReplacementForIdentifier,
                 domain,
-                vct
+                vct,
+                otherVcts
             ).apply {
                 addToDocument()
             }

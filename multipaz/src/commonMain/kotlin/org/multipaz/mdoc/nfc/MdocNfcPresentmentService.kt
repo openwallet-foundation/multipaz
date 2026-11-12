@@ -7,12 +7,12 @@ import kotlin.concurrent.Volatile
 
 /**
  * Base class for NFC APDU services that initiate and manage an ISO/IEC 18013-5 mdoc
- * presentment transaction ([MdocNdefService] and [MdocNfcV2Service]).
+ * presentment transaction ([MdocNdefService] and [MdocNfcCceService]).
  */
 abstract class MdocNfcPresentmentService : NfcApduService() {
     companion object {
         // Shared across all MdocNfcPresentmentService subclasses (MdocNdefService and
-        // MdocNfcV2Service) so that a subsequent NFC tap on either service (or across
+        // MdocNfcCceService) so that a subsequent NFC tap on either service (or across
         // recreated service instances) can cancel and join any previous active proximity
         // transaction.
         @Volatile

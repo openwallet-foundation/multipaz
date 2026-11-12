@@ -183,6 +183,7 @@ We have resources for people already involved and people wishing to contribute
 to the Multipaz project
 - [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved with the project and send PRs.
 - [CODE-OF-CONDUCT.md](CODE-OF-CONDUCT.md) for the policies and rules around collaboration.
+- [SECURITY.md](SECURITY.md) for our security vulnerability disclosure policy and how to report vulnerabilities.
 - [CODING-STYLE.md](CODING-STYLE.md) for guidelines on writing code to be included in the project.
 - [TESTING.md](TESTING.md) explains our approach to unit and manual testing.
 - [DEVELOPER-ENVIRONMENT.md](DEVELOPER-ENVIRONMENT.md) for how to set up your system for building Multipaz.

@@ -333,40 +333,45 @@ class DigitalCredentialsPresentmentTest {
         override suspend fun showConsentPrompt(
             requester: Requester,
             trustedRequesterIdentity: TrustedRequesterIdentity?,
-            consentData: ConsentData,
+            presentmentData: PresentmentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
-        ): CredentialSelection? {
-            val selections = consentData.useCases.mapIndexed { useCaseIndex, useCase ->
+        ): PresentmentSelection? {
+            val selections = presentmentData.useCases.mapIndexed { useCaseIndex, useCase ->
                 if (preselectedDocuments.isNotEmpty()) {
                     val targetDoc = preselectedDocuments.getOrNull(useCaseIndex)
                     if (targetDoc != null) {
                         val matchingIndex = useCase.solutions.indexOfFirst { solution ->
-                            solution.credentials.any { it.match.credential.document == targetDoc }
+                            solution.matches.any { it.credential.document == targetDoc }
                         }
-                        if (matchingIndex != -1) matchingIndex else 0
+                        if (matchingIndex != -1) listOf(matchingIndex) else listOf(0)
                     } else {
-                        0
+                        listOf(0)
                     }
                 } else {
-                    if (useCase.solutions.isNotEmpty()) 0 else -1
+                    when {
+                        useCase.solutions.isEmpty() -> emptyList()
+                        useCase.allowMultiple -> useCase.solutions.indices.toList()
+                        else -> listOf(0)
+                    }
                 }
             }
-            val userInput = mutableMapOf<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>()
-            consentData.useCases.forEachIndexed { index, useCase ->
-                val selection = selections[index]
-                if (selection >= 0 && selection < useCase.solutions.size) {
-                    for (cred in useCase.solutions[selection].credentials) {
-                        val tip = tipPercentByCredential[cred.match.credential] ?: tipPercent
-                        if (tip != null) {
-                            userInput[cred.match] = mapOf(
-                                PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
-                            )
+            val userInput = mutableMapOf<PresentmentCredentialMatch, Map<String, TransactionUserInput>>()
+            presentmentData.useCases.forEachIndexed { index, useCase ->
+                for (selection in selections[index]) {
+                    if (selection in useCase.solutions.indices) {
+                        for (match in useCase.solutions[selection].matches) {
+                            val tip = tipPercentByCredential[match.credential] ?: tipPercent
+                            if (tip != null) {
+                                userInput[match] = mapOf(
+                                    PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
+                                )
+                            }
                         }
                     }
                 }
             }
-            val ret = consentData.toCredentialSelection(selections, userInput)
+            val ret = presentmentData.toPresentmentSelection(selections, userInput)
             onDocumentsInFocus(ret.matches.map { it.credential.document })
             return ret
         }
@@ -384,7 +389,7 @@ class DigitalCredentialsPresentmentTest {
     }
 
     private data class ShownConsentPrompt(
-        val credentialQueryResult: CredentialQueryResult,
+        val presentmentData: PresentmentData,
         val preselectedDocuments: List<Document>,
         val requester: Requester,
         val trustPoint: TrustPoint?
@@ -2290,6 +2295,82 @@ class DigitalCredentialsPresentmentTest {
             "\"random\": h'...',",
             normalizeMdocResponseCdn("\"random\": << 10(h'2ba86224fbb8692180862f0b7d75') >>,")
         )
+    }
+
+    // Signs an OpenID4VP 1.0 request with one signature per client ID, all with certificates for DNS_NAME, and
+    // checks that it is rejected, as some client ID is not a dNSName subject alternative name of its certificate.
+    private suspend fun testClientIdNotMatchingCertificateIsRejected(clientIds: List<String>) {
+        val readerRootCerts = documentStoreTestHarness.readerRootKey.certChain.certificates
+        val verifierIdentities = clientIds.map { clientId ->
+            val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val cert = MdocUtil.generateReaderCertificate(
+                readerRootKey = documentStoreTestHarness.readerRootKey,
+                readerKey = key.publicKey,
+                subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = DNS_NAME,
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = readerRootCerts.first().validityNotBefore,
+                validUntil = readerRootCerts.first().validityNotAfter
+            )
+            VerifierIdentity(
+                AsymmetricKey.X509CertifiedExplicit(
+                    privateKey = key,
+                    certChain = X509CertChain(listOf(cert) + readerRootCerts)
+                ),
+                clientId
+            )
+        }
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = "test-nonce",
+            responseEncryptionKey = null,
+            verifierIdentities = verifierIdentities,
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = Json.decodeFromString(
+                JsonObject.serializer(),
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "age_over_21"] }
+                          ]
+                      }]
+                    }
+                """.trimIndent()
+            ),
+            jsonTransactionData = emptyList()
+        )
+        val source = SimplePresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+            showConsentPromptFn = ::promptModelSilentConsent,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            digitalCredentialsPresentment(
+                protocol = if (clientIds.size == 1) "openid4vp-v1-signed" else "openid4vp-v1-multisigned",
+                data = request,
+                appId = APP_ID,
+                origin = ORIGIN,
+                preselectedDocuments = emptyList(),
+                source = source,
+            )
+        }
+    }
+
+    @Test
+    fun test_OID4VP_signedClientIdNotMatchingCertificate() = runTestWithSetup {
+        testClientIdNotMatchingCertificateIsRejected(listOf("x509_san_dns:impersonated.example"))
+    }
+
+    @Test
+    fun test_OID4VP_multisignedClientIdNotMatchingCertificate() = runTestWithSetup {
+        testClientIdNotMatchingCertificateIsRejected(listOf(CLIENT_ID, "x509_san_dns:impersonated.example"))
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

@@ -328,43 +328,49 @@ private suspend fun processPresentation(
     val multiDocMap = mutableMapOf<String, MutableList<JsonObject>>()
     val processedResponse = DcqlProcessedResponse(dcql, verifiedPresentations)
 
-    for ((id, credential) in processedResponse.credentials) {
-        val presentation = credential.presentation
-        val trusted = presentation.documentSignerCertChain?.let {
-            trustManager.verify(it.certificates, now).isTrusted
-        }
-        val transactions = when (presentation) {
-            is JsonVerifiedPresentation ->
-                presentation.transactionResponses?.let { JsonObject(it) }
-            is MdocVerifiedPresentation ->
-                presentation.transactionResponses?.let { responses ->
-                    buildJsonObject {
-                        for ((transactionId, attributes) in responses) {
-                            putJsonObject(transactionId) {
-                                for ((attributeId, value) in attributes) {
-                                    put(attributeId, value.toJson())
+    for ((id, credentialList) in processedResponse.credentialLists) {
+        for (credential in credentialList) {
+            val presentation = credential.presentation
+            val trusted = presentation.documentSignerCertChain?.let {
+                trustManager.verify(it.certificates, now).isTrusted
+            }
+            val transactions = when (presentation) {
+                is JsonVerifiedPresentation ->
+                    presentation.transactionResponses?.let { JsonObject(it) }
+                is MdocVerifiedPresentation ->
+                    presentation.transactionResponses?.let { responses ->
+                        buildJsonObject {
+                            for ((transactionId, attributes) in responses) {
+                                putJsonObject(transactionId) {
+                                    for ((attributeId, value) in attributes) {
+                                        put(attributeId, value.toJson())
+                                    }
                                 }
                             }
                         }
                     }
+            }
+            val docResult = buildJsonObject {
+                trusted?.let { put("trusted", trusted) }
+                putJsonObject("issuer_signed_claims") {
+                    putClaims(credential.issuerSignedClaims)
                 }
-        }
-        val docResult = buildJsonObject {
-            trusted?.let { put("trusted", trusted) }
-            putJsonObject("issuer_signed_claims") {
-                putClaims(credential.issuerSignedClaims)
-            }
-            if (credential.deviceSignedClaims.isNotEmpty()) {
-                putJsonObject("device_signed_claims") {
-                    putClaims(credential.deviceSignedClaims)
+                if (credential.deviceSignedClaims.isNotEmpty()) {
+                    putJsonObject("device_signed_claims") {
+                        putClaims(credential.deviceSignedClaims)
+                    }
+                }
+                transactions?.let { put("transactions", it) }
+                if (presentation.zkpUsed) {
+                    put("zkp_used", true)
                 }
             }
-            transactions?.let { put("transactions", it) }
-            if (presentation.zkpUsed) {
-                put("zkp_used", true)
+            if (id in processedResponse.multipleQueryIds) {
+                multiDocMap.getOrPut(id) { mutableListOf() }.add(docResult)
+            } else {
+                singleDocMap[id] = docResult
             }
         }
-        singleDocMap[id] = docResult
     }
 
     val result = buildJsonObject {

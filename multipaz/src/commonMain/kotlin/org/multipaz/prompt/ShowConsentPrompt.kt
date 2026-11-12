@@ -1,9 +1,15 @@
 package org.multipaz.prompt
 
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.ClassifySimpleConsentFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
+import org.multipaz.consent.defaultClassifySimpleConsent
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialQueryResult
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
@@ -23,24 +29,24 @@ import org.multipaz.trustmanagement.TrustMetadata
 typealias ShowConsentPromptFn = suspend (
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-) -> CredentialSelection?
+) -> PresentmentSelection?
 
 /**
  * A [ShowConsentPromptFn] which doesn't show any consent prompt
  *
- * @return the result of calling [CredentialQueryResult.select] passing [preselectedDocuments].
+ * @return the result of calling [PresentmentData.select] passing [preselectedDocuments].
  */
 suspend fun promptModelSilentConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection? {
-    val ret = consentData.credentialQueryResult.select(preselectedDocuments)
+): PresentmentSelection? {
+    val ret = presentmentData.select(preselectedDocuments)
     onDocumentsInFocus(ret.matches.map { it.credential.document })
     return ret
 }
@@ -51,13 +57,24 @@ suspend fun promptModelSilentConsent(
  *
  * @param requester the relying party which is requesting the data.
  * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
- * @param consentData the combinations of credentials and claims that the user can select.
+ * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments a list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return `null` if the user dismissed the prompt, otherwise a [CredentialSelection] object
+ * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
+ *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+ *   credentials with [requester] before.
+ * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+ *   for the active selection.
+ * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+ *   for the active selection.
+ * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
+ *   combined simple consent and biometric authentication prompt.
+ * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
+ * @return `null` if the user dismissed the prompt, otherwise a [PresentmentSelection] object
  *   conveying which credentials the user selected, if multiple options are available.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
@@ -65,17 +82,29 @@ suspend fun promptModelSilentConsent(
 suspend fun promptModelRequestConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
-    onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection? {
+    onDocumentsInFocus: (documents: List<Document>) -> Unit,
+    transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
+    classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+    classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
+    classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
+    platformConsentOptions: PlatformConsentOptions? = null,
+): PresentmentSelection? {
     return try {
         PromptModel.get().requestConsent(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = consentData,
+            presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
+            transactionDataRendererRepository = transactionDataRendererRepository,
+            requesterHistory = requesterHistory,
+            classifyPurposesFn = classifyPurposesFn,
+            classifyRiskFn = classifyRiskFn,
+            classifySimpleConsentFn = classifySimpleConsentFn,
+            platformConsentOptions = platformConsentOptions,
         )
     } catch (_: PromptDismissedException) {
         null

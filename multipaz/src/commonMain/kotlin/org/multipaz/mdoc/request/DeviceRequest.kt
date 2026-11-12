@@ -36,6 +36,7 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
@@ -50,14 +51,14 @@ import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.presentment.CredentialMatchSourceIso18013
-import org.multipaz.presentment.CredentialQueryResult
-import org.multipaz.presentment.CredentialPresentmentSet
-import org.multipaz.presentment.CredentialPresentmentSetOption
-import org.multipaz.presentment.CredentialPresentmentSetOptionMember
-import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.FaceMatchingMode
+import org.multipaz.presentment.PresentmentCredentialMatch
+import org.multipaz.presentment.PresentmentCredentialMatchSourceIso18013
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentPurposeHintIso18013
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.PresentmentUseCase
+import org.multipaz.presentment.PresentmentUseCaseSolution
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.canSatisfyChv1
 import org.multipaz.presentment.isChv1Claim
@@ -65,10 +66,12 @@ import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
+import org.multipaz.util.generateAllPaths
 import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -91,7 +94,7 @@ data class DeviceRequest private constructor(
     val version: String,
     val docRequests: List<DocRequest>,
     val deviceRequestInfo: DeviceRequestInfo?,
-    private val readerAuthAll_: List<CoseSign1>
+    internal val readerAuthAll_: List<CoseSign1>
 ) {
     internal var readerAuthAllVerified: Boolean = false
 
@@ -194,9 +197,9 @@ data class DeviceRequest private constructor(
 
     /**
      * Compares two [DeviceRequest] instances and checks if they are similar in structure,
-     * including signing structure (protected headers and unprotected header keys), ignoring
-     * session-transcript-dependent signatures and ephemeral differences (such as certificate
-     * chains when the reader uses single-use keys).
+     * including signing structure (protected headers, unprotected headers, and certificate
+     * chain except for single-use leaf certificate rotation under the same CA), ignoring
+     * session-transcript-dependent signatures.
      *
      * This is used to check if two requests from different sessions (either 18013-5 proximity
      * or 18013-7 Annex A or C) are the same.
@@ -217,10 +220,104 @@ data class DeviceRequest private constructor(
         for (i in readerAuthAll_.indices) {
             val auth1 = readerAuthAll_[i]
             val auth2 = otherDeviceRequest.readerAuthAll_[i]
-            if (auth1.protectedHeaders != auth2.protectedHeaders) return false
-            if (auth1.unprotectedHeaders.keys != auth2.unprotectedHeaders.keys) return false
+            if (!auth1.isReaderAuthStructurallyEquivalent(auth2)) return false
         }
         return true
+    }
+
+    internal suspend fun isSameAuthenticatedReader(
+        otherDeviceRequest: DeviceRequest,
+        source: PresentmentSource,
+    ): Boolean {
+        if (!isStructurallyEquivalent(otherDeviceRequest)) {
+            return false
+        }
+        suspend fun checkChainPair(
+            chain1: X509CertChain?,
+            chain2: X509CertChain?,
+        ): Boolean {
+            if (chain1 == chain2) {
+                return true
+            }
+            if (chain1 == null || chain2 == null) {
+                return false
+            }
+            if (chain1.certificates.size > 1) {
+                try {
+                    chain1.validate()
+                    chain2.validate()
+                } catch (_: Exception) {
+                    return false
+                }
+            }
+            val trust1 = source.resolveTrust(
+                Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(certChain = chain1)))
+            )
+            val trust2 = source.resolveTrust(
+                Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(certChain = chain2)))
+            )
+            if ((trust1 != null) != (trust2 != null)) {
+                return false
+            }
+            if (trust1 != null && trust2 != null && trust1.trustMetadata != trust2.trustMetadata) {
+                return false
+            }
+            if (chain1.certificates.size <= 1 && trust1 == null) {
+                return false
+            }
+            return true
+        }
+
+        for (i in docRequests.indices) {
+            if (!checkChainPair(docRequests[i].readerAuthCertChain, otherDeviceRequest.docRequests[i].readerAuthCertChain)) {
+                return false
+            }
+        }
+        val x5chainLabel = Cose.COSE_LABEL_X5CHAIN.toCoseLabel
+        for (i in readerAuthAll_.indices) {
+            val chain1 = (readerAuthAll_[i].protectedHeaders[x5chainLabel]
+                ?: readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
+            val chain2 = (otherDeviceRequest.readerAuthAll_[i].protectedHeaders[x5chainLabel]
+                ?: otherDeviceRequest.readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
+            if (!checkChainPair(chain1, chain2)) {
+                return false
+            }
+        }
+        return true
+    }
+
+    internal suspend fun getExpectedOtherDocumentAudience(docRequest: DocRequest?): String? {
+        if (docRequest == null) {
+            return null
+        }
+        return if (readerAuthAll_.isNotEmpty()) {
+            val listOfReaderAuthAll = buildCborArray {
+                readerAuthAll_.forEach {
+                    add(it.toDataItem())
+                }
+            }
+            Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
+                    )
+                )
+            ).toBase64Url()
+        } else if (docRequest.readerAuth_ != null) {
+            Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(docRequest.readerAuth_.toDataItem()))
+                    )
+                )
+            ).toBase64Url()
+        } else {
+            "none"
+        }
     }
 
     /**
@@ -554,7 +651,7 @@ data class DeviceRequest private constructor(
     /**
      * Executes the ISO 18013-5 request against a [PresentmentSource].
      *
-     * If successful, this returns a [CredentialQueryResult] which can be used in
+     * If successful, this returns a [PresentmentData] which can be used in
      * an user interface for the user to select which combination of credentials to return, see
      * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
      * of how to do this.
@@ -565,7 +662,7 @@ data class DeviceRequest private constructor(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
      * @param requesterIdentities additional identities of the requester used for matching reader identifiers, if any.
-     * @return the resulting [CredentialQueryResult] if the query was successful.
+     * @return the resulting [PresentmentData] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
     @Throws(Iso18015ResponseException::class, CancellationException::class)
@@ -573,7 +670,7 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
         requesterIdentities: List<RequesterIdentity> = emptyList(),
-    ): CredentialQueryResult {
+    ): PresentmentData {
         val effectiveRequesterIdentities = requesterIdentities.ifEmpty { getRequesterIdentities() }
         val faceMatchingModeCache = mutableMapOf<String, FaceMatchingMode>()
         suspend fun getOrComputeFaceMatchingMode(credential: Credential): FaceMatchingMode {
@@ -583,6 +680,36 @@ data class DeviceRequest private constructor(
                     requesterIdentities = effectiveRequesterIdentities
                 )
             }
+        }
+
+        suspend fun DocRequestMatch.toPresentmentCredentialMatch(): PresentmentCredentialMatch {
+            val docRequestInfo = docRequest.docRequestInfo
+            val encryptionTargetCertificationChain =
+                docRequestInfo?.docResponseEncryption?.recipientCertificates?.let {
+                    if (it.isNotEmpty()) {
+                        X509CertChain(it)
+                    } else {
+                        null
+                    }
+                }
+            val encryptionTargetTrustMetadata = encryptionTargetCertificationChain?.let {
+                val requester = Requester(
+                    requesterIdentities = listOf(
+                        Iso18013RequesterIdentity(certChain = it)
+                    )
+                )
+                presentmentSource.resolveTrust(requester)?.trustMetadata
+            }
+            return PresentmentCredentialMatch(
+                credential = credential,
+                claims = claims,
+                source = PresentmentCredentialMatchSourceIso18013(docRequest = docRequest),
+                transactionData = transactionData,
+                faceMatchNeeded = faceMatchNeeded,
+                encryptionRequested = docRequestInfo?.docResponseEncryption != null,
+                encryptionTargetCertificationChain = encryptionTargetCertificationChain,
+                encryptionTargetTrustMetadata = encryptionTargetTrustMetadata,
+            )
         }
 
         // First find all matches for all DocRequests
@@ -596,7 +723,7 @@ data class DeviceRequest private constructor(
             )
         }
 
-        val credentialSets = mutableListOf<CredentialPresentmentSet>()
+        val useCases = mutableListOf<PresentmentUseCase>()
 
         if (deviceRequestInfo == null || deviceRequestInfo.useCases.isEmpty()) {
             // If useCases isn't set, treat as 18013-5:2021 request. In this case it's undefined
@@ -612,28 +739,21 @@ data class DeviceRequest private constructor(
                 throw Iso18015ResponseException("No matching credentials for first DocRequest$detail")
             }
 
-            // Create a single set, with a single option, containing matches for the first DocRequest.
-            val memberMatches = result.matches.map { match ->
-                CredentialPresentmentSetOptionMemberMatch(
-                    credential = match.credential,
-                    claims = match.claims,
-                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
-                    transactionData = match.transactionData,
-                    faceMatchNeeded = match.faceMatchNeeded,
-                )
+            // Create a single use-case containing a solution for each match for the first DocRequest.
+            val solutions = result.matches.map { match ->
+                PresentmentUseCaseSolution(listOf(match.toPresentmentCredentialMatch()))
             }
-            val member = CredentialPresentmentSetOptionMember(memberMatches)
-            val option = CredentialPresentmentSetOption(listOf(member))
-            credentialSets.add(
-                CredentialPresentmentSet(
+            useCases.add(
+                PresentmentUseCase(
                     optional = false,
-                    options = listOf(option)
+                    solutions = solutions,
+                    allowMultiple = result.docRequest.docRequestInfo?.uniqueDocSetRequired == false
                 )
             )
         } else {
             // Handle ISO 18013-5 Second Edition UseCases (similar to DCQL credential sets)
             for (useCase in deviceRequestInfo.useCases) {
-                val options = mutableListOf<CredentialPresentmentSetOption>()
+                val solutions = mutableListOf<PresentmentUseCaseSolution>()
                 var satisfied = false
 
                 // A UseCase has multiple DocumentSets (which act as options).
@@ -646,20 +766,14 @@ data class DeviceRequest private constructor(
                     }
 
                     if (allRequestsSatisfied) {
-                        // Create a member for each DocRequest in this set
-                        val members = docRequestIds.map { id ->
-                            val matches = docRequestResults[id].matches.map { match ->
-                                CredentialPresentmentSetOptionMemberMatch(
-                                    credential = match.credential,
-                                    claims = match.claims,
-                                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
-                                    transactionData = match.transactionData,
-                                    faceMatchNeeded = match.faceMatchNeeded,
-                                )
+                        val paths = docRequestIds.map { id -> docRequestResults[id].matches.size }.generateAllPaths()
+                        for (path in paths) {
+                            val matches = path.mapIndexed { index, n ->
+                                val id = docRequestIds[index]
+                                docRequestResults[id].matches[n].toPresentmentCredentialMatch()
                             }
-                            CredentialPresentmentSetOptionMember(matches)
+                            solutions.add(PresentmentUseCaseSolution(matches))
                         }
-                        options.add(CredentialPresentmentSetOption(members))
                         satisfied = true
                     }
                 }
@@ -674,18 +788,31 @@ data class DeviceRequest private constructor(
                     throw Iso18015ResponseException("No credentials match required UseCase$detail")
                 }
 
-                if (options.isNotEmpty()) {
-                    credentialSets.add(
-                        CredentialPresentmentSet(
+                if (solutions.isNotEmpty()) {
+                    val allowMultiple = useCase.documentSets.any { documentSet ->
+                        documentSet.docRequestIds.any { id ->
+                            id in docRequests.indices &&
+                                docRequests[id].docRequestInfo?.uniqueDocSetRequired == false
+                        }
+                    }
+                    useCases.add(
+                        PresentmentUseCase(
                             optional = !useCase.mandatory,
-                            options = options
+                            solutions = solutions,
+                            purposeHints = useCase.purposeHints.map { (controllerId, purposeHintCode) ->
+                                PresentmentPurposeHintIso18013(
+                                    controllerId = controllerId,
+                                    purposeHintCode = purposeHintCode
+                                )
+                            },
+                            allowMultiple = allowMultiple
                         )
                     )
                 }
             }
         }
 
-        return CredentialQueryResult(credentialSets)
+        return PresentmentData(useCases)
     }
 
     private suspend fun findMatchesForDocRequest(
@@ -708,7 +835,8 @@ data class DeviceRequest private constructor(
                 }
                 "dc+sd-jwt" -> {
                     document.getCertifiedCredentials().find {
-                        it is KeyBoundSdJwtVcCredential && it.vct == docRequest.docType
+                        it is KeyBoundSdJwtVcCredential &&
+                            (it.vct == docRequest.docType || it.otherVcts.contains(docRequest.docType))
                     }
                 }
                 else -> null
@@ -1267,6 +1395,9 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
             }
         }
 
+        if (docRequest.docRequestInfo?.uniqueDocSetRequired == false) {
+            put("multiple", true)
+        }
         if (!docRequest.docRequestInfo?.issuerIdentifiers.isNullOrEmpty()) {
             putJsonArray("trusted_authorities") {
                 addJsonObject {
@@ -1733,8 +1864,10 @@ internal fun deviceRequestAddQueries(
         val docRequestInfo = if (alternativeDataElements.isNotEmpty()
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()
-            || credQuery.issuerIdentifiers.isNotEmpty()) {
+            || credQuery.issuerIdentifiers.isNotEmpty()
+            || credQuery.multiple) {
             DocRequestInfo(
+                uniqueDocSetRequired = if (credQuery.multiple) false else null,
                 alternativeDataElements = alternativeDataElements,
                 zkRequest = zkRequest,
                 docFormat = if (credQuery.format == "dc+sd-jwt") "dc+sd-jwt" else null,

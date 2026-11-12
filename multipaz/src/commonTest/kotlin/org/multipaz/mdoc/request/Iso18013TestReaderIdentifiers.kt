@@ -242,29 +242,29 @@ class Iso18013TestReaderIdentifiers {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Restricted
-                                  claims:
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                      dataElement: resident_address
-                                      displayName: Resident address
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Restricted
+                              claims:
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                  dataElement: resident_address
+                                  displayName: Resident address
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             result.prettyPrint().trim()
         )
@@ -280,8 +280,8 @@ class Iso18013TestReaderIdentifiers {
         val result = mdlQuery(readerKey = readerKey1).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, result.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-Restricted", result.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, result.useCases[0].solutions.size)
+        assertEquals("my-mDL-Restricted", result.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -323,8 +323,8 @@ class Iso18013TestReaderIdentifiers {
         val result = mdlQuery(readerKey = null).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, result.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-Public", result.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, result.useCases[0].solutions.size)
+        assertEquals("my-mDL-Public", result.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -342,7 +342,7 @@ class Iso18013TestReaderIdentifiers {
         val resultReader1 = mdlQuery(readerKey = readerKey1).execute(
             presentmentSource = harness.presentmentSource
         )
-        val matches1 = resultReader1.credentialSets[0].options[0].members[0].matches
+        val matches1 = resultReader1.useCases[0].solutions.map { it.matches[0] }
         assertEquals(2, matches1.size)
         assertEquals(
             listOf("doc-Public", "doc-Reader1-Only"),
@@ -353,7 +353,7 @@ class Iso18013TestReaderIdentifiers {
         val resultReader2 = mdlQuery(readerKey = readerKey2).execute(
             presentmentSource = harness.presentmentSource
         )
-        val matches2 = resultReader2.credentialSets[0].options[0].members[0].matches
+        val matches2 = resultReader2.useCases[0].solutions.map { it.matches[0] }
         assertEquals(2, matches2.size)
         assertEquals(
             listOf("doc-Public", "doc-Reader2-Only"),
@@ -365,7 +365,7 @@ class Iso18013TestReaderIdentifiers {
         val resultUnknown = mdlQuery(readerKey = readerKeyUnknown).execute(
             presentmentSource = harness.presentmentSource
         )
-        val matchesUnknown = resultUnknown.credentialSets[0].options[0].members[0].matches
+        val matchesUnknown = resultUnknown.useCases[0].solutions.map { it.matches[0] }
         assertEquals(1, matchesUnknown.size)
         assertEquals("doc-Public", matchesUnknown[0].credential.document.displayName)
 
@@ -373,7 +373,7 @@ class Iso18013TestReaderIdentifiers {
         val resultUnauth = mdlQuery(readerKey = null).execute(
             presentmentSource = harness.presentmentSource
         )
-        val matchesUnauth = resultUnauth.credentialSets[0].options[0].members[0].matches
+        val matchesUnauth = resultUnauth.useCases[0].solutions.map { it.matches[0] }
         assertEquals(1, matchesUnauth.size)
         assertEquals("doc-Public", matchesUnauth[0].credential.document.displayName)
     }
@@ -388,8 +388,8 @@ class Iso18013TestReaderIdentifiers {
         val result = mdlQueryReaderAuthAll(readerKey = readerKey1).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, result.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-Restricted", result.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, result.useCases[0].solutions.size)
+        assertEquals("my-mDL-Restricted", result.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -419,27 +419,27 @@ class Iso18013TestReaderIdentifiers {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Restricted
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","formatted"]
-                                      displayName: Resident address
-                                      value: Sample Street 123, CA 90210, US
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Restricted
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","formatted"]
+                                  displayName: Resident address
+                                  value: Sample Street 123, CA 90210, US
             """.trimIndent().trim(),
             result.prettyPrint().trim()
         )
@@ -487,8 +487,8 @@ class Iso18013TestReaderIdentifiers {
         val resultIntermediate = mdlQuery(readerKey = readerKey).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIntermediate.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-3Tier", resultIntermediate.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIntermediate.useCases[0].solutions.size)
+        assertEquals("my-mDL-3Tier", resultIntermediate.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -503,8 +503,8 @@ class Iso18013TestReaderIdentifiers {
         val resultRoot = mdlQuery(readerKey = readerKey).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultRoot.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-mDL-3Tier", resultRoot.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultRoot.useCases[0].solutions.size)
+        assertEquals("my-mDL-3Tier", resultRoot.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -518,8 +518,8 @@ class Iso18013TestReaderIdentifiers {
         val resultIntermediate = pidSdJwtQuery(readerKey = readerKey).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultIntermediate.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-3Tier", resultIntermediate.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultIntermediate.useCases[0].solutions.size)
+        assertEquals("my-PID-3Tier", resultIntermediate.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -533,8 +533,8 @@ class Iso18013TestReaderIdentifiers {
         val resultRoot = pidSdJwtQuery(readerKey = readerKey).execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(1, resultRoot.credentialSets[0].options[0].members[0].matches.size)
-        assertEquals("my-PID-3Tier", resultRoot.credentialSets[0].options[0].members[0].matches[0].credential.document.displayName)
+        assertEquals(1, resultRoot.useCases[0].solutions.size)
+        assertEquals("my-PID-3Tier", resultRoot.useCases[0].solutions[0].matches[0].credential.document.displayName)
     }
 
     @Test
@@ -571,9 +571,9 @@ class Iso18013TestReaderIdentifiers {
         }
 
         val result = request.execute(presentmentSource = harness.presentmentSource)
-        assertEquals(1, result.credentialSets.size)
-        assertEquals(1, result.credentialSets[0].options.size)
-        val matches = result.credentialSets[0].options[0].members[0].matches
+        assertEquals(1, result.useCases.size)
+        assertEquals(1, result.useCases[0].solutions.size)
+        val matches = result.useCases[0].solutions[0].matches
         assertEquals(1, matches.size)
         assertEquals("my-mDL-Reader1", matches[0].credential.document.displayName)
     }

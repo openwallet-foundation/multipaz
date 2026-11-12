@@ -1,15 +1,18 @@
 package org.multipaz.openid4vci.server
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.readRawBytes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
+import io.ktor.http.content.TextContent
 import io.ktor.http.parameters
 import io.ktor.http.protocolWithAuthority
 import io.ktor.http.takeFrom
@@ -115,6 +118,31 @@ class ProvisioningClientTest {
     lateinit var documentStore: DocumentStore
 
     lateinit var documentProvisioningHandler: DocumentProvisioningHandler
+
+    private val credentialRequestBodies = mutableListOf<Any>()
+    private var checkedCredentialRequests = 0
+
+    // Records the body of every request sent to the credential endpoint, whatever its type,
+    // so that assertCredentialRequestsCompliant() can reject bodies that are not JSON text.
+    private val credentialRequestRecorder = createClientPlugin("CredentialRequestRecorder") {
+        onRequest { request, content ->
+            if (request.url.pathSegments.lastOrNull() == "credential") {
+                credentialRequestBodies.add(content)
+            }
+        }
+    }
+
+    private val tokenResponseStatuses = mutableListOf<HttpStatusCode>()
+
+    // Records the status of every response from the token endpoint, so that a test can tell
+    // a token request that succeeded at once from one the server refused first.
+    private val tokenResponseRecorder = createClientPlugin("TokenResponseRecorder") {
+        onResponse { response ->
+            if (response.call.request.url.segments.lastOrNull() == "token") {
+                tokenResponseStatuses.add(response.status)
+            }
+        }
+    }
 
     @Before
     fun setup() = runTest {
@@ -246,10 +274,43 @@ class ProvisioningClientTest {
         )
     }
 
+    @Test
+    fun credentialEndpointRejectsMismatchedScopeConfigurationId() {
+        Assert.assertThrows(IllegalStateException::class.java) {
+            runWithAuthorizationCode(
+                offer = OFFER_PAYMENT,
+                credentialFormat = CredentialFormat.Mdoc(DigitalPaymentCredential.CARD_DOCTYPE),
+                serverArgs = arrayOf(
+                    "-param", "base_url=http://localhost",
+                    "-param", "database_engine=ephemeral",
+                    "-param", "use_scopes=true"
+                ),
+                overrideCredentialConfigurationId = "mDL"
+            )
+        }
+    }
+
+    @Test
+    fun credentialEndpointRejectsMismatchedAuthorizedConfigurationIdWithinSameScope() {
+        Assert.assertThrows(IllegalStateException::class.java) {
+            runWithAuthorizationCode(
+                offer = OFFER_PAYMENT,
+                credentialFormat = CredentialFormat.Mdoc(DigitalPaymentCredential.CARD_DOCTYPE),
+                serverArgs = arrayOf(
+                    "-param", "base_url=http://localhost",
+                    "-param", "database_engine=ephemeral",
+                    "-param", "use_scopes=false"
+                ),
+                overrideCredentialConfigurationId = "payment_sca_sd_jwt"
+            )
+        }
+    }
+
     fun runWithAuthorizationCode(
         offer: String,
         credentialFormat: CredentialFormat,
         serverArgs: Array<String>,
+        overrideCredentialConfigurationId: String? = null,
         extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
         val configuration = ServerConfiguration(serverArgs)
@@ -262,6 +323,27 @@ class ProvisioningClientTest {
         }
         val httpClient = createClient {
             followRedirects = false
+            install(credentialRequestRecorder)
+            if (overrideCredentialConfigurationId != null) {
+                install(createClientPlugin("CredentialConfigurationIdOverrider") {
+                    transformRequestBody { request, content, _ ->
+                        if (request.url.pathSegments.lastOrNull() == "credential" && content is String) {
+                            val mutated = buildJsonObject {
+                                for ((k, v) in Json.parseToJsonElement(content).jsonObject) {
+                                    if (k == "credential_configuration_id") {
+                                        put(k, overrideCredentialConfigurationId)
+                                    } else {
+                                        put(k, v)
+                                    }
+                                }
+                            }.toString()
+                            TextContent(mutated, ContentType.Application.Json)
+                        } else {
+                            null
+                        }
+                    }
+                })
+            }
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
@@ -342,6 +424,7 @@ class ProvisioningClientTest {
                 ))))
 
             Assert.assertEquals(1, credentialData.certifications.size)
+            assertCredentialRequestsCompliant()
 
             credential.certify(credentialData.certifications.first().issuerData)
             if (credential is MdocCredential) {
@@ -372,6 +455,8 @@ class ProvisioningClientTest {
         }
         val httpClient = createClient {
             followRedirects = false
+            install(credentialRequestRecorder)
+            install(tokenResponseRecorder)
         }
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
@@ -430,12 +515,17 @@ class ProvisioningClientTest {
             val authorizationData = provisioningClient.getAuthorizationData()!!
 
             // Test refresh workflow
+            tokenResponseStatuses.clear()
             val refreshClient = Provisioning.createClientFromAuthorizationData(authorizationData)
             refreshClient.getKeyBindingChallenge()
             val refreshKeyInfo = secureArea.createKey(null, CreateKeySettings())
             val refreshed = refreshClient.obtainCredentials(KeyBindingInfo.Attestation(
                 listOf(CredentialKeyAttestation("refresh", refreshKeyInfo.attestation))))
             Assert.assertEquals(1, refreshed.certifications.size)
+            // The refresh token request carries a fresh client attestation challenge, so it
+            // is not first refused with `use_attestation_challenge`.
+            Assert.assertEquals(listOf(HttpStatusCode.OK), tokenResponseStatuses)
+            assertCredentialRequestsCompliant()
 
             // Clean up authorization data
             Provisioning.cleanupAuthorizationData(
@@ -454,6 +544,44 @@ class ProvisioningClientTest {
             }
             // Exception is thrown because key could not be found
             assertIs<IllegalArgumentException>(exception)
+        }
+    }
+
+    /**
+     * Checks the credential requests sent since the previous call against OpenID4VCI 1.0
+     * section 8.2. Each request must be a JSON object that uses only the parameters defined
+     * there. The spec allows extension parameters, but this client sends none, so this check
+     * catches parameters left over from earlier drafts, such as `format`, `doctype` and `vct`.
+     * Which identifier a request uses depends on the token response: `credential_identifier`
+     * if it returned `credential_identifiers`, and `credential_configuration_id` otherwise.
+     * The test issuer never returns `credential_identifiers`, so each request here must use
+     * `credential_configuration_id` and not `credential_identifier`.
+     *
+     * @throws AssertionError if no new credential request was sent, or if a request is not
+     *   compliant.
+     */
+    private fun assertCredentialRequestsCompliant() {
+        val newBodies = credentialRequestBodies.drop(checkedCredentialRequests)
+        checkedCredentialRequests = credentialRequestBodies.size
+        Assert.assertTrue("No new credential request was recorded", newBodies.isNotEmpty())
+        for (body in newBodies) {
+            Assert.assertTrue(
+                "Credential request body is not JSON text: ${body::class.simpleName}",
+                body is String
+            )
+            val request = Json.parseToJsonElement(body as String).jsonObject
+            Assert.assertTrue(
+                "Unexpected credential request parameters: ${request.keys - CREDENTIAL_REQUEST_PARAMETERS}",
+                CREDENTIAL_REQUEST_PARAMETERS.containsAll(request.keys)
+            )
+            Assert.assertTrue(
+                "credential_configuration_id is required when no credential_identifiers were issued",
+                request.containsKey("credential_configuration_id")
+            )
+            Assert.assertFalse(
+                "credential_identifier must not be sent with credential_configuration_id",
+                request.containsKey("credential_identifier")
+            )
         }
     }
 
@@ -746,6 +874,14 @@ class ProvisioningClientTest {
         const val OFFER_NATURALIZATION = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22utopia_naturalization%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
         const val OFFER_PAYMENT = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22payment_sca_mdoc%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
         const val OFFER_PAYMENT_SD_JWT = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22payment_sca_sd_jwt%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
+
+        // Credential Request parameters defined in OpenID4VCI 1.0 section 8.2.
+        val CREDENTIAL_REQUEST_PARAMETERS = setOf(
+            "credential_identifier",
+            "credential_configuration_id",
+            "proofs",
+            "credential_response_encryption"
+        )
 
         val testClientPreferences = OpenID4VCIClientPreferences(
             clientId = "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4",

@@ -1,11 +1,18 @@
 package org.multipaz.prompt
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.consent.ClassifyPurposesFn
+import org.multipaz.consent.ClassifyRiskFn
+import org.multipaz.consent.ClassifySimpleConsentFn
+import org.multipaz.consent.defaultClassifyPurposes
+import org.multipaz.consent.defaultClassifyRisk
+import org.multipaz.consent.defaultClassifySimpleConsent
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FacePose
-import org.multipaz.presentment.CredentialSelection
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.presentment.PresentmentSelection
+import org.multipaz.presentment.RequesterHistory
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -69,13 +76,24 @@ suspend fun PromptModel.requestPassphrase(
  *
  * @param requester the relying party which is requesting the data.
  * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
- * @param consentData the combinations of credentials and claims that the user can select.
+ * @param presentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments a list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [CredentialSelection] object conveying which credentials the user selected, if multiple
+ * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
+ *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
+ *   credentials with [requester] before.
+ * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
+ *   for the active selection.
+ * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
+ *   for the active selection.
+ * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
+ *   combined simple consent and biometric authentication prompt.
+ * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
+ * @return a [PresentmentSelection] object conveying which credentials the user selected, if multiple
  *   options are available.
  * @throws PromptDismissedException if the user dismissed the prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
@@ -91,17 +109,29 @@ suspend fun PromptModel.requestPassphrase(
 suspend fun PromptModel.requestConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
-    onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection {
+    onDocumentsInFocus: (documents: List<Document>) -> Unit,
+    transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    requesterHistory: RequesterHistory? = null,
+    classifyPurposesFn: ClassifyPurposesFn = ::defaultClassifyPurposes,
+    classifyRiskFn: ClassifyRiskFn = ::defaultClassifyRisk,
+    classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
+    platformConsentOptions: PlatformConsentOptions? = null,
+): PresentmentSelection {
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = consentData,
+            presentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
+            transactionDataRendererRepository = transactionDataRendererRepository,
+            requesterHistory = requesterHistory,
+            classifyPurposesFn = classifyPurposesFn,
+            classifyRiskFn = classifyRiskFn,
+            classifySimpleConsentFn = classifySimpleConsentFn,
+            platformConsentOptions = platformConsentOptions,
         )
     )
 }
@@ -136,7 +166,8 @@ suspend fun PromptModel.showFaceMatcherPrompt(
             FaceMatcherPromptDialogModel.FaceMatcherRequest(
                 faceMatcherSession = faceMatcherSession,
                 reason = reason,
-                requireConfirmation = requireConfirmation
+                requireConfirmation = requireConfirmation,
+                usesCustomUserInterface = matcher.usesCustomUserInterface
             )
         )
     } catch (e: PromptDismissedException) {
@@ -181,7 +212,8 @@ suspend fun PromptModel.showFaceMatcherLivenessPrompt(
             FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest(
                 faceMatcherLivenessSession = faceMatcherLivenessSession,
                 reason = reason,
-                requireConfirmation = requireConfirmation
+                requireConfirmation = requireConfirmation,
+                usesCustomUserInterface = matcher.usesCustomUserInterface
             )
         )
     } catch (e: PromptDismissedException) {

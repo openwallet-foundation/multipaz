@@ -492,10 +492,20 @@ class VerificationSession(
                 responseUri = jsonRequest["response_uri"]?.jsonPrimitive?.content
             )
         }
+        val expectedAudience = when (request) {
+            is DcOpenID4VPRequest -> "origin:${request.requestorId}"
+            is DcOpenID4VPDraft24Request -> if (isSigned) {
+                jsonRequest["client_id"]!!.jsonPrimitive.content
+            } else {
+                "web-origin:${request.requestorId}"
+            }
+            is OpenID4VPUriSchemeRequest -> request.requestorId
+        }
         return OpenID4VPPresentmentRecord(
             vpToken = vpToken,
             vpRequest = jsonRequest.toString(),
             mdocSessionTranscript = sessionTranscript,
+            expectedAudience = expectedAudience,
         )
     }
 

@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "18 yaşından büyük + portre denkliği",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "18 yaşından büyük + (portre VEYA portre denkliği)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "18 yaşından büyük + portre denkliği",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18 yaşından büyük olma + (portre veya portre eşdeğeri)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "18 yaşından büyük olma + (portre veya portre eşdeğeri)",
+  "group_name": "Ad",
+  "group_alias_name": "Takma ad",
+  "group_name_at_birth": "Doğumdaki ad",
+  "group_name_initials": "Adın baş harfleri",
+  "group_residential_address": "İkamet adresi",
+  "group_place_of_birth": "Doğum yeri",
+  "group_date_of_birth": "Doğum tarihi",
+  "group_passport_data": "Pasaport verileri"
 }

@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">Přístupová fráze je slabá, vyberte prosím jinou</string>
     <string name="credential_presentment_button_cancel">Zrušit</string>
     <string name="credential_presentment_button_more">Více</string>
-    <string name="credential_presentment_button_share">Sdílet</string>
+    <string name="credential_presentment_button_continue">Pokračovat</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Neznámý žadatel</string>
     <string name="credential_presentment_share_with_known_requester">Tato data budou sdílena s %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">Tato data budou sdílena:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Ikona varování</string>
     <string name="credential_presentment_select_document">Vybrat dokument</string>
     <string name="credential_presentment_requester_information">Informace o žadateli</string>
+    <string name="credential_presentment_details">Podrobnosti</string>
+    <string name="credential_presentment_back">Zpět</string>
     <string name="certificate_viewer_sub_basic_info">Základní informace</string>
     <string name="certificate_viewer_k_type">Typ</string>
     <string name="certificate_viewer_k_serial_number">Sériové číslo</string>
@@ -234,4 +236,8 @@
     <string name="face_matcher_prompt_grant_permission">Udělit povolení</string>
     <string name="face_matcher_prompt_cancel">Zrušit</string>
     <string name="face_matcher_prompt_confirm">Potvrdit</string>
+    <string name="certificate_viewer_tab_leaf">Koncový</string>
+    <string name="certificate_viewer_tab_intermediate">Mezilehlý</string>
+    <string name="certificate_viewer_tab_intermediate_n">Mezil. %1$d</string>
+    <string name="certificate_viewer_tab_root">Kořenový</string>
 </resources>

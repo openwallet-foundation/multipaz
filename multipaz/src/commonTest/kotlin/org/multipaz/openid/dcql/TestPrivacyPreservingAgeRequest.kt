@@ -209,29 +209,29 @@ class TestPrivacyPreservingAgeRequest {
         addMdl_with_AgeOver_AgeInYears_BirthDate(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: David
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: age_over_18
-                                      displayName: Older than 18 years
-                                      value: True
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: David
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: age_over_18
+                                  displayName: Older than 18 years
+                                  value: True
             """.trimIndent().trim(),
             ageAndNameMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -246,29 +246,29 @@ class TestPrivacyPreservingAgeRequest {
         addMdl_with_AgeInYears_BirthDate(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-no-age-over
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: David
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: age_in_years
-                                      displayName: Age in years
-                                      value: 48
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-no-age-over
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: David
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: age_in_years
+                                  displayName: Age in years
+                                  value: 48
             """.trimIndent().trim(),
             ageAndNameMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -289,29 +289,29 @@ class TestPrivacyPreservingAgeRequest {
 
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-only-birth-date
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: David
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: birth_date
-                                      displayName: Date of birth
-                                      value: $dateValue
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-only-birth-date
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: David
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: birth_date
+                                  displayName: Date of birth
+                                  value: $dateValue
             """.trimIndent().trim(),
             result
         )

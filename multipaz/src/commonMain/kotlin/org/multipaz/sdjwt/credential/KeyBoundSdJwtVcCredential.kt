@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
+import org.multipaz.cbor.putCborArray
 import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
@@ -44,6 +45,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
          * @param secureArea The secure area to use for creating keys.
          * @param vct The Verifiable Credential Type for all credentials in the batch.
          * @param createKeySettings The settings to use for key creation, including algorithm parameters.
+         * @param otherVcts Other Verifiable Credential Types that can be used for matching in addition to [vct].
          * @return A pair containing:
          *   - A list of created [KeyBoundSdJwtVcCredential] instances, ready to be certified
          *   - An optional string containing the compact serialization of a JWS with OpenID4VCI key attestation
@@ -55,7 +57,8 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
             domain: String,
             secureArea: SecureArea,
             vct: String,
-            createKeySettings: CreateKeySettings
+            createKeySettings: CreateKeySettings,
+            otherVcts: List<String> = emptyList(),
         ): Pair<List<KeyBoundSdJwtVcCredential>, String?> {
             val batchResult = secureArea.batchCreateKey(numberOfCredentials, createKeySettings)
             val credentials = batchResult.keyInfos
@@ -67,6 +70,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
                         domain = domain,
                         secureArea = secureArea,
                         vct = vct,
+                        otherVcts = otherVcts,
                     ).apply {
                         useExistingKey(keyAlias)
                     }
@@ -83,6 +87,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
          * @param secureArea The [SecureArea] to use for creating a key.
          * @param vct The Verifiable Credential Type for the credential.
          * @param createKeySettings The settings to use for key creation, including algorithm parameters.
+         * @param otherVcts Other Verifiable Credential Types that can be used for matching in addition to [vct].
          * @return an uncertified [Credential] which has been added to [document].
          */
         suspend fun create(
@@ -91,14 +96,16 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
             domain: String,
             secureArea: SecureArea,
             vct: String,
-            createKeySettings: CreateKeySettings
+            createKeySettings: CreateKeySettings,
+            otherVcts: List<String> = emptyList(),
         ): KeyBoundSdJwtVcCredential {
             return KeyBoundSdJwtVcCredential(
                 document,
                 asReplacementForIdentifier,
                 domain,
                 secureArea,
-                vct
+                vct,
+                otherVcts
             ).apply {
                 generateKey(createKeySettings)
             }
@@ -113,6 +120,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
          * @param secureArea The [SecureArea] to use for creating a key.
          * @param vct The Verifiable Credential Type for the credential.
          * @param existingKeyAlias the alias for the existing key in [secureArea].
+         * @param otherVcts Other Verifiable Credential Types that can be used for matching in addition to [vct].
          * @return an uncertified [Credential] which has been added to [document].
          */
         suspend fun createForExistingAlias(
@@ -122,13 +130,15 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
             secureArea: SecureArea,
             vct: String,
             existingKeyAlias: String,
+            otherVcts: List<String> = emptyList(),
         ): KeyBoundSdJwtVcCredential {
             return KeyBoundSdJwtVcCredential(
                 document,
                 asReplacementForIdentifier,
                 domain,
                 secureArea,
-                vct
+                vct,
+                otherVcts
             ).apply {
                 useExistingKey(keyAlias = existingKeyAlias)
             }
@@ -143,6 +153,9 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     override lateinit var vct: String
         private set
 
+    override lateinit var otherVcts: List<String>
+        private set
+
     /**
      * Constructs a new [KeyBoundSdJwtVcCredential].
      *
@@ -154,6 +167,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
      * @param domain the domain of the credential
      * @param secureArea the secure area for the authentication key associated with this credential.
      * @param vct the Verifiable Credential Type.
+     * @param otherVcts other Verifiable Credential Types that can be used for matching in addition to [vct].
      */
     private constructor(
         document: Document,
@@ -161,8 +175,10 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
         domain: String,
         secureArea: SecureArea,
         vct: String,
+        otherVcts: List<String>,
     ) : super(document, asReplacementForIdentifier, domain, secureArea) {
         this.vct = vct
+        this.otherVcts = otherVcts
     }
 
     /**
@@ -179,18 +195,27 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     override suspend fun deserialize(dataItem: DataItem) {
         super.deserialize(dataItem)
         vct = dataItem["vct"].asTstr
+        otherVcts = dataItem.getOrNull("otherVcts")?.asArray?.map { it.asTstr } ?: emptyList()
     }
 
     override fun addSerializedData(builder: MapBuilder<CborBuilder>) {
         super.addSerializedData(builder)
         builder.put("vct", vct)
+        if (otherVcts.isNotEmpty()) {
+            builder.putCborArray("otherVcts") {
+                otherVcts.forEach { add(it) }
+            }
+        }
     }
 
     override val credentialType: String
         get() = CREDENTIAL_TYPE
 
-    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
-        return getClaimsImpl(documentTypeRepository)
+    override suspend fun getClaims(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
+    ): List<JsonClaim> {
+        return getClaimsImpl(documentTypeRepository, locales)
     }
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
@@ -212,6 +237,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            metadata = document.mpzPassMetadata,
             userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
             readerIdentifiers = document.readerIdentifiers,
             sdJwtVc = listOf(MpzPassSdJwtVc(

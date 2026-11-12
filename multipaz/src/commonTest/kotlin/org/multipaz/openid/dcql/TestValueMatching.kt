@@ -279,34 +279,34 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryUS(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika-sex
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: sex
-                                      displayName: Sex
-                                      value: Female
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika-sex
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: sex
+                                  displayName: Sex
+                                  value: Female
             """.trimIndent().trim(),
             mdl_match_sexFemale().execute(
                 presentmentSource = harness.presentmentSource
@@ -323,34 +323,34 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryUS(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max-sex
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: sex
-                                      displayName: Sex
-                                      value: Male
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max-sex
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: sex
+                                  displayName: Sex
+                                  value: Male
             """.trimIndent().trim(),
             mdl_match_sexMale().execute(
                 presentmentSource = harness.presentmentSource
@@ -367,54 +367,59 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryUS(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika-sex
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: sex
-                                      displayName: Sex
-                                      value: Female
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max-sex
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: sex
-                                      displayName: Sex
-                                      value: Male
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika-sex
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: sex
+                                  displayName: Sex
+                                  value: Female
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max-sex
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: sex
+                                  displayName: Sex
+                                  value: Male
             """.trimIndent().trim(),
             mdl_match_sexMaleOrFemale().execute(
                 presentmentSource = harness.presentmentSource
@@ -433,54 +438,59 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryDE(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_postal_code
-                                      displayName: Resident postal code
-                                      value: 90210
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-OG
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: OG
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_postal_code
-                                      displayName: Resident postal code
-                                      value: 90210
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_postal_code
+                                  displayName: Resident postal code
+                                  value: 90210
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-OG
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: OG
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_postal_code
+                                  displayName: Resident postal code
+                                  value: 90210
             """.trimIndent().trim(),
             mdl_match_PostalCode90210().execute(
                 presentmentSource = harness.presentmentSource
@@ -499,64 +509,69 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryDE(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_postal_code
-                                      displayName: Resident postal code
-                                      value: 90210
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_country
-                                      displayName: Resident country
-                                      value: United States of America
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Max
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_postal_code
-                                      displayName: Resident postal code
-                                      value: 94043
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_country
-                                      displayName: Resident country
-                                      value: United States of America
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_postal_code
+                                  displayName: Resident postal code
+                                  value: 90210
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_country
+                                  displayName: Resident country
+                                  value: United States of America
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Max
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_postal_code
+                                  displayName: Resident postal code
+                                  value: 94043
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_country
+                                  displayName: Resident country
+                                  value: United States of America
             """.trimIndent().trim(),
             mdl_match_PostalCode90210And94043_CountryUS().execute(
                 presentmentSource = harness.presentmentSource
@@ -575,39 +590,39 @@ class TestValueMatching {
         addMdl_PostalCode90210_CountryDE(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: my-mDL-Erika
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_postal_code
-                                      displayName: Resident postal code
-                                      value: 90210
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: resident_country
-                                      displayName: Resident country
-                                      value: United States of America
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: my-mDL-Erika
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_postal_code
+                                  displayName: Resident postal code
+                                  value: 90210
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: resident_country
+                                  displayName: Resident country
+                                  value: United States of America
             """.trimIndent().trim(),
             mdl_match_PostalCode90210_CountryUS().execute(
                 presentmentSource = harness.presentmentSource
@@ -668,27 +683,27 @@ class TestValueMatching {
         )
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-DE-US
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["nationalities",0]
-                                      displayName: Nationality
-                                      value: DE
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-DE-US
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["nationalities",0]
+                                  displayName: Nationality
+                                  value: DE
             """.trimIndent().trim(),
             indexQueryMatch.execute(presentmentSource = harness.presentmentSource).prettyPrint().trim()
         )

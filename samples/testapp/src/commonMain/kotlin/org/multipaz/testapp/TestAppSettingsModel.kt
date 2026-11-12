@@ -152,7 +152,7 @@ class TestAppSettingsModel private constructor(
         bind(presentmentBleL2CapEnabled, "presentmentBleL2CapEnabled", false)
         bind(presentmentBleL2CapInEngagementEnabled, "presentmentBleL2CapInEngagementEnabled", true)
         bind(presentmentUseNegotiatedHandover, "presentmentUseNegotiatedHandover", true)
-        bind(presentmentNfcV2OnlyAllowNfc, "presentmentNfcV2OnlyAllowNfc", false)
+        bind(presentmentNfcCceOnlyAllowNfc, "presentmentNfcCceOnlyAllowNfc", false)
         bind(presentmentNegotiatedHandoverPreferredOrder, "presentmentNegotiatedHandoverPreferredOrder",
             listOf(
                 "ble:central_client_mode:",
@@ -161,6 +161,7 @@ class TestAppSettingsModel private constructor(
             )
         )
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
+        bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", false)
         bind(presentmentRequireAuthentication, "presentmentRequireAuthentication", true)
         bind(presentmentPreferSignatureToKeyAgreement, "presentmentPreferSignatureToKeyAgreement", false)
         bind(presentmentFaceMatcher, "presentmentFaceMatcher", "MobileFaceNet")
@@ -174,11 +175,15 @@ class TestAppSettingsModel private constructor(
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
         bind(readerLastSelectedRequestId, "readerLastSelectedRequestId", null)
         bind(readerIssuerIdentifiers, "readerIssuerIdentifiers", "")
+        bind(readerUniqueDocSetRequired, "readerUniqueDocSetRequired", true)
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials?.supportedProtocols ?: emptySet())
+        bind(dcApiCreateProtocols, "dcApiCreateProtocols", TestAppConfiguration.supportedCreateProtocols)
         bind(dcRequestIssuerIdentifiers, "dcRequestIssuerIdentifiers", "")
         bind(dcRequestLastSelectedRequestId, "dcRequestLastSelectedRequestId", null)
+        bind(dcRequestUniqueDocSetRequired, "dcRequestUniqueDocSetRequired", true)
+        bind(dcRequestMultiple, "dcRequestMultiple", false)
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
 
@@ -205,9 +210,10 @@ class TestAppSettingsModel private constructor(
     val presentmentBleL2CapEnabled = MutableStateFlow<Boolean>(false)
     val presentmentBleL2CapInEngagementEnabled = MutableStateFlow<Boolean>(false)
     val presentmentUseNegotiatedHandover = MutableStateFlow<Boolean>(false)
-    val presentmentNfcV2OnlyAllowNfc = MutableStateFlow<Boolean>(false)
+    val presentmentNfcCceOnlyAllowNfc = MutableStateFlow<Boolean>(false)
     val presentmentNegotiatedHandoverPreferredOrder = MutableStateFlow<List<String>>(listOf())
     val presentmentShowConsentPrompt = MutableStateFlow<Boolean>(false)
+    val presentmentUseTransactionDataRenderers = MutableStateFlow<Boolean>(false)
     val presentmentRequireAuthentication = MutableStateFlow<Boolean>(false)
     val presentmentPreferSignatureToKeyAgreement = MutableStateFlow<Boolean>(false)
     val presentmentFaceMatcher = MutableStateFlow<String>("MobileFaceNet")
@@ -221,11 +227,15 @@ class TestAppSettingsModel private constructor(
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
     val readerLastSelectedRequestId = MutableStateFlow<String?>(null)
     val readerIssuerIdentifiers = MutableStateFlow<String>("")
+    val readerUniqueDocSetRequired = MutableStateFlow<Boolean>(true)
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
+    val dcApiCreateProtocols = MutableStateFlow<Set<String>>(emptySet())
     val dcRequestIssuerIdentifiers = MutableStateFlow<String>("")
     val dcRequestLastSelectedRequestId = MutableStateFlow<String?>(null)
+    val dcRequestUniqueDocSetRequired = MutableStateFlow<Boolean>(true)
+    val dcRequestMultiple = MutableStateFlow<Boolean>(false)
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 

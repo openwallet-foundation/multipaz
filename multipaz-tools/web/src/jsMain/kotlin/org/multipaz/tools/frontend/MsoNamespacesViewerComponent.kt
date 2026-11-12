@@ -42,6 +42,7 @@ import org.multipaz.cbor.MajorType
 import org.multipaz.cbor.Tagged
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mpzpass.MpzPassMetadata
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.Cose
@@ -691,7 +692,10 @@ fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject, rawMsoByte
     }
 }
 
-fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) {
+fun react.ChildrenBuilder.renderNamespacesDetails(
+    namespaces: IssuerNamespaces,
+    mpzPassMetadata: MpzPassMetadata? = null
+) {
     if (namespaces.data.isEmpty()) {
         p {
             css { color = Color("#64748b"); fontSize = 14.px }
@@ -735,6 +739,10 @@ fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) 
             }
         }
         namespaces.data.forEach { (nsName, nsItems) ->
+            val hasMpzMetadata = mpzPassMetadata != null && (
+                mpzPassMetadata.isoMdocClaimsMetadata[nsName]?.isNotEmpty() == true ||
+                mpzPassMetadata.isoMdocPortraitEquivalenceData?.namespace == nsName
+            )
             div {
                 css {
                     background = Color("#0f172a")
@@ -767,6 +775,9 @@ fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) 
                         tr {
                             th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8"); width = 100.px }; +"Digest ID" }
                             th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8"); width = 200.px }; +"Element ID" }
+                            if (hasMpzMetadata) {
+                                th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8"); width = 260.px }; +"Claim Metadata" }
+                            }
                             th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8"); width = 200.px }; +"Random (Hex)" }
                             th { css { textAlign = TextAlign.left; padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Value" }
                         }
@@ -776,6 +787,62 @@ fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) 
                             tr {
                                 td { css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace }; +item.digestId.toString() }
                                 td { css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontWeight = FontWeight.bold; color = Color("#38bdf8") }; +item.dataElementIdentifier }
+                                if (hasMpzMetadata) {
+                                    val claimMeta = mpzPassMetadata.getIsoMdocClaimMetadata(nsName, item.dataElementIdentifier)
+                                    val isPortraitEquiv = mpzPassMetadata.isoMdocPortraitEquivalenceData?.let {
+                                        it.namespace == nsName && it.dataElementName == item.dataElementIdentifier
+                                    } ?: false
+                                    td {
+                                        css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")) }
+                                        if (claimMeta == null && !isPortraitEquiv) {
+                                            span { css { color = Color("#64748b"); fontSize = 12.px }; +"—" }
+                                        } else {
+                                            div {
+                                                css {
+                                                    display = Display.flex
+                                                    flexDirection = FlexDirection.column
+                                                    gap = 4.px
+                                                }
+                                                if (claimMeta != null) {
+                                                    div {
+                                                        css { color = Color("#f1f5f9"); fontWeight = FontWeight.bold; fontSize = 13.px }
+                                                        +claimMeta.getDisplayName()
+                                                    }
+                                                    claimMeta.getDescription()?.let { desc ->
+                                                        div {
+                                                            css { color = Color("#94a3b8"); fontSize = 12.px }
+                                                            +desc
+                                                        }
+                                                    }
+                                                    div {
+                                                        css {
+                                                            display = Display.flex
+                                                            flexWrap = FlexWrap.wrap
+                                                            gap = 6.px
+                                                            alignItems = AlignItems.center
+                                                        }
+                                                        if (claimMeta.icon != null) {
+                                                            renderMaterialIconBadge(claimMeta.icon)
+                                                        }
+                                                        renderClaimTypeBadge(claimMeta.type)
+                                                        renderSensitivityBadge(claimMeta.sensitivity)
+                                                        if (claimMeta.groupId != null) {
+                                                            renderClaimGroupBadge(
+                                                                claimMeta.groupId,
+                                                                mpzPassMetadata.claimGroupsMetadata[claimMeta.groupId]
+                                                            )
+                                                        }
+                                                        if (isPortraitEquiv) {
+                                                            renderPortraitEquivalenceBadge()
+                                                        }
+                                                    }
+                                                } else if (isPortraitEquiv) {
+                                                    renderPortraitEquivalenceBadge()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 td { css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; fontSize = 12.px; wordBreak = WordBreak.breakAll }; +item.random.toByteArray().toHex() }
                                 td {
                                     css { padding = 8.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }
@@ -826,7 +893,8 @@ fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) 
 fun react.ChildrenBuilder.renderIssuerSignedDetails(
     result: ParsedResult.IssuerSignedData,
     copiedCertIndex: Int?,
-    onCopyCert: (Int, String) -> Unit
+    onCopyCert: (Int, String) -> Unit,
+    mpzPassMetadata: MpzPassMetadata? = null
 ) {
     div {
         css {
@@ -937,7 +1005,7 @@ fun react.ChildrenBuilder.renderIssuerSignedDetails(
             }
             +"Issuer Namespaces"
         }
-        renderNamespacesDetails(result.namespaces)
+        renderNamespacesDetails(result.namespaces, mpzPassMetadata)
     }
 
     if (result.mso != null) {

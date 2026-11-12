@@ -129,8 +129,9 @@ fun FaceMatcherPromptScreen(
     var showCameraCaptureDialog by remember { mutableStateOf(false) }
     var showSamplePortraitPicker by remember { mutableStateOf(false) }
     val matchers = faceMatcherRepository?.all ?: emptyList()
+    val livenessMatchers = remember(matchers) { matchers.filter { it.supportsLiveness } }
     var selectedMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
-    var selectedLivenessMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
+    var selectedLivenessMatcher by remember { mutableStateOf<FaceMatcher?>(livenessMatchers.firstOrNull()) }
     var requireConfirmationFace by remember { mutableStateOf(false) }
     var requireConfirmationLiveness by remember { mutableStateOf(false) }
     var posesText by remember {
@@ -704,13 +705,13 @@ fun FaceMatcherPromptScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    if (matchers.size > 1) {
+                    if (livenessMatchers.size > 1) {
                         SettingMultipleChoice(
                             title = "Face matcher implementation",
-                            choices = matchers.map { it.displayName },
-                            initialChoice = (selectedLivenessMatcher ?: faceMatcherRepository?.defaultMatcher)?.displayName ?: "",
+                            choices = livenessMatchers.map { it.displayName },
+                            initialChoice = (selectedLivenessMatcher ?: livenessMatchers.firstOrNull())?.displayName ?: "",
                             onChoiceSelected = { choice ->
-                                selectedLivenessMatcher = matchers.find { it.displayName == choice }
+                                selectedLivenessMatcher = livenessMatchers.find { it.displayName == choice }
                             }
                         )
                     }
@@ -778,8 +779,8 @@ fun FaceMatcherPromptScreen(
                             val poses = parsedPoses ?: return@Button
                             coroutineScope.launch {
                                 try {
-                                    val matcherToUse = selectedLivenessMatcher ?: faceMatcherRepository?.defaultMatcher
-                                        ?: throw IllegalStateException("No face matcher available")
+                                    val matcherToUse = selectedLivenessMatcher ?: livenessMatchers.firstOrNull()
+                                        ?: throw IllegalStateException("No liveness face matcher available")
                                     val portraits = promptModel.showFaceMatcherLivenessPrompt(
                                         matcher = matcherToUse,
                                         poses = poses,

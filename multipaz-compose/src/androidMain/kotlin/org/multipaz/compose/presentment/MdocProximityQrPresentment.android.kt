@@ -146,7 +146,7 @@ private fun MdocProximityQrPresentmentAndroid(
                             )
                             advertisedTransports = transports
                             val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                                transports.forEach { addConnectionMethod(it.connectionMethod) }
+                                transports.forEach { it.connectionMethod?.let { cm -> addConnectionMethod(cm) } }
                                 capabilities.forEach { (capability, value) -> addCapability(capability, value) }
                             }.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))
@@ -167,7 +167,6 @@ private fun MdocProximityQrPresentmentAndroid(
                             val intent = Intent(applicationContext, PresentmentActivity::class.java)
                             intent.addFlags(
                                 Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        Intent.FLAG_ACTIVITY_NO_HISTORY or
                                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                                         Intent.FLAG_ACTIVITY_NO_ANIMATION
                             )

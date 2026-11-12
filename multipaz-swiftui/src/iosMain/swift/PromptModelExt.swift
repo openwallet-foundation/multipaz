@@ -63,6 +63,43 @@ extension PromptModel {
     }
 }
 
+public func promptModelRequestConsent(
+    requester: Requester,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
+    presentmentData: PresentmentData,
+    preselectedDocuments: [MultipazDocument],
+    onDocumentsInFocus: @escaping ([MultipazDocument]) -> Void,
+    transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
+    requesterHistory: (any RequesterHistory)? = nil
+) async throws -> PresentmentSelection? {
+    return try await promptModelRequestConsent(
+        requester: requester,
+        trustedRequesterIdentity: trustedRequesterIdentity,
+        presentmentData: presentmentData,
+        preselectedDocuments: preselectedDocuments,
+        onDocumentsInFocus: onDocumentsInFocus,
+        transactionDataRendererRepository: transactionDataRendererRepository,
+        requesterHistory: requesterHistory,
+        classifyPurposesFn: { requester, trustedIdentity, presentmentData, selections in
+            defaultClassifyPurposes(
+                requester: requester,
+                trustedRequesterIdentity: trustedIdentity,
+                presentmentData: presentmentData,
+                selections: selections
+            )
+        },
+        classifyRiskFn: { requester, trustedIdentity, presentmentData, selections, purposes in
+            defaultClassifyRisk(
+                requester: requester,
+                trustedRequesterIdentity: trustedIdentity,
+                presentmentData: presentmentData,
+                selections: selections,
+                purposes: purposes
+            )
+        }
+    )
+}
+
 private class PassphraseEvalulatorHandler: KotlinSuspendFunction1 {
     let f: @Sendable (
         _ enteredPassphrase: String

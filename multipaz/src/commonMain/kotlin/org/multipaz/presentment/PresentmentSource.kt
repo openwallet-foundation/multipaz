@@ -9,6 +9,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
@@ -31,13 +32,15 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository a [ZkSystemRepository] with ZKP systems or `null`.
  * @property eventLogger an [EventLogger] for logging events or `null`.
+ * @property requesterHistory a [RequesterHistory] for tracking relying party interactions or `null`.
  * @see SimplePresentmentSource for one concrete implementation tailored for ISO mdoc and IETF SD-JWT VC credentials.
  */
 abstract class PresentmentSource(
     open val documentStore: DocumentStore,
     open val documentTypeRepository: DocumentTypeRepository,
     open val zkSystemRepository: ZkSystemRepository? = null,
-    open val eventLogger: EventLogger? = null
+    open val eventLogger: EventLogger? = null,
+    open val requesterHistory: RequesterHistory? = null,
 ) {
     /**
      * Determines if a request comes from a trusted requestor and returns the information about the
@@ -74,23 +77,23 @@ abstract class PresentmentSource(
      *
      * @param requester the relying party which is requesting the data.
      * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
-     * @param consentData the combinations of credentials and claims that the user can select.
+     * @param presentmentData the combinations of credentials and claims that the user can select.
      * @param preselectedDocuments a list of documents the user may have preselected earlier (for
      *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
      *   if the user didn't preselect.
      * @param onDocumentsInFocus called with the documents currently selected for the user, including when
      *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
-     * @return `null` if the user dismissed the prompt, otherwise a [CredentialSelection] object
+     * @return `null` if the user dismissed the prompt, otherwise a [PresentmentSelection] object
      *   conveying which credentials the user selected, if multiple options are available.
      * @see [org.multipaz.prompt.ShowConsentPromptFn] which this method wraps.
      */
     abstract suspend fun showConsentPrompt(
         requester: Requester,
         trustedRequesterIdentity: TrustedRequesterIdentity?,
-        consentData: ConsentData,
+        presentmentData: PresentmentData,
         preselectedDocuments: List<Document>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit
-    ): CredentialSelection?
+    ): PresentmentSelection?
 
     /**
      * Chooses a credential from a document.
@@ -138,5 +141,65 @@ abstract class PresentmentSource(
      * Gets the [FaceMatcher] to use for face matching during presentment, or `null` if face matching is not available.
      */
     open fun getFaceMatcher(): FaceMatcher? = null
+
+    /**
+     * Returns a [PresentmentSource] that delegates all operations to this instance except
+     * [showConsentPrompt], which is handled by [showConsentPromptFn].
+     *
+     * @param showConsentPromptFn the function to use for showing the consent prompt.
+     * @return a new [PresentmentSource] overriding [showConsentPrompt].
+     */
+    fun withShowConsentPrompt(
+        showConsentPromptFn: ShowConsentPromptFn
+    ): PresentmentSource = object : PresentmentSource(
+        documentStore = documentStore,
+        documentTypeRepository = documentTypeRepository,
+        zkSystemRepository = zkSystemRepository,
+        eventLogger = eventLogger,
+        requesterHistory = requesterHistory,
+    ) {
+        override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? =
+            this@PresentmentSource.resolveTrust(requester)
+
+        override suspend fun showConsentPrompt(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+            presentmentData: PresentmentData,
+            preselectedDocuments: List<Document>,
+            onDocumentsInFocus: (documents: List<Document>) -> Unit
+        ): PresentmentSelection? = showConsentPromptFn(
+            requester,
+            trustedRequesterIdentity,
+            presentmentData,
+            preselectedDocuments,
+            onDocumentsInFocus
+        )
+
+        override suspend fun selectCredential(
+            document: Document,
+            requestedClaims: List<RequestedClaim>,
+            keyAgreementPossible: List<EcCurve>,
+            credential: Credential?,
+        ): Credential? = this@PresentmentSource.selectCredential(
+            document = document,
+            requestedClaims = requestedClaims,
+            keyAgreementPossible = keyAgreementPossible,
+            credential = credential,
+        )
+
+        override suspend fun getBadges(document: Document): List<DocumentBadge> =
+            this@PresentmentSource.getBadges(document)
+
+        override suspend fun getFaceMatchingMode(
+            credential: Credential,
+            requesterIdentities: List<RequesterIdentity>,
+        ): FaceMatchingMode = this@PresentmentSource.getFaceMatchingMode(
+            credential = credential,
+            requesterIdentities = requesterIdentities,
+        )
+
+        override fun getFaceMatcher(): FaceMatcher? =
+            this@PresentmentSource.getFaceMatcher()
+    }
 }
 

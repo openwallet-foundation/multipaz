@@ -15,6 +15,7 @@ import kotlinx.serialization.json.longOrNull
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -75,11 +76,14 @@ sealed class Claim(
          *
          * @param dataItem a [DataItem].
          * @param documentTypeRepository if not `null`, will be used to look up a [DocumentAttribute] for the claim.
+         * @param fallbackDocumentType if not `null`, will be used to look up a [DocumentAttribute] if not found in
+         *   [documentTypeRepository] (e.g., from [org.multipaz.document.Document.getDocumentType]).
          * @return a [Claim].
          */
         fun fromDataItem(
             dataItem: DataItem,
-            documentTypeRepository: DocumentTypeRepository? = null
+            documentTypeRepository: DocumentTypeRepository? = null,
+            fallbackDocumentType: DocumentType? = null
         ): Claim {
 
             val displayName = dataItem["displayName"].asTstr
@@ -90,8 +94,9 @@ sealed class Claim(
                     val attributeIdentifier = claimPath
                         .filter { it.isString }
                         .joinToString(".") { it.jsonPrimitive.content }
-                    val attribute = documentTypeRepository
-                        ?.getDocumentTypeForJson(vct)
+                    val docType = documentTypeRepository?.getDocumentTypeForJson(vct)
+                        ?: fallbackDocumentType?.takeIf { it.jsonDocumentType?.vct == vct }
+                    val attribute = docType
                         ?.jsonDocumentType
                         ?.getDocumentAttribute(attributeIdentifier)
                     return JsonClaim(
@@ -108,6 +113,10 @@ sealed class Claim(
                     val dataElementName = dataItem["dataElementName"].asTstr
                     val mdocDocType = documentTypeRepository?.getDocumentTypeForMdoc(docType)
                         ?: documentTypeRepository?.getDocumentTypeForMdocNamespace(namespaceName)
+                        ?: fallbackDocumentType?.takeIf {
+                            it.mdocDocumentType?.docType == docType ||
+                                it.mdocDocumentType?.namespaces?.containsKey(namespaceName) == true
+                        }
                     val attribute = mdocDocType?.mdocDocumentType
                         ?.namespaces[namespaceName]
                         ?.dataElements[dataElementName]

@@ -1,6 +1,7 @@
 [versions]
 agp = "8.13.1"
-android-compileSdk = "36"
+android-compileSdk = "37"
+android-compileSdkMinor = "2"
 android-minSdk = "26"
 android-targetSdk = "36"
 androidx-activity-compose = "1.12.0"
@@ -45,7 +46,7 @@ jetbrains-lifecycle = "2.9.6"
 buildconfig = "6.0.5"
 androidx-sqlite = "2.5.2"
 play-services-identity-credentials = "16.0.0-alpha08"
-androidx-credentials = "1.5.0"
+androidx-credentials = "1.6.0"
 androidx-credentials-registry-provider = "1.0.0-alpha03"
 errorprone = "2.44.0"
 semver = "3.0.0"
@@ -65,12 +66,12 @@ kotlin-wrappers-em = "2025.12.1-11.14.0"
 koog = "0.8.0"
 junit-jupiter = "5.10.0"
 jetbrains-navigationevent = "1.0.1"
-jj2000 = "5.2"
 android-keyattestation = "0.4"
+robolectric = "4.14.1"
 
 [libraries]
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 android-keyattestation = { module = "com.android.keyattestation:keyattestation", version.ref = "android-keyattestation" }
-jj2000 = { module = "edu.ucar:jj2000", version.ref = "jj2000" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

@@ -10,6 +10,7 @@ import org.multipaz.utopia.localization.LocalizedStrings
 import org.multipaz.utopia.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.Options
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
@@ -29,6 +30,17 @@ object EUCertificateOfResidence {
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
 
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val residentialAddressGroup = DocumentAttributeGroup(
+            identifier = "residential_address",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_RESIDENTIAL_ADDRESS),
+            icon = Icon.PLACE
+        )
+
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_CERTIFICATE_OF_RESIDENCY))
             .addMdocDocumentType(DOCTYPE)
             .addJsonDocumentType(type = VCT, keyBound = true)
@@ -40,7 +52,8 @@ object EUCertificateOfResidence {
                 mandatory = true,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValueMdoc = SampleData.FAMILY_NAME.toDataItem()
+                sampleValueMdoc = SampleData.FAMILY_NAME.toDataItem(),
+                group = nameGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -50,7 +63,8 @@ object EUCertificateOfResidence {
                 mandatory = true,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PERSON,
-                sampleValueMdoc = SampleData.GIVEN_NAME.toDataItem()
+                sampleValueMdoc = SampleData.GIVEN_NAME.toDataItem(),
+                group = nameGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.Date,
@@ -102,7 +116,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_ADDRESS.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_ADDRESS.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
@@ -112,7 +127,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_COUNTRY.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_COUNTRY.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -122,7 +138,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_STATE.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_STATE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -132,7 +149,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_CITY.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_CITY.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -142,7 +160,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_POSTAL_CODE.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -152,7 +171,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_STREET.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_STREET.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,
@@ -162,7 +182,8 @@ object EUCertificateOfResidence {
                 mandatory = false,
                 mdocNamespace = NAMESPACE,
                 icon = Icon.PLACE,
-                sampleValueMdoc = SampleData.RESIDENT_HOUSE_NUMBER.toDataItem()
+                sampleValueMdoc = SampleData.RESIDENT_HOUSE_NUMBER.toDataItem(),
+                group = residentialAddressGroup
             )
             .addAttribute(
                 type = DocumentAttributeType.String,

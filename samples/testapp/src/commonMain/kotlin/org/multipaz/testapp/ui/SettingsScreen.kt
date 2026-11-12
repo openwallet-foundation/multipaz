@@ -97,9 +97,9 @@ fun SettingsScreen(
         }
         item {
             SettingToggle(
-                title = "NFCv2: Only Allow NFC Data Transfer",
-                isChecked = app.settingsModel.presentmentNfcV2OnlyAllowNfc.collectAsState().value,
-                onCheckedChange = { app.settingsModel.presentmentNfcV2OnlyAllowNfc.value = it },
+                title = "NFC CCE: Only Allow NFC Data Transfer",
+                isChecked = app.settingsModel.presentmentNfcCceOnlyAllowNfc.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentNfcCceOnlyAllowNfc.value = it },
                 enabled = nfcAvailable
             )
         }
@@ -128,7 +128,7 @@ fun SettingsScreen(
             )
         }
         item {
-            SettingHeadline("ISO mdoc NFC Negotiated Handover & NFCv2 Preferred Order")
+            SettingHeadline("ISO mdoc NFC Negotiated Handover & NFC CCE Preferred Order")
         }
         for (n in negotiatedHandoverOrder.indices) {
             val prefix = negotiatedHandoverOrder[n]
@@ -288,6 +288,34 @@ fun SettingsScreen(
         }
 
         item {
+            SettingHeadline("Digital Credentials create() API options")
+        }
+        if (TestAppConfiguration.supportedCreateProtocols.isNotEmpty()) {
+            for (protocol in TestAppConfiguration.supportedCreateProtocols.sorted()) {
+                item {
+                    SettingToggle(
+                        title = "Protocol: $protocol",
+                        isChecked = app.settingsModel.dcApiCreateProtocols.collectAsState().value.contains(protocol),
+                        onCheckedChange = {
+                            val mutableSet = app.settingsModel.dcApiCreateProtocols.value.toMutableSet()
+                            if (it) mutableSet.add(protocol) else mutableSet.remove(protocol)
+                            app.settingsModel.dcApiCreateProtocols.value = mutableSet
+                        },
+                    )
+                }
+            }
+        } else {
+            item {
+                WarningCard {
+                    Text(
+                        "Digital Credentials create() API is not supported on " +
+                            TestAppConfiguration.platform.displayName
+                    )
+                }
+            }
+        }
+
+        item {
             HorizontalDivider(
                 modifier = Modifier.padding(8.dp)
             )
@@ -301,6 +329,13 @@ fun SettingsScreen(
                 title = "Skip consent prompt",
                 isChecked = !app.settingsModel.presentmentShowConsentPrompt.collectAsState().value,
                 onCheckedChange = { app.settingsModel.presentmentShowConsentPrompt.value = !it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Use app-provided transaction data renderers",
+                isChecked = app.settingsModel.presentmentUseTransactionDataRenderers.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentUseTransactionDataRenderers.value = it },
             )
         }
         item {
@@ -329,6 +364,23 @@ fun SettingsScreen(
                     app.settingsModel.presentmentFaceMatcher.value = choice
                 },
             )
+        }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            app.requesterHistory.deleteAll()
+                            showToast("Requester history cleared")
+                        }
+                    },
+                ) {
+                    Text(text = "Reset Requester History")
+                }
+            }
         }
 
         item {

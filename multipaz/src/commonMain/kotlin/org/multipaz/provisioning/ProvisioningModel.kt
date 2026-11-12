@@ -234,6 +234,7 @@ class ProvisioningModel(
                     provisioningClient.authorize(authorizationResponse)
                     evidenceRequests = provisioningClient.getAuthorizationChallenges()
                 }
+                mutableMetadata.emit(provisioningClient.getMetadata())
                 mutableState.emit(Authorized)
 
                 mutableState.emit(Connected)

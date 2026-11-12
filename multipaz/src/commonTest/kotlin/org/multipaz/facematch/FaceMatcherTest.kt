@@ -4,7 +4,9 @@ import kotlinx.io.bytestring.ByteString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class FaceMatcherTest {
 
@@ -125,6 +127,24 @@ class FaceMatcherTest {
             backgroundColor = Color.WHITE
         )
         assertEquals(Color.WHITE, stateWithColor.backgroundColor)
+    }
+
+    @Test
+    fun testUsesCustomUserInterfaceDefaultAndOverride() {
+        val defaultMatcher = object : FaceMatcher {
+            override val name: String = "default"
+            override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
+                object : FaceMatcherSession(referencePortrait) {}
+        }
+        assertFalse(defaultMatcher.usesCustomUserInterface)
+
+        val customUiMatcher = object : FaceMatcher {
+            override val name: String = "custom_ui"
+            override val usesCustomUserInterface: Boolean = true
+            override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
+                object : FaceMatcherSession(referencePortrait) {}
+        }
+        assertTrue(customUiMatcher.usesCustomUserInterface)
     }
 }
 

@@ -32,6 +32,7 @@ extension SimplePresentmentSource.Companion {
     ///   - zkSystemRepository: the [ZkSystemRepository] to use or `nil`.
     ///   - faceMatcherRepository: the [FaceMatcherRepository] to use or `nil`.
     ///   - eventLogger: an [EventLogger] for logging events or `nil`.
+    ///   - requesterHistory: a [RequesterHistory] for tracking relying party interactions or `nil`.
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
     ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
     ///   - getBadgesFn: a function to get badges for a document.
@@ -46,6 +47,7 @@ extension SimplePresentmentSource.Companion {
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
         eventLogger: EventLogger? = nil,
+        requesterHistory: RequesterHistory? = nil,
         getFaceMatcherFn: @escaping () -> FaceMatcher? = { nil },
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
@@ -53,12 +55,12 @@ extension SimplePresentmentSource.Companion {
         showConsentPromptFn: @escaping @MainActor @Sendable (
             _ requester: Requester,
             _ trustMetadata: TrustedRequesterIdentity?,
-            _ consentData: ConsentData,
-            _ preselectedDocuments: [Document],
-            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-        ) async -> CredentialSelection?,
+            _ presentmentData: PresentmentData,
+            _ preselectedDocuments: [MultipazDocument],
+            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
+        ) async -> PresentmentSelection?,
         getBadgesFn: @escaping @MainActor @Sendable (
-            _ document: Document
+            _ document: MultipazDocument
         ) async -> [DocumentBadge] = { document in [] },
         getFaceMatchingModeFn: @escaping @MainActor @Sendable (
             _ credential: Credential,
@@ -80,6 +82,7 @@ extension SimplePresentmentSource.Companion {
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: zkSystemRepository,
             eventLogger: eventLogger,
+            requesterHistory: requesterHistory,
             getFaceMatcherFn: getFaceMatcherFn,
             resolveTrustFn: resolveTrustHandler,
             showConsentPromptFn: showConsentPromptHandler,
@@ -110,14 +113,36 @@ extension SimplePresentmentSource.Companion {
 
 }
 
+extension PresentmentSource {
+    internal func withShowConsentPrompt(
+        _ showConsentPromptFn: @escaping @MainActor @Sendable (
+            _ requester: Requester,
+            _ trustMetadata: TrustedRequesterIdentity?,
+            _ presentmentData: PresentmentData,
+            _ preselectedDocuments: [MultipazDocument],
+            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
+        ) async -> PresentmentSelection?
+    ) -> PresentmentSource {
+        let showConsentPromptHandler = ShowConsentPromptHandler(f: showConsentPromptFn)
+        let wrapped = self.withShowConsentPrompt(showConsentPromptFn: showConsentPromptHandler)
+        objc_setAssociatedObject(
+            wrapped,
+            &handlersHolderKey,
+            showConsentPromptHandler,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        return wrapped
+    }
+}
+
 private typealias ObjcBlockWithNSArray = @convention(block) (NSArray) -> Void
-private typealias ObjcBlockWithDocs = @convention(block) ([Document]) -> Void
+private typealias ObjcBlockWithDocs = @convention(block) ([MultipazDocument]) -> Void
 private typealias ObjcBlockWithAny = @convention(block) (AnyObject) -> Void
 private typealias ObjcBlockWithAnyOptional = @convention(block) (Any?) -> Void
-private typealias SwiftBlockWithDocs = ([Document]) -> Void
+private typealias SwiftBlockWithDocs = ([MultipazDocument]) -> Void
 private typealias SwiftBlockWithAny = (Any?) -> Void
 
-private func invokeOnDocumentsInFocus(callback: Any?, documents: [Document]) {
+private func invokeOnDocumentsInFocus(callback: Any?, documents: [MultipazDocument]) {
     guard let callback = callback else { return }
     
     // 1. Try Obj-C blocks
@@ -184,23 +209,23 @@ private func runResolveTrust(
 private func runShowConsentPrompt(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
-    preselectedDocuments: [Document],
+    presentmentData: PresentmentData,
+    preselectedDocuments: [MultipazDocument],
     onDocumentsInFocusCallback: Any?,
     f: @escaping @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
-        _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?,
+        _ presentmentData: PresentmentData,
+        _ preselectedDocuments: [MultipazDocument],
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
+    ) async -> PresentmentSelection?,
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
         let value = await f(
             requester,
             trustedRequesterIdentity,
-            consentData,
+            presentmentData,
             preselectedDocuments,
             { documents in
                 invokeOnDocumentsInFocus(callback: onDocumentsInFocusCallback, documents: documents)
@@ -211,8 +236,8 @@ private func runShowConsentPrompt(
 }
 
 private func runGetBadges(
-    document: Document,
-    f: @escaping @MainActor @Sendable (Document) async -> [DocumentBadge],
+    document: MultipazDocument,
+    f: @escaping @MainActor @Sendable (MultipazDocument) async -> [DocumentBadge],
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
@@ -240,31 +265,31 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
     let f: @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
-        _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?
+        _ presentmentData: PresentmentData,
+        _ preselectedDocuments: [MultipazDocument],
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
+    ) async -> PresentmentSelection?
     
     init(f: @escaping @MainActor @Sendable (
         _ requester: Requester,
         _ trustedRequesterIdentity: TrustedRequesterIdentity?,
-        _ consentData: ConsentData,
-        _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
-    ) async -> CredentialSelection?) {
+        _ presentmentData: PresentmentData,
+        _ preselectedDocuments: [MultipazDocument],
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
+    ) async -> PresentmentSelection?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
         let trustedRequesterIdentity = p2 as! TrustedRequesterIdentity?
-        let consentData = p3 as! ConsentData
-        let preselectedDocuments = p4 as! [Document]
+        let presentmentData = p3 as! PresentmentData
+        let preselectedDocuments = p4 as! [MultipazDocument]
         let onDocumentsInFocusCallback = p5
         runShowConsentPrompt(
             requester: requester,
             trustedRequesterIdentity: trustedRequesterIdentity,
-            consentData: consentData,
+            presentmentData: presentmentData,
             preselectedDocuments: preselectedDocuments,
             onDocumentsInFocusCallback: onDocumentsInFocusCallback,
             f: self.f,
@@ -275,15 +300,15 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
 
 private class GetBadgesHandler: KotlinSuspendFunction1 {
     let f: @MainActor @Sendable (
-        _ document: Document
+        _ document: MultipazDocument
     ) async -> [DocumentBadge]
     
-    init(f: @escaping @MainActor @Sendable (_ document: Document) async -> [DocumentBadge]) {
+    init(f: @escaping @MainActor @Sendable (_ document: MultipazDocument) async -> [DocumentBadge]) {
         self.f = f
     }
 
     func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
-        let document = p1 as! Document
+        let document = p1 as! MultipazDocument
         runGetBadges(document: document, f: self.f, completionHandler: completionHandler)
     }
 }

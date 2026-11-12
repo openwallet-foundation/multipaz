@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">รหัสผ่านไม่ปลอดภัย โปรดเลือกรหัสผ่านอื่น</string>
     <string name="credential_presentment_button_cancel">ยกเลิก</string>
     <string name="credential_presentment_button_more">เพิ่มเติม</string>
-    <string name="credential_presentment_button_share">แชร์</string>
+    <string name="credential_presentment_button_continue">ดำเนินการต่อ</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">ผู้ขอไม่ทราบ</string>
     <string name="credential_presentment_share_with_known_requester">ข้อมูลนี้จะถูกแชร์กับ %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">ข้อมูลนี้จะถูกแชร์:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">ไอคอนเตือน</string>
     <string name="credential_presentment_select_document">เลือกเอกสาร</string>
     <string name="credential_presentment_requester_information">ข้อมูลผู้ขอ</string>
+    <string name="credential_presentment_details">รายละเอียด</string>
+    <string name="credential_presentment_back">ย้อนกลับ</string>
     <string name="certificate_viewer_sub_basic_info">ข้อมูลพื้นฐาน</string>
     <string name="certificate_viewer_k_type">ประเภท</string>
     <string name="certificate_viewer_k_serial_number">หมายเลขซีเรียล</string>
@@ -218,4 +220,8 @@
     <string name="face_matcher_prompt_grant_permission">อนุญาต</string>
     <string name="face_matcher_prompt_cancel">ยกเลิก</string>
     <string name="face_matcher_prompt_confirm">ยืนยัน</string>
+    <string name="certificate_viewer_tab_leaf">ปลายทาง</string>
+    <string name="certificate_viewer_tab_intermediate">ตัวกลาง</string>
+    <string name="certificate_viewer_tab_intermediate_n">ตัวกลาง %1$d</string>
+    <string name="certificate_viewer_tab_root">รูท</string>
 </resources>

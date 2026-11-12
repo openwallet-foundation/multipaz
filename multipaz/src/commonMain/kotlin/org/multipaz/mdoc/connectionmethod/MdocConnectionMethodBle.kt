@@ -94,6 +94,14 @@ data class MdocConnectionMethodBle(
                     }
                     if (peripheralServerModePsm != null) {
                         put(
+                            OPTION_KEY_SUPPORTS_DIRECT_L2CAP_PERIPHERAL_SERVER_MODE,
+                            supportsPeripheralServerMode
+                        )
+                        put(
+                            OPTION_KEY_SUPPORTS_DIRECT_L2CAP_CENTRAL_CLIENT_MODE,
+                            supportsCentralClientMode
+                        )
+                        put(
                             OPTION_KEY_PERIPHERAL_SERVER_MODE_PSM,
                             peripheralServerModePsm as Int
                         )
@@ -125,10 +133,12 @@ data class MdocConnectionMethodBle(
 
         private const val OPTION_KEY_SUPPORTS_PERIPHERAL_SERVER_MODE = 0L
         private const val OPTION_KEY_SUPPORTS_CENTRAL_CLIENT_MODE = 1L
+        private const val OPTION_KEY_SUPPORTS_DIRECT_L2CAP_PERIPHERAL_SERVER_MODE = 2L
+        private const val OPTION_KEY_SUPPORTS_DIRECT_L2CAP_CENTRAL_CLIENT_MODE = 3L
         private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_UUID = 10L
         private const val OPTION_KEY_CENTRAL_CLIENT_MODE_UUID = 11L
         private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_BLE_DEVICE_ADDRESS = 20L
-        private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_PSM = 21L // NOTE: as per drafts of 18013-5 Second Edition
+        private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_PSM = 21L
 
         internal fun fromDeviceEngagement(encodedDeviceRetrievalMethod: ByteArray): MdocConnectionMethodBle? {
             val array = Cbor.decode(encodedDeviceRetrievalMethod)
@@ -139,9 +149,15 @@ data class MdocConnectionMethodBle(
                 return null
             }
             val map = array[2]
+            val gattPeripheral = map.getOrNull(OPTION_KEY_SUPPORTS_PERIPHERAL_SERVER_MODE)?.asBoolean ?: false
+            val gattCentral = map.getOrNull(OPTION_KEY_SUPPORTS_CENTRAL_CLIENT_MODE)?.asBoolean ?: false
+            val directL2capPeripheral =
+                map.getOrNull(OPTION_KEY_SUPPORTS_DIRECT_L2CAP_PERIPHERAL_SERVER_MODE)?.asBoolean ?: false
+            val directL2capCentral =
+                map.getOrNull(OPTION_KEY_SUPPORTS_DIRECT_L2CAP_CENTRAL_CLIENT_MODE)?.asBoolean ?: false
             val cm = MdocConnectionMethodBle(
-                supportsPeripheralServerMode = map[OPTION_KEY_SUPPORTS_PERIPHERAL_SERVER_MODE].asBoolean,
-                supportsCentralClientMode = map[OPTION_KEY_SUPPORTS_CENTRAL_CLIENT_MODE].asBoolean,
+                supportsPeripheralServerMode = gattPeripheral || directL2capPeripheral,
+                supportsCentralClientMode = gattCentral || directL2capCentral,
                 peripheralServerModeUuid = map.getOrNull(OPTION_KEY_PERIPHERAL_SERVER_MODE_UUID)?.let {
                     UUID.fromByteArray(it.asBstr)
                 },

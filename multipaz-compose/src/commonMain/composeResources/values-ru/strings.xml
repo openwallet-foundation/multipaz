@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">Парольная фраза слабая, выберите другую</string>
     <string name="credential_presentment_button_cancel">Отмена</string>
     <string name="credential_presentment_button_more">Ещё</string>
-    <string name="credential_presentment_button_share">Поделиться</string>
+    <string name="credential_presentment_button_continue">Продолжить</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Неизвестный запросчик</string>
     <string name="credential_presentment_share_with_known_requester">Эти данные будут переданы %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">Эти данные будут переданы:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Значок предупреждения</string>
     <string name="credential_presentment_select_document">Выберите документ</string>
     <string name="credential_presentment_requester_information">Информация о запросчике</string>
+    <string name="credential_presentment_details">Подробности</string>
+    <string name="credential_presentment_back">Назад</string>
     <string name="certificate_viewer_sub_basic_info">Основная информация</string>
     <string name="certificate_viewer_k_type">Тип</string>
     <string name="certificate_viewer_k_serial_number">Серийный номер</string>
@@ -246,4 +248,8 @@
     <string name="face_matcher_prompt_grant_permission">Предоставить разрешение</string>
     <string name="face_matcher_prompt_cancel">Отмена</string>
     <string name="face_matcher_prompt_confirm">Подтвердить</string>
+    <string name="certificate_viewer_tab_leaf">Конечный</string>
+    <string name="certificate_viewer_tab_intermediate">Промежуточный</string>
+    <string name="certificate_viewer_tab_intermediate_n">Пром. %1$d</string>
+    <string name="certificate_viewer_tab_root">Корневой</string>
 </resources>

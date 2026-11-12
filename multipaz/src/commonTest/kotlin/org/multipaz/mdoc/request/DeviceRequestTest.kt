@@ -34,15 +34,23 @@ import kotlinx.datetime.Instant
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManager
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
 import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
@@ -1621,36 +1629,61 @@ class DeviceRequestTest {
     fun testIsStructurallyEquivalentWithDifferentReaderAuthCerts() = runTest {
         val transcript = buildCborArray { add("Session") }
 
+        val caKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val key1 = Crypto.createEcPrivateKey(EcCurve.P256)
         val key2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val otherCaKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
         val validFrom = Clock.System.now()
         val validUntil = Instant.fromEpochMilliseconds(
             validFrom.toEpochMilliseconds() + 30L * 24 * 60 * 60 * 1000
         )
 
-        val cert1 = X509Cert.Builder(
-            publicKey = key1.publicKey,
-            signingKey = AsymmetricKey.anonymous(key1, Algorithm.ES256),
-            serialNumber = ASN1Integer(1),
-            subject = X500Name.fromName("CN=Reader 1"),
-            issuer = X500Name.fromName("CN=Reader 1"),
+        val caCert = X509Cert.Builder(
+            publicKey = caKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(caKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(100),
+            subject = X500Name.fromName("CN=Reader Root CA"),
+            issuer = X500Name.fromName("CN=Reader Root CA"),
             validFrom = validFrom,
             validUntil = validUntil
-        ).build()
+        ).includeSubjectKeyIdentifier().build()
+
+        // Single-use leaf keys issued by the same CA for the same reader subject
+        val cert1 = X509Cert.Builder(
+            publicKey = key1.publicKey,
+            signingKey = AsymmetricKey.anonymous(caKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Reader 1"),
+            issuer = caCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).setAuthorityKeyIdentifierToCertificate(caCert).build()
 
         val cert2 = X509Cert.Builder(
             publicKey = key2.publicKey,
-            signingKey = AsymmetricKey.anonymous(key2, Algorithm.ES256),
+            signingKey = AsymmetricKey.anonymous(caKey, Algorithm.ES256),
             serialNumber = ASN1Integer(2),
+            subject = X500Name.fromName("CN=Reader 1"),
+            issuer = caCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).setAuthorityKeyIdentifierToCertificate(caCert).build()
+
+        // Unrelated reader certificate from a different CA / subject
+        val otherCert = X509Cert.Builder(
+            publicKey = key2.publicKey,
+            signingKey = AsymmetricKey.anonymous(otherCaKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(3),
             subject = X500Name.fromName("CN=Reader 2"),
-            issuer = X500Name.fromName("CN=Reader 2"),
+            issuer = X500Name.fromName("CN=Other Root CA"),
             validFrom = validFrom,
             validUntil = validUntil
         ).build()
 
-        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert1)), key1)
-        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert2)), key2)
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert1, caCert)), key1)
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert2, caCert)), key2)
+        val otherReaderKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(otherCert)), key2)
 
         val req1 = DeviceRequest.Builder(transcript)
             .addDocRequest(
@@ -1668,8 +1701,18 @@ class DeviceRequestTest {
             )
             .build()
 
+        val reqOtherReader = DeviceRequest.Builder(transcript)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = otherReaderKey
+            )
+            .build()
+
         assertTrue(req1.isStructurallyEquivalent(req2))
         assertTrue(req2.isStructurallyEquivalent(req1))
+        assertFalse(req1.isStructurallyEquivalent(reqOtherReader))
+        assertFalse(reqOtherReader.isStructurallyEquivalent(req1))
     }
 
     @Test
@@ -1726,5 +1769,279 @@ class DeviceRequestTest {
         assertEquals(1, identities.size)
         assertEquals(1, identities[0].certChain.certificates.size)
         assertEquals(readerCert, identities[0].certChain.certificates[0])
+    }
+
+    @Test
+    fun testIsSameAuthenticatedReader() = runTest {
+        val transcript1 = buildCborArray { add("Session1") }
+        val transcript2 = buildCborArray { add("Session2") }
+        val validFrom = Clock.System.now()
+        val validUntil = Instant.fromEpochMilliseconds(
+            validFrom.toEpochMilliseconds() + 30L * 24 * 60 * 60 * 1000
+        )
+
+        val storage = EphemeralStorage()
+        val secureAreaRepository = SecureAreaRepository.Builder().build()
+        val documentStore = buildDocumentStore(storage, secureAreaRepository) {}
+        val documentTypeRepository = DocumentTypeRepository()
+        val trustManager = TrustManager(storage)
+
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(rootKey, Algorithm.ES256),
+            subject = X500Name.fromName("CN=Trusted Reader Root CA"),
+            serial = ASN1Integer(100L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/crl",
+        )
+        trustManager.addX509Cert(
+            certificate = rootCert,
+            metadata = TrustMetadata(displayName = "Trusted Reader"),
+        )
+
+        val trustedSource = SimplePresentmentSource(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            resolveTrustFn = { requester ->
+                for (id in requester.requesterIdentities) {
+                    val res = trustManager.verify(id.certChain.certificates)
+                    if (res.isTrusted) {
+                        return@SimplePresentmentSource TrustedRequesterIdentity(
+                            identity = id,
+                            trustMetadata = res.trustPoints.first().metadata
+                        )
+                    }
+                }
+                null
+            },
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val untrustedSource = SimplePresentmentSource(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+
+        val leafPriv1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert1 = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            readerKey = leafPriv1.publicKey,
+            subject = X500Name.fromName("CN=Reader A"),
+            dnsName = null,
+            serial = ASN1Integer(1L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        val leafPriv2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert2 = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            readerKey = leafPriv2.publicKey,
+            subject = X500Name.fromName("CN=Reader A"),
+            dnsName = null,
+            serial = ASN1Integer(2L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+
+        // Attacker signs a spoofed leaf certificate with the exact same subject, issuer, and AKI
+        // as leafCert1, but using an attacker key instead of rootKey
+        val attackerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val spoofedLeafPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val spoofedLeafCert = X509Cert.Builder(
+            publicKey = spoofedLeafPriv.publicKey,
+            signingKey = AsymmetricKey.anonymous(attackerKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(3L),
+            subject = leafCert1.subject,
+            issuer = leafCert1.issuer,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).setAuthorityKeyIdentifierToCertificate(rootCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(leafCert1, rootCert)), leafPriv1)
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(leafCert2, rootCert)), leafPriv2)
+        val spoofedReaderKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(spoofedLeafCert, rootCert)),
+            spoofedLeafPriv
+        )
+
+        val req1 = buildDeviceRequest(transcript1) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+        }
+        val req1SameCert = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+        }
+        val req2RotatedCert = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey2,
+            )
+        }
+        val reqSpoofedCert = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = spoofedReaderKey,
+            )
+        }
+
+        // 1. Identical leaf cert passes for both trusted and untrusted sources
+        assertTrue(req1SameCert.isSameAuthenticatedReader(req1, trustedSource))
+        assertTrue(req1SameCert.isSameAuthenticatedReader(req1, untrustedSource))
+
+        // 2. Single-use leaf rotation (1-cert x5chain on the wire because root is excluded):
+        //    - Passes when trusted by source.resolveTrust()
+        //    - Fails when untrusted (no CA in x5chain or trust store to verify the rotated leaf)
+        //    - Fails when the rotated leaf is spoofed by an attacker key
+        assertTrue(req2RotatedCert.isSameAuthenticatedReader(req1, trustedSource))
+        assertFalse(req2RotatedCert.isSameAuthenticatedReader(req1, untrustedSource))
+        assertTrue(reqSpoofedCert.isStructurallyEquivalent(req1))
+        assertFalse(reqSpoofedCert.isSameAuthenticatedReader(req1, trustedSource))
+
+        // 3. Multi-certificate x5chain ([leaf, intermediateCA] on wire, root excluded):
+        //    - Passes when both leaves are validly signed by intermediateCA
+        //    - Fails when leaf2 is forged (not signed by intermediateCA)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateCert = X509Cert.Builder(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(50L),
+            subject = X500Name.fromName("CN=Intermediate Reader CA"),
+            issuer = rootCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).includeSubjectKeyIdentifier()
+            .setAuthorityKeyIdentifierToCertificate(rootCert)
+            .setBasicConstraints(ca = true, pathLenConstraint = 0)
+            .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            .build()
+
+        val multiLeaf1 = X509Cert.Builder(
+            publicKey = leafPriv1.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(51L),
+            subject = X500Name.fromName("CN=Multi Reader"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).setAuthorityKeyIdentifierToCertificate(intermediateCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+
+        val multiLeaf2 = X509Cert.Builder(
+            publicKey = leafPriv2.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(52L),
+            subject = X500Name.fromName("CN=Multi Reader"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).setAuthorityKeyIdentifierToCertificate(intermediateCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+
+        val forgedMultiLeaf = X509Cert.Builder(
+            publicKey = spoofedLeafPriv.publicKey,
+            signingKey = AsymmetricKey.anonymous(attackerKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(53L),
+            subject = X500Name.fromName("CN=Multi Reader"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).setAuthorityKeyIdentifierToCertificate(intermediateCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+
+        val multiKey1 = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(multiLeaf1, intermediateCert, rootCert)),
+            leafPriv1
+        )
+        val multiKey2 = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(multiLeaf2, intermediateCert, rootCert)),
+            leafPriv2
+        )
+        val forgedMultiKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(forgedMultiLeaf, intermediateCert, rootCert)),
+            spoofedLeafPriv
+        )
+
+        val multiReq1 = buildDeviceRequest(transcript1) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = multiKey1,
+            )
+        }
+        val multiReq2 = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = multiKey2,
+            )
+        }
+        val forgedMultiReq = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = forgedMultiKey,
+            )
+        }
+
+        assertTrue(multiReq2.isSameAuthenticatedReader(multiReq1, untrustedSource))
+        assertTrue(forgedMultiReq.isStructurallyEquivalent(multiReq1))
+        assertFalse(forgedMultiReq.isSameAuthenticatedReader(multiReq1, untrustedSource))
+
+        // 4. Multi-DocRequest where docRequests[0] keeps the same cert and docRequests[1] rotates to a spoofed cert
+        val multiDocReq1 = buildDeviceRequest(transcript1) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+            addDocRequest(
+                docType = PhotoID.PHOTO_ID_DOCTYPE,
+                nameSpaces = mapOf(PhotoID.PHOTO_ID_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+        }
+        val multiDocReq2Valid = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+            addDocRequest(
+                docType = PhotoID.PHOTO_ID_DOCTYPE,
+                nameSpaces = mapOf(PhotoID.PHOTO_ID_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey2,
+            )
+        }
+        val multiDocReq2Spoofed = buildDeviceRequest(transcript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+            addDocRequest(
+                docType = PhotoID.PHOTO_ID_DOCTYPE,
+                nameSpaces = mapOf(PhotoID.PHOTO_ID_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = spoofedReaderKey,
+            )
+        }
+        assertTrue(multiDocReq2Valid.isSameAuthenticatedReader(multiDocReq1, trustedSource))
+        assertFalse(multiDocReq2Spoofed.isSameAuthenticatedReader(multiDocReq1, trustedSource))
     }
 }

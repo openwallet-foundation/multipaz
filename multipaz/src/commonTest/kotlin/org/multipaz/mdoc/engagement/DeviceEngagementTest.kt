@@ -160,4 +160,33 @@ class DeviceEngagementTest {
         )
     }
 
+    @Test
+    fun testReaderEngagement() = runTest {
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val bleMethod = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = UUID.randomUUID()
+        )
+        val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
+            addConnectionMethod(bleMethod)
+        }
+        assertEquals("1.1", readerEngagement.version)
+        assertEquals(eReaderKey.publicKey, readerEngagement.eReaderKey)
+        assertEquals(listOf(bleMethod), readerEngagement.connectionMethods)
+        assertEquals(
+            readerEngagement,
+            ReaderEngagement.fromDataItem(readerEngagement.toDataItem())
+        )
+
+        val nfcOnlyReaderEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {}
+        assertTrue(nfcOnlyReaderEngagement.connectionMethods.isEmpty())
+        assertFalse(nfcOnlyReaderEngagement.toDataItem().hasKey(2))
+        assertEquals(
+            nfcOnlyReaderEngagement,
+            ReaderEngagement.fromDataItem(nfcOnlyReaderEngagement.toDataItem())
+        )
+    }
+
 }

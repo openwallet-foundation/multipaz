@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
@@ -33,6 +34,7 @@ import org.multipaz.util.appendUInt8
 import kotlin.math.min
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 class NfcTransportMdocReader(
@@ -135,11 +137,12 @@ class NfcTransportMdocReader(
 
         ioJob = CoroutineScope(currentCoroutineContext()).launch {
             try {
-                while (true) {
-                    val messageToSend = writingQueue.receive()
+                for (messageToSend in writingQueue) {
                     val responseMessage = nfcTransceive(messageToSend)
-                    incomingMessages.send(responseMessage)
+                    incomingMessages.trySend(responseMessage)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.i(TAG, "Error while waiting for message to send", e)
                 e.printStackTrace()
@@ -261,9 +264,10 @@ class NfcTransportMdocReader(
 
     override suspend fun waitForMessage(): ByteArray {
         mutex.withLock {
-            check(_state.value == State.CONNECTED || _state.value == State.FAILED) {
-                "Expected state CONNECTED or FAILED, got ${_state.value}"
+            if (_state.value == State.FAILED) {
+                throw MdocTransportException("Transport already failed")
             }
+            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
             Logger.i(TAG, "waitForMessage")
         }
         try {
@@ -288,13 +292,25 @@ class NfcTransportMdocReader(
     }
 
     override suspend fun close() {
-        mutex.withLock {
+        val jobToJoin = mutex.withLock {
             if (_state.value == State.FAILED || _state.value == State.CLOSED) {
                 closeTag()
                 return
             }
             Logger.i(TAG, "close")
-            incomingMessages.close()
+            writingQueue.close()
+            ioJob
+        }
+        if (jobToJoin != null) {
+            withTimeoutOrNull(500.milliseconds) {
+                jobToJoin.join()
+            }
+        }
+        mutex.withLock {
+            if (_state.value == State.FAILED || _state.value == State.CLOSED) {
+                closeTag()
+                return
+            }
             ioJob?.cancel()
             ioJob = null
             incomingMessages.close()

@@ -184,5 +184,8 @@
   "cor_description_document_number": "A number for the COR, assigned by the COR Provider.",
   "cor_description_administrative_number": "A number assigned by the COR Provider for audit control or other purposes.",
   "cor_description_issuing_jurisdiction": "Country subdivision code of the jurisdiction that issued the COR, as defined in ISO 3166-2:2020, Clause 8. The first part of the code SHALL be the same as the value for issuing_country.",
-  "cor_description_issuing_country": "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority's country or territory"
+  "cor_description_issuing_country": "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority's country or territory",
+  "group_name": "Name",
+  "group_residential_address": "Residential address",
+  "group_place_of_birth": "Place of birth"
 }

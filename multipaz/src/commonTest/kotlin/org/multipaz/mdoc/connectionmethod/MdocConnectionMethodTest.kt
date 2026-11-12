@@ -331,4 +331,34 @@ class MdocConnectionMethodTest {
         assertEquals(uuid, ble.peripheralServerModeUuid)
         assertEquals(uuid, ble.centralClientModeUuid)
     }
+
+    @Test
+    fun testConnectionMethodBleDirectL2capOptions() {
+        val uuid = UUID(0U, 1U)
+        val cm = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = uuid,
+            peripheralServerModePsm = 192,
+            peripheralServerModeMacAddress = null
+        )
+        val decoded = MdocConnectionMethod.fromDeviceEngagement(cm.toDeviceEngagement()) as MdocConnectionMethodBle?
+        assertNotNull(decoded)
+        assertEquals(cm, decoded)
+        assertEquals(
+            """[
+  2,
+  1,
+  {
+    0: false,
+    1: true,
+    11: h'00000000000000000000000000000001',
+    2: false,
+    3: true,
+    21: 192
+  }
+]""", Cbor.toDiagnostics(cm.toDeviceEngagement(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+    }
 }

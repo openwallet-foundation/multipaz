@@ -59,7 +59,8 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
             }
         }
         val moreThanOneBit = list.find { (_, status) -> status.encoded > 1 } != null
-        val statusListBuilder = StatusList.Builder(if (moreThanOneBit) 2 else 1)
+        val minSize = CredentialState.getKeySpaceSize(bucket)
+        val statusListBuilder = StatusList.Builder(if (moreThanOneBit) 2 else 1, minSize)
         for ((index, status) in list) {
             statusListBuilder.addStatus(index, status.encoded)
         }

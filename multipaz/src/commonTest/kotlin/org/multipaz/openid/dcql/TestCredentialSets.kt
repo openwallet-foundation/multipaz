@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.presentment.DocumentStoreTestHarness
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.prettyPrint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -189,111 +189,8 @@ class TestCredentialSets {
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-other-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced1
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced2
-                                  claims:
-                                    claim:
-                                      path: ["postal_code"]
-                                      displayName: postal_code
-                                      value: 90210
-                                    claim:
-                                      path: ["locality"]
-                                      displayName: locality
-                                      value: Beverly Hills
-                                    claim:
-                                      path: ["region"]
-                                      displayName: region
-                                      value: Los Angeles Basin
-                  credentialSet:
-                    optional: true
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-reward-card
-                                  claims:
-                                    claim:
-                                      path: ["rewards_number"]
-                                      displayName: rewards_number
-                                      value: 24601
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
-        )
 
-        // Also check that getAllSelections() returns all possible selections
+        // Check that getAllSelections() returns all possible selections
         assertEquals(
             """
                 selections:
@@ -568,10 +465,7 @@ class TestCredentialSets {
                                   displayName: rewards_number
                                   value: 24601
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -592,128 +486,8 @@ class TestCredentialSets {
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-max
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Max
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 456
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-other-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced1
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced2
-                                  claims:
-                                    claim:
-                                      path: ["postal_code"]
-                                      displayName: postal_code
-                                      value: 90210
-                                    claim:
-                                      path: ["locality"]
-                                      displayName: locality
-                                      value: Beverly Hills
-                                    claim:
-                                      path: ["region"]
-                                      displayName: region
-                                      value: Los Angeles Basin
-                  credentialSet:
-                    optional: true
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-reward-card
-                                  claims:
-                                    claim:
-                                      path: ["rewards_number"]
-                                      displayName: rewards_number
-                                      value: 24601
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
-        )
 
-        // Also check that getAllSelections() returns all possible selections
+        // Check that getAllSelections() returns all possible selections
         assertEquals(
             """
                 selections:
@@ -1055,10 +829,7 @@ class TestCredentialSets {
                                   displayName: rewards_number
                                   value: 24601
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -1075,93 +846,6 @@ class TestCredentialSets {
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-other-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced1
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced2
-                                  claims:
-                                    claim:
-                                      path: ["postal_code"]
-                                      displayName: postal_code
-                                      value: 90210
-                                    claim:
-                                      path: ["locality"]
-                                      displayName: locality
-                                      value: Beverly Hills
-                                    claim:
-                                      path: ["region"]
-                                      displayName: region
-                                      value: Los Angeles Basin
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
-        )
 
         // Check this is mapped properly to the UI
         assertEquals(
@@ -1253,10 +937,7 @@ class TestCredentialSets {
                                   displayName: region
                                   value: Los Angeles Basin
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -1268,38 +949,6 @@ class TestCredentialSets {
 
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
-        )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-            """.trimIndent().trim(),
-            complexQuery().execute(
-                presentmentSource = harness.presentmentSource
-            ).prettyPrint().trim()
         )
 
         // Check this is mapped properly to the UI
@@ -1331,10 +980,7 @@ class TestCredentialSets {
                                   displayName: address.street_address
                                   value: Sample Street 123
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -1346,36 +992,6 @@ class TestCredentialSets {
 
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
-        )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-other-pid
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: address.street_address
-                                      value: Sample Street 123
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
         )
 
         // Check this is mapped properly to the UI
@@ -1407,10 +1023,7 @@ class TestCredentialSets {
                                   displayName: address.street_address
                                   value: Sample Street 123
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -1424,51 +1037,6 @@ class TestCredentialSets {
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
         )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced1
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced2
-                                  claims:
-                                    claim:
-                                      path: ["postal_code"]
-                                      displayName: postal_code
-                                      value: 90210
-                                    claim:
-                                      path: ["locality"]
-                                      displayName: locality
-                                      value: Beverly Hills
-                                    claim:
-                                      path: ["region"]
-                                      displayName: region
-                                      value: Los Angeles Basin
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
-        )
 
         // Check this is mapped properly to the UI
         assertEquals(
@@ -1516,10 +1084,7 @@ class TestCredentialSets {
                                   displayName: region
                                   value: Los Angeles Basin
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 
@@ -1533,67 +1098,6 @@ class TestCredentialSets {
 
         val queryResult = complexQuery().execute(
             presentmentSource = harness.presentmentSource
-        )
-        assertEquals(
-            """
-                credentialSets:
-                  credentialSet:
-                    optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced1
-                                  claims:
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: family_name
-                                      value: Mustermann
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: given_name
-                                      value: Erika
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-pid-reduced2
-                                  claims:
-                                    claim:
-                                      path: ["postal_code"]
-                                      displayName: postal_code
-                                      value: 90210
-                                    claim:
-                                      path: ["locality"]
-                                      displayName: locality
-                                      value: Beverly Hills
-                                    claim:
-                                      path: ["region"]
-                                      displayName: region
-                                      value: Los Angeles Basin
-                  credentialSet:
-                    optional: true
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-reward-card
-                                  claims:
-                                    claim:
-                                      path: ["rewards_number"]
-                                      displayName: rewards_number
-                                      value: 24601
-            """.trimIndent().trim(),
-            queryResult.prettyPrint().trim()
         )
 
         // Check this is mapped properly to the UI
@@ -1658,10 +1162,7 @@ class TestCredentialSets {
                                   displayName: rewards_number
                                   value: 24601
             """.trimIndent().trim(),
-            ConsentData.fromCredentialQueryResult(
-                queryResult,
-                harness.presentmentSource
-            ).prettyPrint().trim()
+            queryResult.prettyPrint().trim()
         )
     }
 

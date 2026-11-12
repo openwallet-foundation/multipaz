@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">Cụm mật khẩu yếu, vui lòng chọn cụm khác</string>
     <string name="credential_presentment_button_cancel">Hủy</string>
     <string name="credential_presentment_button_more">Thêm</string>
-    <string name="credential_presentment_button_share">Chia sẻ</string>
+    <string name="credential_presentment_button_continue">Tiếp tục</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Người yêu cầu không xác định</string>
     <string name="credential_presentment_share_with_known_requester">Dữ liệu này sẽ được chia sẻ với %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">Dữ liệu này sẽ được chia sẻ:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Biểu tượng cảnh báo</string>
     <string name="credential_presentment_select_document">Chọn tài liệu</string>
     <string name="credential_presentment_requester_information">Thông tin người yêu cầu</string>
+    <string name="credential_presentment_details">Chi tiết</string>
+    <string name="credential_presentment_back">Quay lại</string>
     <string name="certificate_viewer_sub_basic_info">Thông tin cơ bản</string>
     <string name="certificate_viewer_k_type">Loại</string>
     <string name="certificate_viewer_k_serial_number">Số seri</string>
@@ -226,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">Cấp quyền</string>
     <string name="face_matcher_prompt_cancel">Hủy bỏ</string>
     <string name="face_matcher_prompt_confirm">Xác nhận</string>
+    <string name="certificate_viewer_tab_leaf">Cuối</string>
+    <string name="certificate_viewer_tab_intermediate">Trung gian</string>
+    <string name="certificate_viewer_tab_intermediate_n">TG %1$d</string>
+    <string name="certificate_viewer_tab_root">Gốc</string>
 </resources>

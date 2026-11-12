@@ -42,6 +42,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
+internal var clockForTesting: Clock? = null
+
 /**
  * Format time interval to the time instant in human-readable way, such as
  * "3 days and 5 hours ago" or "4 months and 3 days from now".
@@ -50,7 +52,10 @@ import kotlin.time.Duration.Companion.seconds
  * @param now time now, only exposed for testing.
  */
 @Composable
-fun durationFromNowText(instant: Instant, now: Instant = Clock.System.now()): String {
+fun durationFromNowText(
+    instant: Instant,
+    now: Instant = (clockForTesting ?: Clock.System).now()
+): String {
     val coroutineScope = rememberCoroutineScope()
 
     val tick = remember { mutableIntStateOf(0) }

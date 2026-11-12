@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">Parola zayıf, lütfen başka bir parola seçin</string>
     <string name="credential_presentment_button_cancel">İptal</string>
     <string name="credential_presentment_button_more">Daha fazla</string>
-    <string name="credential_presentment_button_share">Paylaş</string>
+    <string name="credential_presentment_button_continue">Devam</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Bilinmeyen istek sahibi</string>
     <string name="credential_presentment_share_with_known_requester">Bu veriler %1$s ile paylaşılacak:</string>
     <string name="credential_presentment_share_with_unknown_requester">Bu veriler paylaşılacak:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Uyarı simgesi</string>
     <string name="credential_presentment_select_document">Belge seç</string>
     <string name="credential_presentment_requester_information">İstek sahibi bilgisi</string>
+    <string name="credential_presentment_details">Ayrıntılar</string>
+    <string name="credential_presentment_back">Geri</string>
     <string name="certificate_viewer_sub_basic_info">Temel bilgiler</string>
     <string name="certificate_viewer_k_type">Tür</string>
     <string name="certificate_viewer_k_serial_number">Seri numarası</string>
@@ -226,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">İzin Ver</string>
     <string name="face_matcher_prompt_cancel">İptal</string>
     <string name="face_matcher_prompt_confirm">Onayla</string>
+    <string name="certificate_viewer_tab_leaf">Uç</string>
+    <string name="certificate_viewer_tab_intermediate">Ara</string>
+    <string name="certificate_viewer_tab_intermediate_n">Ara %1$d</string>
+    <string name="certificate_viewer_tab_root">Kök</string>
 </resources>

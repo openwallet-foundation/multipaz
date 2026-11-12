@@ -48,7 +48,9 @@ final class MdocPresentmentViewModel: ObservableObject {
                     version: "1.0"
                 ) { builder in
                     advertisedTransports.forEach {
-                        builder.addConnectionMethod(connectionMethod: $0.connectionMethod)
+                        if let connectionMethod = $0.connectionMethod {
+                            builder.addConnectionMethod(connectionMethod: connectionMethod)
+                        }
                     }
                 }
 
@@ -107,7 +109,7 @@ final class MdocPresentmentViewModel: ObservableObject {
 
 private func onWaitingForRequest() -> Void {}
 private func onWaitingForUserInput() -> Void {}
-private func onDocumenstInFocus(_ documents: [Document]) -> Void {}
+private func onDocumenstInFocus(_ documents: [MultipazDocument]) -> Void {}
 private func onSendingResponse() -> Void {}
 
 // MARK: - Public SwiftUI View
@@ -121,7 +123,7 @@ public struct MdocProximityQrPresentment<
 >: View {
     
     // MARK: Public Properties
-    public let preselectedDocuments: [Document]
+    public let preselectedDocuments: [MultipazDocument]
     public let eDeviceKeyCurve: EcCurve
     public let transportFactory: MdocTransportFactory
     
@@ -147,7 +149,7 @@ public struct MdocProximityQrPresentment<
     ///   - showCompleted: a ``View`` which will be shown when the transaction is complete. This should should show feedback (either success or error, depending on the error parameter) and call the passed-in ``reset()`` closure when ready to reset the state and go back and show a QR button.
     public init(
         source: PresentmentSource,
-        preselectedDocuments: [Document] = [],
+        preselectedDocuments: [MultipazDocument] = [],
         eDeviceKeyCurve: EcCurve = .p256,
         transportFactory: MdocTransportFactory = MdocTransportFactoryDefault(),
         @ViewBuilder prepareSettings: @escaping (_ generateQrCode: @escaping (MdocProximityQrSettings) -> Void) -> PrepareSettingsContent,

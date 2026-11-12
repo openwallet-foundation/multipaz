@@ -109,6 +109,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":multipaz"))
+                implementation(project(":multipaz-jpeg2000"))
                 implementation(libs.kotlinx.io.bytestring)
             }
         }
@@ -128,7 +129,6 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.androidx.camera.camera2)
-                implementation(libs.jj2000)
             }
         }
 
@@ -136,7 +136,6 @@ kotlin {
             resources.srcDir(unpackTensorFlowLiteCDesktop)
             dependencies {
                 implementation(libs.jna)
-                implementation(libs.jj2000)
             }
         }
     }
@@ -144,7 +143,11 @@ kotlin {
 
 android {
     namespace = "org.multipaz.facenet"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
 
     defaultConfig {
         minSdk = 26

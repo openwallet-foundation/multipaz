@@ -2,13 +2,16 @@ package org.multipaz.verification
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.TransactionData
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.toBase64Url
@@ -24,11 +27,14 @@ import kotlin.time.Instant
  * @property vpRequest raw OpenID4VP request (extracted from signed JWT enveloped if needed).
  * @property mdocSessionTranscript CBOR `SessionTranscript` used for mdoc device authentication;
  *     required when any credential uses `mso_mdoc` format.
+ * @property expectedAudience the expected Key Binding JWT `aud` claim value, or `null` to derive
+ *     it from [vpRequest].
  */
 class OpenID4VPPresentmentRecord(
     val vpToken: String,
     val vpRequest: String,
     val mdocSessionTranscript: DataItem?,
+    val expectedAudience: String? = null,
 ): PresentmentRecord() {
     override suspend fun verifyNonce(nonce: ByteString) {
         val vpNonce = Json.parseToJsonElement(vpRequest)
@@ -46,7 +52,18 @@ class OpenID4VPPresentmentRecord(
         val request = Json.parseToJsonElement(vpRequest).jsonObject
         val transactionDataMap = getTransactionData(request, documentTypeRepository)
         val nonce = request["nonce"]!!.jsonPrimitive.content
-        val queryData = QueryData.fromDcql(request["dcql_query"]!!.jsonObject)
+        val dcqlJson = request["dcql_query"]!!.jsonObject
+        val queryData = QueryData.fromDcql(dcqlJson)
+        val dcqlQuery = DcqlQuery.fromJson(dcqlJson)
+        val audience = expectedAudience ?: run {
+            val responseMode = (request["response_mode"] as? JsonPrimitive)?.content
+            val expectedOrigins = request["expected_origins"] as? JsonArray
+            if (responseMode != null && responseMode.startsWith("dc_api") && !expectedOrigins.isNullOrEmpty()) {
+                "origin:${expectedOrigins.first().jsonPrimitive.content}"
+            } else {
+                (request["client_id"] as? JsonPrimitive)?.content
+            }
+        }
         return VerificationUtil.verifyOpenID4VPResponse(
             now = atTime,
             vpToken = Json.parseToJsonElement(vpToken).jsonObject,
@@ -55,7 +72,9 @@ class OpenID4VPPresentmentRecord(
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             transactionDataMap = transactionDataMap,
-            queryData = queryData.associateBy { it.id!! }
+            queryData = queryData.associateBy { it.id!! },
+            expectedAudience = audience,
+            dcqlQuery = dcqlQuery,
         )
     }
 

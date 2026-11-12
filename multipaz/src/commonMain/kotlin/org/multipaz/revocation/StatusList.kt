@@ -45,15 +45,20 @@ class StatusList(
      *
      * @param index index of the credential (from `idx` field)
      * @return status code of the credential, 0 typically means valid
+     * @throws IndexOutOfBoundsException if [index] is negative or out of bounds
      */
     operator fun get(index: Int): Int {
-        val byteIndex = index / itemsPerByte
-        return if (byteIndex >= statusList.size) {
-            0
-        } else {
-            val shift = bitsPerItem * (index % itemsPerByte)
-            (statusList[byteIndex].toInt() shr shift) and mask
+        if (index < 0) {
+            throw IndexOutOfBoundsException("Index out of range: $index")
         }
+        val byteIndex = index / itemsPerByte
+        if (byteIndex >= statusList.size) {
+            throw IndexOutOfBoundsException(
+                "Index $index out of bounds for status list of size ${statusList.size * itemsPerByte}"
+            )
+        }
+        val shift = bitsPerItem * (index % itemsPerByte)
+        return (statusList[byteIndex].toInt() shr shift) and mask
     }
 
     /**
@@ -76,8 +81,12 @@ class StatusList(
      * status values need to be supplied.
      *
      * @param bitsPerItem number of bits per status code, must be 1, 2, 4, or 8.
+     * @param minSize minimum number of items in the built status list.
      */
-    class Builder(val bitsPerItem: Int) {
+    class Builder(
+        val bitsPerItem: Int,
+        val minSize: Int = 0
+    ) {
         // TODO: if/once we have a Sink which can deflate as we write, we could switch to that
         private var buffer: Buffer = Buffer()
         private var lastIndex: Int = -1
@@ -98,6 +107,7 @@ class StatusList(
 
         init {
             require(bitsPerItem == 1 || bitsPerItem == 2 || bitsPerItem == 4 || bitsPerItem == 8)
+            require(minSize >= 0) { "minSize must be non-negative: $minSize" }
         }
 
         /**
@@ -128,6 +138,9 @@ class StatusList(
          * Builds a new [StatusList] object for the data provided.
          */
         fun build(): StatusList {
+            if (lastIndex < minSize - 1) {
+                addStatus(minSize - 1, 0)
+            }
             buffer.writeByte(currentByte.toByte())
             return StatusList(
                 bitsPerItem = bitsPerItem,

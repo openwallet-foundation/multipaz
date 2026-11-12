@@ -32,6 +32,7 @@ import kotlinx.serialization.json.JsonElement
  * @property sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
  * @property parentAttribute the parent attribute or `null` if this is not an embedded attribute.
  * @property embeddedAttributes attributes embedded in this attribute, only applicable for JSON-based credentials.
+ * @property group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
  */
 data class DocumentAttribute(
     val type: DocumentAttributeType,
@@ -43,7 +44,8 @@ data class DocumentAttribute(
     val sampleValueMdoc: DataItem? = null,
     val sampleValueJson: JsonElement? = null,
     val parentAttribute: DocumentAttribute? = null,
-    val embeddedAttributes: List<DocumentAttribute> = emptyList()
+    val embeddedAttributes: List<DocumentAttribute> = emptyList(),
+    val group: DocumentAttributeGroup? = null,
 ) {
     // NOTE: we ignore embeddedAttributes to avoid hashCode() causing infinite loops
     override fun hashCode(): Int {
@@ -55,6 +57,7 @@ data class DocumentAttribute(
         result = 31 * result + (sampleValueMdoc?.hashCode() ?: 0)
         result = 31 * result + (sampleValueJson?.hashCode() ?: 0)
         result = 31 * result + (parentAttribute?.hashCode() ?: 0)
+        result = 31 * result + (group?.hashCode() ?: 0)
         return result
     }
 
@@ -70,7 +73,8 @@ data class DocumentAttribute(
                 // Prevent Parent loop: Only print the parent's ID, not the whole object
                 "parentAttribute=${parentAttribute?.identifier ?: "null"}, " +
                 // Prevent Child loop: Print only the size of the list
-                "embeddedAttributes=[size=${embeddedAttributes.size}])"
+                "embeddedAttributes=[size=${embeddedAttributes.size}], " +
+                "group=${group?.identifier ?: "null"})"
     }
 
     override fun equals(other: Any?): Boolean {
@@ -88,6 +92,7 @@ data class DocumentAttribute(
         if (sampleValueJson != other.sampleValueJson) return false
         if (parentAttribute != other.parentAttribute) return false
         if (embeddedAttributes != other.embeddedAttributes) return false
+        if (group != other.group) return false
         return true
     }
 }

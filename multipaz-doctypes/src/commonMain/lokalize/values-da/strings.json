@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "Alder over 18 + portrætlighed",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "Alder over 18 + (portræt ELLER portrætlighed)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "Alder over 18 + portrætlighed",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Alder over 18 + (portræt ELLER portræt-ækvivalent)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "Alder over 18 + (portræt ELLER portræt-ækvivalent)",
+  "group_name": "Navn",
+  "group_alias_name": "Kaldenavn",
+  "group_name_at_birth": "Navn ved fødslen",
+  "group_name_initials": "Navneinitialer",
+  "group_residential_address": "Bopælsadresse",
+  "group_place_of_birth": "Fødested",
+  "group_date_of_birth": "Fødselsdato",
+  "group_passport_data": "Pasdata"
 }

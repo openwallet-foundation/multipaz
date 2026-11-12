@@ -404,5 +404,13 @@
   "photo_id_request_age_over_18_and_portrait_equivalence": "만 18세 이상 + 본인 사진 확인",
   "photo_id_request_age_over_18_and_portrait_or_portrait_equivalence": "만 18세 이상 + (본인 사진 또는 본인 사진 확인)",
   "id_pass_request_age_over_18_and_portrait_equivalence": "만 18세 이상 + 본인 사진 확인",
-  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "만 18세 이상 + (증명사진 또는 그에 상응하는 사진)"
+  "id_pass_request_age_over_18_and_portrait_or_portrait_equivalence": "만 18세 이상 + (증명사진 또는 그에 상응하는 사진)",
+  "group_name": "이름",
+  "group_alias_name": "별칭",
+  "group_name_at_birth": "출생 시 성명",
+  "group_name_initials": "성명 이니셜",
+  "group_residential_address": "거주지 주소",
+  "group_place_of_birth": "출생지",
+  "group_date_of_birth": "생년월일",
+  "group_passport_data": "여권 데이터"
 }

@@ -263,27 +263,27 @@ class Iso18013TestSdJwtVc {
         addPidErikaSdJwtVc(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","formatted"]
-                                      displayName: Resident address
-                                      value: Sample Street 123, CA 90210, US
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","formatted"]
+                                  displayName: Resident address
+                                  value: Sample Street 123, CA 90210, US
             """.trimIndent().trim(),
             pidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -298,27 +298,27 @@ class Iso18013TestSdJwtVc {
         addPidErikaSdJwtVc(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","formatted"]
-                                      displayName: Resident address
-                                      value: Sample Street 123, CA 90210, US
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","formatted"]
+                                  displayName: Resident address
+                                  value: Sample Street 123, CA 90210, US
             """.trimIndent().trim(),
             pidQueryWithAlternativeDataElements().execute(
                 presentmentSource = harness.presentmentSource
@@ -333,37 +333,83 @@ class Iso18013TestSdJwtVc {
         addPidErikaSdJwtVcWithoutFormatted(harness)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: my-PID-Erika
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["address","state"]
-                                      displayName: address.state
-                                      value: CA
-                                    claim:
-                                      path: ["address","postal_code"]
-                                      displayName: Resident postal code
-                                      value: 90210
-                                    claim:
-                                      path: ["address","street_address"]
-                                      displayName: Resident street
-                                      value: Sample Street 123
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","state"]
+                                  displayName: address.state
+                                  value: CA
+                                claim:
+                                  path: ["address","postal_code"]
+                                  displayName: Resident postal code
+                                  value: 90210
+                                claim:
+                                  path: ["address","street_address"]
+                                  displayName: Resident street
+                                  value: Sample Street 123
             """.trimIndent().trim(),
             pidQueryWithAlternativeDataElements().execute(
+                presentmentSource = harness.presentmentSource
+            ).prettyPrint().trim()
+        )
+    }
+
+    @Test
+    fun requestPidMatchesOtherVcts() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionSdJwtVc(
+            displayName = "my-PID-DE-Erika",
+            vct = "urn:eudi:pid:de:1",
+            otherVcts = listOf(EUPersonalID.EUPID_VCT),
+            data = listOf(
+                "given_name" to JsonPrimitive("Erika"),
+                "family_name" to JsonPrimitive("Mustermann"),
+                "address" to buildJsonObject {
+                    put("formatted", JsonPrimitive("Heidestraße 17, 51147 Köln, DE"))
+                }
+            )
+        )
+        assertEquals(
+            """
+                useCases:
+                  useCase:
+                    optional: false
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: my-PID-DE-Erika
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["address","formatted"]
+                                  displayName: Resident address
+                                  value: Heidestraße 17, 51147 Köln, DE
+            """.trimIndent().trim(),
+            pidQuery().execute(
                 presentmentSource = harness.presentmentSource
             ).prettyPrint().trim()
         )

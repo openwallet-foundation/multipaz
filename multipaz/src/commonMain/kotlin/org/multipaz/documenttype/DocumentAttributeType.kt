@@ -26,14 +26,14 @@ package org.multipaz.documenttype
  * for inputting or displaying documents attributes.
  */
 sealed class DocumentAttributeType {
-    object Blob : DocumentAttributeType()
-    object String : DocumentAttributeType()
-    object Number : DocumentAttributeType()
-    object Date : DocumentAttributeType()
-    object DateTime : DocumentAttributeType()
-    object Picture : DocumentAttributeType()
-    object Boolean : DocumentAttributeType()
-    object ComplexType : DocumentAttributeType()
-    class StringOptions(val options: List<StringOption>) : DocumentAttributeType()
-    class IntegerOptions(val options: List<IntegerOption>) : DocumentAttributeType()
+    data object Blob : DocumentAttributeType()
+    data object String : DocumentAttributeType()
+    data object Number : DocumentAttributeType()
+    data object Date : DocumentAttributeType()
+    data object DateTime : DocumentAttributeType()
+    data object Picture : DocumentAttributeType()
+    data object Boolean : DocumentAttributeType()
+    data object ComplexType : DocumentAttributeType()
+    data class StringOptions(val options: List<StringOption>) : DocumentAttributeType()
+    data class IntegerOptions(val options: List<IntegerOption>) : DocumentAttributeType()
 }

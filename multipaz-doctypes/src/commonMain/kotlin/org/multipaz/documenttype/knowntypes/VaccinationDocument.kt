@@ -16,11 +16,13 @@
 
 package org.multipaz.documenttype.knowntypes
 
+import org.multipaz.documenttype.DocumentAttributeGroup
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.DocumentAttributeSensitivity
+import org.multipaz.documenttype.Icon
 
 /**
  * Object containing the metadata of the Vaccination
@@ -35,6 +37,22 @@ object VaccinationDocument {
      */
     fun getDocumentType(locale: String = LocalizedStrings.getCurrentLocale()): DocumentType {
         fun getLocalizedString(key: String) = LocalizedStrings.getString(key, locale)
+
+        val nameGroup = DocumentAttributeGroup(
+            identifier = "name",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME),
+            icon = Icon.PERSON
+        )
+        val nameInitialsGroup = DocumentAttributeGroup(
+            identifier = "name_initials",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_NAME_INITIALS),
+            icon = Icon.PERSON
+        )
+        val dateOfBirthGroup = DocumentAttributeGroup(
+            identifier = "date_of_birth",
+            displayName = getLocalizedString(GeneratedStringKeys.GROUP_DATE_OF_BIRTH),
+            icon = Icon.TODAY
+        )
 
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_VACCINATION_DOCUMENT))
             .addMdocDocumentType("org.micov.1")
@@ -85,7 +103,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_FAMILY_NAME_INITIAL),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_FAMILY_NAME_INITIAL),
                 mandatory = false,
-                mdocNamespace = MICOV_ATT_NAMESPACE
+                mdocNamespace = MICOV_ATT_NAMESPACE,
+                group = nameInitialsGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -93,7 +112,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_GIVEN_NAME_INITIAL),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_GIVEN_NAME_INITIAL),
                 mandatory = false,
-                mdocNamespace = MICOV_ATT_NAMESPACE
+                mdocNamespace = MICOV_ATT_NAMESPACE,
+                group = nameInitialsGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Number,
@@ -101,7 +121,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_BIRTH_YEAR),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_BIRTH_YEAR),
                 mandatory = false,
-                mdocNamespace = MICOV_ATT_NAMESPACE
+                mdocNamespace = MICOV_ATT_NAMESPACE,
+                group = dateOfBirthGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Number,
@@ -109,7 +130,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_BIRTH_MONTH),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_BIRTH_MONTH),
                 mandatory = false,
-                mdocNamespace = MICOV_ATT_NAMESPACE
+                mdocNamespace = MICOV_ATT_NAMESPACE,
+                group = dateOfBirthGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Number,
@@ -117,7 +139,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_BIRTH_DAY),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_BIRTH_DAY),
                 mandatory = false,
-                mdocNamespace = MICOV_ATT_NAMESPACE
+                mdocNamespace = MICOV_ATT_NAMESPACE,
+                group = dateOfBirthGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -125,7 +148,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_FAMILY_NAME),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_FAMILY_NAME),
                 mandatory = true,
-                mdocNamespace = MICOV_VTR_NAMESPACE
+                mdocNamespace = MICOV_VTR_NAMESPACE,
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
@@ -133,7 +157,8 @@ object VaccinationDocument {
                 displayName = getLocalizedString(GeneratedStringKeys.VACCINATION_ATTRIBUTE_GIVEN_NAME),
                 description = getLocalizedString(GeneratedStringKeys.VACCINATION_DESCRIPTION_GIVEN_NAME),
                 mandatory = true,
-                mdocNamespace = MICOV_VTR_NAMESPACE
+                mdocNamespace = MICOV_VTR_NAMESPACE,
+                group = nameGroup
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Date,

@@ -112,9 +112,14 @@ class TrustManager(
                 val localEntry = LocalTrustEntry.fromDataItem(Cbor.decode(encodedData.toByteArray()))
                 when (localEntry.entry) {
                     is TrustEntryX509Cert -> {
+                        val effectiveMetadata = if (localEntry.entry.metadata.identifier == null) {
+                            localEntry.entry.metadata.copy(identifier = localEntry.ski)
+                        } else {
+                            localEntry.entry.metadata
+                        }
                         loadedSkiToTrustPoint[localEntry.ski] = TrustPoint(
                             certificate = localEntry.entry.certificate,
-                            metadata = localEntry.entry.metadata,
+                            metadata = effectiveMetadata,
                             trustManager = this
                         )
                     }
@@ -185,13 +190,18 @@ class TrustManager(
         metadata: TrustMetadata,
     ): TrustEntryX509Cert {
         ensureInitialized()
+        val ski = certificate.subjectKeyIdentifier?.toHex()
+        require(ski != null) { "SubjectKeyIdentifier must be set in certificate for TrustPoint" }
+        val effectiveMetadata = if (metadata.identifier == null) {
+            metadata.copy(identifier = ski)
+        } else {
+            metadata
+        }
         val trustPoint = TrustPoint(
             certificate = certificate,
-            metadata = metadata,
+            metadata = effectiveMetadata,
             trustManager = this
         )
-        val ski = trustPoint.certificate.subjectKeyIdentifier?.toHex()
-        require(ski != null) { "SubjectKeyIdentifier must be set in certificate for TrustPoint" }
 
         stateLock.withLock {
             if (skiToTrustPoint.containsKey(ski)) {
@@ -211,7 +221,7 @@ class TrustManager(
             entry = TrustEntryX509Cert(
                 identifier = key,
                 certificate = certificate,
-                metadata = metadata
+                metadata = effectiveMetadata
             )
         )
         storageTable.update(
@@ -385,9 +395,14 @@ class TrustManager(
 
         val newEntry = when (localEntry.entry) {
             is TrustEntryX509Cert -> {
+                val effectiveMetadata = if (metadata.identifier == null) {
+                    metadata.copy(identifier = localEntry.ski)
+                } else {
+                    metadata
+                }
                 TrustEntryX509Cert(
                     identifier = localEntry.id,
-                    metadata = metadata,
+                    metadata = effectiveMetadata,
                     certificate = localEntry.entry.certificate
                 )
             }

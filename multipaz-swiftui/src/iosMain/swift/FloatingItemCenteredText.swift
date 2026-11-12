@@ -3,7 +3,7 @@ import SwiftUI
 /// A list item view that displays centered, italicized text in a secondary color.
 ///
 /// This component is commonly used for informational footers, empty states, or subtle hints.
-public struct FloatingItemCenteredText: View {
+public struct SegmentedItemCenteredText: View {
 
     /// The text to display, formatted as an `AttributedString`.
     public var text: AttributedString
@@ -31,7 +31,7 @@ public struct FloatingItemCenteredText: View {
     }
 
     public var body: some View {
-        FloatingItemContainer(showChevron: showChevron) {
+        SegmentedItemContainer(showChevron: showChevron) {
             Text(text)
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
@@ -41,3 +41,25 @@ public struct FloatingItemCenteredText: View {
         }
     }
 }
+
+/// A list item view that displays centered, italicized text in a secondary color.
+@available(*, deprecated, renamed: "SegmentedItemCenteredText")
+public struct FloatingItemCenteredText: View {
+
+    public var text: AttributedString
+    public var showChevron: Bool
+
+    public init(text: AttributedString, showChevron: Bool = false) {
+        self.text = text
+        self.showChevron = showChevron
+    }
+
+    public init(text: String, showChevron: Bool = false) {
+        self.init(text: AttributedString(text), showChevron: showChevron)
+    }
+
+    public var body: some View {
+        SegmentedItemCenteredText(text: text, showChevron: showChevron)
+    }
+}
+

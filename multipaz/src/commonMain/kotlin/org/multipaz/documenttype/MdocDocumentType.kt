@@ -54,6 +54,7 @@ class MdocDocumentType private constructor(
          * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
+         * @param group logical group of attributes that can be collapsed into a single pseudo-claim in the consent prompt.
          * @return the builder.
          */
         fun addDataElement(
@@ -66,6 +67,7 @@ class MdocDocumentType private constructor(
             sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValue: DataItem? = null,
+            group: DocumentAttributeGroup? = null,
         ) = apply {
             if (!namespaces.containsKey(namespace)) {
                 namespaces[namespace] = MdocNamespace.Builder(namespace)
@@ -78,7 +80,8 @@ class MdocDocumentType private constructor(
                 mandatory = mandatory,
                 sensitivity = sensitivity,
                 icon = icon,
-                sampleValue = sampleValue
+                sampleValue = sampleValue,
+                group = group
             )
         }
 
@@ -99,8 +102,10 @@ class MdocDocumentType private constructor(
                     displayName = dataElement.attribute.displayName,
                     description = dataElement.attribute.description,
                     mandatory = dataElement.mandatory,
+                    sensitivity = dataElement.attribute.sensitivity,
                     icon = dataElement.attribute.icon,
-                    sampleValue = dataElement.attribute.sampleValueMdoc
+                    sampleValue = dataElement.attribute.sampleValueMdoc,
+                    group = dataElement.attribute.group
                 )
             }
         }

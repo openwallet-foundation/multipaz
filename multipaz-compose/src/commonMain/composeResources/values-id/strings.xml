@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">Frasa sandi lemah, silakan pilih yang lain</string>
     <string name="credential_presentment_button_cancel">Batal</string>
     <string name="credential_presentment_button_more">Lebih</string>
-    <string name="credential_presentment_button_share">Bagikan</string>
+    <string name="credential_presentment_button_continue">Lanjutkan</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Peminta tidak dikenal</string>
     <string name="credential_presentment_share_with_known_requester">Data ini akan dibagikan dengan %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">Data ini akan dibagikan:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Ikon peringatan</string>
     <string name="credential_presentment_select_document">Pilih dokumen</string>
     <string name="credential_presentment_requester_information">Informasi peminta</string>
+    <string name="credential_presentment_details">Detail</string>
+    <string name="credential_presentment_back">Kembali</string>
     <string name="certificate_viewer_sub_basic_info">Informasi dasar</string>
     <string name="certificate_viewer_k_type">Jenis</string>
     <string name="certificate_viewer_k_serial_number">Nomor seri</string>
@@ -226,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">Berikan Izin</string>
     <string name="face_matcher_prompt_cancel">Batal</string>
     <string name="face_matcher_prompt_confirm">Konfirmasi</string>
+    <string name="certificate_viewer_tab_leaf">Leaf</string>
+    <string name="certificate_viewer_tab_intermediate">Perantara</string>
+    <string name="certificate_viewer_tab_intermediate_n">Int. %1$d</string>
+    <string name="certificate_viewer_tab_root">Root</string>
 </resources>

@@ -138,6 +138,7 @@ internal class BleCentralManagerImpl(
         val characteristicUuid: UUID? = null,
     )
 
+    @Volatile
     private var waitFor: WaitFor? = null
 
     private fun setWaitCondition(
@@ -173,11 +174,17 @@ internal class BleCentralManagerImpl(
     override val incomingMessages = Channel<ByteArray>(Channel.UNLIMITED)
 
     private var incomingMessage = ByteStringBuilder()
+    @Volatile
     internal var maxCharacteristicSize = -1
+    @Volatile
     private var hasL2capCharacteristic = false
+    @Volatile
     private var expectedIdentValue: ByteArray? = null
+    @Volatile
     private var _l2capPsm: Int? = null
+    @Volatile
     private var l2capChannel: BleL2capChannel? = null
+    @Volatile
     private var isConnectingToPeripheral = false
 
     override val l2capPsm: Int?

@@ -320,13 +320,20 @@ object ASN1 {
                         sb.append("[PRIVATE ${obj.tag}] (1 elem)\n")
                     }
                 }
-                // Try and decode the content as ASN.1, and if so, print it. If not,
-                // just print the content
-                try {
-                    val decodedObject = ASN1.decode(obj.content)
-                    print(sb, indent + 2, decodedObject!!)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
+                if (obj.enc == ASN1Encoding.CONSTRUCTED) {
+                    // Try and decode the content as ASN.1, and if so, print it. If not,
+                    // just print the content
+                    try {
+                        val decodedObject = ASN1.decode(obj.content)
+                        print(sb, indent + 2, decodedObject!!)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        for (n in IntRange(1, indent + 2)) {
+                            sb.append(" ")
+                        }
+                        sb.append(obj.content.toHex(byteDivider = " ", decodeAsString = true) + "\n")
+                    }
+                } else {
                     for (n in IntRange(1, indent + 2)) {
                         sb.append(" ")
                     }

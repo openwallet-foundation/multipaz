@@ -19,6 +19,7 @@ plugins {
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+val xcodeDeveloperPath: String by rootProject.extra
 
 val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
 
@@ -77,7 +78,7 @@ kotlin {
         }
         it.binaries.all {
             linkerOpts(
-                "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
+                "-L${xcodeDeveloperPath}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                 "-Wl,-rpath,/usr/lib/swift",
                 "-lsqlite3"
             )
@@ -139,21 +140,46 @@ kotlin {
                 implementation(libs.zxing.core)
                 implementation(libs.ktor.client.android)
                 implementation(libs.androidx.browser)
-                implementation(libs.jj2000)
+                implementation(project(":multipaz-jpeg2000"))
             }
         }
         val androidUnitTest by getting {
             dependencies {
+                implementation(project(":multipaz-doctypes"))
+                implementation(project(":multipaz-utopia"))
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.robolectric)
+                implementation(libs.compose.junit4)
+                implementation(libs.compose.test.manifest)
+                implementation(libs.androidx.test.junit)
+                implementation(libs.androidx.espresso.core)
             }
         }
     }
 }
 
+val copyComposeResourcesForUnitTest = tasks.register<Copy>("copyComposeResourcesForUnitTest") {
+    dependsOn("prepareComposeResourcesTaskForCommonMain", "convertXmlValueResourcesForCommonMain")
+    from(layout.buildDirectory.dir("generated/compose/resourceGenerator/preparedResources/commonMain/composeResources"))
+    into(layout.buildDirectory.dir("generated/unitTestComposeResources/composeResources/org.multipaz.multipaz_compose.generated.resources"))
+}
+
+tasks.matching { it.name == "processDebugUnitTestJavaRes" || it.name == "processReleaseUnitTestJavaRes" }.configureEach {
+    dependsOn(copyComposeResourcesForUnitTest)
+}
+
 android {
     namespace = "org.multipaz.compose"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.android.compileSdk.get().toInt()) {
+            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+        }
+    }
+
+    sourceSets["test"].resources.srcDir(layout.buildDirectory.dir("generated/unitTestComposeResources"))
 
     defaultConfig {
         minSdk = 29
@@ -161,7 +187,18 @@ android {
     }
 
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+            all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.systemProperty(
+                    "updateGoldens",
+                    project.findProperty("updateGoldens")?.toString() ?: "false"
+                )
+            }
+        }
     }
 
     compileOptions {

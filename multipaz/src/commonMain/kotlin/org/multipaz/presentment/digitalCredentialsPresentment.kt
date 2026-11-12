@@ -68,6 +68,7 @@ private const val TAG = "digitalCredentialsPresentment"
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,
@@ -123,6 +124,7 @@ suspend fun digitalCredentialsPresentment(
 @Throws(
     AuthenticationFailedException::class,
     CancellationException::class,
+    Exception::class,
     FaceNotMatchedException::class,
     IllegalStateException::class,
     PresentmentCanceledException::class,
@@ -195,20 +197,23 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         }
         val requesterIdentities = mutableListOf<RequesterIdentity>()
         val signedRequest = data["request"]
-        val req = if (signedRequest != null) {
+        // OpenID4VP 1.0 Appendix A.3.2.2 does not say where in `data` the JWS JSON Serialization of a multisigned
+        // request goes: read it both as `data` itself and as the value of `request`.
+        val multisignedRequest = signedRequest as? JsonObject ?: data
+        val req = if (signedRequest != null && signedRequest !is JsonObject) {
             val jws = Json.parseToJsonElement(signedRequest.jsonPrimitive.content)
             val info = JsonWebSignature.getInfo(jws.jsonPrimitive.content)
             check(info.x5c != null) { "x5c missing in JWS" }
             JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().publicKey)
             val clientId = (info.claimsSet["client_id"] as? JsonPrimitive)?.content
                 ?: throw IllegalArgumentException("'client_id' is not given in the request")
-            requesterIdentities.add(OpenID4VPRequesterIdentity(info.x5c, clientId))
+            requesterIdentities.add(OpenID4VPRequesterIdentity.fromSignedRequest(info.x5c, clientId))
             info.x5c.validate()
             info.claimsSet
-        } else if (data.containsKey("signatures")) {
-            val payload = (data["payload"] as? JsonPrimitive)?.content
+        } else if (multisignedRequest.containsKey("signatures")) {
+            val payload = (multisignedRequest["payload"] as? JsonPrimitive)?.content
                 ?: throw IllegalArgumentException("'payload' is missing in multisigned request")
-            for (item in data["signatures"]!!.jsonArray) {
+            for (item in multisignedRequest["signatures"]!!.jsonArray) {
                 item as? JsonObject ?:
                     throw IllegalArgumentException("'signatures' is invalid in multisigned request")
                 val header = item["protected"]!!.jsonPrimitive.content
@@ -222,7 +227,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
                 JsonWebSignature.verify("$header.$payload.$signature", x5c.certificates.first().publicKey)
                 val clientId = (headerObj["client_id"] as? JsonPrimitive)?.content
                     ?: throw IllegalArgumentException("'client_id' is not given in the request")
-                requesterIdentities.add(OpenID4VPRequesterIdentity(x5c, clientId))
+                requesterIdentities.add(OpenID4VPRequesterIdentity.fromSignedRequest(x5c, clientId))
                 x5c.validate()
             }
             Json.parseToJsonElement(payload.fromBase64Url().decodeToString()).jsonObject

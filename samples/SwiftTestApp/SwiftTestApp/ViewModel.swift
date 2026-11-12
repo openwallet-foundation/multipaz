@@ -9,6 +9,13 @@ import SwiftUI
 class ViewModel {
 
     var path: [Destination] = []
+    var useTransactionDataRenderers: Bool = false
+    private let swiftTestAppTransactionDataRenderers = makeSwiftTestAppTransactionDataRenderers()
+
+    /// The renderers the consent prompt uses for transaction data, or `nil` for the built-in rendering.
+    var transactionDataRendererRepository: TransactionDataRendererRepository? {
+        useTransactionDataRenderers ? swiftTestAppTransactionDataRenderers : nil
+    }
     var pendingToastMessage: String? = nil
 
     let verticalCardListState = VerticalCardListState()
@@ -47,6 +54,7 @@ class ViewModel {
     var documentStore: DocumentStore!
     var documentModel: DocumentModel!
     var readerTrustManager: TrustManager!
+    var requesterHistory: RequesterHistory!
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
     var faceMatcherRepository: FaceMatcherRepository!
@@ -62,6 +70,7 @@ class ViewModel {
         faceMatcherRepository = FaceMatcherRepository()
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel, debug: true))
+        faceMatcherRepository.add(faceMatcher: CustomUiFaceMatcher(getStorage: { [weak self] in self?.storage }))
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(
@@ -82,6 +91,11 @@ class ViewModel {
             storage: storage,
             secureAreaRepository: secureAreaRepository
         ).build()
+        requesterHistory = SimpleRequesterHistory(
+            storage: storage,
+            partitionId: "default",
+            clock: KotlinClockCompanion.shared.getSystem()
+        )
         readerTrustManager = TrustManager(storage: storage, identifier: "default", partitionId: "default_default")
         try! await readerTrustManager.deleteAll()
         try! await readerTrustManager.addX509Cert(
@@ -249,6 +263,9 @@ class ViewModel {
                 "org.iso.18013.5.1.mDL",
                 "org.iso.23220.photoid.1",
             ])
+            try! await documentStore.setIosSdJwtVcTypes(value: [
+                "urn:eudi:pid:1",
+            ])
             do {
                 try await dcApi.register(
                     documentStore: documentStore,
@@ -285,7 +302,7 @@ class ViewModel {
     }
     
     // For testing of the badge rendering, always add a badge with the document name
-    func getBadges(document: Document) async -> [DocumentBadge] {
+    func getBadges(document: MultipazDocument) async -> [DocumentBadge] {
         let displayName = document.displayName ?? "Unknown Document"
         let hash = displayName.hashValue
         let red = (hash >> 16) & 0xFF
@@ -340,7 +357,8 @@ class ViewModel {
             appData: nil,
             created: now.toKotlinInstant(),
             readerIdentifiers: [],
-            metadata: nil
+            metadata: nil,
+            openID4VCIClaimDescriptions: []
         )
         var deviceKeyAuthorizedDataElements: [String: [String]] = [:]
         if documentType.mdocDocumentType?.supportsPortraitImageEquivalence != nil {
@@ -384,6 +402,7 @@ class ViewModel {
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: nil,
+            requesterHistory: requesterHistory,
             getFaceMatcherFn: {
                 if self.selectedFaceMatcher == "None" {
                     return nil
@@ -409,13 +428,15 @@ class ViewModel {
                 }
                 return nil
             },
-            showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
+            showConsentPromptFn: { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus in
                 try! await promptModelRequestConsent(
                     requester: requester,
                     trustedRequesterIdentity: trustedRequesterIdentity,
-                    consentData: consentData,
+                    presentmentData: presentmentData,
                     preselectedDocuments: preselectedDocuments,
-                    onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
+                    onDocumentsInFocus: { documents in onDocumentsInFocus(documents) },
+                    transactionDataRendererRepository: self.transactionDataRendererRepository,
+                    requesterHistory: self.requesterHistory
                 )
             },
             preferSignatureToKeyAgreement: false,

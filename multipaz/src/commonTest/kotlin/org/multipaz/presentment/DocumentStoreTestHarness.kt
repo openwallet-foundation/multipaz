@@ -303,6 +303,7 @@ class DocumentStoreTestHarness {
         dsKey: AsymmetricKey.X509Certified? = null,
         readerIdentifiers: List<ByteString> = emptyList(),
         createKeySettings: CreateKeySettings? = null,
+        otherVcts: List<String> = emptyList(),
     ): Document {
         initialize()
         val effectiveDsKey = dsKey ?: this.dsKey
@@ -324,6 +325,7 @@ class DocumentStoreTestHarness {
             validUntil = validUntil,
             dsKey = effectiveDsKey,
             createKeySettings = createKeySettings,
+            otherVcts = otherVcts,
         )
         return document
     }
@@ -633,6 +635,7 @@ class DocumentStoreTestHarness {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
         createKeySettings: CreateKeySettings? = null,
+        otherVcts: List<String> = emptyList(),
     ) {
         val credential = KeyBoundSdJwtVcCredential.create(
             document = document,
@@ -640,7 +643,8 @@ class DocumentStoreTestHarness {
             domain = "sdjwt",
             secureArea = softwareSecureArea,
             vct = vct,
-            createKeySettings = createKeySettings ?: SoftwareCreateKeySettings.Builder().build()
+            createKeySettings = createKeySettings ?: SoftwareCreateKeySettings.Builder().build(),
+            otherVcts = otherVcts,
         )
 
         val sdJwt = SdJwt.create(

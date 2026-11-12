@@ -106,29 +106,29 @@ class TestTrustedAuthorities {
         val result = query.execute(harness.presentmentSource)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: MdocCredential
-                                  docId: mDL
-                                  claims:
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: given_name
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      nameSpace: org.iso.18013.5.1
-                                      dataElement: family_name
-                                      displayName: Family name
-                                      value: Mustermann
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
             """.trimIndent().trim() + "\n",
             result.prettyPrint()
         )
@@ -474,40 +474,45 @@ class TestTrustedAuthorities {
         val result = query.execute(harness.presentmentSource)
         assertEquals(
             """
-                credentialSets:
-                  credentialSet:
+                useCases:
+                  useCase:
                     optional: false
-                    options:
-                      option:
-                        members:
-                          member:
-                            matches:
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: EU PID
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Erika
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: Family name
-                                      value: Mustermann
-                              match:
-                                credential:
-                                  type: KeyBoundSdJwtVcCredential
-                                  docId: EU PID 2
-                                  claims:
-                                    claim:
-                                      path: ["given_name"]
-                                      displayName: Given names
-                                      value: Max
-                                    claim:
-                                      path: ["family_name"]
-                                      displayName: Family name
-                                      value: Mustermann
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: EU PID
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  path: ["family_name"]
+                                  displayName: Family name
+                                  value: Mustermann
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata:
+                            displayName: null
+                          match:
+                            credential:
+                              type: KeyBoundSdJwtVcCredential
+                              docId: EU PID 2
+                              claims:
+                                claim:
+                                  path: ["given_name"]
+                                  displayName: Given names
+                                  value: Max
+                                claim:
+                                  path: ["family_name"]
+                                  displayName: Family name
+                                  value: Mustermann
             """.trimIndent().trim() + "\n",
             result.prettyPrint()
         )

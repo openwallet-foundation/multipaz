@@ -223,6 +223,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         std::string docFormat = "mso_mdoc";
         std::map<std::string, std::vector<std::string>> dataElementIdentifierMapping;
         std::vector<std::vector<uint8_t>> issuerIdentifiers;
+        bool multiple = false;
 
         const auto& requestInfoItem = itemsRequestMap->get("requestInfo");
         if (requestInfoItem) {
@@ -234,6 +235,13 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 const auto& docFormatItem = riMap->get("docFormat");
                 if (docFormatItem && docFormatItem->asTstr()) {
                     docFormat = docFormatItem->asTstr()->value();
+                }
+
+                if (!isVersion10) {
+                    const auto& uniqueDocSetRequiredItem = riMap->get("uniqueDocSetRequired");
+                    if (uniqueDocSetRequiredItem && uniqueDocSetRequiredItem->asBool()) {
+                        multiple = !uniqueDocSetRequiredItem->asBool()->value();
+                    }
                 }
 
                 const auto& issuerIdentifiersItem = riMap->get("issuerIdentifiers");
@@ -446,7 +454,8 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 readerAuthAkis,
                 dcqlClaims,
                 claimSets,
-                isVersion10
+                isVersion10,
+                multiple
         ));
     }
 
@@ -552,7 +561,16 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
     std::vector<std::vector<uint8_t>> readerAuthAkis;
 
     cJSON* request = cJSON_GetObjectItem(dataJson, "request");
+    // OpenID4VP 1.0 Appendix A.3.2.2 does not say where in `data` the JWS JSON Serialization of a multisigned
+    // request goes: read it both as `data` itself and as the value of `request`.
+    if (request != nullptr && cJSON_IsObject(request)) {
+        dataJson = request;
+        request = nullptr;
+    }
     if (request != nullptr) {
+        if (!cJSON_IsString(request)) {
+            return nullptr;
+        }
         std::string jwtStr = std::string(cJSON_GetStringValue(request));
         size_t firstDot = jwtStr.find(".");
         if (firstDot == std::string::npos) {

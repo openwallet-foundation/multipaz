@@ -185,29 +185,29 @@ class Iso18013TestMdlOrPid {
 
         assertEquals(
             """
-            credentialSets:
-              credentialSet:
+            useCases:
+              useCase:
                 optional: false
-                options:
-                  option:
-                    members:
-                      member:
-                        matches:
-                          match:
-                            credential:
-                              type: MdocCredential
-                              docId: my-mDL-Erika
-                              claims:
-                                claim:
-                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                  dataElement: given_name
-                                  displayName: Given names
-                                  value: Erika
-                                claim:
-                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                  dataElement: resident_address
-                                  displayName: Resident address
-                                  value: Sample Street 123
+                  solution:
+                    credential:
+                      encryptionRequested: false
+                      encryptionTargetTrustMetadata:
+                        displayName: null
+                      match:
+                        credential:
+                          type: MdocCredential
+                          docId: my-mDL-Erika
+                          claims:
+                            claim:
+                              nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                              dataElement: given_name
+                              displayName: Given names
+                              value: Erika
+                            claim:
+                              nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                              dataElement: resident_address
+                              displayName: Resident address
+                              value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -222,29 +222,29 @@ class Iso18013TestMdlOrPid {
         addPidErika(harness)
         assertEquals(
             """
-            credentialSets:
-              credentialSet:
+            useCases:
+              useCase:
                 optional: false
-                options:
-                  option:
-                    members:
-                      member:
-                        matches:
-                          match:
-                            credential:
-                              type: MdocCredential
-                              docId: my-PID-Erika
-                              claims:
-                                claim:
-                                  nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
-                                  dataElement: given_name
-                                  displayName: Given names
-                                  value: Erika
-                                claim:
-                                  nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
-                                  dataElement: resident_address
-                                  displayName: Resident address
-                                  value: Sample Street 123
+                  solution:
+                    credential:
+                      encryptionRequested: false
+                      encryptionTargetTrustMetadata:
+                        displayName: null
+                      match:
+                        credential:
+                          type: MdocCredential
+                          docId: my-PID-Erika
+                          claims:
+                            claim:
+                              nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
+                              dataElement: given_name
+                              displayName: Given names
+                              value: Erika
+                            claim:
+                              nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
+                              dataElement: resident_address
+                              displayName: Resident address
+                              value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource
@@ -260,48 +260,49 @@ class Iso18013TestMdlOrPid {
         addPidErika(harness)
         assertEquals(
             """
-            credentialSets:
-              credentialSet:
+            useCases:
+              useCase:
                 optional: false
-                options:
-                  option:
-                    members:
-                      member:
-                        matches:
-                          match:
-                            credential:
-                              type: MdocCredential
-                              docId: my-mDL-Erika
-                              claims:
-                                claim:
-                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                  dataElement: given_name
-                                  displayName: Given names
-                                  value: Erika
-                                claim:
-                                  nameSpace: ${DrivingLicense.MDL_NAMESPACE}
-                                  dataElement: resident_address
-                                  displayName: Resident address
-                                  value: Sample Street 123
-                  option:
-                    members:
-                      member:
-                        matches:
-                          match:
-                            credential:
-                              type: MdocCredential
-                              docId: my-PID-Erika
-                              claims:
-                                claim:
-                                  nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
-                                  dataElement: given_name
-                                  displayName: Given names
-                                  value: Erika
-                                claim:
-                                  nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
-                                  dataElement: resident_address
-                                  displayName: Resident address
-                                  value: Sample Street 123
+                  solution:
+                    credential:
+                      encryptionRequested: false
+                      encryptionTargetTrustMetadata:
+                        displayName: null
+                      match:
+                        credential:
+                          type: MdocCredential
+                          docId: my-mDL-Erika
+                          claims:
+                            claim:
+                              nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                              dataElement: given_name
+                              displayName: Given names
+                              value: Erika
+                            claim:
+                              nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                              dataElement: resident_address
+                              displayName: Resident address
+                              value: Sample Street 123
+                  solution:
+                    credential:
+                      encryptionRequested: false
+                      encryptionTargetTrustMetadata:
+                        displayName: null
+                      match:
+                        credential:
+                          type: MdocCredential
+                          docId: my-PID-Erika
+                          claims:
+                            claim:
+                              nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
+                              dataElement: given_name
+                              displayName: Given names
+                              value: Erika
+                            claim:
+                              nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
+                              dataElement: resident_address
+                              displayName: Resident address
+                              value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(
                 presentmentSource = harness.presentmentSource

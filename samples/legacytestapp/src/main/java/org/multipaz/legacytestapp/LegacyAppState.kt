@@ -479,7 +479,15 @@ class LegacyAppState private constructor(
             documentTypeRepository = documentTypeRepository,
             resolveTrustFn = ::resolveTrust,
             showConsentPromptFn = if (showConsentPrompt) {
-                ::promptModelRequestConsent
+                { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
+                    promptModelRequestConsent(
+                        requester = requester,
+                        trustedRequesterIdentity = trustedRequesterIdentity,
+                        presentmentData = presentmentData,
+                        preselectedDocuments = preselectedDocuments,
+                        onDocumentsInFocus = onDocumentsInFocus,
+                    )
+                }
             } else {
                 ::promptModelSilentConsent
             },

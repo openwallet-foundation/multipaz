@@ -55,6 +55,7 @@ import org.multipaz.digitalcredentials.DigitalCredentialsCredman
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanExchangeProtocols
+import org.multipaz.document.setAndroidCredmanNoClaimsRequestedText
 import org.multipaz.document.setAndroidCredmanOmitClaims
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
@@ -91,6 +92,8 @@ class MatcherTest {
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcql: String,
         readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
+        multisign: Boolean = false,
+        transformRequestData: (requestData: JsonObject) -> JsonObject = { it },
     ): String {
         return testMatcherDcql(
             version = version,
@@ -98,7 +101,9 @@ class MatcherTest {
             encryptionKey = encryptionKey,
             harnessInitializer = harnessInitializer,
             dcqlProvider = { dcql },
-            readerAuthKeyProvider = readerAuthKeyProvider
+            readerAuthKeyProvider = readerAuthKeyProvider,
+            multisign = multisign,
+            transformRequestData = transformRequestData
         )
     }
 
@@ -109,6 +114,8 @@ class MatcherTest {
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcqlProvider: (harness: DocumentStoreTestHarness) -> String,
         readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
+        multisign: Boolean = false,
+        transformRequestData: (requestData: JsonObject) -> JsonObject = { it },
     ): String {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
@@ -145,6 +152,9 @@ class MatcherTest {
             responseEncryptionKey = encryptionKey?.publicKey,
             verifierIdentities = buildList {
                 readerAuthKey?.let { add(VerifierIdentity(it, CLIENT_ID)) }
+                if (multisign) {
+                    add(VerifierIdentity(createSecondReaderKey(harness), CLIENT_ID))
+                }
             },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
@@ -152,7 +162,13 @@ class MatcherTest {
         )
         val protocolName = when (version) {
             OpenID4VP.Version.DRAFT_24 -> "openid4vp"
-            OpenID4VP.Version.DRAFT_29 -> if (signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
+            OpenID4VP.Version.DRAFT_29 -> if (multisign) {
+                "openid4vp-v1-multisigned"
+            } else if (signRequest) {
+                "openid4vp-v1-signed"
+            } else {
+                "openid4vp-v1-unsigned"
+            }
         }
 
         val credentialDatabase = calculateCredentialDatabase(
@@ -167,7 +183,7 @@ class MatcherTest {
                 putJsonArray("requests") {
                     addJsonObject {
                         put("protocol", protocolName)
-                        put("data", requestData)
+                        put("data", transformRequestData(requestData))
                     }
                 }
             }.toString().encodeToByteArray(),
@@ -317,6 +333,114 @@ class MatcherTest {
                 """.trimIndent().trim() + "\n",
             matcherResult
         )
+    }
+
+    /**
+     * OpenID4VP 1.0 Appendix A.3.2.2 does not say where in `data` the JWS JSON Serialization of a multisigned
+     * request goes: [OpenID4VP.generateRequest] makes it `data` itself, and e.g. the OpenID Foundation conformance
+     * suite sends it as the value of `request`. The matcher must offer the same documents for both.
+     */
+    @Test
+    fun testMatcher_OpenID4VP_mDL_multisigned() = runTest {
+        val placements = mapOf<String, (JsonObject) -> JsonObject>(
+            "data" to { it },
+            "request" to { requestData -> buildJsonObject { put("request", requestData) } },
+        )
+        for ((placement, transformRequestData) in placements) {
+            val matcherResult = testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+                dcql =
+                    """
+                        {
+                          "credentials": [{
+                              "id": "mDL",
+                              "format": "mso_mdoc",
+                              "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                              "claims": [
+                                { "path": ["org.iso.18013.5.1", "age_over_21"] },
+                                { "path": ["org.iso.18013.5.1", "portrait"] }
+                        ]}]}
+                    """.trimIndent().trim(),
+                multisign = true,
+                transformRequestData = transformRequestData
+            )
+            Assert.assertEquals(
+                "multisigned request in $placement",
+                """
+                    Set
+                      set_id 0 openid4vp-v1-multisigned
+                      SetEntry set_index 0
+                        cred_id 0 openid4vp-v1-multisigned __mDL__
+                        Older than 21 years: true
+                        Photo of holder: 5318 bytes
+                    """.trimIndent().trim() + "\n",
+                matcherResult
+            )
+        }
+    }
+
+    /**
+     * The reader identifiers of a multisigned request come from the certificates of its signatures, also when the
+     * request is the value of `request`.
+     */
+    @Test
+    fun testMatcher_OpenID4VP_multisigned_in_request_readerIdentifiers() = runTest {
+        lateinit var readerKeyTriple: Triple<ByteString, ByteString, AsymmetricKey.X509Certified>
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerKeyTriple.first),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third },
+            multisign = true,
+            transformRequestData = { requestData -> buildJsonObject { put("request", requestData) } }
+        )
+        Assert.assertTrue(matcherResult.contains("__mDL-3Tier__"))
+    }
+
+    /** A `request` that is neither a JWS nor a JWS JSON Serialization matches nothing. */
+    @Test
+    fun testMatcher_OpenID4VP_request_not_a_jws() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "age_over_21"] }
+                    ]}]}
+                """.trimIndent().trim(),
+            transformRequestData = { requestData ->
+                buildJsonObject {
+                    requestData.forEach { (name, value) -> put(name, value) }
+                    put("request", 42)
+                }
+            }
+        )
+        Assert.assertEquals("", matcherResult)
     }
 
     /**
@@ -480,6 +604,184 @@ class MatcherTest {
                     City of birth: "Sample City"
                     Photo of holder: Image (5318 bytes)
             """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_otherVcts() = runTest {
+        val dcql =
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "pid",
+                      "format": "dc+sd-jwt",
+                      "meta": {
+                        "vct_values": [
+                          "urn:eudi:pid:1"
+                        ]
+                      },
+                      "claims": [
+                        {
+                          "path": [
+                            "given_name"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent().trim()
+        val openid4vpResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "DE PID",
+                    vct = "urn:eudi:pid:de:1",
+                    otherVcts = listOf(EUPersonalID.EUPID_VCT),
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    )
+                )
+            },
+            dcql = dcql,
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __DE PID__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            openid4vpResult
+        )
+        val iso18013Result = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "DE PID",
+                    vct = "urn:eudi:pid:de:1",
+                    otherVcts = listOf(EUPersonalID.EUPID_VCT),
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    )
+                )
+            },
+            dcql = dcql,
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __DE PID__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            iso18013Result
+        )
+    }
+
+    /**
+     * A DCQL query may name no claims at all. Credential Manager does not show an entry without a
+     * field and then tells the user their info wasn't found, so the entry gets one field saying no
+     * data is requested.
+     */
+    @Test
+    fun testMatcher_OpenID4VP_mDL_no_claims() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    No data requested
+                """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_no_claims() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": ["urn:eudi:pid:1"] }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    No data requested
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    No data requested
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    /** The text of that field is the document's own when the app set one, e.g. in the user's language. */
+    @Test
+    fun testMatcher_OpenID4VP_no_claims_with_document_text() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                harness.docMdl.setAndroidCredmanNoClaimsRequestedText("Nothing requested from this document")
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" }
+                    }]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Nothing requested from this document
+                """.trimIndent().trim() + "\n",
             matcherResult
         )
     }
@@ -3560,6 +3862,26 @@ class MatcherTest {
         Assert.assertEquals("", matcherResult)
     }
 
+    private suspend fun createSecondReaderKey(
+        harness: DocumentStoreTestHarness
+    ): AsymmetricKey.X509Certified {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = harness.readerRootKey.certChain.certificates.first()
+        val cert = MdocUtil.generateReaderCertificate(
+            readerRootKey = harness.readerRootKey,
+            readerKey = key.publicKey,
+            subject = X500Name.fromName("CN=Multipaz Reader Cert Second Single-Use key"),
+            dnsName = "localhost",
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = readerRootCert.validityNotBefore,
+            validUntil = readerRootCert.validityNotAfter
+        )
+        return AsymmetricKey.X509CertifiedExplicit(
+            privateKey = key,
+            certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
+        )
+    }
+
     private suspend fun create3TierReaderKey(
         harness: DocumentStoreTestHarness
     ): Triple<ByteString, ByteString, AsymmetricKey.X509Certified> {
@@ -4249,9 +4571,11 @@ class MatcherTest {
                     .build()
             }
         )
-        // Entry is offered without any field items (since only device-signed data was requested)
+        // Only device-signed data was requested, so the entry shows the one field saying no data is
+        // requested instead of none: Credential Manager does not show an entry without a field.
         Assert.assertTrue(matcherResult.contains("__PaymentCard__"))
         Assert.assertFalse(matcherResult.contains("payment_transaction"))
+        Assert.assertTrue(matcherResult.contains("    No data requested\n"))
     }
 
     @Test
@@ -5751,8 +6075,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Erika__
+                    No data requested
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Max__
+                    No data requested
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -5891,5 +6217,101 @@ class MatcherTest {
                 """.trimIndent().trim(),
         )
         Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_multiple() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "multiple": true,
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    Given names: Erika
+                  SetEntry set_index 1
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_uniqueDocSetRequired_false() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                harness.provisionMdoc(
+                    displayName = "mDL 2",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Max"),
+                            "age_over_21" to true.toDataItem(),
+                        )
+                    )
+                )
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "multiple": true,
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "given_name"] }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                  SetEntry set_index 1
+                    cred_id 0 org-iso-mdoc __mDL 2__
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
     }
 }

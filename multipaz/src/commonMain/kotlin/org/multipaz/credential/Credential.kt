@@ -436,17 +436,25 @@ abstract class Credential {
     /**
      * Gets the claims in the credential.
      *
-     * If a [DocumentTypeRepository] is passed, it will be used to look up the document type
-     * and if a type is found, it'll be used to populate the [Claim.attribute] field of
-     * the resulting claims.
+     * If a [DocumentTypeRepository] is passed, it will be used to look up the document type;
+     * if not found in the repository (or if [documentTypeRepository] is `null`),
+     * [Document.getDocumentType] is used as a fallback. If a document type is resolved, it will be
+     * used to populate the [Claim.attribute] and [Claim.displayName] fields of the resulting claims.
+     *
+     * Note that [locales] is used when synthesizing a document type via [Document.getDocumentType]
+     * or looking up names from [org.multipaz.document.Document.openID4VCIClaimDescriptions],
+     * whereas names from [documentTypeRepository] are in the language the repository was created with.
      *
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param locales BCP 47 language tags, most preferred first, e.g. `["ja-JP", "en-US"]`. If
+     *  empty, the caller has no preference and the current platform locale is used.
      * @return a list of claims with values.
      * @throws IllegalStateException if claims could not be read (e.g. due to unsupported
      *  credential syntax)
      */
     abstract suspend fun getClaims(
-        documentTypeRepository: DocumentTypeRepository?
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String> = emptyList()
     ): List<Claim>
 
     companion object {

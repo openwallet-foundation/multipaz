@@ -2,6 +2,7 @@ package org.multipaz.mpzpass
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonArray
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
@@ -44,6 +45,7 @@ import org.multipaz.util.inflate
  * @property name The display name of the credential (e.g., "Erika's Driving License").
  * @property typeName The display type of the credential (e.g., "Utopia Driving License").
  * @property cardArt The card art for the pass as a PNG ByteString.
+ * @property metadata Credential metadata for the pass (claim metadata and portrait equivalence data).
  * @property isoMdoc The ISO mDoc credentials in the payload.
  * @property sdJwtVc The SD-JWT VC credentials in the payload.
  * @property issuerCertificateChain The X.509 certificate chain of the pass issuer, if the pass is signed.
@@ -59,6 +61,7 @@ data class MpzPass(
     val name: String? = null,
     val typeName: String? = null,
     val cardArt: ByteString? = null,
+    val metadata: MpzPassMetadata? = null,
     val isoMdoc: List<MpzPassIsoMdoc> = emptyList(),
     val sdJwtVc: List<MpzPassSdJwtVc> = emptyList(),
     val issuerCertificateChain: X509CertChain? = null
@@ -73,6 +76,29 @@ data class MpzPass(
             throw IllegalArgumentException("Both isoMdoc and sdJwtVc cannot be empty")
         }
     }
+
+    /**
+     * Looks up metadata for an ISO mdoc claim by [namespace] and [dataElementName].
+     *
+     * @param namespace The ISO mdoc namespace.
+     * @param dataElementName The data element identifier within [namespace].
+     * @return The [MpzPassClaimMetadata], or `null` if no metadata is defined for this claim.
+     */
+    fun getIsoMdocClaimMetadata(
+        namespace: String,
+        dataElementName: String
+    ): MpzPassClaimMetadata? = metadata?.getIsoMdocClaimMetadata(namespace, dataElementName)
+
+    /**
+     * Looks up metadata for an SD-JWT VC claim by [claimPath].
+     *
+     * @param claimPath The claim path as a [JsonArray] of strings (e.g., `["given_name"]` or
+     *   `["address", "street_address"]`).
+     * @return The [MpzPassClaimMetadata], or `null` if no metadata is defined for this claim.
+     */
+    fun getSdJwtVcClaimMetadata(
+        claimPath: JsonArray
+    ): MpzPassClaimMetadata? = metadata?.getSdJwtVcClaimMetadata(claimPath)
 
     /**
      * Serializes and compresses this [MpzPass] into a [DataItem].
@@ -111,6 +137,11 @@ data class MpzPass(
             }
             if (shareable) {
                 put("shareable", true)
+            }
+            metadata?.let {
+                for ((key, value) in it.toDataItem().asMap) {
+                    put(key, value)
+                }
             }
             putCborMap("credential") {
                 if (isoMdoc.isNotEmpty()) {
@@ -219,6 +250,12 @@ data class MpzPass(
                 ByteString(it.asBstr)
             } ?: emptyList()
             val shareable = credentialData.getOrNull("shareable")?.asBoolean ?: false
+            val metadata = MpzPassMetadata.fromDataItem(credentialData).takeIf {
+                it.claimGroupsMetadata.isNotEmpty() ||
+                    it.isoMdocClaimsMetadata.isNotEmpty() ||
+                    it.isoMdocPortraitEquivalenceData != null ||
+                    it.sdJwtVcClaimsMetadata.isNotEmpty()
+            }
 
             val display = credentialData["display"]
             val name = display.getOrNull("name")?.asTstr
@@ -243,6 +280,7 @@ data class MpzPass(
                 name = name,
                 typeName = typeName,
                 cardArt = cardArt,
+                metadata = metadata,
                 isoMdoc = isoMdoc,
                 sdJwtVc = sdJwtVc,
                 issuerCertificateChain = issuerCertChain

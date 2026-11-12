@@ -15,8 +15,8 @@ import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.decodeImage
-import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemText
+import org.multipaz.compose.items.SegmentedItemList
+import org.multipaz.compose.items.SegmentedItemText
 import org.multipaz.compose.trustmanagement.TrustEntryInfo
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.compose.trustmanagement.getDetails
@@ -27,14 +27,14 @@ import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
  * A Composable that displays a scrollable list of trust entries managed in a [TrustEntryBasedTrustManager].
  *
  * It observes the [TrustManagerModel.trustManagerInfos] state and automatically updates
- * when trust entries are added, removed, or modified. It's using [FloatingItemList] to
+ * when trust entries are added, removed, or modified. It's using [SegmentedItemList] to
  * display items
  *
  * @param trustManagerModel A [TrustManagerModel].
  * @param title The title to display at the top of the list.
  * @param imageLoader a [ImageLoader].
- * @param loading A Composable to render when loading entries, normally a [FloatingItemCenteredText].
- * @param noItems A Composable to render when the trust manager is empty, normally a [FloatingItemCenteredText].
+ * @param loading A Composable to render when loading entries, normally a [SegmentedItemCenteredText].
+ * @param noItems A Composable to render when the trust manager is empty, normally a [SegmentedItemCenteredText].
  * @param onTrustEntryClicked Callback invoked when a specific trust entry in the list is clicked.
  * @param modifier The modifier to apply to the list.
  */
@@ -49,7 +49,7 @@ fun TrustEntryList(
     modifier: Modifier = Modifier
 ) {
     val infos = trustManagerModel.trustManagerInfos.collectAsState().value
-    FloatingItemList(
+    SegmentedItemList(
         modifier = modifier,
         title = title,
     ) {
@@ -59,7 +59,7 @@ fun TrustEntryList(
             noItems()
         } else {
             infos.forEach { trustEntryInfo ->
-                FloatingItemText(
+                SegmentedItemText(
                     modifier = Modifier.clickable { onTrustEntryClicked(trustEntryInfo.entry) },
                     image = {
                         trustEntryInfo.RenderImage(

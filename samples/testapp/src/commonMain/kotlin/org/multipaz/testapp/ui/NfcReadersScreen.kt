@@ -12,9 +12,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import org.multipaz.compose.items.FloatingItemCenteredText
-import org.multipaz.compose.items.FloatingItemHeadingAndText
-import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.SegmentedItemCenteredText
+import org.multipaz.compose.items.SegmentedItemHeadingAndText
+import org.multipaz.compose.items.SegmentedItemList
 import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.nfc.ExternalNfcReaderStore
 
@@ -33,18 +33,18 @@ fun NfcReadersScreen(
     ) {
 
         val readers = externalNfcReaderStore.readers.collectAsState().value
-        FloatingItemList(
+        SegmentedItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
             title = "External NFC Readers"
         ) {
             if (readers.isEmpty()) {
-                FloatingItemCenteredText(
+                SegmentedItemCenteredText(
                     text = "No external NFC readers configured",
                 )
             } else {
                 readers.forEach { reader ->
                     val state = reader.observeState().collectAsState(null)
-                    FloatingItemHeadingAndText(
+                    SegmentedItemHeadingAndText(
                         modifier = Modifier.clickable {
                             onReaderClicked(reader.id)
                         },

@@ -1,21 +1,26 @@
 package org.multipaz.testapp.ui
 
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.PresentmentSource
-import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.PresentmentData
+import org.multipaz.prompt.PlatformConsentOptions
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
+
+actual fun createPlatformConsentOptions(
+    showOnBiometricPrompt: Boolean
+): PlatformConsentOptions? = null
 
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
-    consentData: ConsentData,
+    presentmentData: PresentmentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialSelection? {
+): PresentmentSelection? {
     throw IllegalStateException("Not implemented on this OS")
 }

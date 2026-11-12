@@ -10,7 +10,6 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
@@ -22,7 +21,6 @@ import org.multipaz.document.Document
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
-import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -70,7 +68,7 @@ private const val TAG = "mdocPresentment"
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [CredentialSelection] containing the user's selection.
+ * @return a [PresentmentSelection] containing the user's selection.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
@@ -89,8 +87,8 @@ suspend fun mdocPresentmentObtainConsent(
     preselectedDocuments: List<Document> = emptyList(),
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {}
-): CredentialSelection {
-    val iso18013Response = try {
+): PresentmentSelection {
+    val presentmentData = try {
         deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = keyAgreementPossible,
@@ -111,10 +109,7 @@ suspend fun mdocPresentmentObtainConsent(
     val selection = source.showConsentPrompt(
         requester = requester,
         trustedRequesterIdentity = trustedRequesterIdentity,
-        consentData = ConsentData.fromCredentialQueryResult(
-            credentialQueryResult = iso18013Response,
-            source = source
-        ),
+        presentmentData = presentmentData,
         preselectedDocuments = preselectedDocuments,
         onDocumentsInFocus = onDocumentsInFocus
     )
@@ -125,9 +120,9 @@ suspend fun mdocPresentmentObtainConsent(
 }
 
 /**
- * Authenticates the user for credentials in a [CredentialSelection] and preloads their unlock data.
+ * Authenticates the user for credentials in a [PresentmentSelection] and preloads their unlock data.
  *
- * @param selection The [CredentialSelection] obtained from consent.
+ * @param selection The [PresentmentSelection] obtained from consent.
  * @return A [KeyUnlockDataProvider] containing preloaded unlock data for the credentials in [selection].
  * @throws AuthenticationFailedException if user authentication failed or was canceled.
  */
@@ -137,12 +132,19 @@ suspend fun mdocPresentmentObtainConsent(
     IllegalStateException::class
 )
 suspend fun mdocPresentmentAuthenticateUser(
-    selection: CredentialSelection
+    selection: PresentmentSelection
 ): KeyUnlockDataProvider {
     return buildPreloadedKeyUnlockDataProvider {
+        add(selection.preloadedKeyUnlockData)
+        val alreadyUnlocked = selection.preloadedKeyUnlockData
+            .map { it.secureArea to it.alias }
+            .toSet()
         for (match in selection.matches) {
             if (match.credential is SecureAreaBoundCredential) {
                 val credential = match.credential
+                if ((credential.secureArea to credential.alias) in alreadyUnlocked) {
+                    continue
+                }
                 val keyUnlockDataList = try {
                     credential.secureArea.unlockKey(
                         alias = credential.alias,
@@ -164,7 +166,7 @@ suspend fun mdocPresentmentAuthenticateUser(
  * If face matching is determined to be required, the user is prompted to perform face matching
  * against the credential's reference portrait.
  *
- * @param selection The [CredentialSelection] obtained from consent.
+ * @param selection The [PresentmentSelection] obtained from consent.
  * @param source The source of truth used for presentment.
  * @param onWaitingForUserInput Called when waiting for input from the user (such as face matching).
  * @return A list of [Credential] instances for which face matching was performed and succeeded.
@@ -178,7 +180,7 @@ suspend fun mdocPresentmentAuthenticateUser(
     IllegalStateException::class
 )
 suspend fun mdocPerformFaceMatching(
-    selection: CredentialSelection,
+    selection: PresentmentSelection,
     source: PresentmentSource,
     onWaitingForUserInput: () -> Unit = {},
 ): List<Credential> {
@@ -197,7 +199,8 @@ suspend fun mdocPerformFaceMatching(
         }
 
         val documentType = source.documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
-        val peData = documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
+            ?: credential.document.getDocumentType()
+        val peData = credential.document.portraitEquivalenceData ?: documentType?.mdocDocumentType?.supportsPortraitImageEquivalence
             ?: throw FaceNotMatchedException("Credential docType '${credential.docType}' does not support portrait image equivalence")
         val issuerSignedItem = credential.issuerNamespaces.data[peData.namespace]?.get(peData.dataElementName)
             ?: throw FaceNotMatchedException("Portrait data element '${peData.dataElementName}' not found in namespace '${peData.namespace}'")
@@ -235,9 +238,9 @@ suspend fun mdocPerformFaceMatching(
 }
 
 /**
- * Generates the ISO mdoc presentment response given a user's [CredentialSelection].
+ * Generates the ISO mdoc presentment response given a user's [PresentmentSelection].
  *
- * @param selection The [CredentialSelection] obtained from consent.
+ * @param selection The [PresentmentSelection] obtained from consent.
  * @param deviceRequest The device request.
  * @param eReaderKey The ephemeral reader key, if available.
  * @param sessionTranscript the session transcript.
@@ -255,7 +258,7 @@ suspend fun mdocPerformFaceMatching(
     IllegalStateException::class
 )
 suspend fun mdocPresentmentGenerateResponse(
-    selection: CredentialSelection,
+    selection: PresentmentSelection,
     deviceRequest: DeviceRequest,
     eReaderKey: EcPublicKey?,
     sessionTranscript: DataItem,
@@ -283,13 +286,15 @@ suspend fun mdocPresentmentGenerateResponse(
             eReaderKey = eReaderKey,
         ) {
         for (match in selection.matches) {
-            match.source as CredentialMatchSourceIso18013
-            val zkRequested = match.source.docRequest.docRequestInfo?.zkRequest != null
+            match.source as PresentmentCredentialMatchSourceIso18013
+            val docRequest = deviceRequest.docRequests.getOrNull(match.source.docRequest.docRequestId)
+                ?: match.source.docRequest
+            val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
             var zkSystemMatch: ZkSystem? = null
             var zkSystemSpec: ZkSystemSpec? = null
             if (zkRequested) {
-                val requesterSupportedZkSpecs = match.source.docRequest.docRequestInfo.zkRequest.systemSpecs
+                val requesterSupportedZkSpecs = docRequest.docRequestInfo.zkRequest.systemSpecs
                 val zkSystemRepository = source.zkSystemRepository
                 if (zkSystemRepository != null) {
                     // Find the first ZK System that the requester supports and matches the document
@@ -316,7 +321,7 @@ suspend fun mdocPresentmentGenerateResponse(
             }
 
             // The session transcript to use depends on whether the response is to be encrypted
-            val sessionTranscriptToUse = match.source.docRequest.docRequestInfo?.docResponseEncryption?.let {
+            val sessionTranscriptToUse = docRequest.docRequestInfo?.docResponseEncryption?.let {
                 buildCborArray {
                     add(sessionTranscript.asArray[0])
                     add(Tagged(
@@ -347,19 +352,19 @@ suspend fun mdocPresentmentGenerateResponse(
                             document = document,
                             sessionTranscript = sessionTranscriptToUse
                         )
-                        match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                        docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = match.source.docRequest.docRequestId
+                                docRequestId = docRequest.docRequestId
                             ) {
                                 addZkDocument(zkDocument)
                             }
                         } ?: addZkDocument(zkDocument)
                     } else {
-                        match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                        docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = match.source.docRequest.docRequestId
+                                docRequestId = docRequest.docRequestId
                             ) {
                                 addDocument(document)
                             }
@@ -387,13 +392,13 @@ suspend fun mdocPresentmentGenerateResponse(
                                 )
                             )
                         ).toBase64Url()
-                    } else if (match.source.docRequest.readerAuth != null) {
+                    } else if (docRequest.readerAuth != null) {
                         Crypto.digest(
                             algorithm = Algorithm.SHA256,
                             message = Cbor.encode(
                                 Tagged(
                                     tagNumber = Tagged.ENCODED_CBOR,
-                                    taggedItem = Bstr(Cbor.encode(match.source.docRequest.readerAuth!!.toDataItem()))
+                                    taggedItem = Bstr(Cbor.encode(docRequest.readerAuth!!.toDataItem()))
                                 )
                             )
                         ).toBase64Url()
@@ -406,7 +411,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         check(requestedClaim.namespaceName == "_") {
                             "Expected _ for namespace, got ${requestedClaim.namespaceName}"
                         }
-                        val path = match.source.docRequest.docRequestInfo?.dataElementIdentifierMapping[requestedClaim.dataElementName]
+                        val path = docRequest.docRequestInfo?.dataElementIdentifierMapping[requestedClaim.dataElementName]
                         check(path != null) {
                             "No path for data element ${requestedClaim.dataElementName}"
                         }
@@ -416,7 +421,7 @@ suspend fun mdocPresentmentGenerateResponse(
                     val transactionResponse = processTransactions(
                         credential = match.credential,
                         transactionData = match.transactionData,
-                        docRequestId = match.source.docRequest.docRequestId,
+                        docRequestId = docRequest.docRequestId,
                         transactionUserInput = match.transactionUserInput
                     )
                     val sdJwtKb = filteredSdJwtVc.present(
@@ -440,10 +445,10 @@ suspend fun mdocPresentmentGenerateResponse(
                         docFormat = "dc+sd-jwt",
                         data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
                     )
-                    match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                    docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                         addEncryptedDocuments(
                             encryptionParameters = encryptionParameters,
-                            docRequestId = match.source.docRequest.docRequestId
+                            docRequestId = docRequest.docRequestId
                         ) {
                             addOtherDocument(otherDocument)
                         }
@@ -464,6 +469,12 @@ suspend fun mdocPresentmentGenerateResponse(
         }
     } catch (e: KeyLockedException) {
         throw AuthenticationFailedException("User authentication failed", e)
+    }
+    if (selection.matches.isNotEmpty()) {
+        source.requesterHistory?.recordShare(
+            requester = requester,
+            trustedRequesterIdentity = trustedRequesterIdentity,
+        )
     }
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
@@ -589,7 +600,7 @@ suspend fun mdocPresentment(
 }
 
 internal suspend fun computeDeviceNamespaces(
-    match: CredentialPresentmentSetOptionMemberMatch,
+    match: PresentmentCredentialMatch,
     faceMatchedCredentials: List<Credential>,
 ): DeviceNamespaces {
     val transactionResponse = computeTransactionResponse(match)
@@ -624,13 +635,13 @@ internal suspend fun computeDeviceNamespaces(
     }
 }
 
-internal fun isChv1Requested(match: CredentialPresentmentSetOptionMemberMatch): Boolean {
+internal fun isChv1Requested(match: PresentmentCredentialMatch): Boolean {
     return when (val source = match.source) {
-        is CredentialMatchSourceIso18013 -> {
+        is PresentmentCredentialMatchSourceIso18013 -> {
             source.docRequest.nameSpaces[ISO_23220_5_CHV_1_NAMESPACE]
                 ?.containsKey(ISO_23220_5_CHV_1_DATA_ELEMENT) == true
         }
-        is CredentialMatchSourceOpenID4VP -> {
+        is PresentmentCredentialMatchSourceOpenID4VP -> {
             val cq = source.credentialQuery
             cq.claims.any { isChv1Claim(it) } ||
                 cq.claimSets.any { cs ->
@@ -648,7 +659,7 @@ internal fun isChv1Claim(reqClaim: RequestedClaim): Boolean {
             reqClaim.dataElementName == ISO_23220_5_CHV_1_DATA_ELEMENT
 }
 
-internal fun canSatisfyChv1(
+internal suspend fun canSatisfyChv1(
     cred: Credential,
     presentmentSource: PresentmentSource,
     faceMatchingMode: FaceMatchingMode
@@ -666,7 +677,8 @@ internal fun canSatisfyChv1(
         return false
     }
     val docType = presentmentSource.documentTypeRepository.getDocumentTypeForMdoc(cred.docType)
-    val peData = docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
+        ?: cred.document.getDocumentType()
+    val peData = cred.document.portraitEquivalenceData ?: docType?.mdocDocumentType?.supportsPortraitImageEquivalence ?: return false
     val hasPortrait = cred.issuerNamespaces.data[peData.namespace]?.containsKey(peData.dataElementName) == true
     if (!hasPortrait) {
         return false
@@ -678,13 +690,13 @@ internal fun canSatisfyChv1(
 }
 
 internal suspend fun computeTransactionResponse(
-    match: CredentialPresentmentSetOptionMemberMatch
+    match: PresentmentCredentialMatch
 ): DeviceNamespaces {
     if (match.transactionData.isEmpty()) {
         return buildDeviceNamespaces {}
     }
-    val isIso18013 = match.source is CredentialMatchSourceIso18013
-    val docRequestId = (match.source as? CredentialMatchSourceIso18013)?.docRequest?.docRequestId
+    val isIso18013 = match.source is PresentmentCredentialMatchSourceIso18013
+    val docRequestId = (match.source as? PresentmentCredentialMatchSourceIso18013)?.docRequest?.docRequestId
     val groupedByNamespace = mutableMapOf<String, MutableMap<String, DataItem>>()
 
     if (isIso18013) {

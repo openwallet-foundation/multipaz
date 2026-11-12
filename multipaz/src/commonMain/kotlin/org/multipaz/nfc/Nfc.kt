@@ -16,9 +16,12 @@ object Nfc {
      */
     val NDEF_APPLICATION_ID = ByteString("D2760000850101".fromHex())
 
-    /** To be defined in 18013-5 Second Edition.
+    /**
+     * The Application ID for ISO mdoc NFC Concurrent Channel Engagement (CCE).
+     *
+     * Reference: ISO/IEC 18013-5 Second Edition clause 9.5.2
      */
-    val MDOC_NFC_ENGAGEMENT_V2_AID = ByteString("A0000002480401".fromHex())
+    val ISO_MDOC_NFC_CCE_APPLICATION_ID = ByteString("A0000002480401".fromHex())
 
     /**
      * The Application ID for ISO mdoc NFC data transfer.
@@ -52,6 +55,13 @@ object Nfc {
      * Reference: ISO/IEC 7816-4 clause 5.6
      */
     const val RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS = 0x6f00
+
+    /**
+     * The [ResponseApdu.status] for indicating a function in CLA is not supported.
+     *
+     * Reference: ISO/IEC 7816-4 clause 5.6
+     */
+    const val RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED = 0x6a81
 
     /**
      * The [ResponseApdu.status] for indicating a file or application was not found.

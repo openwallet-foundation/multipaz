@@ -33,7 +33,8 @@ class VicalTrustManager(
             skiToTrustPoint[ski] = TrustPoint(
                 certificate = certInfo.certificate,
                 metadata = TrustMetadata(
-                    displayName = displayName
+                    displayName = displayName,
+                    identifier = ski,
                 ),
                 trustManager = this,
                 isIaca = true,

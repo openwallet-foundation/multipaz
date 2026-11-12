@@ -21,6 +21,7 @@ import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.DigitalCredentialsIos
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ios.IosStorage
@@ -140,6 +141,12 @@ actual object TestAppConfiguration {
         return DigitalCredentialsIos.create()
     }
 
+    actual val supportedCreateProtocols: Set<String> = emptySet()
+
+    actual suspend fun registerForCredentialOffers(protocols: Set<String>) {
+        // Nothing to do.
+    }
+
     actual fun getAndroidCredmanOmitClaims(document: Document): Boolean {
         return false
     }
@@ -147,5 +154,7 @@ actual object TestAppConfiguration {
     actual suspend fun setAndroidCredmanOmitClaims(document: Document, value: Boolean) {
         throw NotImplementedError("Not implemented on this platform")
     }
+
+    actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
 }
 

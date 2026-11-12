@@ -4,7 +4,7 @@
     <string name="passphrase_entry_field_passphrase_is_weak">La contraseña es débil, elija otra</string>
     <string name="credential_presentment_button_cancel">Cancelar</string>
     <string name="credential_presentment_button_more">Más</string>
-    <string name="credential_presentment_button_share">Compartir</string>
+    <string name="credential_presentment_button_continue">Continuar</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Solicitante desconocido</string>
     <string name="credential_presentment_share_with_known_requester">Estos datos se compartirán con %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">Estos datos se compartirán:</string>
@@ -24,6 +24,8 @@
     <string name="credential_presentment_warning_icon_description">Icono de advertencia</string>
     <string name="credential_presentment_select_document">Seleccionar documento</string>
     <string name="credential_presentment_requester_information">Información del solicitante</string>
+    <string name="credential_presentment_details">Detalles</string>
+    <string name="credential_presentment_back">Atrás</string>
     <string name="certificate_viewer_sub_basic_info">Información básica</string>
     <string name="certificate_viewer_k_type">Tipo</string>
     <string name="certificate_viewer_k_serial_number">Número de serie</string>
@@ -226,4 +228,8 @@
     <string name="face_matcher_prompt_grant_permission">Otorgar permiso</string>
     <string name="face_matcher_prompt_cancel">Cancelar</string>
     <string name="face_matcher_prompt_confirm">Confirmar</string>
+    <string name="certificate_viewer_tab_leaf">Final</string>
+    <string name="certificate_viewer_tab_intermediate">Intermedio</string>
+    <string name="certificate_viewer_tab_intermediate_n">Interm. %1$d</string>
+    <string name="certificate_viewer_tab_root">Raíz</string>
 </resources>

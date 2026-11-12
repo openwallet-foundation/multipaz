@@ -91,6 +91,7 @@ import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.document.setIosMdocDoctypes
+import org.multipaz.document.setIosSdJwtVcTypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.eventlogger.SimpleEventLogger
@@ -101,12 +102,14 @@ import org.multipaz.mpzpass.MpzPass
 import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.SimpleRequesterHistory
 import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
 import org.multipaz.facenet.FaceNetModelConfig
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.facematch.FacePose
 import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.provisioning.DocumentProvisioningHandler
@@ -128,6 +131,7 @@ import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
 import org.multipaz.testapp.ui.CertificateScreen
 import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
 import org.multipaz.testapp.ui.ConsentPromptScreen
+import org.multipaz.testapp.ui.testAppTransactionDataRenderers
 import org.multipaz.testapp.ui.FaceMatcherPromptScreen
 import org.multipaz.testapp.ui.FakeIssuerApprovalScreen
 import org.multipaz.testapp.ui.saveFaceMatcherReferencePortrait
@@ -140,8 +144,8 @@ import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
 import org.multipaz.testapp.ui.EventViewerScreen
-import org.multipaz.testapp.ui.FloatingItemListScreen
-import org.multipaz.testapp.ui.LazyFloatingItemListScreen
+import org.multipaz.testapp.ui.LazySegmentedItemListScreen
+import org.multipaz.testapp.ui.SegmentedItemListScreen
 import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
@@ -178,6 +182,7 @@ import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toHex
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
@@ -241,20 +246,31 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val documentsToView = Channel<String>()
 
-    private lateinit var provisioningSupport: ProvisioningSupport
+    lateinit var provisioningSupport: ProvisioningSupport
+        private set
 
     lateinit var zkSystemRepository: ZkSystemRepository
     private val initLock = Mutex()
     var initialized = false
         private set
 
+    /**
+     * Gets the renderers the consent prompt uses for transaction data.
+     *
+     * @return the app's renderers if enabled in the settings, otherwise `null` for the built-in rendering.
+     */
+    fun getTransactionDataRendererRepository(): TransactionDataRendererRepository? =
+        if (settingsModel.presentmentUseTransactionDataRenderers.value) testAppTransactionDataRenderers else null
+
     fun getPresentmentSource(): PresentmentSource {
         val useAuth = settingsModel.presentmentRequireAuthentication.value
+        val transactionDataRendererRepository = getTransactionDataRendererRepository()
         return SimplePresentmentSource(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             eventLogger = eventLogger,
+            requesterHistory = requesterHistory,
             getFaceMatcherFn = {
                 val selected = settingsModel.presentmentFaceMatcher.value
                 if (selected == "None") {
@@ -267,7 +283,17 @@ class App private constructor (val promptModel: PromptModel) {
             },
             resolveTrustFn = ::resolveTrust,
             showConsentPromptFn = if (settingsModel.presentmentShowConsentPrompt.value) {
-                ::promptModelRequestConsent
+                { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
+                    promptModelRequestConsent(
+                        requester = requester,
+                        trustedRequesterIdentity = trustedRequesterIdentity,
+                        presentmentData = presentmentData,
+                        preselectedDocuments = preselectedDocuments,
+                        onDocumentsInFocus = onDocumentsInFocus,
+                        transactionDataRendererRepository = transactionDataRendererRepository,
+                        requesterHistory = requesterHistory,
+                    )
+                }
             } else {
                 ::promptModelSilentConsent
             },
@@ -304,14 +330,17 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun resolveTrust(requesterIdentity: RequesterIdentity): TrustMetadata? {
         // If available, use dynamic metadata in Multipaz X509 extension for a Google account... Since this is
         // TestApp also trust the "Untrusted Devices" CA (production wallets would not want to do that)
-        val rootPublicKey = requesterIdentity.certChain.certificates.last().ecPublicKey
+        val rootCert = requesterIdentity.certChain.certificates.last()
+        val rootPublicKey = rootCert.ecPublicKey
         if (rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_PUBLIC_KEY ||
             rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES_PUBLIC_KEY) {
             val readerCert = requesterIdentity.certChain.certificates.first()
             readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let { extData ->
                 MultipazExtension.fromCbor(extData).googleAccount?.let { googleAccount ->
                     if (googleAccount.emailAddress != null && googleAccount.profilePictureUri != null) {
+                        val rootSki = rootCert.subjectKeyIdentifier?.toHex().orEmpty()
                         return TrustMetadata(
+                                identifier = "${rootSki}_${googleAccount.id}",
                                 displayName = googleAccount.emailAddress,
                                 displayIconUrl = googleAccount.profilePictureUri,
                                 disclaimer = "The email and picture shown are from the requester's Google Account. " +
@@ -470,8 +499,23 @@ class App private constructor (val promptModel: PromptModel) {
 
 
     private suspend fun provisioningModelInit() {
+        provisioningModel = createProvisioningModel(promptModel)
+        provisioningSupport = ProvisioningSupport(
+            storage = TestAppConfiguration.storage,
+            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
+        )
+        provisioningSupport.init()
+    }
+
+    /**
+     * Creates a [ProvisioningModel] using [promptModel] for its UI.
+     *
+     * This is also used for provisioning credentials offered through the W3C Digital Credentials API, which
+     * happens in another activity on Android.
+     */
+    suspend fun createProvisioningModel(promptModel: PromptModel): ProvisioningModel {
         val secureArea = Platform.getSecureArea(TestAppConfiguration.storage)
-        provisioningModel = ProvisioningModel(
+        return ProvisioningModel(
             documentProvisioningHandler = DocumentProvisioningHandler(
                 documentStore = documentStore,
                 secureArea = secureArea,
@@ -483,11 +527,6 @@ class App private constructor (val promptModel: PromptModel) {
             authorizationSecureArea = secureArea,
             eventLogger = eventLogger
         )
-        provisioningSupport = ProvisioningSupport(
-            storage = TestAppConfiguration.storage,
-            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
-        )
-        provisioningSupport.init()
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -514,6 +553,7 @@ class App private constructor (val promptModel: PromptModel) {
                     debug = true
                 )
             )
+            TestAppConfiguration.getPlatformFaceMatchers().forEach { add(it) }
         }
     }
 
@@ -868,6 +908,11 @@ class App private constructor (val promptModel: PromptModel) {
                     "org.iso.23220.photoid.1",
                 )
             )
+            documentStore.setIosSdJwtVcTypes(
+                listOf(
+                    "urn:eudi:pid:1",
+                )
+            )
             try {
                 dc.register(
                     documentStore = documentStore,
@@ -917,9 +962,37 @@ class App private constructor (val promptModel: PromptModel) {
                     }
             }
         }
+
+        if (TestAppConfiguration.supportedCreateProtocols.isNotEmpty()) {
+            try {
+                TestAppConfiguration.registerForCredentialOffers(
+                    protocols = settingsModel.dcApiCreateProtocols.value
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error registering for credential offers with W3C DC API", e)
+            }
+
+            CoroutineScope(Dispatchers.Default).launch {
+                settingsModel.dcApiCreateProtocols
+                    .drop(1) // drop initial value, we just registered above.
+                    .collect { protocols ->
+                        Logger.i(TAG, "DC create protocols changed: $protocols")
+                        try {
+                            TestAppConfiguration.registerForCredentialOffers(
+                                protocols = protocols
+                            )
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            Logger.w(TAG, "Error registering for credential offers with W3C DC API", e)
+                        }
+                    }
+            }
+        }
     }
     
     lateinit var eventLogger: SimpleEventLogger
+    lateinit var requesterHistory: SimpleRequesterHistory
 
     private suspend fun eventLoggerInit() {
         eventLogger = SimpleEventLogger(
@@ -927,6 +1000,9 @@ class App private constructor (val promptModel: PromptModel) {
             onAddEvent = { event ->
                 emptyMap()
             }
+        )
+        requesterHistory = SimpleRequesterHistory(
+            storage = TestAppConfiguration.storage,
         )
     }
 
@@ -1257,7 +1333,7 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickEventLog = { navController.navigate(EventLogDestination) },
                             onClickShareSheet = { navController.navigate(ShareSheetDestination) },
                             onClickGenerateMpzPass = { navController.navigate(GenerateMpzPassDestination) },
-                            onClickFloatingItemList = { navController.navigate(FloatingItemListDestination) },
+                            onClickSegmentedItemList = { navController.navigate(SegmentedItemListDestination) },
                             onClickDeviceCheck = { navController.navigate(DeviceCheckDestination) },
                         )
                     }
@@ -1578,11 +1654,15 @@ class App private constructor (val promptModel: PromptModel) {
                 }
                 composable<ConsentPromptDestination> { backStackEntry ->
                     WithAppBar(navController, "Consent Prompt use-cases") {
+                        val useTransactionDataRenderers =
+                            settingsModel.presentmentUseTransactionDataRenderers.collectAsState().value
                         ConsentPromptScreen(
                             secureAreaRepository = secureAreaRepository,
                             faceMatcherRepository = faceMatcherRepository,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) },
+                            transactionDataRendererRepository =
+                                if (useTransactionDataRenderers) testAppTransactionDataRenderers else null,
                         )
                     }
                 }
@@ -1933,19 +2013,19 @@ class App private constructor (val promptModel: PromptModel) {
                         )
                     }
                 }
-                composable<FloatingItemListDestination> { backstackEntry ->
-                    WithAppBar(navController, "FloatingItemList examples") {
-                        FloatingItemListScreen(
+                composable<SegmentedItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "SegmentedItemList examples") {
+                        SegmentedItemListScreen(
                             showToast = { message -> showToast(message) },
-                            onNavigateToLazyFloatingItemList = {
-                                navController.navigate(LazyFloatingItemListDestination)
+                            onNavigateToLazySegmentedItemList = {
+                                navController.navigate(LazySegmentedItemListDestination)
                             }
                         )
                     }
                 }
-                composable<LazyFloatingItemListDestination> { backstackEntry ->
-                    WithAppBar(navController, "LazyFloatingItemList example") {
-                        LazyFloatingItemListScreen(
+                composable<LazySegmentedItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "LazySegmentedItemList example") {
+                        LazySegmentedItemListScreen(
                             showToast = { message -> showToast(message) },
                         )
                     }
