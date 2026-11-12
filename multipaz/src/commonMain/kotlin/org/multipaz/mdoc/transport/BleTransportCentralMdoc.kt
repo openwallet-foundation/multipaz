@@ -113,7 +113,7 @@ internal class BleTransportCentralMdoc(
             bleScanningTime = _scanningTime,
             bleConnectingTime = _connectingTime,
             bleUsingL2cap = centralManager.usingL2cap,
-            bleL2capPsmInEngagement = psm != null,
+            bleL2capPsmInEngagement = options.bleUseL2CAPInEngagement && psm != null,
             bleNegotiatedMtu = centralManager.negotiatedMtu,
             bleMtuInferredFromWrite = false,
             bleNumScanRestarts = centralManager.numScanRestarts,
@@ -145,7 +145,7 @@ internal class BleTransportCentralMdoc(
                 _scanningTime = nowAfterScan - timeScanningStarted
                 timeConnectingStarted = nowAfterScan
                 mutex.withLock { _state.value = State.CONNECTING }
-                if (psm != null) {
+                if (psm != null && options.bleUseL2CAPInEngagement) {
                     // If the PSM is known at engagement-time we can bypass the entire GATT server
                     // and just connect directly.
                     Logger.i(TAG, "Connecting directly to PSM $psm")
