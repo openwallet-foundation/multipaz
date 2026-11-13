@@ -2,8 +2,12 @@ package org.multipaz.documenttype
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -144,6 +148,15 @@ abstract class TransactionType<PayloadT: Any>(
 
     /**
      * Parses transaction data serialized for use in OpenID4VP protocol.
+     *
+     * The payload comes from [parseOpenId4VpRequest]. The hash algorithms the verifier accepts
+     * come from `transaction_data_hashes_alg`, so a type that does not override this function
+     * still hashes its transaction data with the algorithm the verifier asked for.
+     *
+     * @param serialized the base64url-encoded JSON transaction data item.
+     * @return transaction data wrapping the parsed payload.
+     * @throws IllegalArgumentException if `transaction_data_hashes_alg` is not an array of strings
+     *  or names no known hash algorithm.
      */
     open fun parseJson(serialized: ByteString): TransactionData<PayloadT> {
         val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
@@ -152,6 +165,17 @@ abstract class TransactionType<PayloadT: Any>(
             payload = parseOpenId4VpRequest(jsonString),
             protocol = TransactionProtocol.OPENID4VP,
             rawBytes = serialized,
+            hashAlgorithms = parseJoseHashAlgorithms(
+                Json.parseToJsonElement(jsonString).jsonObject["transaction_data_hashes_alg"]
+                    ?.takeIf { it != JsonNull }
+                    ?.jsonArray
+                    ?.map { alg ->
+                        require(alg is JsonPrimitive && alg.isString) {
+                            "Hash algorithm in 'transaction_data_hashes_alg' must be a string: $alg"
+                        }
+                        alg.content
+                    }
+            ),
         )
     }
 
