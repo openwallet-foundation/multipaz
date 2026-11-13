@@ -75,6 +75,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
     private var gatt: BluetoothGatt? = null
     private var service: BluetoothGattService? = null
     private var targetServiceUuid: UUID? = null
+    private var needsGattCacheRefresh = false
     private val characteristicsByUuid = mutableMapOf<UUID, BluetoothGattCharacteristic>()
     private var l2capSocket: BluetoothSocket? = null
     private var l2capConnectJob: Job? = null
@@ -166,6 +167,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             Logger.d(TAG, "onServicesDiscovered: status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                needsGattCacheRefresh = true
                 callback.onServicesDiscovered(
                     hasTargetService = false,
                     error = IllegalStateException("Expected GATT_SUCCESS but got $status")
@@ -174,6 +176,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
                 val targetUuid = targetServiceUuid
                 val foundService = if (targetUuid != null) gatt.getService(targetUuid.toJavaUuid()) else null
                 service = foundService
+                needsGattCacheRefresh = (foundService == null)
                 callback.onServicesDiscovered(hasTargetService = foundService != null, error = null)
             }
         }
@@ -311,6 +314,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
             } catch (_: Exception) {
             }
         }
+        needsGattCacheRefresh = false
         gatt = dev.connectGatt(applicationContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
@@ -322,6 +326,16 @@ internal class BleCentralHalAndroid : BleCentralHal {
     override fun discoverServices(serviceUuid: UUID) {
         val g = checkNotNull(gatt) { "gatt is null" }
         targetServiceUuid = serviceUuid
+        if (needsGattCacheRefresh) {
+            try {
+                val refreshMethod = g.javaClass.getMethod("refresh")
+                val refreshed = refreshMethod.invoke(g) as? Boolean
+                Logger.d(TAG, "Called BluetoothGatt.refresh(): $refreshed")
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Unable to call BluetoothGatt.refresh()", e)
+            }
+        }
         if (!g.discoverServices()) {
             callback.onServicesDiscovered(
                 hasTargetService = false,

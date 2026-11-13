@@ -41,9 +41,12 @@ jobs:
         sudo udevadm trigger --name-match=kvm
     - name: Run unit tests on Android Emulator API 35
       uses: reactivecircus/android-emulator-runner@v2
+      env:
+        NETSIM_HCI_PORT: 6402
       with:
         api-level: 35
         arch: x86_64
+        emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -netsim-args --hci-port=6402
         script: |
           ./gradlew connectedCheck -Pdisable.web.targets=true
           mkdir -p build/reports/logcat

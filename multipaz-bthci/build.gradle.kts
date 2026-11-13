@@ -94,10 +94,19 @@ kotlin {
             }
         }
 
+        val javaSharedMain by creating {
+            dependsOn(commonMain)
+        }
+
         val jvmMain by getting {
+            dependsOn(javaSharedMain)
             dependencies {
                 compileOnly(libs.jna)
             }
+        }
+
+        val androidMain by getting {
+            dependsOn(javaSharedMain)
         }
 
         val jvmTest by getting {
@@ -112,6 +121,20 @@ kotlin {
             dependencies {
                 implementation(libs.bouncy.castle.bcprov)
                 implementation(libs.bouncy.castle.bcpkix)
+            }
+        }
+
+        val androidInstrumentedTest by getting {
+            dependencies {
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
+                implementation(project(":multipaz-doctypes"))
+                implementation(project(":multipaz-utopia"))
+                implementation(libs.androidx.test.junit)
+                implementation(libs.androidx.espresso.core)
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.kotlinx.coroutines.android)
             }
         }
     }
@@ -136,11 +159,19 @@ android {
 
     defaultConfig {
         minSdk = 26
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += listOf("/META-INF/{AL2.0,LGPL2.1}")
+            excludes += listOf("/META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+        }
     }
 
     testOptions {

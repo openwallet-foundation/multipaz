@@ -34,6 +34,7 @@ import kotlin.time.Duration.Companion.seconds
  * @param connectTimeout per-attempt timeout for `HCI_LE_Create_Connection` before cancelling and
  *   retrying (defaults to `3.seconds`).
  * @param centralConfig BLE Central retry, scan-restart, and L2CAP connection timing parameters.
+ * @param faultConfig optional [BleHciFaultConfig] for injecting deterministic BLE handshake faults.
  * @param fallbackFactory factory used for non-BLE [MdocConnectionMethod]s (defaults to
  *   [MdocTransportFactory.Default]).
  * @param packetIoFactory factory that opens an [HciPacketIo] transport for each BLE session.
@@ -48,6 +49,7 @@ class BtHciMdocTransportFactory(
         scanRestartTimeout = 3.seconds,
         requireL2capPeripheralConnectedFirst = true,
     ),
+    private val faultConfig: BleHciFaultConfig = BleHciFaultConfig(),
     private val fallbackFactory: MdocTransportFactory = MdocTransportFactory.Default,
     private val packetIoFactory: suspend () -> HciPacketIo = ::openDefaultHciPacketIo,
 ) : MdocTransportFactory {
@@ -86,6 +88,7 @@ class BtHciMdocTransportFactory(
                     BlePeripheralHalHci(
                         gapDeviceName = gapDeviceName,
                         randomAddress = randomAddressBytes?.copyOf(),
+                        faultConfig = faultConfig,
                         packetIoFactory = packetIoFactory,
                     )
                 },
