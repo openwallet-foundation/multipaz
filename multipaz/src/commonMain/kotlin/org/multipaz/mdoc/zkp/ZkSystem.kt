@@ -1,6 +1,8 @@
 package org.multipaz.mdoc.zkp
 
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 import org.multipaz.cbor.DataItem
 import org.multipaz.mdoc.response.MdocDocument
@@ -44,12 +46,16 @@ interface ZkSystem {
      * @param zkDocument the document containing the proof and associated metadata
      * @param zkSystemSpec the system spec used to generate the proof
      * @param sessionTranscript the Session Transcript used for the document.
+     * @param atTime the point in time against which [ZkDocumentData.timestamp] is verified.
+     * @param maxTimestampDrift maximum allowed difference between [atTime] and [ZkDocumentData.timestamp].
      * @throws ProofVerificationFailureException if the proof is invalid or cannot be verified
      */
     fun verifyProof(
         zkDocument: ZkDocument,
         zkSystemSpec: ZkSystemSpec,
-        sessionTranscript: DataItem
+        sessionTranscript: DataItem,
+        atTime: Instant = Clock.System.now(),
+        maxTimestampDrift: Duration = 5.minutes,
     )
 
     /**

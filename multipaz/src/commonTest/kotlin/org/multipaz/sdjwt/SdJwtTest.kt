@@ -12,9 +12,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -27,6 +30,7 @@ import org.multipaz.sdjwt.DisclosureMetadata.Companion.listOfArrayDisclosures
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
+import org.multipaz.webtoken.buildJwt
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -3097,6 +3101,148 @@ class SdJwtTest {
         val withDuplicate = sdJwt.compactSerialization + duplicateDisclosure + "~"
         assertFailsWith<IllegalArgumentException> {
             SdJwt.fromCompactSerialization(withDuplicate)
+        }
+    }
+
+    @Test
+    fun testRejectDisclosureShapeCollisionsAndReservedClaims() = runTest {
+        val issuerPrivKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerKey = AsymmetricKey.anonymous(issuerPrivKey, Algorithm.ESP256)
+        suspend fun digestOf(disc: String): String =
+            Crypto.digest(Algorithm.SHA256, disc.encodeToByteArray()).toBase64Url()
+        suspend fun signRawSdJwt(payload: JsonObject, disclosures: List<String>): SdJwt {
+            val jws = buildJwt(
+                type = "dc+sd-jwt",
+                key = issuerKey,
+                creationTime = Instant.DISTANT_PAST,
+            ) {
+                payload.forEach { (k, v) -> put(k, v) }
+            }
+            val sb = StringBuilder(jws).append('~')
+            disclosures.forEach { sb.append(it).append('~') }
+            return SdJwt.fromCompactSerialization(sb.toString())
+        }
+
+        // 1. Two disclosures with the same claim name in the same _sd array must fail
+        val disc1 = """["salt_one_1234567890","given_name","Alice"]""".encodeToByteArray().toBase64Url()
+        val disc2 = """["salt_two_1234567890","given_name","Mallory"]""".encodeToByteArray().toBase64Url()
+        val disc1Digest = digestOf(disc1)
+        val disc2Digest = digestOf(disc2)
+        val collidingClaimsSdJwt = signRawSdJwt(
+            payload = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("_sd") {
+                    add(disc1Digest)
+                    add(disc2Digest)
+                }
+            },
+            disclosures = listOf(disc1, disc2),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            collidingClaimsSdJwt.verify(issuerPrivKey.publicKey)
+        }
+
+        // 2. 3-element object disclosure referenced inside an array {"...": digest} must fail
+        val objDiscInArray = signRawSdJwt(
+            payload = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("nationalities") {
+                    add(buildJsonObject { put("...", disc1Digest) })
+                }
+            },
+            disclosures = listOf(disc1),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            objDiscInArray.verify(issuerPrivKey.publicKey)
+        }
+
+        // 3. 2-element array disclosure referenced inside an object _sd array must fail
+        val arrDisc = """["salt_arr_1234567890","US"]""".encodeToByteArray().toBase64Url()
+        val arrDiscDigest = digestOf(arrDisc)
+        val arrDiscInObject = signRawSdJwt(
+            payload = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("_sd") {
+                    add(arrDiscDigest)
+                }
+            },
+            disclosures = listOf(arrDisc),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            arrDiscInObject.verify(issuerPrivKey.publicKey)
+        }
+
+        // 4. Duplicate undisclosed digest in _sd must fail (RFC 9901 Section 7.1 step 2.b)
+        val undisclosedDigest = disc1Digest
+        val duplicateUndisclosedSdJwt = signRawSdJwt(
+            payload = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("_sd") {
+                    add(undisclosedDigest)
+                    add(undisclosedDigest)
+                }
+            },
+            disclosures = emptyList(),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            duplicateUndisclosedSdJwt.verify(issuerPrivKey.publicKey)
+        }
+
+        // 5. Selectively disclosed cnf/exp/iss must fail (RFC 9901 Section 9.7)
+        val cnfDisc = """["salt_cnf_1234567890","cnf",{"jwk":{}}]""".encodeToByteArray().toBase64Url()
+        val cnfDiscDigest = digestOf(cnfDisc)
+        val sdCnfSdJwt = signRawSdJwt(
+            payload = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("_sd") {
+                    add(cnfDiscDigest)
+                }
+            },
+            disclosures = listOf(cnfDisc),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            sdCnfSdJwt.verify(issuerPrivKey.publicKey)
+        }
+    }
+
+    @Test
+    fun testRejectKbJwtWithWrongTypHeader() = runTest {
+        val issuerPrivKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderPrivKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now()
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.anonymous(issuerPrivKey, Algorithm.ESP256),
+            kbKey = holderPrivKey.publicKey,
+            claims = buildJsonObject { put("given_name", "Erika") },
+            nonSdClaims = buildJsonObject { put("iss", "https://issuer.example") },
+            creationTime = now,
+        )
+        val sdHash = Crypto.digest(
+            Algorithm.SHA256,
+            sdJwt.compactSerialization.encodeToByteArray()
+        ).toBase64Url()
+        val wrongTypKbJwt = buildJwt(
+            type = "JWT",
+            key = AsymmetricKey.anonymous(holderPrivKey, Algorithm.ESP256),
+            creationTime = now,
+        ) {
+            put("nonce", "test-nonce")
+            put("aud", "https://verifier.example")
+            put("sd_hash", sdHash)
+        }
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(sdJwt.compactSerialization + wrongTypKbJwt)
+        assertFailsWith<IllegalStateException> {
+            sdJwtKb.verify(
+                issuerKey = issuerPrivKey.publicKey,
+                checkNonce = { it == "test-nonce" },
+                checkAudience = { it == "https://verifier.example" },
+                checkCreationTime = { true },
+            )
         }
     }
 

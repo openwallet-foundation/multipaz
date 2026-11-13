@@ -102,12 +102,14 @@ class DocumentType private constructor(
          *
          * @param type the document type.
          * @param keyBound whether credentials should be bound to a key residing on the device.
+         * @param otherVcts other Verifiable Credential Types that credentials of [type] also satisfy.
          */
         fun addJsonDocumentType(
             type: String,
             keyBound: Boolean,
+            otherVcts: List<String> = emptyList(),
         ) = apply {
-            jsonBuilder = JsonDocumentType.Builder(type, keyBound = keyBound)
+            jsonBuilder = JsonDocumentType.Builder(type, keyBound = keyBound, otherVcts = otherVcts)
         }
 
         /**
@@ -607,6 +609,7 @@ class DocumentType private constructor(
             asReplacementForIdentifier = null,
             domain = domain,
             vct = jsonDocumentType.vct,
+            otherVcts = jsonDocumentType.otherVcts,
         )
 
         val sdJwt = SdJwt.create(
@@ -669,6 +672,7 @@ class DocumentType private constructor(
             domain = domain,
             secureArea = secureArea,
             vct = jsonDocumentType.vct,
+            otherVcts = jsonDocumentType.otherVcts,
             createKeySettings = createKeySettings
         )
 

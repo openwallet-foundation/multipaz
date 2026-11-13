@@ -17,12 +17,17 @@ class RicalTrustManager(
     override val identifier: String = "default"
 ): TrustManagerInterface {
     private val skiToTrustPoint = mutableMapOf<String, TrustPoint>()
+    private val skiToIntermediateCert = mutableMapOf<String, X509Cert>()
 
     init {
         for (certInfo in signedRical.rical.certificateInfos) {
             val ski = certInfo.ski.toByteArray().toHex()
-            if (skiToTrustPoint.containsKey(ski)) {
+            if (skiToTrustPoint.containsKey(ski) || skiToIntermediateCert.containsKey(ski)) {
                 Logger.w(TAG, "Ignoring certificate with SKI $ski which already exists in the RICAL")
+                continue
+            }
+            if (!certInfo.isTrustAnchor) {
+                skiToIntermediateCert[ski] = certInfo.certificate
                 continue
             }
             // TODO: Would be nice if there was generally a better way to get displayName,
@@ -52,7 +57,34 @@ class RicalTrustManager(
         validateCaValidity: Boolean,
         docType: String?
     ): TrustResult {
-        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity, docType)
+        val notAfter = signedRical.rical.notAfter
+        if (notAfter != null && atTime > notAfter) {
+            return TrustResult(
+                isTrusted = false,
+                error = IllegalStateException("RICAL is no longer valid ($atTime > $notAfter)")
+            )
+        }
+        val expandedChain = if (skiToIntermediateCert.isEmpty() || chain.isEmpty()) {
+            chain
+        } else {
+            buildList {
+                addAll(chain)
+                val visitedSkis = mutableSetOf<String>()
+                while (true) {
+                    val aki = last().authorityKeyIdentifier?.toHex() ?: break
+                    if (skiToTrustPoint.containsKey(aki) || !visitedSkis.add(aki)) {
+                        break
+                    }
+                    val intermediate = skiToIntermediateCert[aki] ?: break
+                    if (!contains(intermediate)) {
+                        add(intermediate)
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+        return TrustManagerUtil.verifyX509TrustChain(expandedChain, atTime, skiToTrustPoint, validateCaValidity, docType)
     }
 
     companion object {

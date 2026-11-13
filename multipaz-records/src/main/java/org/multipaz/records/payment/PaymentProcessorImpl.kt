@@ -112,7 +112,11 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
         }
 
         val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
-        val trustResult = trustManager.verify(payment.documentSignerCertChain.certificates, now)
+        val trustResult = trustManager.verify(
+            chain = payment.documentSignerCertChain.certificates,
+            atTime = now,
+            docType = payment.docType,
+        )
         if (!trustResult.isTrusted) {
             throw InvalidRequestException("Payment instrument is not issued by a trusted issuer")
         }

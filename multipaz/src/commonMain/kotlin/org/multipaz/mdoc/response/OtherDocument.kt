@@ -44,6 +44,10 @@ data class OtherDocument(
     val expectedAudience: String?
         get() = _expectedAudience
 
+    internal fun clearVerificationState() {
+        _expectedAudience = null
+    }
+
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
         put("data", data.toByteArray())
@@ -65,6 +69,7 @@ data class OtherDocument(
                 atTime = atTime,
                 expectedAudience = expectedAudience
             )
+            else -> throw IllegalStateException("Unsupported OtherDocument format '$docFormat'")
         }
     }
 

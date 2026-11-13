@@ -12,7 +12,11 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.claim.Claim
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
+import org.multipaz.claim.findMatchingClaim
+import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.openid.dcql.DcqlCredentialQuery
 import org.multipaz.openid.dcql.DcqlQuery
+import org.multipaz.request.JsonRequestedClaim
 
 /**
  * Helper object that organizes verified presentation response, so that presentation
@@ -23,10 +27,13 @@ import org.multipaz.openid.dcql.DcqlQuery
  *
  * @param dcql DCQL that was used to generate the request
  * @param presentations a list of verified credential presentations generated in the response
+ * @param documentTypeRepository optional [DocumentTypeRepository] used to resolve verifier-approved
+ *   `vct` aliases via [org.multipaz.documenttype.JsonDocumentType.otherVcts].
  */
 class DcqlProcessedResponse(
     dcql: String,
-    presentations: List<VerifiedPresentation>
+    presentations: List<VerifiedPresentation>,
+    documentTypeRepository: DocumentTypeRepository? = null,
 ) {
     /**
      * Set of DCQL credential query ids that have `multiple` set to `true`.
@@ -48,6 +55,7 @@ class DcqlProcessedResponse(
     init {
         val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
         val dcqlQuery = DcqlQuery.fromJson(dcqlJson)
+        val credQueryById = dcqlQuery.credentialQueries.associateBy { it.id }
         multipleQueryIds = dcqlQuery.credentialQueries.filter { it.multiple }.map { it.id }.toSet()
         val byDocType = mutableMapOf<String, MutableList<JsonObject>>()
         val byVct = mutableMapOf<String, MutableList<JsonObject>>()
@@ -77,6 +85,15 @@ class DcqlProcessedResponse(
             } else {
                 val list = when (presentation) {
                     is JsonVerifiedPresentation -> byVct[presentation.vct]
+                        ?: if (documentTypeRepository != null) {
+                            byVct.entries
+                                .filter { (reqVct, _) -> documentTypeRepository.vctMatches(presentation.vct, reqVct) }
+                                .flatMap { it.value }
+                                .distinct()
+                                .ifEmpty { null }
+                        } else {
+                            null
+                        }
                     is MdocVerifiedPresentation -> byDocType[presentation.docType]
                 } ?: throw IllegalStateException("query not found")
                 if (list.size > 1) {
@@ -85,10 +102,17 @@ class DcqlProcessedResponse(
                 list.first()
             }
             val queryId = query["id"]!!.jsonPrimitive.content
+            val credQuery = credQueryById[queryId]
+                ?: throw IllegalStateException("query not found")
             presentationsByQueryId.getOrPut(queryId) { mutableListOf() }.add(presentation)
-            credentialListsMap.getOrPut(queryId) { mutableListOf() }.add(Credential(presentation, query))
+            credentialListsMap.getOrPut(queryId) { mutableListOf() }.add(
+                Credential(presentation, query, credQuery)
+            )
         }
-        dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
+        dcqlQuery.checkResponseSatisfiesQuery(
+            presentationsByQueryId = presentationsByQueryId,
+            documentTypeRepository = documentTypeRepository,
+        )
         credentialLists = credentialListsMap
         credentials = credentialListsMap.mapValues { (_, list) -> list.last() }
     }
@@ -101,7 +125,8 @@ class DcqlProcessedResponse(
      */
     class Credential internal constructor(
         val presentation: VerifiedPresentation,
-        query: JsonObject
+        query: JsonObject,
+        credQuery: DcqlCredentialQuery,
     ) {
         /**
          * Mapping of DCQL ids (and simple claim name if id is not given) to the
@@ -116,7 +141,9 @@ class DcqlProcessedResponse(
          * Mapping of DCQL ids (and simple claim name if id is not given) to the
          * corresponding device-signed [Claim].
          *
-         * Simple claim name is defined as [MdocClaim.dataElementName] for ISO mdoc.
+         * Simple claim name is defined as [MdocClaim.dataElementName] for ISO mdoc and the last
+         * name in the path for IETF SD-JWT Key Binding JWT claims. For `dc+sd-jwt` credentials,
+         * DCQL claim ids apply only to [issuerSignedClaims].
          */
         val deviceSignedClaims: Map<String, Claim>
 
@@ -127,8 +154,30 @@ class DcqlProcessedResponse(
                 val id = claim["id"]?.jsonPrimitive?.content ?: continue
                 idMap[pathKey(claim["path"]!!.jsonArray)] = id
             }
-            issuerSignedClaims = mapClaims(presentation.issuerSignedClaims, idMap)
-            deviceSignedClaims = mapClaims(presentation.deviceSignedClaims, idMap)
+            val mappedIssuerClaims = mapClaims(presentation.issuerSignedClaims, idMap).toMutableMap()
+            if (presentation is JsonVerifiedPresentation) {
+                for (requestedClaim in credQuery.claims) {
+                    if (requestedClaim is JsonRequestedClaim && requestedClaim.claimPath.size > 1) {
+                        val matchedClaim = presentation.issuerSignedClaims.findMatchingClaim(requestedClaim)
+                            ?: continue
+                        if (requestedClaim.id != null) {
+                            mappedIssuerClaims[requestedClaim.id] = matchedClaim
+                        } else {
+                            val lastSegment = requestedClaim.claimPath.last() as? JsonPrimitive
+                            if (lastSegment != null && lastSegment.isString &&
+                                !mappedIssuerClaims.containsKey(lastSegment.content)
+                            ) {
+                                mappedIssuerClaims[lastSegment.content] = matchedClaim
+                            }
+                        }
+                    }
+                }
+            }
+            issuerSignedClaims = mappedIssuerClaims
+            deviceSignedClaims = mapClaims(
+                claimsList = presentation.deviceSignedClaims,
+                idMap = if (presentation is JsonVerifiedPresentation) emptyMap() else idMap
+            )
         }
 
         companion object {

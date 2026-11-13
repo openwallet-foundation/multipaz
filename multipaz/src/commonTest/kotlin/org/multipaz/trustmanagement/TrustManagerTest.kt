@@ -2041,4 +2041,277 @@ class TrustManagerTest {
             assertEquals(2, it.trustChain!!.certificates.size)
         }
     }
+
+    @Test
+    fun testVicalNotAfterEnforced() = runTestWithSetup {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val vicalNotAfter = now + 5.minutes
+
+        val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val vicalCert = buildX509Cert(
+            publicKey = vicalKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test VICAL provider"),
+            issuer = X500Name.fromName("CN=Test VICAL provider"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+
+        val vical = Vical(
+            version = "1.0",
+            vicalProvider = "Test VICAL provider",
+            date = now,
+            nextUpdate = null,
+            notAfter = vicalNotAfter,
+            vicalIssueID = 1L,
+            certificateInfos = listOf(
+                VicalCertificateInfo(
+                    certificate = ca2Certificate,
+                    docTypes = listOf("org.iso.18013.5.1.mDL")
+                )
+            ),
+            vicalUrl = null,
+            extensions = emptyMap(),
+        )
+        val signedVical = SignedVical(vical, X509CertChain(listOf(vicalCert)))
+        val encodedSignedVical = ByteString(
+            signedVical.generate(AsymmetricKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm))
+        )
+        val parsedVical = SignedVical.parse(encodedSignedVical.toByteArray())
+        val vicalTrustManager = VicalTrustManager(parsedVical)
+
+        // Direct VicalTrustManager: trusted before and at notAfter, untrusted after notAfter
+        // (even though ds2Certificate and ca2Certificate are valid for another ~55 minutes).
+        assertTrue(vicalTrustManager.verify(listOf(ds2Certificate), atTime = now).isTrusted)
+        assertTrue(vicalTrustManager.verify(listOf(ds2Certificate), atTime = vicalNotAfter).isTrusted)
+        vicalTrustManager.verify(listOf(ds2Certificate), atTime = vicalNotAfter + 1.minutes).let {
+            assertFalse(it.isTrusted)
+            assertNotNull(it.error)
+        }
+
+        // Persistent TrustManager (including after reload from storage)
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+        trustManager.addVical(encodedSignedVical, TrustMetadata(displayName = "Expiring VICAL"))
+        assertTrue(trustManager.verify(listOf(ds2Certificate), atTime = now).isTrusted)
+        assertFalse(trustManager.verify(listOf(ds2Certificate), atTime = vicalNotAfter + 1.minutes).isTrusted)
+
+        val reloadedTrustManager = TrustManager(storage)
+        assertTrue(reloadedTrustManager.verify(listOf(ds2Certificate), atTime = now).isTrusted)
+        assertFalse(reloadedTrustManager.verify(listOf(ds2Certificate), atTime = vicalNotAfter + 1.minutes).isTrusted)
+
+        // If a standalone X509 trust point is also present, verification still succeeds via fallback
+        reloadedTrustManager.addX509Cert(ca2Certificate, TrustMetadata(displayName = "Fallback CA2"))
+        assertTrue(reloadedTrustManager.verify(listOf(ds2Certificate), atTime = vicalNotAfter + 1.minutes).isTrusted)
+    }
+
+    @Test
+    fun testRicalNotAfterEnforced() = runTestWithSetup {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val ricalNotAfter = now + 5.minutes
+        val validFrom = now - 1.hours
+        val validUntil = now + 1.hours
+
+        val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(readerRootKey),
+            subject = X500Name.fromName("CN=Expiring RICAL Reader Root"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/crl"
+        )
+        val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                privateKey = readerRootKey,
+                certChain = X509CertChain(listOf(readerRootCert))
+            ),
+            readerKey = readerKey.publicKey,
+            dnsName = "reader.multipaz.org",
+            subject = X500Name.fromName("CN=Reader"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+
+        val ricalKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val ricalCert = buildX509Cert(
+            publicKey = ricalKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test RICAL provider"),
+            issuer = X500Name.fromName("CN=Test RICAL provider"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+
+        val rical = Rical(
+            type = Rical.RICAL_TYPE_READER_AUTHENTICATION,
+            version = "1.0",
+            provider = "Test RICAL provider",
+            date = now,
+            nextUpdate = null,
+            notAfter = ricalNotAfter,
+            certificateInfos = listOf(RicalCertificateInfo(certificate = readerRootCert)),
+            id = 1L,
+            latestRicalUrl = null,
+            extensions = emptyMap(),
+        )
+        val signedRical = SignedRical(rical, X509CertChain(listOf(ricalCert)))
+        val encodedSignedRical = ByteString(
+            signedRical.generate(AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm))
+        )
+        val parsedRical = SignedRical.parse(encodedSignedRical.toByteArray())
+        val ricalTrustManager = RicalTrustManager(parsedRical)
+
+        assertTrue(ricalTrustManager.verify(listOf(readerCert), atTime = now).isTrusted)
+        assertTrue(ricalTrustManager.verify(listOf(readerCert), atTime = ricalNotAfter).isTrusted)
+        ricalTrustManager.verify(listOf(readerCert), atTime = ricalNotAfter + 1.minutes).let {
+            assertFalse(it.isTrusted)
+            assertNotNull(it.error)
+        }
+
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+        trustManager.addRical(encodedSignedRical, TrustMetadata(displayName = "Expiring RICAL"))
+        assertTrue(trustManager.verify(listOf(readerCert), atTime = now).isTrusted)
+        assertFalse(trustManager.verify(listOf(readerCert), atTime = ricalNotAfter + 1.minutes).isTrusted)
+
+        val reloadedTrustManager = TrustManager(storage)
+        assertTrue(reloadedTrustManager.verify(listOf(readerCert), atTime = now).isTrusted)
+        assertFalse(reloadedTrustManager.verify(listOf(readerCert), atTime = ricalNotAfter + 1.minutes).isTrusted)
+    }
+
+    @Test
+    fun testRicalIsTrustAnchorFlag() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val validFrom = now - 5.minutes
+        val validUntil = now + 30.minutes
+
+        val standaloneCaKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val standaloneCaCert = buildX509Cert(
+            publicKey = standaloneCaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(standaloneCaKey, standaloneCaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.fromName("CN=Non-Anchor CA"),
+            issuer = X500Name.fromName("CN=Non-Anchor CA"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
+        }
+        val unanchoredLeafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val unanchoredLeafCert = buildX509Cert(
+            publicKey = unanchoredLeafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(standaloneCaKey, standaloneCaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.fromName("CN=Unanchored Reader"),
+            issuer = standaloneCaCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(standaloneCaCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.fromName("CN=Anchored Reader Root CA"),
+            issuer = X500Name.fromName("CN=Anchored Reader Root CA"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setBasicConstraints(ca = true, pathLenConstraint = 1)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
+        }
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.fromName("CN=Anchored Reader Intermediate CA"),
+            issuer = rootCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
+        }
+        val anchoredLeafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val anchoredLeafCert = buildX509Cert(
+            publicKey = anchoredLeafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.fromName("CN=Anchored Reader"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val ricalKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val ricalCert = buildX509Cert(
+            publicKey = ricalKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test RICAL provider"),
+            issuer = X500Name.fromName("CN=Test RICAL provider"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+        val rical = Rical(
+            type = Rical.RICAL_TYPE_READER_AUTHENTICATION,
+            version = "1.0",
+            provider = "Test RICAL provider",
+            date = now,
+            nextUpdate = null,
+            notAfter = validUntil,
+            certificateInfos = listOf(
+                RicalCertificateInfo(certificate = standaloneCaCert, isTrustAnchor = false),
+                RicalCertificateInfo(certificate = intermediateCert, isTrustAnchor = false),
+                RicalCertificateInfo(certificate = rootCert, isTrustAnchor = true),
+            ),
+            id = 2L,
+            latestRicalUrl = null,
+            extensions = emptyMap(),
+        )
+        val signedRical = SignedRical(rical, X509CertChain(listOf(ricalCert)))
+        val encodedSignedRical = signedRical.generate(
+            AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm)
+        )
+        val ricalTrustManager = RicalTrustManager(SignedRical.parse(encodedSignedRical))
+
+        // Only rootCert (isTrustAnchor=true) may appear in getTrustPoints()
+        assertEquals(1, ricalTrustManager.getTrustPoints().size)
+        assertEquals(rootCert, ricalTrustManager.getTrustPoints().single().certificate)
+
+        // Certificate signed by a non-trust-anchor CA without a trust-anchor root is rejected
+        assertFalse(ricalTrustManager.verify(listOf(unanchoredLeafCert), atTime = now).isTrusted)
+        assertFalse(ricalTrustManager.verify(listOf(standaloneCaCert), atTime = now).isTrusted)
+
+        // Certificate signed by a non-trust-anchor intermediate CA chained to rootCert is accepted
+        val anchoredResult = ricalTrustManager.verify(listOf(anchoredLeafCert), atTime = now)
+        assertTrue(anchoredResult.isTrusted)
+        assertEquals(rootCert, anchoredResult.trustPoints.single().certificate)
+    }
 }

@@ -161,10 +161,12 @@ class SdJwt private constructor(
             }
         }
         val referencedDisclosureStrings = mutableSetOf<String>()
+        val seenDigests = mutableSetOf<String>()
         val processedPayload = processObject(
             obj = jwtBody,
             hashToDisclosureString = hashToDisclosureString,
             path = mutableListOf(),
+            seenDigests = seenDigests,
             visitor = { _, _, disclosure ->
                 if (disclosure != null && !referencedDisclosureStrings.add(disclosure)) {
                     throw IllegalArgumentException("Disclosure referenced more than once")
@@ -693,9 +695,6 @@ class SdJwt private constructor(
     }
 
     companion object {
-        // From SD-JWT spec 9.7.  Selectively-Disclosable Validity Claims
-        private val CLAIMS_THAT_CANNOT_BE_DISCLOSED = setOf("iss", "exp", "nbf", "cnf", "aud")
-
         /**
          * Creates a [SdJwt] from compact serialization.
          *
@@ -1234,16 +1233,20 @@ private fun Random.getRandomSalt(
     return bytes.toBase64Url()
 }
 
+// From SD-JWT spec 9.7.  Selectively-Disclosable Validity Claims
+private val CLAIMS_THAT_CANNOT_BE_DISCLOSED = setOf("iss", "exp", "nbf", "cnf", "aud")
+
 private fun process(
     elem: JsonElement,
     hashToDisclosureString: Map<String, String>,
     path: List<JsonElement>,
+    seenDigests: MutableSet<String>? = null,
     visitor: (path: JsonArray, value: JsonElement, disclosureString: String?) -> Unit,
 ): JsonElement {
     val processedElem = if (elem is JsonObject) {
-        processObject(elem, hashToDisclosureString, path, visitor)
+        processObject(elem, hashToDisclosureString, path, seenDigests, visitor)
     } else if (elem is JsonArray) {
-        processArray(elem, hashToDisclosureString, path, visitor)
+        processArray(elem, hashToDisclosureString, path, seenDigests, visitor)
     } else {
         elem
     }
@@ -1254,25 +1257,40 @@ private fun processObject(
     obj: JsonObject,
     hashToDisclosureString: Map<String, String>,
     path: List<JsonElement>,
+    seenDigests: MutableSet<String>? = null,
     visitor: (path: JsonArray, value: JsonElement, disclosureString: String?) -> Unit,
 ): JsonObject {
     return buildJsonObject {
+        val presentClaimNames = mutableSetOf<String>()
         for (claimName in obj.keys) {
             if (claimName == "_sd" || claimName == "_sd_alg") {
-                // skip
+                if (claimName == "_sd_alg" && path.isNotEmpty()) {
+                    throw IllegalArgumentException("'_sd_alg' is only allowed at the top level")
+                }
             } else {
+                presentClaimNames.add(claimName)
                 val claimValue = obj[claimName]!!
                 val subPath = path + JsonPrimitive(claimName)
                 visitor(JsonArray(subPath), claimValue, null)
-                put(claimName, process(claimValue, hashToDisclosureString, subPath, visitor))
+                put(claimName, process(claimValue, hashToDisclosureString, subPath, seenDigests, visitor))
             }
         }
 
         val embeddedDigests = mutableListOf<String>()
         val _sd = obj["_sd"]
         if (_sd != null) {
-            for (digest in _sd.jsonArray) {
-                embeddedDigests.add(digest.jsonPrimitive.content)
+            val sdArray = _sd as? JsonArray
+                ?: throw IllegalArgumentException("'_sd' must be a JSON array")
+            for (digestElem in sdArray) {
+                val digestPrimitive = digestElem as? JsonPrimitive
+                if (digestPrimitive == null || !digestPrimitive.isString) {
+                    throw IllegalArgumentException("Digest in '_sd' must be a string")
+                }
+                val digest = digestPrimitive.content
+                if (seenDigests != null && !seenDigests.add(digest)) {
+                    throw IllegalArgumentException("Duplicate digest '$digest' in SD-JWT")
+                }
+                embeddedDigests.add(digest)
             }
         }
         for (ed in embeddedDigests) {
@@ -1282,17 +1300,33 @@ private fun processObject(
                     JsonArray.serializer(),
                     disclosureString.fromBase64Url().decodeToString()
                 ).jsonArray
-                val claimName = disclosure[1].jsonPrimitive.content
+                if (disclosure.size != 3) {
+                    throw IllegalArgumentException(
+                        "Object property disclosure must have 3 elements, got ${disclosure.size}"
+                    )
+                }
+                val saltPrimitive = disclosure[0] as? JsonPrimitive
+                if (saltPrimitive == null || !saltPrimitive.isString) {
+                    throw IllegalArgumentException("Disclosure salt must be a string")
+                }
+                val claimNamePrimitive = disclosure[1] as? JsonPrimitive
+                if (claimNamePrimitive == null || !claimNamePrimitive.isString) {
+                    throw IllegalArgumentException("Disclosure claim name must be a string")
+                }
+                val claimName = claimNamePrimitive.content
                 val claimValue = disclosure[2]
-                if (claimName == "_sd" || claimName == "...") {
+                if (claimName == "_sd" || claimName == "..." || claimName == "_sd_alg") {
                     throw IllegalArgumentException("Illegal disclosure claim name")
                 }
-                if (obj.get(claimName) != null) {
+                if (path.isEmpty() && claimName in CLAIMS_THAT_CANNOT_BE_DISCLOSED) {
+                    throw IllegalArgumentException("Claim '$claimName' cannot be selectively disclosed")
+                }
+                if (!presentClaimNames.add(claimName)) {
                     throw IllegalArgumentException("Claim $claimName already exists")
                 }
                 val subPath = path + JsonPrimitive(claimName)
                 visitor(JsonArray(subPath), claimValue, disclosureString)
-                put(claimName, process(claimValue, hashToDisclosureString, subPath, visitor))
+                put(claimName, process(claimValue, hashToDisclosureString, subPath, seenDigests, visitor))
             }
         }
     }
@@ -1302,28 +1336,45 @@ private fun processArray(
     array: JsonArray,
     hashToDisclosureString: Map<String, String>,
     path: List<JsonElement>,
+    seenDigests: MutableSet<String>? = null,
     visitor: (path: JsonArray, value: JsonElement, disclosureString: String?) -> Unit,
 ): JsonArray {
     return buildJsonArray {
         for (n in IntRange(0, array.size - 1)) {
             var claimValue = array[n]
             if (claimValue is JsonObject && claimValue.keys.size == 1 && claimValue.keys.first() == "...") {
-                val digest = claimValue["..."]!!.jsonPrimitive.content
+                val digestPrimitive = claimValue["..."] as? JsonPrimitive
+                if (digestPrimitive == null || !digestPrimitive.isString) {
+                    throw IllegalArgumentException("Digest in '...' must be a string")
+                }
+                val digest = digestPrimitive.content
+                if (seenDigests != null && !seenDigests.add(digest)) {
+                    throw IllegalArgumentException("Duplicate digest '$digest' in SD-JWT")
+                }
                 val disclosureString = hashToDisclosureString[digest]
                 if (disclosureString != null) {
                     val disclosure = Json.decodeFromString(
                         JsonArray.serializer(),
                         disclosureString.fromBase64Url().decodeToString()
                     ).jsonArray
+                    if (disclosure.size != 2) {
+                        throw IllegalArgumentException(
+                            "Array element disclosure must have 2 elements, got ${disclosure.size}"
+                        )
+                    }
+                    val saltPrimitive = disclosure[0] as? JsonPrimitive
+                    if (saltPrimitive == null || !saltPrimitive.isString) {
+                        throw IllegalArgumentException("Disclosure salt must be a string")
+                    }
                     claimValue = disclosure[1]
                     val subPath = path + JsonPrimitive(n)
                     visitor(JsonArray(subPath), claimValue, disclosureString)
-                    add(process(claimValue, hashToDisclosureString, subPath, visitor))
+                    add(process(claimValue, hashToDisclosureString, subPath, seenDigests, visitor))
                 }
             } else {
                 val subPath = path + JsonPrimitive(n)
                 visitor(JsonArray(subPath), claimValue, null)
-                add(process(claimValue, hashToDisclosureString, subPath, visitor))
+                add(process(claimValue, hashToDisclosureString, subPath, seenDigests, visitor))
             }
         }
     }

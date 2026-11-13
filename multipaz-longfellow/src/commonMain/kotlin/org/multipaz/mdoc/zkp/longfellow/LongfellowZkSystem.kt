@@ -16,6 +16,7 @@ import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import kotlin.time.Duration
 import kotlin.time.Instant
 import org.multipaz.cbor.putCborArray
 import org.multipaz.mdoc.response.DeviceResponse
@@ -233,9 +234,23 @@ class LongfellowZkSystem(): ZkSystem {
         return zkDocument
     }
 
-    override fun verifyProof(zkDocument: ZkDocument, zkSystemSpec: ZkSystemSpec, sessionTranscript: DataItem) {
+    override fun verifyProof(
+        zkDocument: ZkDocument,
+        zkSystemSpec: ZkSystemSpec,
+        sessionTranscript: DataItem,
+        atTime: Instant,
+        maxTimestampDrift: Duration,
+    ) {
         if (zkDocument.documentData.msoX5chain == null || zkDocument.documentData.msoX5chain!!.certificates.isEmpty()) {
             throw IllegalArgumentException("zkDocument must contain at least 1 certificate in msoX5chain.")
+        }
+        if (zkDocument.documentData.deviceSigned.isNotEmpty()) {
+            throw ProofVerificationFailureException("Longfellow ZK proofs do not support deviceSigned data elements.")
+        }
+        if ((atTime - zkDocument.documentData.timestamp).absoluteValue > maxTimestampDrift) {
+            throw ProofVerificationFailureException(
+                "ZK document timestamp ${zkDocument.documentData.timestamp} is outside allowed drift of $maxTimestampDrift from $atTime"
+            )
         }
 
         Logger.i(TAG, "Verifying proof using $zkSystemSpec")

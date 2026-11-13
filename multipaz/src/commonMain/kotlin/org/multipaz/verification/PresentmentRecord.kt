@@ -4,6 +4,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.trustmanagement.TrustManagerInterface
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -25,11 +26,19 @@ sealed class PresentmentRecord() : AutoCloseable {
     abstract suspend fun verifyNonce(nonce: ByteString)
 
     /**
-     * Verifies the cryptographic validity of the presentment and the issuer trust chain.
+     * Verifies the cryptographic validity of the presentment.
      * This includes verifying that the credential holder approved all transactions that apply to
      * the presented credentials, even if no data was sent as a response for a given transaction.
      *
+     * Note that this method does not verify whether the issuer is trusted; callers must verify
+     * [VerifiedPresentation.documentSignerCertChain] against an appropriate
+     * [TrustManagerInterface] (passing [MdocVerifiedPresentation.docType] as `docType` for ISO
+     * mdoc presentations, and checking revocation status if applicable).
+     *
      * @param atTime the time at which to evaluate validity.
+     * @param documentTypeRepository optional [DocumentTypeRepository] for resolving claim metadata
+     *     and transaction types.
+     * @param zkSystemRepository optional [ZkSystemRepository] for verifying Zero-Knowledge Proofs.
      * @return a list of verification results, one per document/credential in the presentation.
      */
     abstract suspend fun verify(

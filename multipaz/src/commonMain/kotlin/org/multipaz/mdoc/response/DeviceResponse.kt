@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
@@ -135,13 +136,23 @@ data class DeviceResponse internal constructor(
             } else {
                 val docRequestId = findDocRequestId(deviceRequest, documentTypeRepository, document)
                 if (docRequestId < 0) {
-                    if (deviceRequest.docRequests.any { it.hasTransactionData() }) {
+                    throw IllegalStateException(
+                        "Cannot resolve DocRequest for document with docType '${document.docType}'"
+                    )
+                }
+                val reqIssuerIds = deviceRequest.docRequests[docRequestId].docRequestInfo?.issuerIdentifiers
+                if (!reqIssuerIds.isNullOrEmpty()) {
+                    val requiredAkis = reqIssuerIds.toSet()
+                    val matchesIssuer = document.issuerCertChain.certificates.any { cert ->
+                        cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
+                    }
+                    if (!matchesIssuer) {
                         throw IllegalStateException(
-                            "Cannot resolve DocRequest for document with docType '${document.docType}'"
+                            "Document certificate chain does not match requested issuerIdentifiers for docType '${document.docType}'"
                         )
                     }
-                    emptyList()
-                } else if (documentTypeRepository == null) {
+                }
+                if (documentTypeRepository == null) {
                     emptyList()
                 } else {
                     val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
@@ -167,7 +178,54 @@ data class DeviceResponse internal constructor(
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
             )
         }
+        if (deviceRequest != null) {
+            zkDocuments.forEach { zkDocument ->
+                val matchingZkRequests = deviceRequest.docRequests.filter { req ->
+                    req.docType == zkDocument.documentData.docType &&
+                        (req.docRequestInfo?.docFormat ?: "mso_mdoc") in listOf("mso_mdoc", "mso_mdoc_zk") &&
+                        req.docRequestInfo?.zkRequest != null &&
+                        req.docRequestInfo.zkRequest.systemSpecs.any { it.id == zkDocument.documentData.zkSystemSpecId }
+                }
+                if (matchingZkRequests.isEmpty()) {
+                    throw IllegalStateException(
+                        "Cannot resolve DocRequest with matching zkRequest for ZkDocument with docType '${zkDocument.documentData.docType}'"
+                    )
+                }
+                if (matchingZkRequests.all {
+                        it.hasTransactionData() && it.docRequestInfo?.alternativeDataElements.isNullOrEmpty()
+                    }
+                ) {
+                    throw IllegalStateException("Transaction data is not supported with ZkDocument")
+                }
+                val issuerMatchingZkRequests = matchingZkRequests.filter { req ->
+                    val reqIssuerIds = req.docRequestInfo?.issuerIdentifiers
+                    if (reqIssuerIds.isNullOrEmpty()) {
+                        true
+                    } else {
+                        val requiredAkis = reqIssuerIds.toSet()
+                        zkDocument.documentData.msoX5chain?.certificates?.any { cert ->
+                            cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
+                        } == true
+                    }
+                }
+                if (issuerMatchingZkRequests.isEmpty()) {
+                    throw IllegalStateException(
+                        "ZkDocument certificate chain does not match requested issuerIdentifiers for docType '${zkDocument.documentData.docType}'"
+                    )
+                }
+            }
+            encryptedDocuments.forEach { encDoc ->
+                val req = deviceRequest.docRequests.getOrNull(encDoc.docRequestId)
+                    ?: throw IllegalStateException("Invalid docRequestId ${encDoc.docRequestId} for EncryptedDocuments")
+                if (req.docRequestInfo?.docResponseEncryption == null) {
+                    throw IllegalStateException(
+                        "Unexpected EncryptedDocuments for DocRequest ${encDoc.docRequestId} without docResponseEncryption"
+                    )
+                }
+            }
+        }
         otherDocuments.forEach { otherDocument ->
+            otherDocument.clearVerificationState()
             val docRequestId = if (deviceRequest == null) {
                 -1
             } else {
@@ -208,6 +266,21 @@ data class DeviceResponse internal constructor(
                 atTime = atTime,
                 expectedAudience = expectedAudience
             )
+            val reqIssuerIds = docRequest?.docRequestInfo?.issuerIdentifiers
+            if (!reqIssuerIds.isNullOrEmpty() && otherDocument.docFormat == "dc+sd-jwt") {
+                val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                    otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                )
+                val requiredAkis = reqIssuerIds.toSet()
+                val matchesIssuer = sdJwtKb.sdJwt.x5c?.certificates?.any { cert ->
+                    cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
+                } == true
+                if (!matchesIssuer) {
+                    throw IllegalStateException(
+                        "OtherDocument certificate chain does not match requested issuerIdentifiers"
+                    )
+                }
+            }
         }
     }
 
@@ -232,6 +305,9 @@ data class DeviceResponse internal constructor(
         atTime: Instant = Clock.System.now(),
         rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
+        if (otherDocuments.isNotEmpty() || encryptedDocuments.isNotEmpty()) {
+            throw IllegalStateException("Not a single-document DeviceResponse")
+        }
         if (documents_.size == 1 && zkDocuments.isEmpty()) {
             numTimesVerifyCalled += 1
             documents_.first().verify(
@@ -242,6 +318,9 @@ data class DeviceResponse internal constructor(
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
             )
         } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
+            if (transactionData.isNotEmpty()) {
+                throw IllegalStateException("Transaction data is not supported with ZkDocument")
+            }
             numTimesVerifyCalled += 1
             // Zero-knowledge proof is verified when generating response
         } else {
@@ -392,11 +471,11 @@ data class DeviceResponse internal constructor(
                         )
                     }
                 }
-                if (vct != req.docType &&
-                    deviceRequest.docRequests.any {
+                val isAllowedAlias = documentTypeRepository.vctMatches(vct, req.docType) &&
+                    deviceRequest.docRequests.none {
                         it.docRequestInfo?.docFormat == "dc+sd-jwt" && it.docType == vct
                     }
-                ) {
+                if (vct != req.docType && !isAllowedAlias) {
                     throw IllegalStateException(
                         "OtherDocument vct '$vct' does not match DocRequest at index $docRequestId"
                     )
@@ -410,10 +489,21 @@ data class DeviceResponse internal constructor(
         if (sdJwtIndices.isEmpty()) {
             return -1
         }
-        val vctMatchingIndices = sdJwtIndices.filter { index ->
+        val exactMatchingIndices = sdJwtIndices.filter { index ->
             deviceRequest.docRequests[index].docType == vct
         }
-        val candidates = vctMatchingIndices.ifEmpty { sdJwtIndices }
+        val candidates = exactMatchingIndices.ifEmpty {
+            if (documentTypeRepository == null) {
+                emptyList()
+            } else {
+                sdJwtIndices.filter { index ->
+                    documentTypeRepository.vctMatches(vct, deviceRequest.docRequests[index].docType)
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            return -1
+        }
         if (candidates.size == 1) {
             return candidates.single()
         }
