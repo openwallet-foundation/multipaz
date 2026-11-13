@@ -7,6 +7,9 @@ import org.multipaz.cbor.annotation.CborSerializable
  *
  * @param docType docType of this credential
  * @param namespaces queried claims grouped by their namespaces
+ * @param zkRequested whether zero-knowledge proof presentation was requested
+ * @param zkRequired whether zero-knowledge proof presentation is required
+ * @param zkSystemSpecIds allowed ZK system spec identifiers, or `null` if unrestricted
  */
 @CborSerializable
 data class MdocQueryData(
@@ -14,6 +17,9 @@ data class MdocQueryData(
     override val multiple: Boolean,
     val docType: String,
     val namespaces: List<QueryNamespace>,
+    val zkRequested: Boolean = false,
+    val zkRequired: Boolean = false,
+    val zkSystemSpecIds: List<String>? = null,
 ): QueryData() {
 
     /**

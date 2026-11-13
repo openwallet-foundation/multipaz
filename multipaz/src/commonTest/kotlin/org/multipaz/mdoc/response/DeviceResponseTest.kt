@@ -43,6 +43,7 @@ import org.multipaz.crypto.buildX509Cert
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionType
@@ -1992,12 +1993,40 @@ class DeviceResponseTest {
             encryptionParameters = encryptionParameters,
             docRequestId = 0
         ).apply { addOtherDocument(otherDocument) }.build()
+
+        // Without a verifier-configured otherVcts alias in documentTypeRepository, mismatched vct is rejected.
+        val unapprovedOtherVctError = assertFailsWith<IllegalStateException> {
+            validOtherVctEncrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = requestWithOtherVctAndEncryption
+            )
+        }
+        assertEquals(
+            "OtherDocument vct '${EUPersonalID.EUPID_VCT}' does not match DocRequest docType 'urn:eudi:pid:base:1'",
+            unapprovedOtherVctError.cause?.message
+        )
+
+        val aliasRepo = DocumentTypeRepository().apply {
+            addDocumentType(
+                DocumentType.Builder("EU PID")
+                    .addJsonDocumentType(
+                        type = EUPersonalID.EUPID_VCT,
+                        keyBound = true,
+                        otherVcts = listOf("urn:eudi:pid:base:1"),
+                    )
+                    .build()
+            )
+        }
         val decrypted = validOtherVctEncrypted.decrypt(
             recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
             encryptionParameters = encryptionParameters,
             sessionTranscript = sessionTranscript,
             atTime = euPidTimeSigned,
-            deviceRequest = requestWithOtherVctAndEncryption
+            deviceRequest = requestWithOtherVctAndEncryption,
+            documentTypeRepository = aliasRepo,
         )
         assertEquals(1, decrypted.otherDocuments.size)
         assertEquals("none", decrypted.otherDocuments.single().expectedAudience)
@@ -2430,5 +2459,221 @@ class DeviceResponseTest {
             )
         }
         assertEquals("MSO validUntil is after DS certificate validity period", error.message)
+    }
+
+    @Test
+    fun otherDocumentRejectsUnrequestedVctUnlessVerifierAliasConfigured() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val requestedBaseVct = "urn:example:pid:base:1"
+
+        // 1. Non-transaction path: request for requestedBaseVct, presented EUPID_VCT
+        val nonTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = requestedBaseVct,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+        val nonTxOtherDoc = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val nonTxResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(nonTxOtherDoc)
+        }
+
+        // Rejected without DocumentTypeRepository
+        val noRepoError = assertFailsWith<IllegalStateException> {
+            nonTxResponse.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = nonTxRequest,
+                documentTypeRepository = null,
+                atTime = euPidTimeSigned,
+            )
+        }
+        assertEquals("Failed verification of audience", noRepoError.message)
+        assertEquals(null, nonTxResponse.otherDocuments.single().expectedAudience)
+
+        // Rejected when DocumentTypeRepository does not declare requestedBaseVct in otherVcts
+        val repoWithoutAlias = DocumentTypeRepository().apply {
+            addTransactionType(TestTxType)
+            addDocumentType(
+                DocumentType.Builder("EU PID")
+                    .addJsonDocumentType(type = EUPersonalID.EUPID_VCT, keyBound = true)
+                    .build()
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            nonTxResponse.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = nonTxRequest,
+                documentTypeRepository = repoWithoutAlias,
+                atTime = euPidTimeSigned,
+            )
+        }
+
+        // Accepted when DocumentTypeRepository declares requestedBaseVct in otherVcts of EUPID_VCT
+        val repoWithAlias = DocumentTypeRepository().apply {
+            addTransactionType(TestTxType)
+            addDocumentType(
+                DocumentType.Builder("EU PID")
+                    .addJsonDocumentType(
+                        type = EUPersonalID.EUPID_VCT,
+                        keyBound = true,
+                        otherVcts = listOf(requestedBaseVct),
+                    )
+                    .build()
+            )
+        }
+        nonTxResponse.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = nonTxRequest,
+            documentTypeRepository = repoWithAlias,
+            atTime = euPidTimeSigned,
+        )
+        assertEquals("none", nonTxResponse.otherDocuments.single().expectedAudience)
+
+        val verifiedPresentations = VerificationUtil.verifyMdocDeviceResponse(
+            now = euPidTimeSigned,
+            deviceResponse = nonTxResponse.toDataItem(),
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            documentTypeRepository = repoWithAlias,
+            zkSystemRepository = null,
+            request = nonTxRequest,
+        )
+        assertEquals(1, verifiedPresentations.size)
+
+        // 2. Transaction path: request index 0 asks for requestedBaseVct with TestTxType
+        val txRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = requestedBaseVct,
+                nameSpaces = mapOf(
+                    "_" to mapOf("sdjwtvc_given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false),
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    ),
+                    transactionData = TransactionsInfo(
+                        data = mapOf(
+                            TestTxType.identifier to TestTxType.serializeIso18013Request("tx-nonce")
+                        )
+                    )
+                )
+            )
+        }
+        val taggedTranscript = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(sessionTranscript)))
+        val nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(taggedTranscript)).toBase64Url()
+        val sdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdHash = Crypto.digest(sdJwt.digestAlg, sdJwt.compactSerialization.encodeToByteArray()).toBase64Url()
+        val kbSigningKey = AsymmetricKey.AnonymousSecureAreaBased(
+            alias = euPidCredential.alias,
+            secureArea = euPidCredential.secureArea,
+            keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias),
+        )
+        val txKbJwt = buildJwt(
+            type = "kb+jwt",
+            key = kbSigningKey,
+            creationTime = euPidTimeSigned,
+        ) {
+            put("nonce", nonce)
+            put("aud", "none")
+            put("sd_hash", sdHash)
+            putJsonObject(TestTxType.kbJwtResponseClaimName) {
+                put("doc_request_id", 0)
+            }
+        }
+        val txResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString((sdJwt.compactSerialization + txKbJwt).encodeToByteArray().zlibDeflate()),
+                )
+            )
+        }
+
+        // Rejected on transaction path without verifier alias
+        val txNoAliasError = assertFailsWith<IllegalStateException> {
+            txResponse.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = txRequest,
+                documentTypeRepository = repoWithoutAlias,
+                atTime = euPidTimeSigned,
+            )
+        }
+        assertEquals(
+            "OtherDocument vct '${EUPersonalID.EUPID_VCT}' does not match DocRequest at index 0",
+            txNoAliasError.message,
+        )
+
+        // Accepted on transaction path with verifier alias
+        txResponse.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = txRequest,
+            documentTypeRepository = repoWithAlias,
+            atTime = euPidTimeSigned,
+        )
+        assertEquals("none", txResponse.otherDocuments.single().expectedAudience)
+
+        // Still rejected even with alias when another dc+sd-jwt DocRequest explicitly requests EUPID_VCT
+        val txRequestWithExplicitSubtype = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = requestedBaseVct,
+                nameSpaces = mapOf(
+                    "_" to mapOf("sdjwtvc_given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false),
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    ),
+                    transactionData = TransactionsInfo(
+                        data = mapOf(
+                            TestTxType.identifier to TestTxType.serializeIso18013Request("tx-nonce")
+                        )
+                    )
+                )
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+        }
+        val txMisboundError = assertFailsWith<IllegalStateException> {
+            txResponse.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = txRequestWithExplicitSubtype,
+                documentTypeRepository = repoWithAlias,
+                atTime = euPidTimeSigned,
+            )
+        }
+        assertEquals(
+            "OtherDocument vct '${EUPersonalID.EUPID_VCT}' does not match DocRequest at index 0",
+            txMisboundError.message,
+        )
+        assertEquals(null, txResponse.otherDocuments.single().expectedAudience)
     }
 }

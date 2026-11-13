@@ -113,6 +113,30 @@ class DocumentTypeRepository {
         }
 
     /**
+     * Checks whether [presentedVct] satisfies [requestedVct], either by exact string equality or
+     * via a verifier-configured [JsonDocumentType.otherVcts] relationship in this repository.
+     *
+     * @param presentedVct the `vct` claim from the presented SD-JWT VC credential.
+     * @param requestedVct the `vct` requested by the verifier.
+     * @return `true` if [presentedVct] equals [requestedVct] or if a registered
+     *   [JsonDocumentType] for [presentedVct] lists [requestedVct] in [JsonDocumentType.otherVcts].
+     */
+    fun vctMatches(
+        presentedVct: String,
+        requestedVct: String,
+    ): Boolean {
+        if (presentedVct == requestedVct) {
+            return true
+        }
+        return _documentTypes.any { docType ->
+            val jsonDocType = docType.jsonDocumentType
+            jsonDocType != null &&
+                jsonDocType.vct == presentedVct &&
+                requestedVct in jsonDocType.otherVcts
+        }
+    }
+
+    /**
      * Gets the first [DocumentType] in [documentTypes] with a given mdoc namespace.
      *
      * @param mdocNamespace the mdoc namespace name.

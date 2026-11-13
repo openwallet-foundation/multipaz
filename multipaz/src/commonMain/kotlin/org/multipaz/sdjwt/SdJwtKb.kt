@@ -44,6 +44,13 @@ class SdJwtKb private constructor(
     private val kbSignature: String
 ) {
     /**
+     * The header of the Key Binding JWT.
+     */
+    val jwtHeader: JsonObject by lazy {
+        Json.decodeFromString<JsonObject>(kbHeader.fromBase64Url().decodeToString())
+    }
+
+    /**
      * The body of the SD-JWT+KB.
      *
      * This contains the claims signed by the device-bound key.
@@ -77,8 +84,14 @@ class SdJwtKb private constructor(
         checkCreationTime: (creationTime: Instant) -> Boolean,
         transactionData: List<TransactionData<*>> = listOf()
     ): JsonObject {
+        val typHeader = (jwtHeader["typ"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (typHeader != "kb+jwt") {
+            throw IllegalStateException("KB-JWT header 'typ' must be 'kb+jwt', got '$typHeader'")
+        }
+        val holderKey = sdJwt.kbKey
+            ?: throw IllegalStateException("SD-JWT does not contain a holder binding key in 'cnf'")
         try {
-            JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", sdJwt.kbKey!!)
+            JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", holderKey)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw SignatureVerificationException("Error validating KB signature", e)

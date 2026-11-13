@@ -78,7 +78,26 @@ sealed class QueryData {
                                 claims = list.map { it.second }
                             )
                         }
-                        MdocQueryData(id, multiple, docType, namespaces)
+                        val isZk = format == "mso_mdoc_zk"
+                        val zkSystemSpecIds = if (isZk) {
+                            (meta["zk_system_type"] as? JsonArray)?.map { specElem ->
+                                val specObj = specElem as? JsonObject
+                                    ?: throw IllegalArgumentException("'meta.zk_system_type' entry is invalid in credential query '$id'")
+                                (specObj["id"] as? JsonPrimitive)?.content
+                                    ?: throw IllegalArgumentException("'meta.zk_system_type.id' is missing or invalid in credential query '$id'")
+                            }
+                        } else {
+                            emptyList()
+                        }
+                        MdocQueryData(
+                            id = id,
+                            multiple = multiple,
+                            docType = docType,
+                            namespaces = namespaces,
+                            zkRequested = isZk,
+                            zkRequired = isZk,
+                            zkSystemSpecIds = zkSystemSpecIds,
+                        )
                     }
                     else -> throw IllegalArgumentException("'format' value '$format' is invalid in credential query '$id'")
                 }
@@ -96,9 +115,10 @@ sealed class QueryData {
          */
         fun fromDeviceRequest(deviceRequest: DeviceRequest): List<MdocQueryData> {
             return deviceRequest.docRequests.map { docRequest ->
+                val zkRequest = docRequest.docRequestInfo?.zkRequest
                 MdocQueryData(
                     id = null,
-                    multiple = false,
+                    multiple = docRequest.docRequestInfo?.uniqueDocSetRequired == false,
                     docType = docRequest.docType,
                     namespaces = docRequest.nameSpaces.map { (namespace, claims) ->
                         MdocQueryData.QueryNamespace(
@@ -110,7 +130,10 @@ sealed class QueryData {
                                 )
                             }
                         )
-                    }
+                    },
+                    zkRequested = zkRequest != null,
+                    zkRequired = zkRequest?.zkRequired == true,
+                    zkSystemSpecIds = zkRequest?.systemSpecs?.map { it.id },
                 )
             }
         }

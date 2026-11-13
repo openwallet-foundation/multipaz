@@ -12,6 +12,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Hpke
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
@@ -58,6 +59,8 @@ data class EncryptedDocuments internal constructor(
      * @param atTime the point in time for validating whether returned documents are valid.
      * @param deviceRequest the [DeviceRequest] to which this response is given; required when
      *   decrypting `dc+sd-jwt` documents in [EncryptedDocumentsPlaintext.otherDocuments].
+     * @param documentTypeRepository optional [DocumentTypeRepository] used to resolve verifier-approved
+     *   `dc+sd-jwt` `vct` aliases via [org.multipaz.documenttype.JsonDocumentType.otherVcts].
      * @return a [EncryptedDocumentsPlaintext].
      */
     suspend fun decrypt(
@@ -67,6 +70,7 @@ data class EncryptedDocuments internal constructor(
         transactionDataList: List<List<TransactionData<*>>> = emptyList(),
         atTime: Instant = Clock.System.now(),
         deviceRequest: DeviceRequest? = null,
+        documentTypeRepository: DocumentTypeRepository? = null,
     ): EncryptedDocumentsPlaintext {
         val encSessionTranscript = buildCborArray {
             add(sessionTranscript.asArray[0])
@@ -135,11 +139,11 @@ data class EncryptedDocuments internal constructor(
                     )
                     val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
                         ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
-                    if (vct != docRequest.docType &&
-                        deviceRequest?.docRequests?.any {
+                    val isAllowedAlias = documentTypeRepository?.vctMatches(vct, docRequest.docType) == true &&
+                        deviceRequest?.docRequests?.none {
                             it.docRequestInfo?.docFormat == "dc+sd-jwt" && it.docType == vct
-                        } == true
-                    ) {
+                        } != false
+                    if (vct != docRequest.docType && !isAllowedAlias) {
                         throw IllegalStateException(
                             "OtherDocument vct '$vct' does not match DocRequest docType '${docRequest.docType}'"
                         )

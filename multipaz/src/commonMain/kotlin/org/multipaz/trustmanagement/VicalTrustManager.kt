@@ -54,6 +54,13 @@ class VicalTrustManager(
         validateCaValidity: Boolean,
         docType: String?
     ): TrustResult {
+        val notAfter = signedVical.vical.notAfter
+        if (notAfter != null && atTime > notAfter) {
+            return TrustResult(
+                isTrusted = false,
+                error = IllegalStateException("VICAL is no longer valid ($atTime > $notAfter)")
+            )
+        }
         return TrustManagerUtil.verifyX509TrustChain(
             chain = chain,
             atTime = atTime,

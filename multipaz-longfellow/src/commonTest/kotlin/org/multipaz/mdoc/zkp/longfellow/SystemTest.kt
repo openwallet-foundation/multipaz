@@ -7,10 +7,14 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
+import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.time.Duration.Companion.minutes
 
 class SystemTest {
     @Test
@@ -60,6 +64,25 @@ class SystemTest {
         val zkDocResponse = parsedResponse.zkDocuments.first()
 
         zkRepository.lookup(system.name)!!
-            .verifyProof(zkDocResponse, spec, sessionTranscript)
+            .verifyProof(zkDocResponse, spec, sessionTranscript, atTime = testTime)
+
+        assertFailsWith<ProofVerificationFailureException> {
+            zkRepository.lookup(system.name)!!
+                .verifyProof(zkDocResponse, spec, sessionTranscript, atTime = testTime + 10.minutes)
+        }
+        assertFailsWith<ProofVerificationFailureException> {
+            zkRepository.lookup(system.name)!!
+                .verifyProof(zkDocResponse, spec, sessionTranscript, atTime = testTime - 10.minutes)
+        }
+
+        val tamperedWithDeviceSigned = zkDocResponse.copy(
+            documentData = zkDocResponse.documentData.copy(
+                deviceSigned = mapOf("org.iso.23220.5.1" to mapOf("CHV_1" to Simple.TRUE))
+            )
+        )
+        assertFailsWith<ProofVerificationFailureException> {
+            zkRepository.lookup(system.name)!!
+                .verifyProof(tamperedWithDeviceSigned, spec, sessionTranscript, atTime = testTime)
+        }
     }
 }

@@ -1,8 +1,12 @@
 package org.multipaz.openid.dcql
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.claim.findMatchingClaim
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.request.RequestedClaim
 import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
@@ -46,34 +50,87 @@ data class DcqlCredentialQuery(
      * Verifies that [presentation] matches this credential query's format, type (`vct` or `docType`),
      * and requested claims or `claim_sets`.
      *
+     * @param presentation the verified presentation to check.
+     * @param documentTypeRepository optional [DocumentTypeRepository] used to resolve verifier-approved
+     *   `vct` aliases via [org.multipaz.documenttype.JsonDocumentType.otherVcts].
      * @throws IllegalStateException if [presentation] does not satisfy this query.
      */
-    fun checkPresentationMatches(presentation: VerifiedPresentation) {
-        when (format) {
+    fun checkPresentationMatches(
+        presentation: VerifiedPresentation,
+        documentTypeRepository: DocumentTypeRepository? = null,
+    ) {
+        val candidateClaims = when (format) {
             "dc+sd-jwt" -> {
                 val jsonPresentation = presentation as? JsonVerifiedPresentation
                     ?: throw IllegalStateException("Expected SD-JWT presentation for query '$id'")
-                if (vctValues == null || jsonPresentation.vct !in vctValues) {
+                val matchesVct = vctValues != null && (
+                    jsonPresentation.vct in vctValues ||
+                        (documentTypeRepository != null &&
+                            vctValues.any { documentTypeRepository.vctMatches(jsonPresentation.vct, it) })
+                    )
+                if (!matchesVct) {
                     throw IllegalStateException(
                         "Presented SD-JWT vct '${jsonPresentation.vct}' is not in allowed vct_values $vctValues for query '$id'"
                     )
                 }
+                presentation.issuerSignedClaims
             }
-            "mso_mdoc", "mso_mdoc_zk" -> {
+            "mso_mdoc" -> {
                 val mdocPresentation = presentation as? MdocVerifiedPresentation
                     ?: throw IllegalStateException("Expected mdoc presentation for query '$id'")
+                if (mdocPresentation.zkpUsed) {
+                    throw IllegalStateException("Unexpected ZK presentation for 'mso_mdoc' query '$id'")
+                }
                 if (mdocPresentation.docType != mdocDocType) {
                     throw IllegalStateException(
                         "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '$mdocDocType' for query '$id'"
                     )
                 }
+                presentation.issuerSignedClaims + presentation.deviceSignedClaims
+            }
+            "mso_mdoc_zk" -> {
+                val mdocPresentation = presentation as? MdocVerifiedPresentation
+                    ?: throw IllegalStateException("Expected mdoc ZK presentation for query '$id'")
+                if (!mdocPresentation.zkpUsed) {
+                    throw IllegalStateException("Expected ZK presentation for 'mso_mdoc_zk' query '$id'")
+                }
+                if (mdocPresentation.docType != mdocDocType) {
+                    throw IllegalStateException(
+                        "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '$mdocDocType' for query '$id'"
+                    )
+                }
+                val allowedZkSpecs = (meta["zk_system_type"] as? JsonArray)?.map {
+                    it.jsonObject["id"]!!.jsonPrimitive.content
+                }
+                if (allowedZkSpecs != null && mdocPresentation.zkSystemSpecId !in allowedZkSpecs) {
+                    throw IllegalStateException(
+                        "Presented ZK system spec '${mdocPresentation.zkSystemSpecId}' is not in allowed zk_system_type $allowedZkSpecs for query '$id'"
+                    )
+                }
+                presentation.issuerSignedClaims + presentation.deviceSignedClaims
             }
             else -> throw IllegalStateException("Unsupported format '$format' for query '$id'")
         }
-        val allClaims = presentation.issuerSignedClaims + presentation.deviceSignedClaims
+        if (issuerIdentifiers.isNotEmpty()) {
+            val certChain = presentation.documentSignerCertChain
+                ?: throw IllegalStateException(
+                    "Presented credential has no certificate chain to match trusted_authorities for query '$id'"
+                )
+            val requiredAkis = issuerIdentifiers.toSet()
+            val matchesTrustedAuthority = certChain.certificates.any { cert ->
+                cert.authorityKeyIdentifier?.let { aki ->
+                    requiredAkis.contains(ByteString(aki))
+                } ?: false
+            }
+            if (!matchesTrustedAuthority) {
+                throw IllegalStateException(
+                    "Presented credential certificate chain does not match trusted_authorities for query '$id'"
+                )
+            }
+        }
         if (claimSets.isEmpty()) {
             for (requestedClaim in claims) {
-                if (allClaims.findMatchingClaim(requestedClaim) == null) {
+                if (candidateClaims.findMatchingClaim(requestedClaim) == null) {
                     throw IllegalStateException(
                         "Missing or non-matching requested claim $requestedClaim for query '$id'"
                     )
@@ -83,7 +140,7 @@ data class DcqlCredentialQuery(
             val satisfiedSet = claimSets.any { claimSet ->
                 claimSet.claimIdentifiers.all { claimId ->
                     val requestedClaim = claimIdToClaim[claimId]
-                    requestedClaim != null && allClaims.findMatchingClaim(requestedClaim) != null
+                    requestedClaim != null && candidateClaims.findMatchingClaim(requestedClaim) != null
                 }
             }
             if (!satisfiedSet) {

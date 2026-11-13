@@ -986,6 +986,153 @@ class VerificationSessionTest {
         assertEquals(2, processedMulti.credentialLists["administrator"]?.size)
     }
 
+    @Test
+    fun testSdJwtKbClaimsSeparatedFromIssuerSignedClaimsAndCannotSatisfyDcql() = runTest {
+        setup()
+        val now = Clock.System.now()
+        val nonce = "test-nonce-kb-separation"
+        val holderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderKey = AsymmetricKey.anonymous(holderPrivateKey, Algorithm.ESP256)
+        val credential = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = holderPrivateKey.publicKey,
+            claims = buildJsonObject {
+                put("given_name", "Erika")
+                put("age_over_21", false)
+            },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        )
+
+        // 1. Colliding and unissued claims in KB-JWT must go to deviceSignedClaims, never issuerSignedClaims,
+        //    and must not overwrite issuer-signed values in DcqlProcessedResponse even when an explicit claim id is used.
+        val collidingPresentation = credential.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ) {
+            put("given_name", "Mallory")
+            put("is_admin", true)
+        }.compactSerialization
+
+        val dcqlWithId = """
+            {
+              "credentials": [{
+                "id": "pid",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+                "claims": [{ "id": "claim_given_name", "path": ["given_name"] }]
+              }]
+            }
+        """.trimIndent()
+        val requestWithId = """
+            {
+              "client_id": "$CLIENT_ID",
+              "nonce": "$nonce",
+              "response_uri": "https://$DNS_NAME/post",
+              "dcql_query": $dcqlWithId
+            }
+        """.trimIndent()
+
+        val verifiedList = OpenID4VPPresentmentRecord(
+            vpToken = buildJsonObject { putJsonArray("pid") { add(collidingPresentation) } }.toString(),
+            vpRequest = requestWithId,
+            mdocSessionTranscript = null,
+        ).verify(
+            atTime = now,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+        val vp = assertIs<JsonVerifiedPresentation>(verifiedList.single())
+        val issuerClaims = vp.issuerSignedClaims.associate {
+            it.claimPath.last().jsonPrimitive.content to it.value
+        }
+        val deviceClaims = vp.deviceSignedClaims.associate {
+            it.claimPath.last().jsonPrimitive.content to it.value
+        }
+        assertEquals("Erika", issuerClaims["given_name"]!!.jsonPrimitive.content)
+        assertEquals(null, issuerClaims["is_admin"])
+        assertEquals(null, issuerClaims["nonce"])
+        assertEquals("Mallory", deviceClaims["given_name"]!!.jsonPrimitive.content)
+        assertEquals(true, deviceClaims["is_admin"]!!.jsonPrimitive.boolean)
+        assertEquals(nonce, deviceClaims["nonce"]!!.jsonPrimitive.content)
+
+        val processed = DcqlProcessedResponse(dcqlWithId, verifiedList)
+        val processedCred = processed.credentials["pid"]!!
+        assertEquals("Erika", processedCred.issuerSignedClaims["claim_given_name"]!!.render())
+        assertEquals(null, processedCred.issuerSignedClaims["is_admin"])
+        assertEquals("Mallory", processedCred.deviceSignedClaims["given_name"]!!.render())
+        assertEquals(null, processedCred.deviceSignedClaims["claim_given_name"])
+
+        // 2. A KB-JWT claim must NOT satisfy a missing requested claim in DCQL for dc+sd-jwt.
+        val dcqlMissingClaim = """
+            {
+              "credentials": [{
+                "id": "pid",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+                "claims": [{ "path": ["is_admin"] }]
+              }]
+            }
+        """.trimIndent()
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("pid") { add(collidingPresentation) } }.toString(),
+                vpRequest = """
+                    {
+                      "client_id": "$CLIENT_ID",
+                      "nonce": "$nonce",
+                      "response_uri": "https://$DNS_NAME/post",
+                      "dcql_query": $dcqlMissingClaim
+                    }
+                """.trimIndent(),
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+
+        // 3. A KB-JWT claim must NOT satisfy a DCQL values constraint when the issuer-signed claim was omitted.
+        val filteredWithoutAge = credential.filter { path, _ ->
+            path.first().jsonPrimitive.content != "age_over_21"
+        }.present(
+            signingKey = holderKey,
+            nonce = nonce,
+            audience = CLIENT_ID,
+            creationTime = now,
+        ) {
+            put("age_over_21", true)
+        }.compactSerialization
+
+        val dcqlAgeGate = """
+            {
+              "credentials": [{
+                "id": "pid",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+                "claims": [{ "path": ["age_over_21"], "values": [true] }]
+              }]
+            }
+        """.trimIndent()
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("pid") { add(filteredWithoutAge) } }.toString(),
+                vpRequest = """
+                    {
+                      "client_id": "$CLIENT_ID",
+                      "nonce": "$nonce",
+                      "response_uri": "https://$DNS_NAME/post",
+                      "dcql_query": $dcqlAgeGate
+                    }
+                """.trimIndent(),
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+    }
+
     private companion object {
         const val ORIGIN = "https://verifier.multipaz.org"
         const val DNS_NAME = "verifier.multipaz.org"

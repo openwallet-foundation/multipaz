@@ -69,6 +69,8 @@ interface TrustManagerInterface {
      *   - If the root (IACA) certificate specifies a `countryName` (C), the leaf certificate must have the
      *     same `countryName`.
      *   - If both the root (IACA) and leaf certificate specify a `stateOrProvinceName` (ST), they must match.
+     * - If trust is established via a VICAL or RICAL that specifies a `notAfter` timestamp, [atTime]
+     *   must not exceed `notAfter`.
      * - In accordance with ISO/IEC 18013-5 Second Edition clause 12.8.1:
      *   - If [docType] is provided and trust is established via a VICAL, [docType] must be in the list of
      *     authorized document types for that certificate.

@@ -320,7 +320,11 @@ private suspend fun parseResponse(
                 }
                 lines.add(Line("Issuer DS key", ValueText(mdocDsKeyDesc)))
                 val trustResult =
-                    issuerTrustManager.verify(vp.documentSignerCertChain.certificates, now)
+                    issuerTrustManager.verify(
+                        chain = vp.documentSignerCertChain.certificates,
+                        atTime = now,
+                        docType = vp.docType,
+                    )
                 if (trustResult.isTrusted) {
                     val tpName =
                         trustResult.trustPoints.first().metadata.displayName?.let { " ($it)" } ?: ""

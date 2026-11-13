@@ -15,6 +15,7 @@ import kotlin.time.Instant
  * @property transactionResponses response to transaction data associated with the presented
  *  credential as a map keyed by [TransactionType.identifier], and with the value is a map
  *  with an entry for each item in the transaction response data, including "transaction_data_hash".
+ * @property zkSystemSpecId the ZK system spec identifier used when [zkpUsed] is `true`, or `null`.
  */
 data class MdocVerifiedPresentation(
     override val documentSignerCertChain: X509CertChain,
@@ -30,4 +31,5 @@ data class MdocVerifiedPresentation(
     override val vpTokenIdentifier: String?,
     override val transactionData: List<TransactionData<*>>,
     override val revocationStatus: RevocationStatus? = null,
+    val zkSystemSpecId: String? = null,
 ): VerifiedPresentation()

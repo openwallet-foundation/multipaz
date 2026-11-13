@@ -95,7 +95,9 @@ import org.multipaz.util.zlibInflate
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.verification.VerifierIdentity
+import java.net.URLDecoder
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -881,11 +883,12 @@ private suspend fun handleDcGetDataOpenID4VP(
 ) {
     val response = Json.parseToJsonElement(credentialResponse).jsonObject
 
-    val encryptedResponse = response["response"]
-    val vpToken = if (encryptedResponse != null) {
+    val vpToken = if (session.encryptResponse) {
+        val encryptedResponse = response["response"]?.jsonPrimitive?.content
+            ?: throw InvalidRequestException("Expected encrypted 'response' parameter")
         session.responseWasEncrypted = true
         val decryptedResponse = JsonWebEncryption.decrypt(
-            encryptedResponse.jsonPrimitive.content,
+            encryptedResponse,
             AsymmetricKey.anonymous(
                 privateKey = session.encryptionKey,
                 algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
@@ -893,7 +896,18 @@ private suspend fun handleDcGetDataOpenID4VP(
         ).jsonObject
         decryptedResponse["vp_token"]!!.jsonObject
     } else {
-        response["vp_token"]!!.jsonObject
+        response["vp_token"]?.jsonObject ?: run {
+            val unsecuredJwt = response["response"]?.jsonPrimitive?.content
+                ?: throw InvalidRequestException("'vp_token' is missing in response")
+            val splits = unsecuredJwt.split(".")
+            if (splits.size != 3) {
+                throw InvalidRequestException("Unexpected encrypted response when encryptResponse=false")
+            }
+            Json.decodeFromString(
+                JsonObject.serializer(),
+                splits[1].fromBase64Url().decodeToString()
+            )["vp_token"]!!.jsonObject
+        }
     }
     //Logger.iJson(TAG, "vpToken", vpToken)
 
@@ -1369,27 +1383,44 @@ private suspend fun handleOpenID4VPResponse(
         val kvPairs = mutableMapOf<String, String>()
         for (part in responseString.split("&")) {
             val parts = part.split("=", limit = 2)
-            kvPairs[parts[0]] = parts[1]
+            if (parts.size == 2) {
+                kvPairs[URLDecoder.decode(parts[0], StandardCharsets.UTF_8)] =
+                    URLDecoder.decode(parts[1], StandardCharsets.UTF_8)
+            }
         }
 
-        val responseJwtCs = kvPairs["response"]!!
-        val splits = responseJwtCs.split(".")
-        val responseObj = if (splits.size == 3) {
-            // Unsecured JWT
-            Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
-        } else {
+        val vpToken = if (session.encryptResponse) {
+            val responseJwtCs = kvPairs["response"]
+                ?: throw InvalidRequestException("Expected encrypted 'response' parameter")
             session.responseWasEncrypted = true
-            JsonWebEncryption.decrypt(
+            val responseObj = JsonWebEncryption.decrypt(
                 encryptedJwt = responseJwtCs,
                 recipientKey = AsymmetricKey.anonymous(
                     privateKey = session.encryptionKey,
                     algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
                 )
             )
+            responseObj["vp_token"]!!.jsonObject
+        } else {
+            val vpTokenStr = kvPairs["vp_token"]
+            if (vpTokenStr != null) {
+                Json.decodeFromString(JsonObject.serializer(), vpTokenStr)
+            } else {
+                val responseJwtCs = kvPairs["response"]
+                    ?: throw InvalidRequestException("'vp_token' is missing in response")
+                val splits = responseJwtCs.split(".")
+                if (splits.size != 3) {
+                    throw InvalidRequestException("Unexpected encrypted response when encryptResponse=false")
+                }
+                val responseObj = Json.decodeFromString(
+                    JsonObject.serializer(),
+                    splits[1].fromBase64Url().decodeToString()
+                )
+                responseObj["vp_token"]!!.jsonObject
+            }
         }
-        //Logger.iJson(TAG, "responseObj", responseObj)
+        //Logger.iJson(TAG, "vpToken", vpToken)
 
-        val vpToken = responseObj["vp_token"]!!.jsonObject
         for ((_, value) in vpToken) {
             for (credElement in value.jsonArray) {
                 val vpTokenForCred = credElement.jsonPrimitive.content
@@ -1620,7 +1651,10 @@ private suspend fun handleGetDataMdoc(
         for (document in deviceResponse.documents) {
             val lines = headerLines.toMutableList()
             try {
-                val trustResult = trustManager.verify(document.issuerCertChain.certificates)
+                val trustResult = trustManager.verify(
+                    chain = document.issuerCertChain.certificates,
+                    docType = document.docType,
+                )
                 if (trustResult.isTrusted) {
                     val tp = trustResult.trustPoints[0]
                     val name = tp.metadata.displayName ?: tp.certificate.subject.name
@@ -1710,7 +1744,10 @@ private suspend fun handleGetDataMdoc(
                     lines.add(ResultLine("Issuer", "No msoX5chain in ZkDocumentData"))
                 } else {
                     val trustResult =
-                        trustManager.verify(zkDocument.documentData.msoX5chain!!.certificates)
+                        trustManager.verify(
+                            chain = zkDocument.documentData.msoX5chain!!.certificates,
+                            docType = zkDocument.documentData.docType,
+                        )
                     if (trustResult.isTrusted) {
                         val tp = trustResult.trustPoints[0]
                         val name = tp.metadata.displayName ?: tp.certificate.subject.name

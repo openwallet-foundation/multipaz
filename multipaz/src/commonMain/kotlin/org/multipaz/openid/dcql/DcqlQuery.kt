@@ -18,6 +18,7 @@ import org.multipaz.claim.Claim
 import org.multipaz.claim.findMatchingClaim
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.FaceMatchingMode
 import org.multipaz.presentment.PresentmentCredentialMatch
@@ -468,6 +469,7 @@ data class DcqlQuery(
     fun checkResponseSatisfiesQuery(
         presentationsByQueryId: Map<String, List<VerifiedPresentation>>,
         enforceClaimConstraints: Boolean = true,
+        documentTypeRepository: DocumentTypeRepository? = null,
     ) {
         val queryById = credentialQueries.associateBy { it.id }
         for ((queryId, presentations) in presentationsByQueryId) {
@@ -483,7 +485,7 @@ data class DcqlQuery(
             }
             if (enforceClaimConstraints) {
                 for (presentation in presentations) {
-                    credQuery.checkPresentationMatches(presentation)
+                    credQuery.checkPresentationMatches(presentation, documentTypeRepository)
                 }
             }
         }

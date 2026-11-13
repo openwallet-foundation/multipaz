@@ -29,6 +29,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
+import org.multipaz.claim.findMatchingClaim
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
@@ -38,6 +39,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
@@ -49,6 +51,7 @@ import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.mdocVersionCompareTo
+import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
@@ -242,7 +245,8 @@ object VerificationUtil {
         when (exchangeProtocol) {
             "openid4vp",
             "openid4vp-v1-unsigned",
-            "openid4vp-v1-signed" -> {
+            "openid4vp-v1-signed",
+            "openid4vp-v1-multisigned" -> {
                 put(
                     "data",
                     OpenID4VP.generateRequest(
@@ -785,6 +789,8 @@ object VerificationUtil {
      * @param nonce the nonce.
      * @param origin the origin.
      * @param responseEncryptionKey the response encryption or `null` if the response isn't encrypted.
+     * @param clientId optional `client_id` used for signed OpenID4VP Draft 24 requests; if `null`,
+     *   `web-origin:<origin>` is used for Draft 24 handover computation.
      * @return a [OpenID4VPDcResponse] or [MdocApiDcResponse] with the cleartext response.
      */
     suspend fun decryptDcResponse(
@@ -792,32 +798,43 @@ object VerificationUtil {
         nonce: ByteString,
         origin: String,
         responseEncryptionKey: AsymmetricKey?,
+        clientId: String? = null,
     ): DcResponse {
         when (val exchangeProtocol = response["protocol"]!!.jsonPrimitive.content) {
             "openid4vp",
             "openid4vp-v1-signed",
+            "openid4vp-v1-multisigned",
             "openid4vp-v1-unsigned" -> {
-                val response = response["data"]!!.jsonObject["response"]!!.jsonPrimitive.content
-                val splits = response.split(".")
-                val responseObj = if (splits.size == 3) {
-                    // Unsecured JWT
-                    Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
-                } else {
-                    if (responseEncryptionKey == null) {
-                        throw IllegalStateException("Response is encryption but no key was provided for decryption")
-                    }
+                val dataObj = response["data"]!!.jsonObject
+                val responseObj = if (responseEncryptionKey != null) {
+                    val encryptedResponse = dataObj["response"]?.jsonPrimitive?.content
+                        ?: throw IllegalStateException("Expected encrypted 'response' parameter")
                     JsonWebEncryption.decrypt(
-                        encryptedJwt = response,
+                        encryptedJwt = encryptedResponse,
                         recipientKey = responseEncryptionKey
                     )
+                } else {
+                    val jwtResponse = dataObj["response"]?.jsonPrimitive?.content
+                    if (jwtResponse != null) {
+                        val splits = jwtResponse.split(".")
+                        if (splits.size != 3) {
+                            throw IllegalStateException("Response is encrypted but no key was provided for decryption")
+                        }
+                        // Unsecured JWT (Draft 24)
+                        Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
+                    } else {
+                        // OpenID4VP 1.0 unencrypted dc_api places vp_token directly in data
+                        dataObj
+                    }
                 }
-                val vpToken = responseObj["vp_token"]!!.jsonObject
+                val vpToken = responseObj["vp_token"]?.jsonObject
+                    ?: throw IllegalStateException("'vp_token' is missing or invalid in response")
 
                 val handoverInfo = if (exchangeProtocol == "openid4vp") {
                     // Draft 24
                     buildCborArray {
                         add(origin)
-                        add("web-origin:$origin")
+                        add(clientId ?: "web-origin:$origin")
                         add(nonce.toByteArray().toBase64Url())
                     }
                 } else {
@@ -967,7 +984,12 @@ object VerificationUtil {
                             expectedAudience = expectedAudience,
                             requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
                         ) as JsonVerifiedPresentation
-                        if (sdjwtVerifiedPresentation.vct !in credQueryData.vct) {
+                        val matchesVct = sdjwtVerifiedPresentation.vct in credQueryData.vct ||
+                            (documentTypeRepository != null &&
+                                credQueryData.vct.any {
+                                    documentTypeRepository.vctMatches(sdjwtVerifiedPresentation.vct, it)
+                                })
+                        if (!matchesVct) {
                             throw IllegalStateException(
                                 "Presented SD-JWT vct '${sdjwtVerifiedPresentation.vct}' is not in allowed vct_values ${credQueryData.vct} for query '$credId'"
                             )
@@ -981,12 +1003,30 @@ object VerificationUtil {
                             deviceResponse = Cbor.decode(credBase64.fromBase64Url()),
                             sessionTranscript = sessionTranscript!!,
                             documentTypeRepository = documentTypeRepository,
-                            zkSystemRepository = zkSystemRepository,
+                            zkSystemRepository = if (credQueryData.zkRequested) zkSystemRepository else null,
                             transactionData = transactionData,
                             vpTokenIdentifier = credId
                         )
                         check(mdocVerifiedPresentations.size == 1)
                         val mdocPresentation = mdocVerifiedPresentations.single() as MdocVerifiedPresentation
+                        if (!credQueryData.zkRequested && mdocPresentation.zkpUsed) {
+                            throw IllegalStateException(
+                                "Unexpected ZK presentation for non-ZK query '$credId'"
+                            )
+                        }
+                        if (credQueryData.zkRequired && !mdocPresentation.zkpUsed) {
+                            throw IllegalStateException(
+                                "Expected ZK presentation for 'mso_mdoc_zk' query '$credId'"
+                            )
+                        }
+                        if (mdocPresentation.zkpUsed &&
+                            credQueryData.zkSystemSpecIds != null &&
+                            mdocPresentation.zkSystemSpecId !in credQueryData.zkSystemSpecIds
+                        ) {
+                            throw IllegalStateException(
+                                "Presented ZK system spec '${mdocPresentation.zkSystemSpecId}' is not in allowed zk_system_type ${credQueryData.zkSystemSpecIds} for query '$credId'"
+                            )
+                        }
                         if (mdocPresentation.docType != credQueryData.docType) {
                             throw IllegalStateException(
                                 "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '${credQueryData.docType}' for query '$credId'"
@@ -998,7 +1038,10 @@ object VerificationUtil {
                 }
             }
         }
-        dcqlQuery.checkResponseSatisfiesQuery(presentationsByQueryId)
+        dcqlQuery.checkResponseSatisfiesQuery(
+            presentationsByQueryId = presentationsByQueryId,
+            documentTypeRepository = documentTypeRepository,
+        )
         return verifiedPresentations
     }
 
@@ -1046,9 +1089,11 @@ object VerificationUtil {
 
         val issuerCertChain = sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")
+        val issuerPublicKey = issuerCertChain.certificates.firstOrNull()?.publicKey
+            ?: throw IllegalStateException("Empty `x5c` certificate chain in SD-JWT header")
         val processedPayload = if (sdJwtKb != null) {
             sdJwtKb.verify(
-                issuerKey = issuerCertChain.certificates.first().ecPublicKey,
+                issuerKey = issuerPublicKey,
                 checkNonce = { nonceInCredential -> nonceInCredential == nonce },
                 checkAudience = { audienceInCredential ->
                     expectedAudience != null && audienceInCredential == expectedAudience
@@ -1061,8 +1106,11 @@ object VerificationUtil {
             )
         } else {
             sdJwt.verify(
-                issuerKey = issuerCertChain.certificates.first().ecPublicKey
+                issuerKey = issuerPublicKey
             )
+        }
+        if (sdJwtKb == null && processedPayload.containsKey("cnf")) {
+            throw IllegalStateException("`cnf` claim present in SD-JWT, but no Key Binding JWT was provided")
         }
 
         val vct = processedPayload["vct"]!!.jsonPrimitive.content
@@ -1109,8 +1157,9 @@ object VerificationUtil {
                 val jsonAttr = dt?.jsonDocumentType?.getDocumentAttribute(claimName)
                 // TODO: should we pass claims that we know were transaction results? Right now
                 //  we pass everything.
-                claims.add(JsonClaim(
-                    displayName = jsonAttr?.displayName ?: "$claimName (Device Signed)",
+                // KB-JWT claims are signed by the holder, not the issuer.
+                deviceSignedClaims.add(JsonClaim(
+                    displayName = jsonAttr?.displayName ?: claimName,
                     attribute = jsonAttr,
                     vct = vct,
                     claimPath = JsonArray(listOf(JsonPrimitive(claimName))),
@@ -1159,6 +1208,11 @@ object VerificationUtil {
         request: DeviceRequest?,
     ): List<VerifiedPresentation> {
         val deviceResponse = DeviceResponse.fromDataItem(deviceResponse)
+        if (deviceResponse.status != DeviceResponse.STATUS_OK) {
+            throw IllegalStateException(
+                "DeviceResponse status is ${deviceResponse.status}, expected ${DeviceResponse.STATUS_OK}"
+            )
+        }
         deviceResponse.verify(
             sessionTranscript = sessionTranscript,
             eReaderKey = eReaderKey,
@@ -1166,13 +1220,17 @@ object VerificationUtil {
             documentTypeRepository = documentTypeRepository,
             atTime = now
         )
-        return createVerifiedPresentationList(
+        val presentations = createVerifiedPresentationList(
             now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository
         )
+        if (request != null) {
+            checkDeviceRequestSatisfied(request, presentations, documentTypeRepository)
+        }
+        return presentations
     }
 
     /**
@@ -1195,6 +1253,11 @@ object VerificationUtil {
         vpTokenIdentifier: String
     ): List<VerifiedPresentation> {
         val deviceResponse = DeviceResponse.fromDataItem(deviceResponse)
+        if (deviceResponse.status != DeviceResponse.STATUS_OK) {
+            throw IllegalStateException(
+                "DeviceResponse status is ${deviceResponse.status}, expected ${DeviceResponse.STATUS_OK}"
+            )
+        }
         deviceResponse.verifySingleDoc(
             sessionTranscript = sessionTranscript,
             transactionData = transactionData,
@@ -1210,6 +1273,172 @@ object VerificationUtil {
         )
     }
 
+    private fun checkDeviceRequestSatisfied(
+        request: DeviceRequest,
+        presentations: List<VerifiedPresentation>,
+        documentTypeRepository: DocumentTypeRepository?,
+    ) {
+        val matchingIndicesPerPresentation = presentations.map { presentation ->
+            val indices = request.docRequests.indices.filter { reqIndex ->
+                presentationMatchesDocRequest(presentation, reqIndex, request, documentTypeRepository)
+            }
+            if (indices.isEmpty()) {
+                throw IllegalStateException(
+                    "Presented credential does not satisfy any requested DocRequest in DeviceRequest"
+                )
+            }
+            indices
+        }
+
+        val counts = IntArray(request.docRequests.size)
+        fun areUseCasesSatisfied(): Boolean {
+            val useCases = request.deviceRequestInfo?.useCases
+            if (useCases.isNullOrEmpty()) {
+                return counts.all { it >= 1 }
+            }
+            return useCases.all { useCase ->
+                !useCase.mandatory || useCase.documentSets.any { docSet ->
+                    docSet.docRequestIds.all { reqId -> reqId in counts.indices && counts[reqId] >= 1 }
+                }
+            }
+        }
+
+        fun assign(presIndex: Int): Boolean {
+            if (presIndex == matchingIndicesPerPresentation.size) {
+                return areUseCasesSatisfied()
+            }
+            for (reqIndex in matchingIndicesPerPresentation[presIndex]) {
+                val allowMultiple = request.docRequests[reqIndex].docRequestInfo?.uniqueDocSetRequired == false
+                if (!allowMultiple && counts[reqIndex] >= 1) {
+                    continue
+                }
+                counts[reqIndex] += 1
+                if (assign(presIndex + 1)) {
+                    return true
+                }
+                counts[reqIndex] -= 1
+            }
+            return false
+        }
+
+        if (!assign(0)) {
+            throw IllegalStateException("DeviceResponse does not satisfy DeviceRequest constraints")
+        }
+    }
+
+    private fun presentationMatchesDocRequest(
+        presentation: VerifiedPresentation,
+        reqIndex: Int,
+        request: DeviceRequest,
+        documentTypeRepository: DocumentTypeRepository?,
+    ): Boolean {
+        val req = request.docRequests[reqIndex]
+        val docFormat = req.docRequestInfo?.docFormat ?: "mso_mdoc"
+        when (docFormat) {
+            "dc+sd-jwt" -> {
+                if (presentation !is JsonVerifiedPresentation) {
+                    return false
+                }
+                val isAllowedAlias = documentTypeRepository?.vctMatches(presentation.vct, req.docType) == true &&
+                    request.docRequests.none {
+                        it.docRequestInfo?.docFormat == "dc+sd-jwt" && it.docType == presentation.vct
+                    }
+                if (presentation.vct != req.docType && !isAllowedAlias) {
+                    return false
+                }
+                val candidateClaims = presentation.issuerSignedClaims
+                fun hasElement(namespace: String, elementName: String): Boolean {
+                    if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        return presentation.transactionData.any { it.type.identifier == elementName }
+                    }
+                    if (namespace != "_") {
+                        return false
+                    }
+                    val path = req.docRequestInfo?.dataElementIdentifierMapping?.get(elementName)
+                        ?: JsonArray(listOf(JsonPrimitive(elementName)))
+                    val requestedClaim = JsonRequestedClaim(
+                        vctValues = listOf(presentation.vct),
+                        claimPath = path,
+                    )
+                    return candidateClaims.findMatchingClaim(requestedClaim) != null
+                }
+                for ((namespace, dataElements) in req.nameSpaces) {
+                    if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        continue
+                    }
+                    for ((elementName, _) in dataElements) {
+                        if (hasElement(namespace, elementName)) {
+                            continue
+                        }
+                        val alternatives = req.docRequestInfo?.alternativeDataElements?.find {
+                            it.requestedElement.namespace == namespace &&
+                                it.requestedElement.dataElement == elementName
+                        }
+                        val altSatisfied = alternatives?.alternativeElementSets?.any { altSet ->
+                            altSet.all { hasElement(it.namespace, it.dataElement) }
+                        } == true
+                        if (!altSatisfied) {
+                            return false
+                        }
+                    }
+                }
+                return true
+            }
+
+            "mso_mdoc", "mso_mdoc_zk" -> {
+                if (presentation !is MdocVerifiedPresentation || presentation.docType != req.docType) {
+                    return false
+                }
+                val zkRequest = req.docRequestInfo?.zkRequest
+                if (presentation.zkpUsed) {
+                    if (zkRequest == null || zkRequest.systemSpecs.none { it.id == presentation.zkSystemSpecId }) {
+                        return false
+                    }
+                } else {
+                    if (docFormat == "mso_mdoc_zk" || zkRequest?.zkRequired == true) {
+                        return false
+                    }
+                }
+                val candidateClaims = presentation.issuerSignedClaims + presentation.deviceSignedClaims
+                fun hasElement(namespace: String, elementName: String): Boolean {
+                    if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        return presentation.transactionData.any { it.type.identifier == elementName }
+                    }
+                    val requestedClaim = MdocRequestedClaim(
+                        docType = presentation.docType,
+                        namespaceName = namespace,
+                        dataElementName = elementName,
+                        intentToRetain = false,
+                    )
+                    return candidateClaims.findMatchingClaim(requestedClaim) != null
+                }
+                for ((namespace, dataElements) in req.nameSpaces) {
+                    if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        continue
+                    }
+                    for ((elementName, _) in dataElements) {
+                        if (hasElement(namespace, elementName)) {
+                            continue
+                        }
+                        val alternatives = req.docRequestInfo?.alternativeDataElements?.find {
+                            it.requestedElement.namespace == namespace &&
+                                it.requestedElement.dataElement == elementName
+                        }
+                        val altSatisfied = alternatives?.alternativeElementSets?.any { altSet ->
+                            altSet.all { hasElement(it.namespace, it.dataElement) }
+                        } == true
+                        if (!altSatisfied) {
+                            return false
+                        }
+                    }
+                }
+                return true
+            }
+
+            else -> return false
+        }
+    }
+
     private suspend fun createVerifiedPresentationList(
         now: Instant,
         deviceResponse: DeviceResponse,
@@ -1218,6 +1447,9 @@ object VerificationUtil {
         zkSystemRepository: ZkSystemRepository?,
         vpTokenIdentifier: String? = null
     ): List<VerifiedPresentation> {
+        if (deviceResponse.encryptedDocuments.isNotEmpty()) {
+            throw IllegalStateException("Unexpected encryptedDocuments in DeviceResponse")
+        }
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
         for (document in deviceResponse.documents) {
             val transactionResponses = document.transactionResponse
@@ -1274,6 +1506,11 @@ object VerificationUtil {
             )
         }
         for (zkDocument in deviceResponse.zkDocuments) {
+            if ((now - zkDocument.documentData.timestamp).absoluteValue > 5.minutes) {
+                throw ProofVerificationFailureException(
+                    "ZK document timestamp ${zkDocument.documentData.timestamp} is outside allowed 5m drift from $now"
+                )
+            }
             val zkSystemSpec = zkSystemRepository?.getAllZkSystemSpecs()?.find {
                 it.id == zkDocument.documentData.zkSystemSpecId
             } ?: throw IllegalStateException("Zk System '${zkDocument.documentData.zkSystemSpecId}' was not found.")
@@ -1282,6 +1519,7 @@ object VerificationUtil {
                     zkDocument = zkDocument,
                     zkSystemSpec = zkSystemSpec,
                     sessionTranscript = sessionTranscript,
+                    atTime = now,
                 )
                 ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
 
@@ -1312,7 +1550,7 @@ object VerificationUtil {
             for ((namespaceName, dataElements) in zkDocument.documentData.deviceSigned) {
                 for ((dataElementName, value) in dataElements) {
                     val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
-                    issuerSignedClaims.add(
+                    deviceSignedClaims.add(
                         MdocClaim(
                             displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                             attribute = mdocAttr?.attribute,
@@ -1338,15 +1576,15 @@ object VerificationUtil {
                     docType = zkDocument.documentData.docType,
                     transactionResponses = null,
                     vpTokenIdentifier = vpTokenIdentifier,
-                    transactionData = listOf()  // No transactions for ZKP
+                    transactionData = listOf(),  // No transactions for ZKP
+                    zkSystemSpecId = zkDocument.documentData.zkSystemSpecId,
                 )
             )
         }
 
         for (document in deviceResponse.otherDocuments) {
             if (document.docFormat != "dc+sd-jwt") {
-                Logger.w(TAG, "Unknown docFormat ${document.docFormat}")
-                continue
+                throw IllegalStateException("Unsupported OtherDocument format '${document.docFormat}'")
             }
             val sdJwtKbCompactSerialization = document.data.toByteArray().zlibInflate().decodeToString()
 

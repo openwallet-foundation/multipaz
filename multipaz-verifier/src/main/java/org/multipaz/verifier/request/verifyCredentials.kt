@@ -332,7 +332,11 @@ private suspend fun processPresentation(
         for (credential in credentialList) {
             val presentation = credential.presentation
             val trusted = presentation.documentSignerCertChain?.let {
-                trustManager.verify(it.certificates, now).isTrusted
+                trustManager.verify(
+                    chain = it.certificates,
+                    atTime = now,
+                    docType = (presentation as? MdocVerifiedPresentation)?.docType,
+                ).isTrusted
             }
             val transactions = when (presentation) {
                 is JsonVerifiedPresentation ->
@@ -355,10 +359,11 @@ private suspend fun processPresentation(
                 putJsonObject("issuer_signed_claims") {
                     putClaims(credential.issuerSignedClaims)
                 }
-                if (credential.deviceSignedClaims.isNotEmpty()) {
-                    putJsonObject("device_signed_claims") {
-                        putClaims(credential.deviceSignedClaims)
-                    }
+                val deviceSignedClaimsJson = buildJsonObject {
+                    putClaims(credential.deviceSignedClaims)
+                }
+                if (deviceSignedClaimsJson.isNotEmpty()) {
+                    put("device_signed_claims", deviceSignedClaimsJson)
                 }
                 transactions?.let { put("transactions", it) }
                 if (presentation.zkpUsed) {

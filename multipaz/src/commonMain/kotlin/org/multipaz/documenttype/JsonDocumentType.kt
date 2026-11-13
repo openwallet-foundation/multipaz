@@ -25,11 +25,14 @@ import kotlinx.serialization.json.JsonElement
  * @property claims the claims for the document type. Each claim name uses `.` to separate path components
  *   for example `age_equal_or_over.18`.
  * @property keyBound `true` if a device-bound key must exist for the document.
+ * @property otherVcts other Verifiable Credential Types (such as base/parent VCTs from SD-JWT VC
+ *   type metadata `extends`) that credentials of [vct] also satisfy.
  */
 class JsonDocumentType private constructor(
     val vct: String,
     val claims: Map<String, DocumentAttribute>,
-    val keyBound: Boolean
+    val keyBound: Boolean,
+    val otherVcts: List<String> = emptyList(),
 ) {
 
     /**
@@ -53,10 +56,12 @@ class JsonDocumentType private constructor(
      *
      * @param vct the document type e.g. `urn:eudi:pid:1`.
      * @param keyBound `true` if a device-bound key must exist for the document.
+     * @param otherVcts other Verifiable Credential Types that credentials of [vct] also satisfy.
      */
     data class Builder(
         val vct: String,
         val keyBound: Boolean = true,
+        val otherVcts: List<String> = emptyList(),
         internal val claims: MutableMap<String, Pair<DocumentAttribute, MutableList<DocumentAttribute>>> = mutableMapOf(),
     ) {
         /**
@@ -129,6 +134,6 @@ class JsonDocumentType private constructor(
         /**
          * Build the [JsonDocumentType].
          */
-        fun build() = JsonDocumentType(vct, claims.mapValues { (_, v) -> v.first }, keyBound)
+        fun build() = JsonDocumentType(vct, claims.mapValues { (_, v) -> v.first }, keyBound, otherVcts)
     }
 }
