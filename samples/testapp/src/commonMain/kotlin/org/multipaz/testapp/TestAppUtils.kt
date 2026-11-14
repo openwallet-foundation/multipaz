@@ -50,6 +50,7 @@ import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
@@ -506,6 +507,20 @@ object TestAppUtils {
                             PingTransaction.identifier,
                         )
                     )
+                )
+                // Key-bound, so it can sign an AP2 delegation (DelegateTransaction).
+                provisionDocument(
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    deviceKeyAlgorithm = deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm = deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain = numCredentialsPerDomain,
+                    documentType = DigitalPaymentCredentialSdJwt.getDocumentType(),
+                    givenNameOverride = "Erika",
+                    displayName = "Erika's Payment Card (SD-JWT)",
+                    cardArtResource = Res.drawable.payment_card_art
                 )
                 provisionDocument(
                     documentStore = documentStore,

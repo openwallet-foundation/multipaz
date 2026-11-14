@@ -73,6 +73,8 @@ class SdJwtKb private constructor(
      * @param checkAudience a function to check that the audience in the KB JWT is as expected.
      * @param checkCreationTime a function to check that the creation time in the KB JWT is as expected.
      * @param transactionData transaction data that was sent with the request.
+     * @param expectedType the `typ` the KB-JWT must have: `kb+jwt`, as RFC 9901 §4.3 requires. A
+     *   profile that defines its own passes it, such as Delegate SD-JWT's `kb+sd-jwt` (§5.1.4).
      * @return the processed SD-JWT payload.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
@@ -82,11 +84,12 @@ class SdJwtKb private constructor(
         checkNonce: (nonce: String) -> Boolean,
         checkAudience: (audience: String) -> Boolean,
         checkCreationTime: (creationTime: Instant) -> Boolean,
-        transactionData: List<TransactionData<*>> = listOf()
+        transactionData: List<TransactionData<*>> = listOf(),
+        expectedType: String = "kb+jwt",
     ): JsonObject {
         val typHeader = (jwtHeader["typ"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-        if (typHeader != "kb+jwt") {
-            throw IllegalStateException("KB-JWT header 'typ' must be 'kb+jwt', got '$typHeader'")
+        if (typHeader != expectedType) {
+            throw IllegalStateException("KB-JWT header 'typ' must be '$expectedType', got '$typHeader'")
         }
         val holderKey = sdJwt.kbKey
             ?: throw IllegalStateException("SD-JWT does not contain a holder binding key in 'cnf'")

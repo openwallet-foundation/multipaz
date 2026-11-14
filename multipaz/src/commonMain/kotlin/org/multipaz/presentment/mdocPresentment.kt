@@ -3,6 +3,7 @@ package org.multipaz.presentment
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.json.JsonObjectBuilder
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -472,26 +473,44 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         docRequestId = docRequest.docRequestId,
                         transactionUserInput = match.transactionUserInput
                     )
-                    val sdJwtKb = filteredSdJwtVc.present(
-                        signingKey = AsymmetricKey.AnonymousSecureAreaBased(
-                            alias = match.credential.alias,
-                            secureArea = match.credential.secureArea,
-                            keyInfo = match.credential.secureArea.getKeyInfo(match.credential.alias),
-                            unlockReason = PresentmentUnlockReason(match.credential),
-                        ),
-                        nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptToUseBytes)).toBase64Url(),
-                        audience = audience,
-                        creationTime = creationTime
-                    ) {
+                    val signingKey = AsymmetricKey.AnonymousSecureAreaBased(
+                        alias = match.credential.alias,
+                        secureArea = match.credential.secureArea,
+                        keyInfo = match.credential.secureArea.getKeyInfo(match.credential.alias),
+                        unlockReason = PresentmentUnlockReason(match.credential),
+                    )
+                    val nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptToUseBytes)).toBase64Url()
+                    val type = TransactionData.sdJwtKbType(match.transactionData)
+                    val claims: JsonObjectBuilder.() -> Unit = {
                         if (!match.transactionData.isEmpty()) {
-                            for ((key, response) in transactionResponse) {
+                            for ((key, response) in transactionResponse.claims) {
                                 put(key, response)
                             }
                         }
                     }
+                    val presentation = if (transactionResponse.disclosures.isEmpty()) {
+                        filteredSdJwtVc.present(
+                            signingKey = signingKey,
+                            nonce = nonce,
+                            audience = audience,
+                            creationTime = creationTime,
+                            type = type,
+                            additionalClaimBuilderAction = claims,
+                        ).compactSerialization
+                    } else {
+                        filteredSdJwtVc.presentWithKbDisclosures(
+                            signingKey = signingKey,
+                            nonce = nonce,
+                            audience = audience,
+                            kbDisclosures = transactionResponse.disclosures,
+                            creationTime = creationTime,
+                            type = type,
+                            additionalClaimBuilderAction = claims,
+                        )
+                    }
                     val otherDocument = OtherDocument(
                         docFormat = "dc+sd-jwt",
-                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
+                        data = ByteString(presentation.encodeToByteArray().zlibDeflate())
                     )
                     docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                         addEncryptedDocuments(

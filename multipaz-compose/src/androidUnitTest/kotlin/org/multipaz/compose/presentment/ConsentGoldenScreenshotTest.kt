@@ -60,6 +60,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
@@ -771,6 +772,48 @@ class ConsentGoldenScreenshotTest {
                 capture("main", "Main AP2 delegate mandate prompt")
                 clickViewDetails()
                 capture("tx_details", "AP2 mandate transaction details page")
+            }
+        }
+
+        // 2.5 ap2_delegate_default_renderer
+        run {
+            val (req, trusted) = eco.trustedWebRequester(
+                rpId = ConsentGoldenEcosystem.RP_MARKETPLACE,
+                origin = "https://agent.utopiamarket.example.com",
+            )
+            val pd = eco.executeDcql(
+                dcqlJson = """
+                {
+                  "credentials": [
+                    {
+                      "id": "payment_card",
+                      "format": "dc+sd-jwt",
+                      "meta": { "vct_values": ["${DigitalPaymentCredentialSdJwt.CARD_VCT}"] },
+                      "claims": [ { "path": ["last_four"] } ]
+                    }
+                  ]
+                }
+                """.trimIndent(),
+                transactionDataMap = mapOf("payment_card" to listOf(goldenDelegateTransactionData())),
+            )
+            runScenario(
+                categoryDir = cat2Dir,
+                categoryTitle = cat2Title,
+                categoryDescription = cat2Desc,
+                scenarioId = "ap2_delegate_default_renderer",
+                title = "AP2 Delegation (SDK Default Renderer for DelegateTransaction)",
+                requesterSummary = "Utopia Marketplace — Over-the-Internet (OpenID4VP)",
+                protocolSummary = "DigitalPaymentCredentialSdJwt + DelegateTransaction",
+                riskBadge = "NORMAL",
+                description = "An AP2 `delegate` request, with the mandates as AP2 sends them, drawn by the SDK's DelegateTransactionRendererCompose. The summary sets the per-purchase and total limits large, then gives the merchant, the item, the expiry and the agent a row each. The details page lists both mandates in full, as they will be signed.",
+                requester = req,
+                trustedRequesterIdentity = trusted,
+                presentmentData = pd,
+            ) {
+                capture("main", "Main spending permission prompt")
+                // The first "View details" is the claims'; the second is the spending permission's.
+                clickViewDetails(index = 1)
+                capture("tx_details", "Spending permission details page")
             }
         }
 

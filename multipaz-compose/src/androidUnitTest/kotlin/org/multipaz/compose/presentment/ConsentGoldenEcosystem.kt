@@ -104,6 +104,7 @@ import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
@@ -114,10 +115,14 @@ import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.toBase64Url
+import org.multipaz.utopia.knowntypes.DelegateTransaction
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
+import org.multipaz.utopia.knowntypes.addDelegateTransactionType
 import org.robolectric.Shadows
 import kotlin.math.abs
 import kotlin.math.round
@@ -697,10 +702,13 @@ internal class ConsentGoldenEcosystem private constructor(
                 addDocumentType(paymentDocType)
                 addDocumentType(boardingPassDocType)
                 addDocumentType(avDocType)
+                addDocumentType(DigitalPaymentCredentialSdJwt.getDocumentType())
+                addDelegateTransactionType()
             }
             val transactionDataRendererRepository = TransactionDataRendererRepository().apply {
                 addRenderer(GoldenTransitFareTransaction.identifier, goldenTransitFareRenderer)
                 addRenderer(GoldenAp2MandateTransaction.identifier, goldenAp2MandateRenderer)
+                addRenderer(DelegateTransaction.identifier, DelegateTransactionRendererCompose)
             }
 
             val storage = DeterministicStorage()
@@ -1254,6 +1262,21 @@ internal class ConsentGoldenEcosystem private constructor(
                 keylessSdJwtVcDomain = "sdjwt",
             )
 
+            // 11. Utopia Bank card as a key-bound SD-JWT VC, which can sign an AP2 delegation. Created
+            // last so the documents above, and what they draw from the random source, stay as they were.
+            val paymentSdJwtDoc = documentStore.createDocument(
+                displayName = "Utopia Bank Debit",
+                typeDisplayName = "Payment Card (**** 1234)",
+                cardArt = readResourceBytes("/cards/card_utopia_payment.png"),
+            )
+            createPaymentSdJwt(
+                document = paymentSdJwtDoc,
+                secureArea = secureArea,
+                createKeySettings = keySettings,
+                dsKey = dsKey,
+                randomProvider = rng,
+            )
+
             return ConsentGoldenEcosystem(
                 locale = locale,
                 documentTypeRepository = documentTypeRepository,
@@ -1319,6 +1342,42 @@ internal class ConsentGoldenEcosystem private constructor(
                 nonSdClaims = buildJsonObject {
                     put("iss", "https://utopiacinema.example.com")
                     put("vct", UtopiaMovieTicket.MOVIE_TICKET_VCT)
+                    put("iat", VALID_FROM.epochSeconds)
+                    put("nbf", VALID_FROM.epochSeconds)
+                    put("exp", VALID_UNTIL.epochSeconds)
+                },
+                random = randomProvider,
+            )
+            credential.certify(sdJwt.compactSerialization.encodeToByteString())
+            return credential
+        }
+
+        private suspend fun createPaymentSdJwt(
+            document: Document,
+            secureArea: SecureArea,
+            createKeySettings: CreateKeySettings,
+            dsKey: AsymmetricKey.X509Certified,
+            randomProvider: Random,
+        ): KeyBoundSdJwtVcCredential {
+            val credential = KeyBoundSdJwtVcCredential.create(
+                document = document,
+                asReplacementForIdentifier = null,
+                domain = "sdjwt",
+                secureArea = secureArea,
+                vct = DigitalPaymentCredentialSdJwt.CARD_VCT,
+                createKeySettings = createKeySettings,
+            )
+            val sdJwt = SdJwt.create(
+                issuerKey = dsKey,
+                kbKey = secureArea.getKeyInfo(credential.alias).publicKey,
+                claims = buildJsonObject {
+                    put("credential_id", JsonPrimitive("UT-DPC-1234"))
+                    put("network", JsonPrimitive("multipaz"))
+                    put("last_four", JsonPrimitive("1234"))
+                },
+                nonSdClaims = buildJsonObject {
+                    put("iss", "https://bank.utopia.example.com")
+                    put("vct", DigitalPaymentCredentialSdJwt.CARD_VCT)
                     put("iat", VALID_FROM.epochSeconds)
                     put("nbf", VALID_FROM.epochSeconds)
                     put("exp", VALID_UNTIL.epochSeconds)
@@ -1549,6 +1608,27 @@ internal fun <PayloadT : Any> goldenTransactionData(
     protocol = TransactionProtocol.OPENID4VP,
     rawBytes = ByteString("${type.identifier}:$payload".encodeToByteArray()),
 )
+
+/**
+ * An AP2 `delegate` item as AP2 sends it: the mandates in `delegate_payload`, for an agent to
+ * buy headphones from one merchant within a per-purchase and a total limit, for 30 days.
+ */
+internal fun goldenDelegateTransactionData(): TransactionData<*> {
+    val exp = (ConsentGoldenEcosystem.NOW + 30.days).epochSeconds
+    val agent = """{"jwk":{"kty":"EC","crv":"P-256","x":"Fo9yTRgc4kXAdKpCV2mQe8Lw3sZ1HbuN6r0iJt7aPyE","y":"y"}}"""
+    val merchant = """{"id":"market.utopia.example.com","name":"Utopia Market","website":"https://market.utopia.example.com"}"""
+    val json = """{"type":"delegate","credential_ids":["payment_card"],"format":"dc+sd-jwt",
+        "transaction_data_hashes_alg":["sha-256"],"delegate_payload":[
+          {"vct":"mandate.checkout.open.1","exp":$exp,"cnf":$agent,"constraints":[
+            {"type":"checkout.allowed_merchants","allowed":[$merchant]},
+            {"type":"checkout.line_items","items":[{"id":"r1","quantity":1,
+              "acceptable_items":[{"id":"aurora","title":"Aurora headphones"}]}]}]},
+          {"vct":"mandate.payment.open.1","exp":$exp,"cnf":$agent,"constraints":[
+            {"type":"payment.amount_range","currency":"USD","max":25000},
+            {"type":"payment.budget","currency":"USD","max":400.00},
+            {"type":"payment.allowed_payees","allowed":[$merchant]}]}]}"""
+    return DelegateTransaction.parseJson(json.encodeToByteArray().toBase64Url().encodeToByteString())
+}
 
 internal fun utopiaPaymentTransactionData(
     payeeName: String,

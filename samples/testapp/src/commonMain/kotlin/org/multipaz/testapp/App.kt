@@ -185,6 +185,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
+import org.multipaz.utopia.knowntypes.addDelegateTransactionType
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
@@ -420,6 +421,9 @@ class App private constructor (val promptModel: PromptModel) {
         documentTypeRepository = DocumentTypeRepository()
         documentTypeRepository.addKnownTypes()
         documentTypeRepository.addUtopiaTypes()
+        // Not one of the utopia types: it is registered where its renderer is.
+        documentTypeRepository.addDelegateTransactionType()
+        documentTypeRepository.addExtraSingleDocumentCannedRequest(ap2DelegateCannedRequest())
     }
 
     private suspend fun documentStoreInit() {
