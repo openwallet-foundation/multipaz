@@ -70,7 +70,8 @@ public func promptModelRequestConsent(
     preselectedDocuments: [MultipazDocument],
     onDocumentsInFocus: @escaping ([MultipazDocument]) -> Void,
     transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
-    requesterHistory: (any RequesterHistory)? = nil
+    requesterHistory: (any RequesterHistory)? = nil,
+    platformConsentOptions: PlatformConsentOptions? = nil
 ) async throws -> PresentmentSelection? {
     return try await promptModelRequestConsent(
         requester: requester,
@@ -96,7 +97,16 @@ public func promptModelRequestConsent(
                 selections: selections,
                 purposes: purposes
             )
-        }
+        },
+        classifySimpleConsentFn: { requester, trustedIdentity, presentmentData, selections in
+            defaultClassifySimpleConsent(
+                requester: requester,
+                trustedRequesterIdentity: trustedIdentity,
+                presentmentData: presentmentData,
+                selections: selections
+            )
+        },
+        platformConsentOptions: platformConsentOptions
     )
 }
 

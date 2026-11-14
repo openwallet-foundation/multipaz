@@ -237,6 +237,9 @@ class SessionEncryption(
     ): Pair<ByteArray?, Long?> {
         ensureInitialized()
         val map = Cbor.decode(messageData)
+        require(!map.hasKey("deviceEngagementBytes")) {
+            "Unexpected deviceEngagementBytes in encrypted SessionMessage"
+        }
         if (insertSequenceNumbers) {
             val seqDataItem = map.getOrNull("seq")
                 ?: throw IllegalArgumentException("Expected seq in SessionData when insertSequenceNumbers is true")
@@ -300,6 +303,48 @@ class SessionEncryption(
             val encodedCoseKey = map["eReaderKey"].asTagged.asBstr
             val publicKey = Cbor.decode(encodedCoseKey).asCoseKey.ecPublicKey
             return EReaderKey(publicKey, encodedCoseKey)
+        }
+
+        /**
+         * Encodes the initial unencrypted `SessionMessage` sent by the mdoc to the mdoc reader in
+         * Reader QR engagement (`{"deviceEngagementBytes": #6.24(bstr .cbor DeviceEngagement)}`)
+         * according to ISO/IEC 18013-5 Second Edition clauses 9.7 and 12.2.4.
+         *
+         * @param encodedDeviceEngagement the CBOR-encoded `DeviceEngagement` bytes.
+         * @return the CBOR-encoded `SessionMessage` bytes.
+         */
+        fun encodeDeviceEngagementMessage(encodedDeviceEngagement: ByteArray): ByteArray =
+            Cbor.encode(
+                buildCborMap {
+                    putTaggedEncodedCbor("deviceEngagementBytes", encodedDeviceEngagement)
+                }
+            )
+
+        /**
+         * Extracts the raw CBOR-encoded `DeviceEngagement` bytes (`#6.24(bstr .cbor DeviceEngagement)`)
+         * from the initial unencrypted `SessionMessage` sent by the mdoc in Reader QR engagement
+         * according to ISO/IEC 18013-5 Second Edition clauses 9.7 and 12.2.4.
+         *
+         * @param sessionMessage the CBOR-encoded initial `SessionMessage` bytes.
+         * @return the exact inner `DeviceEngagement` CBOR byte array.
+         * @throws IllegalArgumentException if [sessionMessage] does not conform to an unencrypted
+         *   `"deviceEngagementBytes"` `SessionMessage`.
+         */
+        fun getDeviceEngagementBytes(sessionMessage: ByteArray): ByteArray {
+            val map = Cbor.decode(sessionMessage)
+            require(map.hasKey("deviceEngagementBytes")) {
+                "Expected deviceEngagementBytes in initial Reader QR SessionMessage"
+            }
+            for (forbiddenKey in listOf("eReaderKey", "data", "status", "seq", "disconnectNfc")) {
+                require(!map.hasKey(forbiddenKey)) {
+                    "Unexpected $forbiddenKey alongside deviceEngagementBytes in SessionMessage"
+                }
+            }
+            val item = map["deviceEngagementBytes"]
+            require(item is Tagged && item.tagNumber == Tagged.ENCODED_CBOR) {
+                "Expected CBOR tag ${Tagged.ENCODED_CBOR} on deviceEngagementBytes"
+            }
+            return item.taggedItem.asBstr
         }
     }
 }

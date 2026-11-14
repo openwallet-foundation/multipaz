@@ -28,6 +28,8 @@ import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.compose.presentment.MdocProximityQrPresentment
 import org.multipaz.compose.presentment.MdocProximityQrSettings
+import org.multipaz.compose.presentment.MdocProximityReaderQrPresentment
+import org.multipaz.compose.presentment.MdocProximityReaderQrSettings
 import org.multipaz.compose.qrcode.generateQrCode
 import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
@@ -109,53 +111,114 @@ fun IsoMdocProximitySharingScreen(
                 source = presentmentSource,
                 promptModel = promptModel,
                 prepareSettings = { generateQrCode ->
-                    ComboBox(
-                        headline = "Presentation Face Matcher",
-                        options = faceMatcherOptions,
-                        comboBoxSelected = faceMatcherSelected,
-                        comboBoxExpanded = faceMatcherDropdownExpanded,
-                        getDisplayName = { it },
-                        onSelected = { index, value ->
-                            settingsModel.presentmentFaceMatcher.value = value
-                        }
-                    )
-                    Button(onClick = {
-                        val connectionMethods = mutableListOf<MdocConnectionMethod>()
-                        val bleUuid = UUID.randomUUID()
-                        if (settingsModel.presentmentBleCentralClientModeEnabled.value) {
-                            connectionMethods.add(
-                                MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                    MdocProximityReaderQrPresentment(
+                        modifier = Modifier,
+                        source = presentmentSource,
+                        promptModel = promptModel,
+                        prepareSettings = { scanReaderQrCode ->
+                            ComboBox(
+                                headline = "Presentation Face Matcher",
+                                options = faceMatcherOptions,
+                                comboBoxSelected = faceMatcherSelected,
+                                comboBoxExpanded = faceMatcherDropdownExpanded,
+                                getDisplayName = { it },
+                                onSelected = { _, value ->
+                                    settingsModel.presentmentFaceMatcher.value = value
+                                }
                             )
-                        }
-                        if (settingsModel.presentmentBlePeripheralServerModeEnabled.value) {
-                            if (settingsModel.presentmentBleL2CapInEngagementEnabled.value) {
-                                connectionMethods.add(
-                                    MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid)
+                            Button(onClick = {
+                                val connectionMethods = mutableListOf<MdocConnectionMethod>()
+                                val bleUuid = UUID.randomUUID()
+                                if (settingsModel.presentmentBleCentralClientModeEnabled.value) {
+                                    connectionMethods.add(
+                                        MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                                    )
+                                }
+                                if (settingsModel.presentmentBlePeripheralServerModeEnabled.value) {
+                                    if (settingsModel.presentmentBleL2CapInEngagementEnabled.value) {
+                                        connectionMethods.add(
+                                            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid)
+                                        )
+                                    }
+                                    connectionMethods.add(
+                                        MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
+                                    )
+                                }
+                                if (settingsModel.presentmentNfcDataTransferEnabled.value) {
+                                    connectionMethods.add(
+                                        MdocConnectionMethod.Nfc(
+                                            commandDataFieldMaxLength = 0xffff,
+                                            responseDataFieldMaxLength = 0x10000
+                                        )
+                                    )
+                                }
+                                generateQrCode(
+                                    MdocProximityQrSettings(
+                                        availableConnectionMethods = connectionMethods,
+                                        createTransportOptions = MdocTransportOptions(
+                                            bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                                        )
+                                    )
                                 )
+                            }) {
+                                Text("Present mDL via QR")
                             }
-                            connectionMethods.add(
-                                MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
-                            )
-                        }
-                        if (settingsModel.presentmentNfcDataTransferEnabled.value) {
-                            connectionMethods.add(
-                                MdocConnectionMethod.Nfc(
-                                    commandDataFieldMaxLength = 0xffff,
-                                    responseDataFieldMaxLength = 0x10000
+                            Button(onClick = {
+                                scanReaderQrCode(
+                                    MdocProximityReaderQrSettings(
+                                        preferredConnectionMethodOrder =
+                                            settingsModel.presentmentNegotiatedHandoverPreferredOrder.value,
+                                        bleDirectL2capEnabled =
+                                            settingsModel.presentmentBleL2CapInEngagementEnabled.value,
+                                        createTransportOptions = MdocTransportOptions(
+                                            bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                                        ),
+                                    )
                                 )
+                            }) {
+                                Text("Scan Reader QR Code")
+                            }
+                        },
+                        scanQrCode = { onQrCodeScanned, reset ->
+                            var codeAccepted by remember { mutableStateOf(false) }
+                            ScanQrCodeDialog(
+                                title = { Text("Scan Reader QR Code") },
+                                text = { Text("Point the camera at the mdoc reader's QR code") },
+                                dismissButton = "Cancel",
+                                onCodeScanned = { data ->
+                                    val accepted = onQrCodeScanned(data)
+                                    if (accepted) {
+                                        codeAccepted = true
+                                    }
+                                    accepted
+                                },
+                                onDismiss = {
+                                    if (!codeAccepted) {
+                                        reset()
+                                    }
+                                }
                             )
-                        }
-                        generateQrCode(
-                            MdocProximityQrSettings(
-                                availableConnectionMethods = connectionMethods,
-                                createTransportOptions = MdocTransportOptions(
-                                    bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
-                                )
-                            )
-                        )
-                    }) {
-                        Text("Present mDL via QR")
-                    }
+                        },
+                        showTransacting = { reset ->
+                            Text("Transacting")
+                            Button(onClick = { reset() }) {
+                                Text("Cancel")
+                            }
+                        },
+                        showCompleted = { error, reset ->
+                            if (error != null) {
+                                Text("Something went wrong: $error")
+                            } else {
+                                Text("The data was shared")
+                            }
+                            LaunchedEffect(Unit) {
+                                delay(1.5.seconds)
+                                reset()
+                            }
+                        },
+                        transportFactory = TestAppConfiguration.mdocTransportFactory,
+                        disablePlatformSpecificImplementation = disablePlatformImplementation,
+                    )
                 },
                 showQrCode = { uri, reset ->
                     val qrCodeBitmap = remember { generateQrCode(uri) }

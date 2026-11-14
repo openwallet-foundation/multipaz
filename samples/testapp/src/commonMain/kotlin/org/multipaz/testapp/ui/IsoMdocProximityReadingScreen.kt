@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.nfc.scanMdocReader
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -51,6 +53,8 @@ import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.MdocTransportStats
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
+import org.multipaz.mdoc.transport.advertise
+import org.multipaz.mdoc.transport.waitForConnection
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppUtils
@@ -59,10 +63,12 @@ import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
+import org.multipaz.util.toBase64Url
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -71,6 +77,8 @@ import kotlinx.serialization.json.JsonObject
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.ReaderEngagement
+import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.nfc.MdocHandoverType
 import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
 import org.multipaz.mdoc.role.MdocRole
@@ -192,6 +200,7 @@ fun IsoMdocProximityReadingScreen(
     val bleEnabledState = rememberBluetoothEnabledState()
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
     val readerShowQrScanner = remember { mutableStateOf(false) }
+    val readerQrUriToShow = remember { mutableStateOf<String?>(null) }
     val readerTransport = remember { mutableStateOf<MdocTransport?>(null) }
     val readerMostRecentTransportStats = remember { mutableStateOf<MdocTransportStats?>(null) }
     val readerSessionEncryption = remember { mutableStateOf<SessionEncryption?>(null) }
@@ -289,13 +298,29 @@ fun IsoMdocProximityReadingScreen(
         )
     }
 
+    val currentReaderQrUri = readerQrUriToShow.value
+    if (currentReaderQrUri != null) {
+        key(currentReaderQrUri) {
+            ShowQrCodeDialog(
+                title = { Text(text = "Reader QR Code") },
+                text = { Text(text = "Scan this QR code with the holder's wallet app") },
+                dismissButton = "Cancel",
+                data = currentReaderQrUri,
+                onDismiss = {
+                    readerQrUriToShow.value = null
+                    readerJob?.cancel()
+                }
+            )
+        }
+    }
+
     if (readerShowQrScanner.value) {
         ScanQrCodeDialog(
             title = { Text(text = "Scan QR code") },
             text = { Text(text = "Scan this QR code on another device") },
             dismissButton = "Close",
             onCodeScanned = { data ->
-                if (data.startsWith("mdoc:")) {
+                if (data.startsWith("mdoc:") && !data.startsWith("mdoc://")) {
                     readerShowQrScanner.value = false
                     readerMostRecentDeviceResponse.value = null
                     readerSession.value = null
@@ -646,6 +671,179 @@ fun IsoMdocProximityReadingScreen(
                         content = { Text("Request mdoc via QR Code") }
                     )
                 }
+                item {
+                    TextButton(
+                        onClick = {
+                            val connectionMethods = mutableListOf<MdocConnectionMethod>()
+                            val bleUuid = UUID.randomUUID()
+                            if (app.settingsModel.readerBleCentralClientModeEnabled.value) {
+                                if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
+                                    connectionMethods.add(
+                                        MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid)
+                                    )
+                                }
+                                connectionMethods.add(
+                                    MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                                )
+                            }
+                            if (app.settingsModel.readerBlePeripheralServerModeEnabled.value) {
+                                connectionMethods.add(
+                                    MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
+                                )
+                            }
+                            if (connectionMethods.isEmpty()) {
+                                showToast("Enable at least one reader BLE mode in Settings")
+                                return@TextButton
+                            }
+                            readerMostRecentDeviceResponse.value = null
+                            readerSession.value = null
+                            readerSessionEncryption.value = null
+                            eReaderKey.value = null
+                            readerJob = coroutineScope.launch(Dispatchers.Default) {
+                                var connectedTransport: MdocTransport? = null
+                                var enteredTransportFlow = false
+                                try {
+                                    val generatedReaderKey = Crypto.createEcPrivateKey(
+                                        app.settingsModel.readerSessionEncryptionCurve.value
+                                    )
+                                    eReaderKey.value = generatedReaderKey
+                                    val advertisedTransports = connectionMethods.advertise(
+                                        role = MdocRole.MDOC_READER,
+                                        transportFactory = TestAppConfiguration.mdocTransportFactory,
+                                        options = MdocTransportOptions(
+                                            bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                        ),
+                                    )
+                                    val readerEngagement = buildReaderEngagement(
+                                        eReaderKey = generatedReaderKey.publicKey,
+                                        version = "1.1",
+                                    ) {
+                                        advertisedTransports.forEach { advertised ->
+                                            advertised.connectionMethods.forEach { method ->
+                                                addConnectionMethod(method)
+                                            }
+                                        }
+                                    }
+                                    val encodedReaderEngagement = Cbor.encode(
+                                        readerEngagement.toDataItem(MdocEngagementType.READER_QR)
+                                    )
+                                    val handover = ReaderEngagement.computeHandover(encodedReaderEngagement)
+                                    readerQrUriToShow.value = "mdoc:" + encodedReaderEngagement.toBase64Url()
+
+                                    val transport = advertisedTransports.waitForConnection(
+                                        eSenderKey = generatedReaderKey.publicKey
+                                    )
+                                    connectedTransport = transport
+                                    readerTransport.value = transport
+                                    readerQrUriToShow.value = null
+
+                                    val transferProtocol = transport.connectionMethod.toString()
+                                    val initialSessionMessage = transport.waitForMessage()
+                                    val encodedDeBytes = SessionEncryption.getDeviceEngagementBytes(
+                                        initialSessionMessage
+                                    )
+                                    Logger.dCbor(TAG, "DeviceEngagement (Reader QR)", encodedDeBytes)
+                                    val deviceEngagement = DeviceEngagement.fromDataItem(
+                                        dataItem = Cbor.decode(encodedDeBytes),
+                                        engagementType = MdocEngagementType.READER_QR,
+                                    )
+                                    check(deviceEngagement.eDeviceKey.curve == generatedReaderKey.curve) {
+                                        "Holder EDeviceKey curve ${deviceEngagement.eDeviceKey.curve} " +
+                                            "does not match EReaderKey curve ${generatedReaderKey.curve}"
+                                    }
+
+                                    enteredTransportFlow = true
+                                    doReaderFlowWithTransport(
+                                        app = app,
+                                        transport = transport,
+                                        encodedDeviceEngagement = ByteString(encodedDeBytes),
+                                        handover = handover,
+                                        allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
+                                        insertSequenceNumbers = false,
+                                        showToast = showToast,
+                                        readerTransport = readerTransport,
+                                        readerMostRecentTransportStats = readerMostRecentTransportStats,
+                                        readerSessionEncryption = readerSessionEncryption,
+                                        readerSession = readerSession,
+                                        readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
+                                        readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
+                                        durationEngagementReceivedToRequestSent =
+                                            durationEngagementReceivedToRequestSent,
+                                        durationRequestSentToResponseReceived =
+                                            durationRequestSentToResponseReceived,
+                                        selectedRequest = requestSelected,
+                                        eDeviceKey = deviceEngagement.eDeviceKey,
+                                        eReaderKey = generatedReaderKey,
+                                        signRequest = app.settingsModel.signRequest.value,
+                                        issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
+                                        uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
+                                        alreadyOpened = true,
+                                        sendSessionEstablishment = false,
+                                    )
+
+                                    if (readerMostRecentDeviceResponse.value != null) {
+                                        val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
+                                        val session = readerSession.value!!
+                                        val presentmentRecord = session.processIso18013ProximityResponse(
+                                            deviceResponse = deviceResponse
+                                        )
+                                        app.eventLogger.addEventAsync(
+                                            EventVerificationIso18013Proximity(
+                                                presentmentRecord = presentmentRecord,
+                                                engagementType = EngagementType.READER_QR_CODE,
+                                                durationEngagementReceivedToRequestSent =
+                                                    durationEngagementReceivedToRequestSent.value,
+                                                durationRequestSentToResponseReceived =
+                                                    durationRequestSentToResponseReceived.value,
+                                                durationScanningTime =
+                                                    readerMostRecentTransportStats.value?.bleScanningTime,
+                                                transportStats = readerMostRecentTransportStats.value,
+                                            )
+                                        )
+                                        withContext(Dispatchers.Main) {
+                                            showResponse(
+                                                /* vpToken = */ null,
+                                                /* deviceResponse = */ deviceResponse,
+                                                /* session = */ session,
+                                                /* eReaderKey = */ eReaderKey.value!!,
+                                                /* metadata = */ ShowResponseMetadata(
+                                                    engagementType = "Reader QR Code",
+                                                    transferProtocol = transferProtocol,
+                                                    requestSize =
+                                                        readerMostRecentDeviceRequest.value?.size?.toLong() ?: 0L,
+                                                    responseSize =
+                                                        readerMostRecentDeviceResponse.value?.size?.toLong() ?: 0L,
+                                                    durationMsecNfcTapToEngagement = null,
+                                                    durationMsecEngagementReceivedToRequestSent =
+                                                        durationEngagementReceivedToRequestSent
+                                                            .value?.inWholeMilliseconds ?: 0,
+                                                    durationMsecRequestSentToResponseReceived =
+                                                        durationRequestSentToResponseReceived
+                                                            .value?.inWholeMilliseconds ?: 0,
+                                                    transportStats = readerMostRecentTransportStats.value,
+                                                )
+                                            )
+                                        }
+                                    }
+                                } catch (error: Exception) {
+                                    if (error is CancellationException) throw error
+                                    Logger.e(TAG, "Reader QR engagement failed", error)
+                                    showToast("Error: ${error.message}")
+                                } finally {
+                                    readerQrUriToShow.value = null
+                                    if (!enteredTransportFlow && connectedTransport != null) {
+                                        withContext(NonCancellable) {
+                                            connectedTransport.close()
+                                            readerTransport.value = null
+                                        }
+                                    }
+                                    readerJob = null
+                                }
+                            }
+                        },
+                        content = { Text("Request mdoc via Reader QR Code") }
+                    )
+                }
 
                 fun launchNfcScan(handoverOptions: MdocReaderNfcHandoverOptions, nfcOnly: Boolean) {
                     readerMostRecentDeviceResponse.value = null
@@ -831,7 +1029,13 @@ fun IsoMdocProximityReadingScreen(
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = true), nfcOnly = false)
+                            launchNfcScan(
+                                MdocReaderNfcHandoverOptions(
+                                    useCce = true,
+                                    eReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
+                                ),
+                                nfcOnly = false
+                            )
                         },
                         content = { Text("Request mdoc via NFC CCE") }
                     )
@@ -839,7 +1043,13 @@ fun IsoMdocProximityReadingScreen(
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = true), nfcOnly = true)
+                            launchNfcScan(
+                                MdocReaderNfcHandoverOptions(
+                                    useCce = true,
+                                    eReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
+                                ),
+                                nfcOnly = true
+                            )
                         },
                         content = { Text("Request mdoc via NFC CCE (NFC only)") }
                     )
@@ -1062,6 +1272,8 @@ private suspend fun doReaderFlowWithTransport(
     signRequest: Boolean,
     issuerIdentifiers: List<ByteString> = emptyList(),
     uniqueDocSetRequired: Boolean = true,
+    alreadyOpened: Boolean = false,
+    sendSessionEstablishment: Boolean = true,
 ) {
     val session = TestAppUtils.createProximityVerificationSession(
         app = app,
@@ -1083,11 +1295,14 @@ private suspend fun doReaderFlowWithTransport(
         encodedSessionTranscript = Cbor.encode(proximityRequest.sessionTranscript),
         insertSequenceNumbers = insertSequenceNumbers,
     )
+    sessionEncryption.setSendSessionEstablishment(sendSessionEstablishment)
     Logger.dCbor(TAG, "deviceRequest", deviceRequest)
     try {
         readerTransport.value = transport
         val t0 = Clock.System.now()
-        transport.open(eDeviceKey)
+        if (!alreadyOpened) {
+            transport.open(eDeviceKey)
+        }
         val encryptedDeviceRequest = sessionEncryption.encryptMessage(
             messagePlaintext = deviceRequest,
             statusCode = null

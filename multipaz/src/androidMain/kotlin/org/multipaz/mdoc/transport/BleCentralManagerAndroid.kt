@@ -375,13 +375,15 @@ internal class BleCentralHalAndroid : BleCentralHal {
             }
         characteristicsByUuid[server2ClientCharacteristicUuid] = s2cChar
 
+        var hasIdent = false
         if (identCharacteristicUuid != null) {
             val identChar = svc.getCharacteristic(identCharacteristicUuid.toJavaUuid())
-                ?: run {
-                    callback.onCharacteristicsDiscovered(null, false, IllegalStateException("Ident characteristic not found"))
-                    return
-                }
-            characteristicsByUuid[identCharacteristicUuid] = identChar
+            if (identChar != null) {
+                characteristicsByUuid[identCharacteristicUuid] = identChar
+                hasIdent = true
+            } else {
+                Logger.w(TAG, "Ident characteristic requested ($identCharacteristicUuid) but not found")
+            }
         }
 
         var hasL2cap = false
@@ -398,7 +400,8 @@ internal class BleCentralHalAndroid : BleCentralHal {
         callback.onCharacteristicsDiscovered(
             maxWriteSize = null,
             hasL2capCharacteristic = hasL2cap,
-            error = null
+            error = null,
+            hasIdentCharacteristic = hasIdent,
         )
     }
 
