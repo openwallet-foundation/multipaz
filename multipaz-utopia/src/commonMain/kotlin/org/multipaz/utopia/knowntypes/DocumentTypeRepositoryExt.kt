@@ -19,7 +19,8 @@ import org.multipaz.documenttype.knowntypes.PaymentTransaction
  * Adds all known document and transaction data types from the `multipaz-utopia` library..
  *
  * [DelegateTransaction] is not added: an application that registers it must also register a
- * renderer that shows the mandate in the consent prompt, so it adds both itself.
+ * renderer that shows the mandate in the consent prompt, so it adds both itself, with
+ * [addDelegateTransactionType].
  *
  * @receiver the [DocumentTypeRepository] to add to.
  * @param locale BCP-47 language tag used to resolve localized strings.
@@ -40,6 +41,22 @@ fun DocumentTypeRepository.addUtopiaTypes(locale: String = LocalizedStrings.getC
             getDocumentTypeForMdoc(EUPersonalID.EUPID_NAMESPACE)!!
         )
     )
+}
+
+/**
+ * Adds [DelegateTransaction], which [addUtopiaTypes] leaves out.
+ *
+ * An application adds it together with a renderer that shows the mandates in the consent prompt,
+ * such as the SDK's default one, `DelegateTransactionRendererCompose` or
+ * `DelegateTransactionRendererSwiftUi`.
+ *
+ * This is the same as `addTransactionType(DelegateTransaction)`, which Swift can't call: there the
+ * parameter is a `TransactionType<AnyObject>`, and `DelegateTransaction` is not one.
+ *
+ * @receiver the [DocumentTypeRepository] to add to.
+ */
+fun DocumentTypeRepository.addDelegateTransactionType() {
+    addTransactionType(DelegateTransaction)
 }
 
 private fun createEUPersonalIDWithTransactionCannedRequest(

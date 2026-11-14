@@ -28,6 +28,28 @@ import kotlin.time.Instant
  * disclosed terms filled in. The text is English.
  */
 object DelegateMandateText {
+    /** The title of a spending permission on the consent screen. */
+    const val TITLE = "Spending permission"
+
+    /** Under [TITLE] in the consent prompt: what approving the permission lets happen. */
+    const val SUMMARY_EXPLAINER =
+        "An agent will be able to spend for you without asking again, until these limits are reached."
+
+    /** Under [TITLE] on the details page. */
+    const val DETAILS_EXPLAINER = "Everything below is part of what you sign."
+
+    /** The label for who asked for the permission. */
+    const val REQUESTED_BY = "Requested by"
+
+    /**
+     * Shown in place of the permission when its mandates cannot be read. [DelegateTransaction]
+     * refuses such a request before the consent prompt, so a screen should never need it.
+     */
+    const val CANNOT_SHOW = "This spending permission can't be shown. Don't approve it."
+
+    /** The raw mandate type, printed under a section's heading on the details page. */
+    fun mandateTypeLine(mandateType: String): String = "Type: $mandateType"
+
     /**
      * One readable line on the consent screen.
      *
@@ -46,27 +68,24 @@ object DelegateMandateText {
         val kind: Kind = Kind.OTHER,
     )
 
-    /**
-     * What a [SummaryLine] is about. Only the rows [describePermission] words in a fixed way carry
-     * one of these; every other line is [OTHER].
-     */
+    /** What a row of [PermissionSummary.rows] is about. */
     enum class Kind {
-        /** Where the agent may buy ("At"). */
+        /** Where the agent may buy (`checkout.allowed_merchants`). */
         MERCHANT,
 
-        /** Who is paid ("Paid to"). */
+        /** Who may be paid, when they are not the merchants (`payment.allowed_payees`, `payee`). */
         PAYEE,
 
-        /** What may be bought ("For"). */
+        /** What may be bought (`checkout.line_items`). */
         ITEMS,
 
-        /** Until when the permission lasts ("Until"). */
+        /** When the permission ends (`exp`). */
         EXPIRY,
 
-        /** Which agent the permission is for ("Agent"). */
+        /** Who the permission is for: the agent's key (`cnf`). */
         AGENT,
 
-        /** Anything else, including every line of a mandate this wallet does not recognise. */
+        /** Anything else. */
         OTHER,
     }
 
