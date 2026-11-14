@@ -44,9 +44,9 @@ class TestAppMdocNdefService : MdocNdefService() {
             staticHandoverBleCentralClientModeEnabled = app.settingsModel.presentmentBleCentralClientModeEnabled.value,
             staticHandoverBlePeripheralServerModeEnabled = app.settingsModel.presentmentBlePeripheralServerModeEnabled.value,
             staticHandoverNfcDataTransferEnabled = app.settingsModel.presentmentNfcDataTransferEnabled.value,
+            bleDirectL2capEnabled = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value,
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
-                bleUseL2CAPInEngagement = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value
             ),
         )
     }

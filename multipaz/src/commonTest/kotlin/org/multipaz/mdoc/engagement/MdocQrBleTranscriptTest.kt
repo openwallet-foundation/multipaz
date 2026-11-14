@@ -43,7 +43,6 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.connectionmethod.BleAddressType
 import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -208,7 +207,7 @@ class MdocQrBleTranscriptTest {
     }
 
     private class LoopbackQrBlePair(
-        private val cm: MdocConnectionMethodBle,
+        private val cm: MdocConnectionMethod.Ble,
     ) {
         private val readerToMdoc = Channel<ByteArray>(Channel.UNLIMITED)
         private val mdocToReader = Channel<ByteArray>(Channel.UNLIMITED)
@@ -262,19 +261,15 @@ class MdocQrBleTranscriptTest {
 
     private suspend fun verifyDeviceQrEndToEndSession(
         qrUri: String,
-        selectedMethodSelector: (List<MdocConnectionMethod>) -> MdocConnectionMethodBle = {
-            it.first() as MdocConnectionMethodBle
+        selectedMethodSelector: (List<MdocConnectionMethod>) -> MdocConnectionMethod.Ble = {
+            it.first() as MdocConnectionMethod.Ble
         },
     ) = withContext(Dispatchers.Default) {
         assertTrue(qrUri.startsWith("mdoc:"))
         val encodedDeviceEngagement = qrUri.removePrefix("mdoc:").fromBase64Url()
         val decodedDeviceEngagementItem = Cbor.decode(encodedDeviceEngagement)
         val parsedDeviceEngagement = DeviceEngagement.fromDataItem(decodedDeviceEngagementItem)
-        val disambiguated = MdocConnectionMethod.disambiguate(
-            parsedDeviceEngagement.connectionMethods,
-            MdocRole.MDOC_READER
-        )
-        val selectedMethod = selectedMethodSelector(disambiguated)
+        val selectedMethod = selectedMethodSelector(parsedDeviceEngagement.connectionMethods)
         val blePair = LoopbackQrBlePair(selectedMethod)
 
         val eDeviceKey = getAnnexDEDeviceKey()
@@ -372,10 +367,7 @@ class MdocQrBleTranscriptTest {
         val encodedReaderEngagement = readerQrUri.removePrefix("mdoc:").fromBase64Url()
         val parsedReaderEngagement = ReaderEngagement.fromDataItem(Cbor.decode(encodedReaderEngagement))
         val eReaderKeyPublic = checkNotNull(parsedReaderEngagement.eReaderKey)
-        val disambiguated = MdocConnectionMethod.disambiguate(
-            parsedReaderEngagement.connectionMethods,
-            MdocRole.MDOC
-        )
+        val decodedMethods = parsedReaderEngagement.connectionMethods
 
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
@@ -503,7 +495,7 @@ class MdocQrBleTranscriptTest {
         )
         assertEquals(1, verifiedResp.documents.size)
 
-        return disambiguated
+        return decodedMethods
     }
 
     /**
@@ -513,11 +505,8 @@ class MdocQrBleTranscriptTest {
     fun testGoldenDeviceQrGattCentralOnly() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
-        val bleMethod = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
+        val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+            uuid = centralUuid,
         )
         val deItem = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
             addConnectionMethod(bleMethod)
@@ -578,11 +567,8 @@ class MdocQrBleTranscriptTest {
         assertEquals(BleAddressType.RANDOM, mdocAddress.addressType)
         assertEquals("2828378b1228", mdocAddress.address.toByteArray().toHex())
 
-        val bleMethod = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
+        val bleMethod = MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = peripheralUuid,
             peripheralAddress = mdocAddress,
         )
         val deItem = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
@@ -641,17 +627,18 @@ class MdocQrBleTranscriptTest {
     fun testGoldenDeviceQrGattAndDirectL2capPeripheral() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val bleMethod = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            directL2capPeripheral = true,
-            directL2capCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
-            directL2capPsm = 129,
-        )
         val deItem = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-            addConnectionMethod(bleMethod)
+            addConnectionMethod(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                    uuid = peripheralUuid,
+                    psm = 129,
+                )
+            )
+            addConnectionMethod(
+                MdocConnectionMethod.Ble.GattPeripheral(
+                    uuid = peripheralUuid,
+                )
+            )
             addCapability(Capability.READER_AUTH_ALL_SUPPORT, Simple.TRUE)
             addCapability(Capability.EXTENDED_REQUEST_SUPPORT, Simple.TRUE)
         }.toDataItem(engagementType = MdocEngagementType.DEVICE_QR)
@@ -700,47 +687,39 @@ class MdocQrBleTranscriptTest {
         )
         verifyDeviceQrEndToEndSession("mdoc:${encoded.toBase64Url()}") { methods ->
             assertEquals(2, methods.size)
-            val first = methods[0] as MdocConnectionMethodBle
-            val second = methods[1] as MdocConnectionMethodBle
-            assertTrue(first.directL2capPeripheral)
-            assertEquals(129, first.directL2capPsm)
-            assertTrue(second.gattPeripheral)
-            assertNull(second.directL2capPsm)
+            val first = methods[0] as MdocConnectionMethod.Ble.DirectL2capPeripheral
+            val second = methods[1] as MdocConnectionMethod.Ble.GattPeripheral
+            assertEquals(129, first.psm)
+            assertEquals(peripheralUuid, second.uuid)
             first
         }
     }
 
     /**
      * Golden `T-DQR-4`: Device QR dual-role (`GattPeripheral` + `GattCentral` + `DirectL2capPeripheral`),
-     * verifying [MdocConnectionMethod.combine] produces a single `[2, 1, BleOptions]` entry with `3: false`.
+     * verifying [MdocConnectionMethod.encodeDeviceRetrievalMethods] produces a single `[2, 1, BleOptions]`
+     * entry with `3: false`.
      */
     @Test
     fun testGoldenDeviceQrDualRoleCombined() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val advertisedTransports = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = true,
-                gattCentral = false,
-                directL2capPeripheral = true,
-                directL2capCentral = false,
-                peripheralModeUuid = peripheralUuid,
-                centralModeUuid = null,
-                directL2capPsm = 129,
+        val advertisedMethods = listOf(
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                uuid = peripheralUuid,
+                psm = 129,
             ),
-            MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = centralUuid,
+            MdocConnectionMethod.Ble.GattPeripheral(
+                uuid = peripheralUuid,
+            ),
+            MdocConnectionMethod.Ble.GattCentral(
+                uuid = centralUuid,
             ),
         )
-        val combined = MdocConnectionMethod.combine(advertisedTransports)
-        assertEquals(1, combined.size)
 
         val deItem = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-            combined.forEach { addConnectionMethod(it) }
+            advertisedMethods.forEach { addConnectionMethod(it) }
             addCapability(Capability.READER_AUTH_ALL_SUPPORT, Simple.TRUE)
             addCapability(Capability.EXTENDED_REQUEST_SUPPORT, Simple.TRUE)
         }.toDataItem(engagementType = MdocEngagementType.DEVICE_QR)
@@ -790,15 +769,12 @@ class MdocQrBleTranscriptTest {
         )
         verifyDeviceQrEndToEndSession("mdoc:${encoded.toBase64Url()}") { methods ->
             assertEquals(3, methods.size)
-            val m0 = methods[0] as MdocConnectionMethodBle
-            val m1 = methods[1] as MdocConnectionMethodBle
-            val m2 = methods[2] as MdocConnectionMethodBle
-            assertTrue(m0.directL2capPeripheral)
-            assertEquals(129, m0.directL2capPsm)
-            assertTrue(m1.gattCentral)
-            assertNull(m1.directL2capPsm)
-            assertTrue(m2.gattPeripheral)
-            assertNull(m2.directL2capPsm)
+            val m0 = methods[0] as MdocConnectionMethod.Ble.DirectL2capPeripheral
+            val m1 = methods[1] as MdocConnectionMethod.Ble.GattCentral
+            val m2 = methods[2] as MdocConnectionMethod.Ble.GattPeripheral
+            assertEquals(129, m0.psm)
+            assertEquals(centralUuid, m1.uuid)
+            assertEquals(peripheralUuid, m2.uuid)
             m0
         }
     }
@@ -810,11 +786,8 @@ class MdocQrBleTranscriptTest {
     fun testGoldenReaderQrGattCentralOnly() = runTest {
         val eReaderKey = getAnnexDEReaderKey()
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
-        val readerMethod = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
+        val readerMethod = MdocConnectionMethod.Ble.GattCentral(
+            uuid = centralUuid,
         )
         val reItem = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
             addConnectionMethod(readerMethod)
@@ -865,11 +838,8 @@ class MdocQrBleTranscriptTest {
     fun testGoldenReaderQrGattPeripheralOnly() = runTest {
         val eReaderKey = getAnnexDEReaderKey()
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val readerMethod = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
+        val readerMethod = MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = peripheralUuid,
         )
         val reItem = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
             addConnectionMethod(readerMethod)
@@ -920,17 +890,18 @@ class MdocQrBleTranscriptTest {
     fun testGoldenReaderQrGattAndDirectL2capCentral() = runTest {
         val eReaderKey = getAnnexDEReaderKey()
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
-        val readerMethod = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            directL2capPeripheral = false,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
-            directL2capPsm = 128,
-        )
         val reItem = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
-            addConnectionMethod(readerMethod)
+            addConnectionMethod(
+                MdocConnectionMethod.Ble.DirectL2capCentral(
+                    uuid = centralUuid,
+                    psm = 128,
+                )
+            )
+            addConnectionMethod(
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = centralUuid,
+                )
+            )
         }.toDataItem(engagementType = MdocEngagementType.READER_QR)
         val encoded = Cbor.encode(reItem)
 
@@ -972,46 +943,37 @@ class MdocQrBleTranscriptTest {
         )
         val disambiguated = verifyReaderQrEndToEndSession("mdoc:${encoded.toBase64Url()}")
         assertEquals(2, disambiguated.size)
-        val first = disambiguated[0] as MdocConnectionMethodBle
-        val second = disambiguated[1] as MdocConnectionMethodBle
-        assertTrue(first.directL2capCentral)
-        assertEquals(128, first.directL2capPsm)
-        assertTrue(second.gattCentral)
-        assertNull(second.directL2capPsm)
+        val first = disambiguated[0] as MdocConnectionMethod.Ble.DirectL2capCentral
+        val second = disambiguated[1] as MdocConnectionMethod.Ble.GattCentral
+        assertEquals(128, first.psm)
+        assertEquals(centralUuid, second.uuid)
     }
 
     /**
      * Golden `T-RQR-4`: Reader QR dual-role (`GattPeripheral` + `GattCentral` + `DirectL2capCentral`),
-     * verifying [MdocConnectionMethod.combine] produces a single `[2, 1, BleOptions]` entry with `2: false`.
+     * verifying [MdocConnectionMethod.encodeDeviceRetrievalMethods] produces a single `[2, 1, BleOptions]`
+     * entry with `2: false`.
      */
     @Test
     fun testGoldenReaderQrDualRoleCombined() = runTest {
         val eReaderKey = getAnnexDEReaderKey()
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val combined = MdocConnectionMethod.combine(
-            listOf(
-                MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = false,
-                    peripheralModeUuid = peripheralUuid,
-                    centralModeUuid = null,
-                ),
-                MdocConnectionMethodBle(
-                    gattPeripheral = false,
-                    gattCentral = true,
-                    directL2capPeripheral = false,
-                    directL2capCentral = true,
-                    peripheralModeUuid = null,
-                    centralModeUuid = centralUuid,
-                    directL2capPsm = 128,
-                ),
-            )
+        val readerMethods = listOf(
+            MdocConnectionMethod.Ble.GattPeripheral(
+                uuid = peripheralUuid,
+            ),
+            MdocConnectionMethod.Ble.DirectL2capCentral(
+                uuid = centralUuid,
+                psm = 128,
+            ),
+            MdocConnectionMethod.Ble.GattCentral(
+                uuid = centralUuid,
+            ),
         )
-        assertEquals(1, combined.size)
 
         val reItem = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
-            combined.forEach { addConnectionMethod(it) }
+            readerMethods.forEach { addConnectionMethod(it) }
         }.toDataItem(engagementType = MdocEngagementType.READER_QR)
         val encoded = Cbor.encode(reItem)
 
@@ -1054,14 +1016,11 @@ class MdocQrBleTranscriptTest {
         )
         val disambiguated = verifyReaderQrEndToEndSession("mdoc:${encoded.toBase64Url()}")
         assertEquals(3, disambiguated.size)
-        val m0 = disambiguated[0] as MdocConnectionMethodBle
-        val m1 = disambiguated[1] as MdocConnectionMethodBle
-        val m2 = disambiguated[2] as MdocConnectionMethodBle
-        assertTrue(m0.directL2capCentral)
-        assertEquals(128, m0.directL2capPsm)
-        assertTrue(m1.gattCentral)
-        assertNull(m1.directL2capPsm)
-        assertTrue(m2.gattPeripheral)
-        assertNull(m2.directL2capPsm)
+        val m0 = disambiguated[0] as MdocConnectionMethod.Ble.DirectL2capCentral
+        val m1 = disambiguated[1] as MdocConnectionMethod.Ble.GattCentral
+        val m2 = disambiguated[2] as MdocConnectionMethod.Ble.GattPeripheral
+        assertEquals(128, m0.psm)
+        assertEquals(centralUuid, m1.uuid)
+        assertEquals(peripheralUuid, m2.uuid)
     }
 }

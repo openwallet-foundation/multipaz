@@ -25,23 +25,21 @@ struct Iso18013ProximityPresentmentScreen: View {
 
                         Button("Share mdoc using QR code") {
                             let bleUuid = UUID.companion.randomUUID(random: KotlinRandom.companion)
-                            let connectionMethods = [
-                                MdocConnectionMethodBle(
-                                    gattPeripheral: true,
-                                    gattCentral: false,
-                                    directL2capPeripheral: false,
-                                    directL2capCentral: false,
-                                    peripheralModeUuid: bleUuid,
-                                    centralModeUuid: nil,
-                                    directL2capPsm: nil,
+                            let connectionMethods: [MdocConnectionMethod] = [
+                                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                                    uuid: bleUuid,
+                                    psm: nil,
+                                    peripheralAddress: nil
+                                ),
+                                MdocConnectionMethod.Ble.GattPeripheral(
+                                    uuid: bleUuid,
                                     peripheralAddress: nil
                                 )
                             ]
                             let settings = MdocProximityQrSettings(
                                 availableConnectionMethods: connectionMethods,
                                 createTransportOptions: MdocTransportOptions(
-                                    bleUseL2CAP: false,
-                                    bleUseL2CAPInEngagement: true
+                                    bleUseL2CAP: false
                                 )
                             )
                             generateQrCode(settings)

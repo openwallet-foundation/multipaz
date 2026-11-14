@@ -23,7 +23,6 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -35,15 +34,12 @@ internal class BleTransportPeripheralMdocReader(
     private val centralManager: BleCentralManager,
     private val uuid: UUID,
     private val psm: Int?,
-    private val gattEnabled: Boolean = true,
-    private val directL2capEnabled: Boolean = false,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdocReader"
     }
 
-    private val useDirectL2cap: Boolean =
-        psm != null && (options.bleUseL2CAPInEngagement || (!gattEnabled && directL2capEnabled))
+    private val useDirectL2cap: Boolean = psm != null
 
     private val transportScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val mutex = Mutex()
@@ -54,15 +50,11 @@ internal class BleTransportPeripheralMdocReader(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     override val connectionMethod: MdocConnectionMethod
-        get() = MdocConnectionMethodBle(
-            gattPeripheral = gattEnabled,
-            gattCentral = false,
-            directL2capPeripheral = directL2capEnabled,
-            directL2capCentral = false,
-            peripheralModeUuid = uuid,
-            centralModeUuid = null,
-            directL2capPsm = if (useDirectL2cap) psm else null,
-        )
+        get() = if (psm != null) {
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = psm)
+        } else {
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
+        }
 
     init {
         centralManager.setUuids(

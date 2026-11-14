@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.BleCentralConfig
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -107,10 +107,8 @@ class TcpHciPacketIoTest {
                     ),
                     packetIoFactory = { bus.peripheralIo },
                 )
-                val connectionMethod = MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = false,
-                    peripheralModeUuid = serviceUuid,
+                val connectionMethod = MdocConnectionMethod.Ble.GattPeripheral(
+                    uuid = serviceUuid,
                 )
 
                 val peripheral = peripheralFactory.createTransport(

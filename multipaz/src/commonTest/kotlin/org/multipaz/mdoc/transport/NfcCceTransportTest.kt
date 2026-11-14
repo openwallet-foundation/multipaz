@@ -20,7 +20,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -521,11 +520,8 @@ class NfcCceTransportTest {
         private val _state = MutableStateFlow(State.IDLE)
         override val state: StateFlow<State> = _state.asStateFlow()
 
-        override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = UUID.fromString("12345678-1234-5678-1234-567812345678"),
-            centralModeUuid = null
+        override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = UUID.fromString("12345678-1234-5678-1234-567812345678")
         )
 
         override val scanningTime: Duration? = null

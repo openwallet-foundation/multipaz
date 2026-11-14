@@ -12,7 +12,7 @@ import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.UUID
 import org.multipaz.util.getUInt32
@@ -317,8 +317,8 @@ class BleTransportTest {
     /**
      * Verifies the full GATT lifecycle of [BleTransportPeripheralMdoc] (mdoc in BLE Peripheral
      * Server Mode):
-     * 1. [BleTransportPeripheralMdoc.connectionMethod] reports `gattPeripheral = true`
-     *    with `peripheralModeUuid = testUuid`, and no `Ident` characteristic is exposed
+     * 1. [BleTransportPeripheralMdoc.connectionMethod] reports [MdocConnectionMethod.Ble.GattPeripheral]
+     *    with `uuid = testUuid`, and no `Ident` characteristic is exposed
      *    (`identCharacteristicUuidValue == null`, as ISO 18013-5 only defines `Ident` in Central
      *    Client Mode).
      * 2. Calling [BleTransportPeripheralMdoc.advertise] followed by [BleTransportPeripheralMdoc.open]
@@ -340,14 +340,12 @@ class BleTransportTest {
         )
 
         assertNull(transport.scanningTime)
-        val cm = transport.connectionMethod as MdocConnectionMethodBle
-        assertTrue(cm.gattPeripheral)
-        assertFalse(cm.gattCentral)
-        assertFalse(cm.directL2capPeripheral)
-        assertFalse(cm.directL2capCentral)
-        assertEquals(testUuid, cm.peripheralModeUuid)
-        assertNull(cm.centralModeUuid)
-        assertNull(cm.directL2capPsm)
+        assertEquals(
+            listOf<MdocConnectionMethod>(MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid)),
+            transport.connectionMethods
+        )
+        val cm = assertIs<MdocConnectionMethod.Ble.GattPeripheral>(transport.connectionMethod)
+        assertEquals(testUuid, cm.uuid)
 
         transport.advertise()
         assertEquals(MdocTransport.State.ADVERTISING, transport.state.value)
@@ -386,11 +384,12 @@ class BleTransportTest {
 
     /**
      * Verifies [BleTransportCentralMdocReader] (reader acting as BLE peripheral server in BLE Central
-     * Client Mode) when both `bleUseL2CAP` and `bleUseL2CAPInEngagement` are enabled:
+     * Client Mode) in dual-mode (`gattEnabled = true`, `directL2capEnabled = true`) with `bleUseL2CAP = true`:
      * 1. [BleTransportCentralMdocReader.advertise] starts the L2CAP server, exposes the Central Client
      *    Mode `L2CAP` (`0000000b-...`) and `Ident` (`00000008-...`) characteristic UUIDs, and populates
-     *    `directL2capPsm` on [BleTransportCentralMdocReader.connectionMethod] so it can be
-     *    conveyed in `ReaderEngagement` (e.g. during NFC Negotiated Handover or CCE).
+     *    [BleTransportCentralMdocReader.connectionMethods] with both
+     *    [MdocConnectionMethod.Ble.DirectL2capCentral] (`psm = 128`) and
+     *    [MdocConnectionMethod.Ble.GattCentral] so both modes can be offered in `ReaderEngagement`.
      * 2. [BleTransportCentralMdocReader.open] sets the sender key so reading the `Ident` characteristic
      *    returns the expected `BLEIdent` value (`deriveBleIdent(senderKey)`), and connects directly
      *    over the L2CAP channel.
@@ -407,9 +406,11 @@ class BleTransportTest {
         )
         val transport = BleTransportCentralMdocReader(
             role = MdocRole.MDOC_READER,
-            options = MdocTransportOptions(bleUseL2CAP = true, bleUseL2CAPInEngagement = true),
+            options = MdocTransportOptions(bleUseL2CAP = true),
             peripheralManager = manager,
             uuid = testUuid,
+            gattEnabled = true,
+            directL2capEnabled = true,
         )
 
         transport.advertise()
@@ -424,13 +425,16 @@ class BleTransportTest {
             manager.identCharacteristicUuidValue
         )
 
-        val cm = transport.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm.gattPeripheral)
-        assertTrue(cm.gattCentral)
-        assertFalse(cm.directL2capPeripheral)
-        assertTrue(cm.directL2capCentral)
-        assertEquals(testUuid, cm.centralModeUuid)
-        assertEquals(128, cm.directL2capPsm)
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = testUuid, psm = 128),
+                MdocConnectionMethod.Ble.GattCentral(uuid = testUuid),
+            ),
+            transport.connectionMethods
+        )
+        val cm = assertIs<MdocConnectionMethod.Ble.DirectL2capCentral>(transport.connectionMethod)
+        assertEquals(testUuid, cm.uuid)
+        assertEquals(128, cm.psm)
 
         transport.open(senderKey)
         assertEquals(MdocTransport.State.CONNECTED, transport.state.value)
@@ -475,12 +479,8 @@ class BleTransportTest {
         )
 
         assertNull(transport.scanningTime)
-        val cm = transport.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm.gattPeripheral)
-        assertTrue(cm.gattCentral)
-        assertFalse(cm.directL2capPeripheral)
-        assertFalse(cm.directL2capCentral)
-        assertEquals(testUuid, cm.centralModeUuid)
+        val cm = assertIs<MdocConnectionMethod.Ble.GattCentral>(transport.connectionMethod)
+        assertEquals(testUuid, cm.uuid)
 
         transport.advertise()
         assertEquals(MdocTransport.State.IDLE, transport.state.value)
@@ -568,7 +568,7 @@ class BleTransportTest {
         val manager2 = FakeBleCentralManager()
         val peripheralMdocReader = BleTransportPeripheralMdocReader(
             role = MdocRole.MDOC_READER,
-            options = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+            options = MdocTransportOptions(),
             centralManager = manager2,
             uuid = testUuid,
             psm = 200,
@@ -605,33 +605,30 @@ class BleTransportTest {
     }
 
     /**
-     * Verifies ISO/IEC 18013-5 Second Edition single-mode Direct L2CAP (`gattEnabled = false`,
-     * `directL2capEnabled = true`) across all four BLE transports even when
-     * `MdocTransportOptions.bleUseL2CAPInEngagement` is `false` (default):
-     * - [BleTransportCentralMdoc] connects directly over L2CAP to `psm` without GATT service discovery.
-     * - [BleTransportPeripheralMdocReader] connects directly over L2CAP to `psm` without GATT service discovery.
-     * - [BleTransportPeripheralMdoc] and [BleTransportCentralMdocReader] start the L2CAP server on
-     *   `advertise()` and expose single-mode `directL2capPeripheral = true` / `directL2capCentral = true`
-     *   with `gattPeripheral = false` / `gattCentral = false`.
+     * Verifies ISO/IEC 18013-5 Second Edition single-mode Direct L2CAP across all four BLE transports:
+     * - [BleTransportCentralMdoc] (`psm != null`) exposes [MdocConnectionMethod.Ble.DirectL2capCentral]
+     *   and connects directly over L2CAP to `psm` without GATT service discovery.
+     * - [BleTransportPeripheralMdocReader] (`psm != null`) exposes
+     *   [MdocConnectionMethod.Ble.DirectL2capPeripheral] and connects directly over L2CAP to `psm`
+     *   without GATT service discovery.
+     * - [BleTransportPeripheralMdoc] and [BleTransportCentralMdocReader] (`gattEnabled = false`,
+     *   `directL2capEnabled = true`) start the L2CAP server on `advertise()` and expose a single
+     *   [MdocConnectionMethod.Ble.DirectL2capPeripheral] / [MdocConnectionMethod.Ble.DirectL2capCentral]
+     *   in [MdocTransport.connectionMethods].
      */
     @Test
-    fun singleModeDirectL2capTransportsConnectWithoutBleUseL2capInEngagementOption() = runTest {
+    fun singleModeDirectL2capTransportsExposeDirectL2capMethodAndConnectDirectly() = runTest {
         val centralManager1 = FakeBleCentralManager()
         val centralMdoc = BleTransportCentralMdoc(
             role = MdocRole.MDOC,
-            options = MdocTransportOptions(), // bleUseL2CAPInEngagement = false
+            options = MdocTransportOptions(),
             centralManager = centralManager1,
             uuid = testUuid,
             psm = 128,
-            gattEnabled = false,
-            directL2capEnabled = true,
         )
-        val cm1 = centralMdoc.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm1.gattPeripheral)
-        assertFalse(cm1.gattCentral)
-        assertFalse(cm1.directL2capPeripheral)
-        assertTrue(cm1.directL2capCentral)
-        assertEquals(128, cm1.directL2capPsm)
+        val cm1 = assertIs<MdocConnectionMethod.Ble.DirectL2capCentral>(centralMdoc.connectionMethod)
+        assertEquals(testUuid, cm1.uuid)
+        assertEquals(128, cm1.psm)
         centralMdoc.open(senderKey)
         assertEquals(0, centralManager1.connectToPeripheralCalls)
         assertEquals(listOf(128), centralManager1.connectedL2capPsms)
@@ -640,19 +637,14 @@ class BleTransportTest {
         val centralManager2 = FakeBleCentralManager()
         val peripheralMdocReader = BleTransportPeripheralMdocReader(
             role = MdocRole.MDOC_READER,
-            options = MdocTransportOptions(), // bleUseL2CAPInEngagement = false
+            options = MdocTransportOptions(),
             centralManager = centralManager2,
             uuid = testUuid,
             psm = 129,
-            gattEnabled = false,
-            directL2capEnabled = true,
         )
-        val cm2 = peripheralMdocReader.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm2.gattPeripheral)
-        assertFalse(cm2.gattCentral)
-        assertTrue(cm2.directL2capPeripheral)
-        assertFalse(cm2.directL2capCentral)
-        assertEquals(129, cm2.directL2capPsm)
+        val cm2 = assertIs<MdocConnectionMethod.Ble.DirectL2capPeripheral>(peripheralMdocReader.connectionMethod)
+        assertEquals(testUuid, cm2.uuid)
+        assertEquals(129, cm2.psm)
         peripheralMdocReader.open(senderKey)
         assertEquals(0, centralManager2.connectToPeripheralCalls)
         assertEquals(listOf(129), centralManager2.connectedL2capPsms)
@@ -669,16 +661,16 @@ class BleTransportTest {
             peripheralManager = peripheralManager1,
             uuid = testUuid,
             gattEnabled = false,
-            directL2capRequested = true,
+            directL2capEnabled = true,
         )
         peripheralMdoc.advertise()
         assertTrue(peripheralManager1.startL2capServerValue)
-        val cm3 = peripheralMdoc.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm3.gattPeripheral)
-        assertFalse(cm3.gattCentral)
-        assertTrue(cm3.directL2capPeripheral)
-        assertFalse(cm3.directL2capCentral)
-        assertEquals(129, cm3.directL2capPsm)
+        assertEquals(
+            listOf<MdocConnectionMethod>(MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = testUuid, psm = 129)),
+            peripheralMdoc.connectionMethods
+        )
+        val cm3 = assertIs<MdocConnectionMethod.Ble.DirectL2capPeripheral>(peripheralMdoc.connectionMethod)
+        assertEquals(129, cm3.psm)
         peripheralMdoc.close()
 
         val peripheralManager2 = FakeBlePeripheralManager(
@@ -692,16 +684,16 @@ class BleTransportTest {
             peripheralManager = peripheralManager2,
             uuid = testUuid,
             gattEnabled = false,
-            directL2capRequested = true,
+            directL2capEnabled = true,
         )
         centralMdocReader.advertise()
         assertTrue(peripheralManager2.startL2capServerValue)
-        val cm4 = centralMdocReader.connectionMethod as MdocConnectionMethodBle
-        assertFalse(cm4.gattPeripheral)
-        assertFalse(cm4.gattCentral)
-        assertFalse(cm4.directL2capPeripheral)
-        assertTrue(cm4.directL2capCentral)
-        assertEquals(128, cm4.directL2capPsm)
+        assertEquals(
+            listOf<MdocConnectionMethod>(MdocConnectionMethod.Ble.DirectL2capCentral(uuid = testUuid, psm = 128)),
+            centralMdocReader.connectionMethods
+        )
+        val cm4 = assertIs<MdocConnectionMethod.Ble.DirectL2capCentral>(centralMdocReader.connectionMethod)
+        assertEquals(128, cm4.psm)
         centralMdocReader.close()
     }
 
@@ -884,32 +876,26 @@ class BleTransportTest {
     }
 
     /**
-     * Verifies that [BleTransportCentralMdoc] and [BleTransportPeripheralMdocReader] ignore a non-null
-     * engagement `psm` when [MdocTransportOptions.bleUseL2CAPInEngagement] is `false`:
-     * 1. When both `bleUseL2CAP` and `bleUseL2CAPInEngagement` are `false`, `BleTransportCentralMdoc`
-     *    falls back to GATT rather than connecting to the engagement PSM, and reports both
-     *    `bleUsingL2cap = false` and `bleL2capPsmInEngagement = false`.
-     * 2. When `bleUseL2CAP = true` and `bleUseL2CAPInEngagement = false`, `BleTransportCentralMdoc`
-     *    ignores the engagement PSM (`200`), performs GATT discovery + `Ident` verification, and connects
-     *    via the GATT L2CAP characteristic PSM (`192`), reporting `bleUsingL2cap = true` and
+     * Verifies [MdocTransportStats.bleUsingL2cap] and [MdocTransportStats.bleL2capPsmInEngagement]
+     * across the three BLE central connection modes on [BleTransportCentralMdoc] and
+     * [BleTransportPeripheralMdocReader]:
+     * 1. Pure GATT (`psm = null`, `bleUseL2CAP = false`): `bleUsingL2cap = false`,
      *    `bleL2capPsmInEngagement = false`.
-     * 3. When both `bleUseL2CAP` and `bleUseL2CAPInEngagement` are `false`,
-     *    `BleTransportPeripheralMdocReader` falls back to GATT rather than connecting to the engagement
-     *    PSM, reporting `bleUsingL2cap = false` and `bleL2capPsmInEngagement = false`.
+     * 2. L2CAP via GATT characteristic (`psm = null`, `bleUseL2CAP = true`, peripheral exposes PSM
+     *    `192` on GATT L2CAP characteristic): `bleUsingL2cap = true`, `bleL2capPsmInEngagement = false`.
+     * 3. Direct L2CAP via engagement (`psm = 200`): connects directly to L2CAP PSM `200` without GATT
+     *    connection, reporting `bleUsingL2cap = true` and `bleL2capPsmInEngagement = true`.
      */
     @Test
-    fun centralTransportsIgnoreEngagementPsmWhenBleUseL2capInEngagementDisabled() = runTest {
-        // 1. BleTransportCentralMdoc with both L2CAP options false + non-null engagement PSM
+    fun centralTransportsReportL2capAndEngagementPsmStatsCorrectly() = runTest {
+        // 1. BleTransportCentralMdoc over GATT (psm == null, bleUseL2CAP == false)
         val manager1 = FakeBleCentralManager(expectedIdent = senderIdent)
         val centralMdocGatt = BleTransportCentralMdoc(
             role = MdocRole.MDOC,
-            options = MdocTransportOptions(
-                bleUseL2CAP = false,
-                bleUseL2CAPInEngagement = false
-            ),
+            options = MdocTransportOptions(bleUseL2CAP = false),
             centralManager = manager1,
             uuid = testUuid,
-            psm = 200,
+            psm = null,
         )
         centralMdocGatt.open(senderKey)
         assertEquals(1, manager1.connectToPeripheralCalls)
@@ -920,20 +906,17 @@ class BleTransportTest {
         assertEquals(false, centralMdocGatt.stats.bleL2capPsmInEngagement)
         centralMdocGatt.close()
 
-        // 2. BleTransportCentralMdoc with bleUseL2CAP = true, bleUseL2CAPInEngagement = false
+        // 2. BleTransportCentralMdoc with bleUseL2CAP = true and psm == null (L2CAP via GATT characteristic)
         val manager2 = FakeBleCentralManager(
             expectedIdent = senderIdent,
             remoteL2capPsm = 192
         )
         val centralMdocGattCharL2cap = BleTransportCentralMdoc(
             role = MdocRole.MDOC,
-            options = MdocTransportOptions(
-                bleUseL2CAP = true,
-                bleUseL2CAPInEngagement = false
-            ),
+            options = MdocTransportOptions(bleUseL2CAP = true),
             centralManager = manager2,
             uuid = testUuid,
-            psm = 200,
+            psm = null,
         )
         centralMdocGattCharL2cap.open(senderKey)
         assertEquals(1, manager2.connectToPeripheralCalls)
@@ -944,26 +927,23 @@ class BleTransportTest {
         assertEquals(false, centralMdocGattCharL2cap.stats.bleL2capPsmInEngagement)
         centralMdocGattCharL2cap.close()
 
-        // 3. BleTransportPeripheralMdocReader with both L2CAP options false + non-null engagement PSM
+        // 3. BleTransportPeripheralMdocReader with engagement PSM = 200 (Direct L2CAP)
         val manager3 = FakeBleCentralManager()
-        val peripheralMdocReaderGatt = BleTransportPeripheralMdocReader(
+        val peripheralMdocReaderDirectL2cap = BleTransportPeripheralMdocReader(
             role = MdocRole.MDOC_READER,
-            options = MdocTransportOptions(
-                bleUseL2CAP = false,
-                bleUseL2CAPInEngagement = false
-            ),
+            options = MdocTransportOptions(),
             centralManager = manager3,
             uuid = testUuid,
             psm = 200,
         )
-        peripheralMdocReaderGatt.open(senderKey)
-        assertEquals(1, manager3.connectToPeripheralCalls)
+        peripheralMdocReaderDirectL2cap.open(senderKey)
+        assertEquals(0, manager3.connectToPeripheralCalls)
         assertEquals(0, manager3.checkReaderIdentCalls)
-        assertEquals(1, manager3.subscribeToCharacteristicsCalls)
-        assertEquals(emptyList(), manager3.connectedL2capPsms)
-        assertEquals(false, peripheralMdocReaderGatt.stats.bleUsingL2cap)
-        assertEquals(false, peripheralMdocReaderGatt.stats.bleL2capPsmInEngagement)
-        peripheralMdocReaderGatt.close()
+        assertEquals(0, manager3.subscribeToCharacteristicsCalls)
+        assertEquals(listOf(200), manager3.connectedL2capPsms)
+        assertEquals(true, peripheralMdocReaderDirectL2cap.stats.bleUsingL2cap)
+        assertEquals(true, peripheralMdocReaderDirectL2cap.stats.bleL2capPsmInEngagement)
+        peripheralMdocReaderDirectL2cap.close()
     }
 
     /**

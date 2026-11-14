@@ -2,7 +2,7 @@ package org.multipaz.testapp.multidevicetests
 
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.testapp.TestAppConfiguration
@@ -58,20 +58,21 @@ class MultiDeviceTestsClient(
                 val getPsmFromReader = if (parts[6] == "true") true else false
                 val encodedDeviceEngagement = parts[7].fromBase64Url()
                 val test = Test.valueOf(testName)
-                val bleUseL2CAPInEngagement = (
-                    test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT ||
-                        test == Test.MDOC_PERIPHERAL_SERVER_MODE_L2CAP_PSM_IN_DEVICE_ENGAGEMENT
-                )
                 val options = MdocTransportOptions(
                     bleUseL2CAP = bleUseL2CAP,
-                    bleUseL2CAPInEngagement = bleUseL2CAPInEngagement,
                 )
 
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
                 Logger.i(TAG, "Test: $test")
                 Logger.dHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
                 val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
-                val connectionMethod = deviceEngagement.connectionMethods[0]
+                val rawConnectionMethod = deviceEngagement.connectionMethods[0]
+                val connectionMethod = if (getPsmFromReader) {
+                    val bleCm = rawConnectionMethod as MdocConnectionMethod.Ble
+                    MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleCm.uuid)
+                } else {
+                    rawConnectionMethod
+                }
                 val eDeviceKey = deviceEngagement.eDeviceKey
                 val transport = TestAppConfiguration.mdocTransportFactory.createTransport(
                     connectionMethod,
@@ -83,7 +84,7 @@ class MultiDeviceTestsClient(
                     transport.advertise()
                 }
                 if (getPsmFromReader) {
-                    val cm = transport.connectionMethod as MdocConnectionMethodBle
+                    val cm = transport.connectionMethod as MdocConnectionMethod.Ble
                     sendChannel.writeStringUtf8("${cm.directL2capPsm!!}\n")
                 }
                 val nextCmd = receiveChannel.readUTF8Line(LINE_LIMIT)

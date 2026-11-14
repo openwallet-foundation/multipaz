@@ -1,8 +1,6 @@
 package org.multipaz.mdoc.transport
 
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.role.MdocRole
 
 /**
@@ -18,30 +16,40 @@ class AndroidMdocTransportFactory(
     override fun createTransport(
         connectionMethod: MdocConnectionMethod,
         role: MdocRole,
-        options: MdocTransportOptions
-    ): MdocTransport {
-        return when (connectionMethod) {
-            is MdocConnectionMethodBle -> createBleMdocTransport(
-                connectionMethod = connectionMethod,
-                role = role,
-                options = options,
-                centralConfig = centralConfig,
-                centralHalFactory = { BleCentralHalAndroid() },
-                peripheralHalFactory = { BlePeripheralHalAndroid() }
-            )
-            is MdocConnectionMethodNfc -> {
-                when (role) {
-                    MdocRole.MDOC -> NfcTransportMdoc(role, options, connectionMethod)
-                    MdocRole.MDOC_READER -> NfcTransportMdocReader(role, options, connectionMethod)
+        options: MdocTransportOptions,
+    ): MdocTransport = createTransports(listOf(connectionMethod), role, options).single()
+
+    override fun createTransports(
+        connectionMethods: List<MdocConnectionMethod>,
+        role: MdocRole,
+        options: MdocTransportOptions,
+    ): List<MdocTransport> = createMdocTransports(
+        connectionMethods = connectionMethods,
+        role = role,
+        options = options,
+        centralConfig = centralConfig,
+        centralHalFactory = { BleCentralHalAndroid() },
+        peripheralHalFactory = { BlePeripheralHalAndroid() },
+        nonBleTransportFactory = { method ->
+            when (method) {
+                is MdocConnectionMethod.Nfc -> when (role) {
+                    MdocRole.MDOC -> NfcTransportMdoc(role, options, method)
+                    MdocRole.MDOC_READER -> NfcTransportMdocReader(role, options, method)
                 }
+                else -> throw IllegalArgumentException("$method is not supported")
             }
-            else -> throw IllegalArgumentException("$connectionMethod is not supported")
-        }
-    }
+        },
+    )
 }
 
 internal actual fun defaultMdocTransportFactoryCreateTransport(
     connectionMethod: MdocConnectionMethod,
     role: MdocRole,
-    options: MdocTransportOptions
+    options: MdocTransportOptions,
 ): MdocTransport = AndroidMdocTransportFactory().createTransport(connectionMethod, role, options)
+
+internal actual fun defaultMdocTransportFactoryCreateTransports(
+    connectionMethods: List<MdocConnectionMethod>,
+    role: MdocRole,
+    options: MdocTransportOptions,
+): List<MdocTransport> = AndroidMdocTransportFactory().createTransports(connectionMethods, role, options)

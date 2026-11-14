@@ -24,7 +24,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.request.DeviceRequest
@@ -106,6 +105,9 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
      *   otherwise the secondary connection method is chosen according to [handoverPreferredOrder].
      * @property handoverPreferredOrder a list of the preferred order for which kind of secondary
      *   [MdocConnectionMethod] to select during handover when [onlyAllowNfc] is `false`.
+     * @property bleDirectL2capEnabled `true` if ISO/IEC 18013-5 Second Edition direct BLE L2CAP modes
+     *   ([MdocConnectionMethod.Ble.DirectL2capPeripheral] and [MdocConnectionMethod.Ble.DirectL2capCentral])
+     *   should be accepted during CCE handover.
      * @property transportOptions the [MdocTransportOptions] to use for newly created connections.
      * @property transportFactory the [MdocTransportFactory] to use for creating transports.
      * @property capabilities the capabilities to convey to the mdoc reader.
@@ -118,6 +120,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
         val sessionEncryptionCurve: EcCurve,
         val onlyAllowNfc: Boolean,
         val handoverPreferredOrder: List<String> = emptyList(),
+        val bleDirectL2capEnabled: Boolean = false,
         val transportOptions: MdocTransportOptions,
         val transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
         val capabilities: Map<Capability, DataItem> = mapOf(
@@ -436,10 +439,10 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 Logger.w(TAG, "Engagement failed. Maybe this wasn't an ISO mdoc reader.", error)
             },
             handoverPicker = { connectionMethods ->
-                val eligibleMethods = if (settings.transportOptions.bleUseL2CAPInEngagement) {
+                val eligibleMethods = if (settings.bleDirectL2capEnabled) {
                     connectionMethods
                 } else {
-                    connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasDirectL2cap }
+                    connectionMethods.filterNot { it is MdocConnectionMethod.Ble && it.isDirectL2cap }
                 }
                 if (settings.onlyAllowNfc || eligibleMethods.isEmpty()) {
                     null
@@ -452,27 +455,25 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                         }
                     }
                     val chosen = picked ?: eligibleMethods.first()
-                    if (chosen is MdocConnectionMethodBle &&
-                        chosen.directL2capPeripheral &&
-                        chosen.directL2capPsm == null
-                    ) {
+                    if (chosen is MdocConnectionMethod.Ble.DirectL2capPeripheral && chosen.psm == null) {
                         val prevJob = transactionJob
                         if (prevJob != null) {
                             prevJob.cancel(TransactionSupersededException())
                             prevJob.join()
                         }
-                        val uuid = chosen.peripheralModeUuid ?: UUID.randomUUID()
-                        val methodToAdvertise = chosen.copy(peripheralModeUuid = uuid)
+                        val uuid = chosen.uuid ?: UUID.randomUUID()
+                        val methodToAdvertise = chosen.copy(uuid = uuid)
                         val secondaryTransport = settings.transportFactory.createTransport(
                             connectionMethod = methodToAdvertise,
                             role = MdocRole.MDOC,
-                            options = settings.transportOptions.copy(bleUseL2CAPInEngagement = true),
+                            options = settings.transportOptions,
                         )
                         try {
                             secondaryTransport.advertise()
                             pendingPreAdvertisedTransport = secondaryTransport
-                            val advertisedBle = secondaryTransport.connectionMethod as? MdocConnectionMethodBle
-                            methodToAdvertise.copy(directL2capPsm = advertisedBle?.directL2capPsm)
+                            val advertisedBle =
+                                secondaryTransport.connectionMethod as? MdocConnectionMethod.Ble.DirectL2capPeripheral
+                            methodToAdvertise.copy(psm = advertisedBle?.psm)
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             try {
@@ -566,11 +567,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                         val createdTransport = preAdvertisedForSecondary ?: settings.transportFactory.createTransport(
                             connectionMethod = connectionMethod,
                             role = MdocRole.MDOC,
-                            options = if (connectionMethod is MdocConnectionMethodBle && !connectionMethod.hasDirectL2cap) {
-                                settings.transportOptions.copy(bleUseL2CAPInEngagement = false)
-                            } else {
-                                settings.transportOptions
-                            }
+                            options = settings.transportOptions,
                         )
                         secondaryTransport = createdTransport
                         createdTransport.open(eSenderKey = eDeviceKey.publicKey)

@@ -1,13 +1,12 @@
 package org.multipaz.bthci
 
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.BleCentralConfig
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
-import org.multipaz.mdoc.transport.createBleMdocTransport
+import org.multipaz.mdoc.transport.createMdocTransports
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -16,7 +15,7 @@ import kotlin.time.Duration.Companion.seconds
  * An [MdocTransportFactory] that creates BLE [MdocTransport] instances backed by Multipaz's
  * user-space Bluetooth HCI/L2CAP/ATT stack ([BleCentralHalHci] and [BlePeripheralHalHci]).
  *
- * Non-BLE connection methods (such as [org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc])
+ * Non-BLE connection methods (such as [MdocConnectionMethod.Nfc])
  * are delegated to [fallbackFactory].
  *
  * On Linux JVM, the default [packetIoFactory] opens a `LinuxHciSocketPacketIo` bound via
@@ -66,34 +65,38 @@ class BtHciMdocTransportFactory(
     override fun createTransport(
         connectionMethod: MdocConnectionMethod,
         role: MdocRole,
-        options: MdocTransportOptions
-    ): MdocTransport {
-        return when (connectionMethod) {
-            is MdocConnectionMethodBle -> createBleMdocTransport(
-                connectionMethod = connectionMethod,
-                role = role,
-                options = options,
-                centralConfig = centralConfig,
-                centralHalFactory = {
-                    BleCentralHalHci(
-                        gapDeviceName = gapDeviceName,
-                        randomAddress = randomAddressBytes?.copyOf(),
-                        scanInterval = scanInterval,
-                        scanWindow = scanWindow,
-                        connectTimeout = connectTimeout,
-                        packetIoFactory = packetIoFactory,
-                    )
-                },
-                peripheralHalFactory = {
-                    BlePeripheralHalHci(
-                        gapDeviceName = gapDeviceName,
-                        randomAddress = randomAddressBytes?.copyOf(),
-                        faultConfig = faultConfig,
-                        packetIoFactory = packetIoFactory,
-                    )
-                },
+        options: MdocTransportOptions,
+    ): MdocTransport = createTransports(listOf(connectionMethod), role, options).single()
+
+    override fun createTransports(
+        connectionMethods: List<MdocConnectionMethod>,
+        role: MdocRole,
+        options: MdocTransportOptions,
+    ): List<MdocTransport> = createMdocTransports(
+        connectionMethods = connectionMethods,
+        role = role,
+        options = options,
+        centralConfig = centralConfig,
+        centralHalFactory = {
+            BleCentralHalHci(
+                gapDeviceName = gapDeviceName,
+                randomAddress = randomAddressBytes?.copyOf(),
+                scanInterval = scanInterval,
+                scanWindow = scanWindow,
+                connectTimeout = connectTimeout,
+                packetIoFactory = packetIoFactory,
             )
-            else -> fallbackFactory.createTransport(connectionMethod, role, options)
-        }
-    }
+        },
+        peripheralHalFactory = {
+            BlePeripheralHalHci(
+                gapDeviceName = gapDeviceName,
+                randomAddress = randomAddressBytes?.copyOf(),
+                faultConfig = faultConfig,
+                packetIoFactory = packetIoFactory,
+            )
+        },
+        nonBleTransportFactory = { method ->
+            fallbackFactory.createTransport(method, role, options)
+        },
+    )
 }

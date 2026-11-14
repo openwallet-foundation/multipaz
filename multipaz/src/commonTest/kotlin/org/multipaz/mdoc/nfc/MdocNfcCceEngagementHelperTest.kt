@@ -23,8 +23,6 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
@@ -77,7 +75,7 @@ private const val TAG = "MdocNfcCceEngagementHelperTest"
  *      `CCEHandoverSelect` `{0: DeviceEngagement}` in `DO'53'`.
  *    - If the mdoc omitted the BLE UUID in `DeviceEngagement` (because the UUID was supplied by the
  *      reader in `CCEHandoverRequest`), [mdocReaderNfcHandover] supplements the reader's BLE UUID back
- *      onto the returned [MdocConnectionMethodBle].
+ *      onto the returned [MdocConnectionMethod.Ble].
  * 3. **Concurrent / NFC-only data transfer (`INS_ENVELOPE` #2+)**:
  *    - Subsequent `ENVELOPE` APDUs on the same selected application carry encrypted session messages
  *      (`DeviceRequest` / `DeviceResponse` / session termination) between
@@ -314,16 +312,12 @@ class MdocNfcCceEngagementHelperTest {
         lateinit var mdocReaderTransport: NfcCceTransportMdocReader
         lateinit var mdocTransport: NfcCceTransportMdoc
 
-        val methods = listOf(MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = false,
-            directL2capPeripheral = false,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = UUID(1UL, 2UL),
-            directL2capPsm = 192,
-            peripheralAddress = null
-        ))
+        val methods = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(
+                uuid = UUID(1UL, 2UL),
+                psm = 192,
+            )
+        )
 
         var handoverComplete = false
         val engagementHelper = MdocNfcCceEngagementHelper(
@@ -419,7 +413,7 @@ class MdocNfcCceEngagementHelperTest {
      * Verifies that when the mdoc selects BLE Central Mode during NFC CCE handover, `centralModeUuid`
      * and `directL2capPsm` are omitted from `CCEHandoverSelect` on the wire (per ISO 18013-5 Second
      * Edition Clause 11.1.2, since the reader already provided them in `CCEHandoverRequest`), and
-     * [mdocReaderNfcHandover] supplements them back onto the returned [MdocConnectionMethodBle] while
+     * [mdocReaderNfcHandover] supplements them back onto the returned [MdocConnectionMethod.Ble] while
      * preserving the raw `encodedDeviceEngagement` bytes for `SessionTranscript`.
      */
     @Test
@@ -429,25 +423,17 @@ class MdocNfcCceEngagementHelperTest {
 
         val bleUuid = UUID(10UL, 20UL)
         val readerMethods = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = true,
-                directL2capPeripheral = false,
-                directL2capCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = bleUuid,
-                directL2capPsm = 192,
-                peripheralAddress = null
-            )
+            MdocConnectionMethod.Ble.DirectL2capCentral(
+                uuid = bleUuid,
+                psm = 192,
+            ),
+            MdocConnectionMethod.Ble.GattCentral(
+                uuid = bleUuid,
+            ),
         )
 
-        // The mdoc selects directL2capCentral without UUID in DeviceEngagement
-        val mdocBleMethodWithoutUuid = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = false,
-            directL2capPeripheral = false,
-            directL2capCentral = true,
-        )
+        // The mdoc selects DirectL2capCentral without UUID in DeviceEngagement
+        val mdocBleMethodWithoutUuid = MdocConnectionMethod.Ble.DirectL2capCentral()
 
         lateinit var mdocReaderTransport: NfcCceTransportMdocReader
         lateinit var mdocTransport: NfcCceTransportMdoc
@@ -466,9 +452,9 @@ class MdocNfcCceEngagementHelperTest {
             },
             handoverPicker = { connectionMethods ->
                 assertEquals(2, connectionMethods.size)
-                assertTrue((connectionMethods[0] as MdocConnectionMethodBle).directL2capCentral)
-                assertTrue((connectionMethods[1] as MdocConnectionMethodBle).gattCentral)
-                // Pick directL2capCentral without UUID
+                assertTrue(connectionMethods[0] is MdocConnectionMethod.Ble.DirectL2capCentral)
+                assertTrue(connectionMethods[1] is MdocConnectionMethod.Ble.GattCentral)
+                // Pick DirectL2capCentral without UUID
                 mdocBleMethodWithoutUuid
             },
         )
@@ -483,23 +469,19 @@ class MdocNfcCceEngagementHelperTest {
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
 
-        // Verify that the reader supplemented centralModeUuid and directL2capPsm from readerMethods
-        val supplementedMethod = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
-        assertNull(supplementedMethod.peripheralModeUuid)
-        assertEquals(bleUuid, supplementedMethod.centralModeUuid)
-        assertEquals(192, supplementedMethod.directL2capPsm)
-        assertTrue(supplementedMethod.directL2capCentral)
-        assertFalse(supplementedMethod.gattCentral)
+        // Verify that the reader supplemented uuid and psm from readerMethods
+        val supplementedMethod = handoverResult.connectionMethods[0] as MdocConnectionMethod.Ble.DirectL2capCentral
+        assertEquals(bleUuid, supplementedMethod.uuid)
+        assertEquals(192, supplementedMethod.psm)
 
         // Verify that raw DeviceEngagement received from the mdoc had no UUID and no PSM
         val deFromMdoc = DeviceEngagement.fromDataItem(
             Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
         )
         assertEquals(1, deFromMdoc.connectionMethods.size)
-        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethodBle
-        assertNull(deBleMethod.centralModeUuid)
-        assertNull(deBleMethod.peripheralModeUuid)
-        assertNull(deBleMethod.directL2capPsm)
+        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethod.Ble.DirectL2capCentral
+        assertNull(deBleMethod.uuid)
+        assertNull(deBleMethod.psm)
 
         assertTrue(handoverComplete)
 
@@ -561,10 +543,7 @@ class MdocNfcCceEngagementHelperTest {
         val eReaderKey = getEReaderKey()
 
         val readerMethods = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = true,
-                gattCentral = false,
-            )
+            MdocConnectionMethod.Ble.GattPeripheral()
         )
 
         lateinit var mdocReaderTransport: NfcCceTransportMdocReader
@@ -574,9 +553,9 @@ class MdocNfcCceEngagementHelperTest {
         val engagementHelper = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
             onHandoverComplete = { connectionMethod, _, _, _ ->
-                val ble = connectionMethod as MdocConnectionMethodBle
-                assertNotNull(ble.peripheralModeUuid)
-                mdocObservedUuid = ble.peripheralModeUuid
+                val ble = connectionMethod as MdocConnectionMethod.Ble.GattPeripheral
+                assertNotNull(ble.uuid)
+                mdocObservedUuid = ble.uuid
             },
             onMessageReceived = { message ->
                 mdocTransport.onMessageReceivedViaNfc(message)
@@ -586,9 +565,8 @@ class MdocNfcCceEngagementHelperTest {
             },
             handoverPicker = { connectionMethods ->
                 assertEquals(1, connectionMethods.size)
-                val offered = connectionMethods[0] as MdocConnectionMethodBle
-                assertTrue(offered.gattPeripheral)
-                assertNull(offered.peripheralModeUuid)
+                val offered = connectionMethods[0] as MdocConnectionMethod.Ble.GattPeripheral
+                assertNull(offered.uuid)
                 offered
             },
         )
@@ -603,46 +581,39 @@ class MdocNfcCceEngagementHelperTest {
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
         assertEquals(1, handoverResult.connectionMethods.size)
 
-        val selected = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
+        val selected = handoverResult.connectionMethods[0] as MdocConnectionMethod.Ble.GattPeripheral
         assertNotNull(mdocObservedUuid)
-        assertEquals(mdocObservedUuid, selected.peripheralModeUuid)
-        assertNull(selected.centralModeUuid)
+        assertEquals(mdocObservedUuid, selected.uuid)
 
         val deFromMdoc = DeviceEngagement.fromDataItem(
             Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
         )
-        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethodBle
-        assertEquals(mdocObservedUuid, deBleMethod.peripheralModeUuid)
-        assertNull(deBleMethod.centralModeUuid)
+        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethod.Ble.GattPeripheral
+        assertEquals(mdocObservedUuid, deBleMethod.uuid)
     }
 
     /**
      * Verifies ISO/IEC 18013-5 Second Edition Clause 11.1.2 single-mode rule in CCE:
-     * 1. When the reader offers all 4 BLE modes, [MdocNfcCceEngagementHelper] disambiguates them into
+     * 1. When the reader offers all 4 BLE modes, [MdocNfcCceEngagementHelper] decodes them into
      *    4 distinct single-mode choices for `handoverPicker`.
-     * 2. If `handoverPicker` attempts to return a multi-mode [MdocConnectionMethodBle],
-     *    [MdocNfcCceEngagementHelper] rejects it via `onError` (`6F00`), enforcing that only a single
-     *    mode may be selected in `CCEHandoverSelect`.
-     * 3. Also verifies that any [org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc] passed to
+     * 2. If `handoverPicker` attempts to select `DirectL2capPeripheral` without a PSM,
+     *    [MdocNfcCceEngagementHelper] rejects it via `onError` (`6F00`).
+     * 3. Also verifies that any [MdocConnectionMethod.Nfc] passed to
      *    `mdocReaderNfcHandover(useCce = true)` is stripped from `CCEHandoverRequest` (Clauses 9.5.1 / 11.2.1).
      */
     @Test
-    fun testFourModeReaderOfferNfcStrippingAndMultiModeSelectRejection() = runTest {
+    fun testFourModeReaderOfferNfcStrippingAndInvalidSelectRejection() = runTest {
         val eDeviceKey = getEDeviceKey()
         val bleUuid = UUID(50UL, 60UL)
         val readerMethods = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = true,
-                gattCentral = true,
-                directL2capPeripheral = true,
-                directL2capCentral = true,
-                centralModeUuid = bleUuid,
-                directL2capPsm = 192,
-            ),
-            MdocConnectionMethodNfc(65535, 65536),
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid, psm = 192),
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(),
+            MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(),
+            MdocConnectionMethod.Nfc(65535, 65536),
         )
 
-        // 1. Reader offers 4 BLE modes + NFC -> NFC is stripped, mdoc sees 4 BLE modes, picks gattCentral
+        // 1. Reader offers 4 BLE modes + NFC -> NFC is stripped, mdoc sees 4 BLE modes, picks GattCentral
         var seenMethodsCount = 0
         val engagementHelper1 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
@@ -651,8 +622,8 @@ class MdocNfcCceEngagementHelperTest {
             onError = { error -> fail("onError should not be called with $error") },
             handoverPicker = { methods ->
                 seenMethodsCount = methods.size
-                assertTrue(methods.all { it is MdocConnectionMethodBle })
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                assertTrue(methods.all { it is MdocConnectionMethod.Ble })
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().single()
             },
         )
         val tag1 = LoopbackIsoTag(engagementHelper1)
@@ -664,26 +635,18 @@ class MdocNfcCceEngagementHelperTest {
         assertNotNull(handoverResult1)
         assertEquals(4, seenMethodsCount)
         assertEquals(1, handoverResult1.connectionMethods.size)
-        val selectedGattCentral = handoverResult1.connectionMethods[0] as MdocConnectionMethodBle
-        assertTrue(selectedGattCentral.gattCentral)
-        assertFalse(selectedGattCentral.directL2capCentral)
-        assertEquals(bleUuid, selectedGattCentral.centralModeUuid)
-        assertNull(selectedGattCentral.directL2capPsm)
+        val selectedGattCentral = handoverResult1.connectionMethods[0] as MdocConnectionMethod.Ble.GattCentral
+        assertEquals(bleUuid, selectedGattCentral.uuid)
 
-        // 2. Multi-mode selection in handoverPicker is rejected
-        var multiModeError: Throwable? = null
+        // 2. Selecting DirectL2capPeripheral without a PSM in handoverPicker is rejected in CCE_SELECT
+        var invalidSelectError: Throwable? = null
         val engagementHelper2 = MdocNfcCceEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
             onHandoverComplete = { _, _, _, _ -> },
             onMessageReceived = {},
-            onError = { error -> multiModeError = error },
+            onError = { error -> invalidSelectError = error },
             handoverPicker = { _ ->
-                MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = true,
-                    peripheralModeUuid = bleUuid,
-                    centralModeUuid = bleUuid,
-                )
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid, psm = null)
             },
         )
         val tag2 = LoopbackIsoTag(engagementHelper2)
@@ -694,7 +657,7 @@ class MdocNfcCceEngagementHelperTest {
                 options = MdocReaderNfcHandoverOptions(useCce = true)
             )
         }
-        assertNotNull(multiModeError)
+        assertNotNull(invalidSelectError)
     }
 
     /**
@@ -709,20 +672,14 @@ class MdocNfcCceEngagementHelperTest {
         val readerUuid = UUID(100UL, 101UL)
         val mdocUuid = UUID(200UL, 201UL)
         val readerMethods = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = true,
-                gattCentral = false,
-                peripheralModeUuid = readerUuid,
-                centralModeUuid = null,
+            MdocConnectionMethod.Ble.GattPeripheral(
+                uuid = readerUuid,
             )
         )
 
         // The mdoc provides its own UUID in DeviceEngagement
-        val mdocBleMethodWithUuid = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = mdocUuid,
-            centralModeUuid = null,
+        val mdocBleMethodWithUuid = MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = mdocUuid,
         )
 
         val engagementHelper = MdocNfcCceEngagementHelper(
@@ -748,9 +705,8 @@ class MdocNfcCceEngagementHelperTest {
         assertEquals(1, handoverResult.connectionMethods.size)
 
         // Verify that mdoc's UUID is kept and not overwritten by readerUuid
-        val cm = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
-        assertEquals(mdocUuid, cm.peripheralModeUuid)
-        assertNull(cm.centralModeUuid)
+        val cm = handoverResult.connectionMethods[0] as MdocConnectionMethod.Ble.GattPeripheral
+        assertEquals(mdocUuid, cm.uuid)
     }
 
     /**
@@ -769,15 +725,9 @@ class MdocNfcCceEngagementHelperTest {
         lateinit var mdocTransport: NfcCceTransportMdoc
 
         val methods = listOf(
-            MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = false,
-                directL2capPeripheral = false,
-                directL2capCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = UUID(1UL, 2UL),
-                directL2capPsm = 192,
-                peripheralAddress = null
+            MdocConnectionMethod.Ble.DirectL2capCentral(
+                uuid = UUID(1UL, 2UL),
+                psm = 192,
             )
         )
 

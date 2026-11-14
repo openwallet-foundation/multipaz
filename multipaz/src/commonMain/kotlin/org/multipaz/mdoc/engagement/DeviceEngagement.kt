@@ -6,7 +6,6 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -16,6 +15,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.origininfo.OriginInfo
+import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 
 /**
@@ -75,27 +75,24 @@ data class DeviceEngagement private constructor(
         ) {
             "Invalid engagementType $engagementType for DeviceEngagement"
         }
-        val methodsToEncode = MdocConnectionMethod.combine(connectionMethods)
-        if (engagementType == MdocEngagementType.CCE_SELECT) {
-            require(methodsToEncode.size <= 1) {
-                "At most one connection method may be selected in CCE_SELECT, got ${methodsToEncode.size}"
-            }
-        } else if (engagementType == MdocEngagementType.READER_QR) {
-            require(methodsToEncode.isEmpty()) {
+        if (engagementType == MdocEngagementType.READER_QR) {
+            require(connectionMethods.isEmpty()) {
                 "DeviceRetrievalMethods must not be present in DeviceEngagement for READER_QR"
             }
         }
+        val encodedMethods = MdocConnectionMethod.encodeDeviceRetrievalMethods(
+            methods = connectionMethods,
+            engagementType = engagementType,
+        )
         return buildCborMap {
             put(0, version)
             putCborArray(1) {
                 add(1) // cipher suite
                 addTaggedEncodedCbor(Cbor.encode(this@DeviceEngagement.eDeviceKey.toCoseKey().toDataItem()))
             }
-            if (methodsToEncode.isNotEmpty()) {
+            if (encodedMethods.isNotEmpty()) {
                 putCborArray(2) {
-                    methodsToEncode.forEach { connectionMethod ->
-                        add(RawCbor(connectionMethod.toDeviceEngagement(engagementType)))
-                    }
+                    encodedMethods.forEach { add(it) }
                 }
             }
             if (version >= "1.1") {
@@ -133,17 +130,12 @@ data class DeviceEngagement private constructor(
             val eDeviceKey = security[1].asTaggedEncodedCbor.asCoseKey.ecPublicKey
             val eDeviceKeyBytes = ByteString(Cbor.encode(security[1]))
             val connectionMethodsArray = dataItem.getOrNull(2)
-            val connectionMethods = mutableListOf<MdocConnectionMethod>()
-            if (connectionMethodsArray != null) {
-                for (cmDataItem in (connectionMethodsArray as CborArray).items) {
-                    val connectionMethod = MdocConnectionMethod.fromDeviceEngagement(
-                        Cbor.encode(cmDataItem)
-                    )
-                    if (connectionMethod != null) {
-                        connectionMethods.add(connectionMethod)
-                    }
-                }
-            }
+            val connectionMethods = connectionMethodsArray?.let {
+                MdocConnectionMethod.decodeDeviceRetrievalMethods(
+                    items = (it as CborArray).items,
+                    senderRole = MdocRole.MDOC,
+                )
+            } ?: emptyList()
             val originInfos = mutableListOf<OriginInfo>()
             // 18013-7 defines key 5 as having origin info
             if (dataItem.hasKey(5)) {
@@ -260,7 +252,7 @@ data class DeviceEngagement private constructor(
                         Bstr(Cbor.encode(eDeviceKey.toCoseKey().toDataItem()))
                     ))
                 ),
-                connectionMethods = MdocConnectionMethod.combine(connectionMethods),
+                connectionMethods = connectionMethods.toList(),
                 originInfos = originInfos,
                 capabilities = capabilities
             )

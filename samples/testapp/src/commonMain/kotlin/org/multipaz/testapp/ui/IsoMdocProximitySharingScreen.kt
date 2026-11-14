@@ -31,8 +31,6 @@ import org.multipaz.compose.presentment.MdocProximityQrSettings
 import org.multipaz.compose.qrcode.generateQrCode
 import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
@@ -126,25 +124,22 @@ fun IsoMdocProximitySharingScreen(
                         val bleUuid = UUID.randomUUID()
                         if (settingsModel.presentmentBleCentralClientModeEnabled.value) {
                             connectionMethods.add(
-                                MdocConnectionMethodBle(
-                                    gattPeripheral = false,
-                                    gattCentral = true,
-                                    centralModeUuid = bleUuid,
-                                )
+                                MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
                             )
                         }
                         if (settingsModel.presentmentBlePeripheralServerModeEnabled.value) {
-                            connectionMethods.add(
-                                MdocConnectionMethodBle(
-                                    gattPeripheral = true,
-                                    gattCentral = false,
-                                    peripheralModeUuid = bleUuid,
+                            if (settingsModel.presentmentBleL2CapInEngagementEnabled.value) {
+                                connectionMethods.add(
+                                    MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid)
                                 )
+                            }
+                            connectionMethods.add(
+                                MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
                             )
                         }
                         if (settingsModel.presentmentNfcDataTransferEnabled.value) {
                             connectionMethods.add(
-                                MdocConnectionMethodNfc(
+                                MdocConnectionMethod.Nfc(
                                     commandDataFieldMaxLength = 0xffff,
                                     responseDataFieldMaxLength = 0x10000
                                 )
@@ -155,7 +150,6 @@ fun IsoMdocProximitySharingScreen(
                                 availableConnectionMethods = connectionMethods,
                                 createTransportOptions = MdocTransportOptions(
                                     bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
-                                    bleUseL2CAPInEngagement = settingsModel.presentmentBleL2CapInEngagementEnabled.value
                                 )
                             )
                         )

@@ -9,6 +9,7 @@ import org.multipaz.util.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class NdefMessageTest {
 
@@ -358,6 +359,52 @@ class NdefMessageTest {
         for ((mimeType, payload, record) in testData) {
             assertEquals(mimeType, record.mimeType)
             assertEquals(payload, record.payload)
+        }
+    }
+
+    @Test
+    fun testAlternativeCarrierRecord() {
+        val cpsValues = listOf(
+            AlternativeCarrierRecord.CPS_INACTIVE,
+            AlternativeCarrierRecord.CPS_ACTIVE,
+            AlternativeCarrierRecord.CPS_ACTIVATING,
+            AlternativeCarrierRecord.CPS_UNKNOWN,
+        )
+        for (cps in cpsValues) {
+            val ac = AlternativeCarrierRecord(
+                cps = cps,
+                carrierDataReference = "0",
+                auxiliaryDataReferences = listOf("mdoc", "chble"),
+            )
+            val encoded = ac.generateNdefRecord()
+            assertEquals(NdefRecord.Tnf.WELL_KNOWN, encoded.tnf)
+            assertEquals(Nfc.RTD_ALTERNATIVE_CARRIER, encoded.type)
+            assertEquals(ac, AlternativeCarrierRecord.fromNdefRecord(encoded))
+        }
+
+        val noAux = AlternativeCarrierRecord(carrierDataReference = "nfc")
+        assertEquals(noAux, AlternativeCarrierRecord.fromNdefRecord(noAux.generateNdefRecord()))
+
+        // Non-"ac" records return null.
+        assertNull(AlternativeCarrierRecord.fromNdefRecord(NdefRecord.createUri("https://example.com")))
+
+        // Out-of-range CPS and malformed payloads throw IllegalArgumentException.
+        assertFailsWith<IllegalArgumentException> {
+            AlternativeCarrierRecord(cps = 4, carrierDataReference = "0")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AlternativeCarrierRecord.fromNdefRecord(
+                NdefRecord(NdefRecord.Tnf.WELL_KNOWN, Nfc.RTD_ALTERNATIVE_CARRIER, payload = ByteString(0x01))
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AlternativeCarrierRecord.fromNdefRecord(
+                NdefRecord(
+                    NdefRecord.Tnf.WELL_KNOWN,
+                    Nfc.RTD_ALTERNATIVE_CARRIER,
+                    payload = ByteString(0x01, 0x01, '0'.code.toByte(), 0x00, 0xFF.toByte())
+                )
+            )
         }
     }
 }

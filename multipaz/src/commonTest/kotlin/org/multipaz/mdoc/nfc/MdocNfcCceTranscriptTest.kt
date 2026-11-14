@@ -44,8 +44,6 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -439,7 +437,7 @@ class MdocNfcCceTranscriptTest {
     }
 
     private class LoopbackBleTransportPair(
-        val connectionMethod: MdocConnectionMethodBle,
+        val connectionMethod: MdocConnectionMethod.Ble,
         val transcript: TranscriptLogger,
         private val onBeforeReaderOpen: (suspend () -> Unit)? = null,
         private val onBeforeReaderSend: (suspend (msgIndex: Int, message: ByteArray) -> Unit)? = null,
@@ -648,38 +646,21 @@ class MdocNfcCceTranscriptTest {
         y = TestVectors.ISO_18013_5_ANNEX_D_STATIC_DEVICE_KEY_Y.fromHex(),
     )
 
-    private fun getStaticBleConnectionMethod(): MdocConnectionMethodBle = MdocConnectionMethodBle(
-        gattPeripheral = false,
-        gattCentral = true,
-        directL2capPeripheral = false,
-        directL2capCentral = true,
-        peripheralModeUuid = null,
-        centralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
-        directL2capPsm = 128,
-        peripheralAddress = null,
+    private fun getStaticBleConnectionMethods(): List<MdocConnectionMethod.Ble> = listOf(
+        getSelectedDirectL2capCentralMethod(),
+        getSelectedGattCentralMethod(),
     )
 
-    private fun getSelectedDirectL2capCentralMethod(): MdocConnectionMethodBle = MdocConnectionMethodBle(
-        gattPeripheral = false,
-        gattCentral = false,
-        directL2capPeripheral = false,
-        directL2capCentral = true,
-        peripheralModeUuid = null,
-        centralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
-        directL2capPsm = 128,
-        peripheralAddress = null,
-    )
+    private fun getSelectedDirectL2capCentralMethod(): MdocConnectionMethod.Ble.DirectL2capCentral =
+        MdocConnectionMethod.Ble.DirectL2capCentral(
+            uuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
+            psm = 128,
+        )
 
-    private fun getSelectedGattCentralMethod(): MdocConnectionMethodBle = MdocConnectionMethodBle(
-        gattPeripheral = false,
-        gattCentral = true,
-        directL2capPeripheral = false,
-        directL2capCentral = false,
-        peripheralModeUuid = null,
-        centralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
-        directL2capPsm = null,
-        peripheralAddress = null,
-    )
+    private fun getSelectedGattCentralMethod(): MdocConnectionMethod.Ble.GattCentral =
+        MdocConnectionMethod.Ble.GattCentral(
+            uuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
+        )
 
     /**
      * Provisions an [MdocCredential] backed by the static `dDeviceKey` and the `issuerSigned`
@@ -1017,10 +998,10 @@ class MdocNfcCceTranscriptTest {
     fun testReaderOffersBleMdocOnlyNfc() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleCm = getStaticBleConnectionMethod()
+        val bleCms = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
         val blePair = LoopbackBleTransportPair(
-            connectionMethod = bleCm,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
         )
         val presentmentSource = createAnnexDPresentmentSource()
@@ -1095,7 +1076,7 @@ class MdocNfcCceTranscriptTest {
             selectConnectionMethod = {
                 fail("selectConnectionMethod should not be called when mdoc selects no secondary transport")
             },
-            negotiatedHandoverConnectionMethods = listOf(bleCm),
+            negotiatedHandoverConnectionMethods = bleCms,
             onHandover = { scanResult ->
                 assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
                 val readerTransport = scanResult.transport
@@ -1294,7 +1275,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverRequestOnNfcFirst() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleCm = getStaticBleConnectionMethod()
+        val bleCms = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
 
         val nfcRequestReceivedByMdoc = CompletableDeferred<Unit>()
@@ -1309,7 +1290,7 @@ class MdocNfcCceTranscriptTest {
         lateinit var tag: TranscriptRecordingNfcIsoTag
 
         val blePair = LoopbackBleTransportPair(
-            connectionMethod = bleCm,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onBeforeReaderOpen = {
                 nfcRequestReceivedByMdoc.await()
@@ -1408,7 +1389,7 @@ class MdocNfcCceTranscriptTest {
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
-            negotiatedHandoverConnectionMethods = listOf(bleCm),
+            negotiatedHandoverConnectionMethods = bleCms,
         )
         assertNotNull(scanResult)
         val readerTransport = scanResult.transport
@@ -1630,7 +1611,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverRequestOnBleFirst() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleCm = getStaticBleConnectionMethod()
+        val bleCms = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
 
         val bleResponseLogged = CompletableDeferred<Unit>()
@@ -1644,7 +1625,7 @@ class MdocNfcCceTranscriptTest {
         lateinit var engagementHelper: MdocNfcCceEngagementHelper
 
         val blePair = LoopbackBleTransportPair(
-            connectionMethod = bleCm,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onAfterMdocSendLogged = { msgIndex, _ ->
                 if (msgIndex == 1) {
@@ -1741,7 +1722,7 @@ class MdocNfcCceTranscriptTest {
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
-            negotiatedHandoverConnectionMethods = listOf(bleCm),
+            negotiatedHandoverConnectionMethods = bleCms,
         )
         assertNotNull(scanResult)
         val readerTransport = scanResult.transport
@@ -1962,7 +1943,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverResponseOnBleBeforeNfcGetResponse() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleCm = getStaticBleConnectionMethod()
+        val bleCms = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
 
         val nfcRequestReceivedByMdoc = CompletableDeferred<Unit>()
@@ -1977,7 +1958,7 @@ class MdocNfcCceTranscriptTest {
         lateinit var engagementHelper: MdocNfcCceEngagementHelper
 
         val blePair = LoopbackBleTransportPair(
-            connectionMethod = bleCm,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onBeforeReaderOpen = {
                 nfcRequestReceivedByMdoc.await()
@@ -2086,7 +2067,7 @@ class MdocNfcCceTranscriptTest {
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
-            negotiatedHandoverConnectionMethods = listOf(bleCm),
+            negotiatedHandoverConnectionMethods = bleCms,
         )
         assertNotNull(scanResult)
         val readerTransport = scanResult.transport
@@ -2306,7 +2287,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverLateBleConnectionPrunesBacklog() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleCm = getStaticBleConnectionMethod()
+        val bleCms = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
 
         val nfcExchange1Completed = CompletableDeferred<Unit>()
@@ -2320,7 +2301,7 @@ class MdocNfcCceTranscriptTest {
         lateinit var engagementHelper: MdocNfcCceEngagementHelper
 
         val blePair = LoopbackBleTransportPair(
-            connectionMethod = bleCm,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onBeforeReaderOpen = {
                 nfcExchange1Completed.await()
@@ -2414,7 +2395,7 @@ class MdocNfcCceTranscriptTest {
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
-            negotiatedHandoverConnectionMethods = listOf(bleCm),
+            negotiatedHandoverConnectionMethods = bleCms,
         )
         assertNotNull(scanResult)
         val readerTransport = scanResult.transport
@@ -2637,7 +2618,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverFieldLostDuringEnvelope2() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleMethod = getStaticBleConnectionMethod()
+        val bleMethods = getStaticBleConnectionMethods()
         val transcriptLogger = TranscriptLogger()
 
         val bleOpenGate = CompletableDeferred<Unit>()
@@ -2675,7 +2656,7 @@ class MdocNfcCceTranscriptTest {
         )
 
         blePair = LoopbackBleTransportPair(
-            connectionMethod = bleMethod,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onBeforeReaderOpen = {
                 withContext(Dispatchers.Default) {
@@ -2762,7 +2743,7 @@ class MdocNfcCceTranscriptTest {
                 ),
                 transportFactory = blePair,
                 selectConnectionMethod = { methods -> methods.firstOrNull() },
-                negotiatedHandoverConnectionMethods = listOf(bleMethod),
+                negotiatedHandoverConnectionMethods = bleMethods,
                 context = coroutineContext,
             )
         )
@@ -2977,7 +2958,7 @@ class MdocNfcCceTranscriptTest {
     fun testBleHandoverFieldLostAfterHandover() = runTest {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
-        val bleMethod = getStaticBleConnectionMethod()
+        val bleMethods = getStaticBleConnectionMethods()
         val presentmentSource = createAnnexDPresentmentSource()
         val transcriptLogger = TranscriptLogger()
 
@@ -2996,7 +2977,7 @@ class MdocNfcCceTranscriptTest {
         val presentmentDone = CompletableDeferred<Unit>()
 
         blePair = LoopbackBleTransportPair(
-            connectionMethod = bleMethod,
+            connectionMethod = getSelectedDirectL2capCentralMethod(),
             transcript = transcriptLogger,
             onBeforeReaderOpen = {
                 withContext(Dispatchers.Default) {
@@ -3087,7 +3068,7 @@ class MdocNfcCceTranscriptTest {
                 ),
                 transportFactory = blePair,
                 selectConnectionMethod = { methods -> methods.firstOrNull() },
-                negotiatedHandoverConnectionMethods = listOf(bleMethod),
+                negotiatedHandoverConnectionMethods = bleMethods,
                 context = coroutineContext,
             )
         )
@@ -4240,7 +4221,7 @@ class MdocNfcCceTranscriptTest {
     private suspend fun runGoldenCceBleScenario(
         readerOfferedMethods: List<MdocConnectionMethod>,
         mdocHandoverPicker: suspend (List<MdocConnectionMethod>) -> MdocConnectionMethod?,
-        expectedSelectedMethod: MdocConnectionMethodBle,
+        expectedSelectedMethod: MdocConnectionMethod.Ble,
     ): String = withContext(Dispatchers.Default) {
         val eDeviceKey = getAnnexDEDeviceKey()
         val eReaderKey = getAnnexDEReaderKey()
@@ -4433,11 +4414,8 @@ class MdocNfcCceTranscriptTest {
      */
     @Test
     fun testGoldenCceGattCentral() = runTest {
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
+        val readerOffer = MdocConnectionMethod.Ble.GattCentral(
+            uuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
         )
         val transcript = runGoldenCceBleScenario(
             readerOfferedMethods = listOf(readerOffer),
@@ -4547,10 +4525,10 @@ class MdocNfcCceTranscriptTest {
     @Test
     fun testGoldenCceSelectGattCentralFromDualCentralOffer() = runTest {
         val transcript = runGoldenCceBleScenario(
-            readerOfferedMethods = listOf(getStaticBleConnectionMethod()),
+            readerOfferedMethods = getStaticBleConnectionMethods(),
             mdocHandoverPicker = { methods ->
                 assertEquals(2, methods.size)
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().single()
             },
             expectedSelectedMethod = getSelectedGattCentralMethod(),
         )
@@ -4660,24 +4638,16 @@ class MdocNfcCceTranscriptTest {
     @Test
     fun testGoldenCceGattPeripheral() = runTest {
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = null,
-            centralModeUuid = null,
-        )
-        val expectedSelected = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
+        val readerOffer = MdocConnectionMethod.Ble.GattPeripheral()
+        val expectedSelected = MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = peripheralUuid,
         )
         val transcript = runGoldenCceBleScenario(
             readerOfferedMethods = listOf(readerOffer),
             mdocHandoverPicker = { methods ->
-                val chosen = methods.single() as MdocConnectionMethodBle
-                assertNull(chosen.peripheralModeUuid)
-                chosen.copy(peripheralModeUuid = peripheralUuid)
+                val chosen = methods.single() as MdocConnectionMethod.Ble.GattPeripheral
+                assertNull(chosen.uuid)
+                chosen.copy(uuid = peripheralUuid)
             },
             expectedSelectedMethod = expectedSelected,
         )
@@ -4785,35 +4755,24 @@ class MdocNfcCceTranscriptTest {
     @Test
     fun testGoldenCceDirectL2capPeripheral() = runTest {
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            directL2capPeripheral = true,
-            directL2capCentral = false,
-            peripheralModeUuid = null,
-            centralModeUuid = null,
-            directL2capPsm = null,
+        val readerOffers = listOf(
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(),
+            MdocConnectionMethod.Ble.GattPeripheral(),
         )
-        val expectedSelected = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = false,
-            directL2capPeripheral = true,
-            directL2capCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
-            directL2capPsm = 129,
+        val expectedSelected = MdocConnectionMethod.Ble.DirectL2capPeripheral(
+            uuid = peripheralUuid,
+            psm = 129,
         )
         val transcript = runGoldenCceBleScenario(
-            readerOfferedMethods = listOf(readerOffer),
+            readerOfferedMethods = readerOffers,
             mdocHandoverPicker = { methods ->
                 assertEquals(2, methods.size)
-                val chosen = methods.first() as MdocConnectionMethodBle
-                assertTrue(chosen.directL2capPeripheral)
-                assertNull(chosen.peripheralModeUuid)
-                assertNull(chosen.directL2capPsm)
+                val chosen = methods.first() as MdocConnectionMethod.Ble.DirectL2capPeripheral
+                assertNull(chosen.uuid)
+                assertNull(chosen.psm)
                 chosen.copy(
-                    peripheralModeUuid = peripheralUuid,
-                    directL2capPsm = 129,
+                    uuid = peripheralUuid,
+                    psm = 129,
                 )
             },
             expectedSelectedMethod = expectedSelected,
@@ -4922,7 +4881,7 @@ class MdocNfcCceTranscriptTest {
     /**
      * Golden `T-CCE-7`: Reader offers all 4 BLE modes + optional 7-byte reader peripheral address
      * (`{0: true, 1: true, 2: true, 3: true, 11: h'00000001...', 20: h'28078080bf2801', 21: 128}`) plus
-     * `MdocConnectionMethodNfc` (which `mdocReaderNfcCceHandover` must strip per Clauses 9.5.1 & 11.2.1);
+     * [MdocConnectionMethod.Nfc] (which `mdocReaderNfcCceHandover` must strip per Clauses 9.5.1 & 11.2.1);
      * mdoc selects `DirectL2capPeripheral` with mdoc's UUID, 7-byte peripheral address, and PSM `129`.
      */
     @Test
@@ -4931,41 +4890,39 @@ class MdocNfcCceTranscriptTest {
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
         val readerAddress = BlePeripheralAddress.fromEncoded("28078080bf2801".fromHex())
         val mdocAddress = BlePeripheralAddress.fromEncoded("28128b37282801".fromHex())
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            directL2capPeripheral = true,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
-            directL2capPsm = 128,
-            peripheralAddress = readerAddress,
-        )
-        val expectedSelected = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = false,
-            directL2capPeripheral = true,
-            directL2capCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
-            directL2capPsm = 129,
+        val expectedSelected = MdocConnectionMethod.Ble.DirectL2capPeripheral(
+            uuid = peripheralUuid,
+            psm = 129,
             peripheralAddress = mdocAddress,
         )
         val transcript = runGoldenCceBleScenario(
             readerOfferedMethods = listOf(
-                readerOffer,
-                MdocConnectionMethodNfc(65535L, 65536L),
+                MdocConnectionMethod.Ble.DirectL2capCentral(
+                    uuid = centralUuid,
+                    psm = 128,
+                    peripheralAddress = readerAddress,
+                ),
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                    peripheralAddress = readerAddress,
+                ),
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = centralUuid,
+                    peripheralAddress = readerAddress,
+                ),
+                MdocConnectionMethod.Ble.GattPeripheral(
+                    peripheralAddress = readerAddress,
+                ),
+                MdocConnectionMethod.Nfc(65535L, 65536L),
             ),
             mdocHandoverPicker = { methods ->
                 assertEquals(4, methods.size)
-                val bleMethods = methods.map { it as MdocConnectionMethodBle }
-                assertTrue(bleMethods[0].directL2capCentral)
-                assertTrue(bleMethods[1].directL2capPeripheral)
-                assertTrue(bleMethods[2].gattCentral)
-                assertTrue(bleMethods[3].gattPeripheral)
-                bleMethods[1].copy(
-                    peripheralModeUuid = peripheralUuid,
-                    directL2capPsm = 129,
+                assertTrue(methods[0] is MdocConnectionMethod.Ble.DirectL2capCentral)
+                assertTrue(methods[1] is MdocConnectionMethod.Ble.DirectL2capPeripheral)
+                assertTrue(methods[2] is MdocConnectionMethod.Ble.GattCentral)
+                assertTrue(methods[3] is MdocConnectionMethod.Ble.GattPeripheral)
+                (methods[1] as MdocConnectionMethod.Ble.DirectL2capPeripheral).copy(
+                    uuid = peripheralUuid,
+                    psm = 129,
                     peripheralAddress = mdocAddress,
                 )
             },

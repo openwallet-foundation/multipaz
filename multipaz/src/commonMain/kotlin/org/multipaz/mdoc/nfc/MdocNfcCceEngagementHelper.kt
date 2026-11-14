@@ -14,12 +14,10 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
-import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.encapsulateInDo53
 import org.multipaz.mdoc.transport.extractFromDo53
 import org.multipaz.nfc.CommandApdu
@@ -131,21 +129,16 @@ class MdocNfcCceEngagementHelper(
             "No EReaderKey in Security element of ReaderEngagement in CCEHandoverRequest"
         }
 
-        val disambiguatedConnectionMethods = MdocConnectionMethod.disambiguate(
-            readerEngagement.connectionMethods,
-            MdocRole.MDOC
-        )
-
-        var selectedMethod = if (disambiguatedConnectionMethods.isEmpty() || handoverPicker == null) {
+        var selectedMethod = if (readerEngagement.connectionMethods.isEmpty() || handoverPicker == null) {
             null
         } else {
-            handoverPicker.invoke(disambiguatedConnectionMethods)
+            handoverPicker.invoke(readerEngagement.connectionMethods)
         }
-        if (selectedMethod is MdocConnectionMethodBle &&
-            selectedMethod.hasPeripheralMode &&
-            selectedMethod.peripheralModeUuid == null
+        if (selectedMethod is MdocConnectionMethod.Ble &&
+            selectedMethod.isMdocPeripheral &&
+            selectedMethod.uuid == null
         ) {
-            selectedMethod = selectedMethod.copy(peripheralModeUuid = UUID.randomUUID())
+            selectedMethod = selectedMethod.withUuid(UUID.randomUUID())
         }
 
         val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey) {

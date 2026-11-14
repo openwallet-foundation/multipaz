@@ -192,7 +192,7 @@ class BleManagerImplTest {
     }
 
     /**
-     * End-to-end test of direct L2CAP connection when PSM is provided in engagement (`bleUseL2CAPInEngagement = true`),
+     * End-to-end test of direct L2CAP connection when PSM is provided in engagement (`directL2capEnabled = true`),
      * including the iOS path where `requireL2capPeripheralConnectedFirst = true`.
      */
     @Test
@@ -208,9 +208,11 @@ class BleManagerImplTest {
 
             val mdoc = BleTransportPeripheralMdoc(
                 role = MdocRole.MDOC,
-                options = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                options = MdocTransportOptions(),
                 peripheralManager = peripheralManager,
-                uuid = serviceUuid
+                uuid = serviceUuid,
+                gattEnabled = false,
+                directL2capEnabled = true,
             )
             mdoc.advertise()
             val psm = peripheralManager.l2capPsm
@@ -218,7 +220,7 @@ class BleManagerImplTest {
 
             val reader = BleTransportPeripheralMdocReader(
                 role = MdocRole.MDOC_READER,
-                options = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                options = MdocTransportOptions(),
                 centralManager = centralManager,
                 uuid = serviceUuid,
                 psm = psm

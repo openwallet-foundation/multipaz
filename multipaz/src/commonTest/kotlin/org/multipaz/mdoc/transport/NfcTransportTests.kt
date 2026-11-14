@@ -6,7 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -39,7 +39,7 @@ private fun String.truncateTo(maxLength: Int): String {
  *   records a human-readable APDU transcript. This verifies:
  *   1. Application selection (`SELECT APPLICATION` for `A0000002480400`).
  *   2. Single-APDU `ENVELOPE` (`INS = 0xC3`, `CLA = 0x00`) exchanges when payloads fit within both the
- *      negotiated [MdocConnectionMethodNfc] limits and [NfcIsoTag.maxTransceiveLength].
+ *      negotiated [MdocConnectionMethod.Nfc] limits and [NfcIsoTag.maxTransceiveLength].
  *   3. Command APDU chaining (`CLA = 0x10` followed by `CLA = 0x00`) for large reader-to-mdoc requests,
  *      and `GET RESPONSE` (`INS = 0xC0`) chaining (`SW1 = 0x61`) for large mdoc-to-reader responses.
  * - **Tag lifecycle and error handling**: Verifies that [NfcTransportMdocReader] closes its underlying
@@ -106,12 +106,12 @@ class NfcTransportTests {
         val mdoc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val mdocReader = NfcTransportMdocReader(
             role = MdocRole.MDOC_READER,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val tag = LoopbackIsoTag(mdoc)
         mdocReader.setTag(tag)
@@ -165,7 +165,7 @@ close
 
     /**
      * Verifies that when the reader's [NfcIsoTag.maxTransceiveLength] (4096 bytes) is smaller than the
-     * maximum APDU sizes advertised in [MdocConnectionMethodNfc] (`0xffff` / `0x10000`),
+     * maximum APDU sizes advertised in [MdocConnectionMethod.Nfc] (`0xffff` / `0x10000`),
      * [NfcTransportMdocReader] clamps both command chunks and `Le` values so that every APDU fits within
      * `maxTransceiveLength`.
      */
@@ -174,12 +174,12 @@ close
         val mdoc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val mdocReader = NfcTransportMdocReader(
             role = MdocRole.MDOC_READER,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val tag = LoopbackIsoTag(mdoc)
         tag.maxTransceiveLength = 4096
@@ -240,12 +240,12 @@ close
         val mdoc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val mdocReader = NfcTransportMdocReader(
             role = MdocRole.MDOC_READER,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val tag = LoopbackIsoTag(mdoc)
         mdocReader.setTag(tag)
@@ -280,12 +280,12 @@ close
         val mdoc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val mdocReader = NfcTransportMdocReader(
             role = MdocRole.MDOC_READER,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val tag = LoopbackIsoTag(mdoc)
         tag.failNextTransceive = true
@@ -363,7 +363,7 @@ close
         val mdoc1 = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         mdoc1.open(eSenderKey = eReaderKey.publicKey)
         val wrongSelect = CommandApdu(
@@ -386,7 +386,7 @@ close
         val mdoc2 = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         mdoc2.open(eSenderKey = eReaderKey.publicKey)
         val unsupportedApdu = CommandApdu(
@@ -406,7 +406,7 @@ close
         val mdoc3 = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         mdoc3.open(eSenderKey = eReaderKey.publicKey)
         val validSelect = CommandApdu(
@@ -459,7 +459,7 @@ close
         val mdoc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         mdoc.open(eSenderKey = eReaderKey.publicKey)
         assertEquals(
@@ -496,7 +496,7 @@ close
         val mdoc2 = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         mdoc2.open(eSenderKey = eReaderKey.publicKey)
         NfcTransportMdoc.onDeactivated()

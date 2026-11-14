@@ -153,11 +153,17 @@ class TestAppSettingsModel private constructor(
         bind(presentmentBleL2CapInEngagementEnabled, "presentmentBleL2CapInEngagementEnabled", true)
         bind(presentmentUseNegotiatedHandover, "presentmentUseNegotiatedHandover", true)
         bind(presentmentNfcCceOnlyAllowNfc, "presentmentNfcCceOnlyAllowNfc", false)
+        val legacyPrefixMigrations = mapOf(
+            "ble:central_l2cap_mode:" to "ble:direct_l2cap_central:",
+            "ble:peripheral_l2cap_mode:" to "ble:direct_l2cap_peripheral:",
+            "ble:central_client_mode:" to "ble:gatt_central:",
+            "ble:peripheral_server_mode:" to "ble:gatt_peripheral:",
+        )
         val defaultHandoverOrder = listOf(
-            "ble:central_l2cap_mode:",
-            "ble:peripheral_l2cap_mode:",
-            "ble:central_client_mode:",
-            "ble:peripheral_server_mode:",
+            "ble:direct_l2cap_central:",
+            "ble:direct_l2cap_peripheral:",
+            "ble:gatt_central:",
+            "ble:gatt_peripheral:",
             "nfc:"
         )
         bind(
@@ -165,12 +171,17 @@ class TestAppSettingsModel private constructor(
             "presentmentNegotiatedHandoverPreferredOrder",
             defaultHandoverOrder
         )
+        val migratedHandoverOrder = presentmentNegotiatedHandoverPreferredOrder.value
+            .map { legacyPrefixMigrations[it] ?: it }
+            .distinct()
         val missingHandoverPrefixes = defaultHandoverOrder.filter {
-            it !in presentmentNegotiatedHandoverPreferredOrder.value
+            it !in migratedHandoverOrder
         }
-        if (missingHandoverPrefixes.isNotEmpty()) {
-            presentmentNegotiatedHandoverPreferredOrder.value =
-                missingHandoverPrefixes + presentmentNegotiatedHandoverPreferredOrder.value
+        val finalHandoverOrder = missingHandoverPrefixes + migratedHandoverOrder.filter {
+            it in defaultHandoverOrder
+        }
+        if (finalHandoverOrder != presentmentNegotiatedHandoverPreferredOrder.value) {
+            presentmentNegotiatedHandoverPreferredOrder.value = finalHandoverOrder
         }
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
         bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", false)

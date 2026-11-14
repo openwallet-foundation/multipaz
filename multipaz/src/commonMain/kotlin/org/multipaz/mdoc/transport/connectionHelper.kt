@@ -31,19 +31,15 @@ suspend fun List<MdocConnectionMethod>.advertise(
     role: MdocRole,
     transportFactory: MdocTransportFactory,
     options: MdocTransportOptions
-): List<MdocTransport> {
-    val transports = mutableListOf<MdocTransport>()
+): List<MdocTransport> = transportFactory.createTransports(
+    connectionMethods = this,
+    role = role,
+    options = options,
+).also { transports ->
     try {
-        for (connectionMethod in this) {
-            val transport = transportFactory.createTransport(
-                connectionMethod,
-                role,
-                options
-            )
-            transports.add(transport)
+        for (transport in transports) {
             transport.advertise()
         }
-        return transports
     } catch (error: Exception) {
         withContext(NonCancellable) {
             for (transport in transports) {
