@@ -18,8 +18,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.role.MdocRole
@@ -129,6 +127,9 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
      *   offered when using NFC static handover.
      * @property staticHandoverNfcDataTransferEnabled `true` if NFC data transfer should be offered when using NFC
      *   static handover
+     * @property bleDirectL2capEnabled `true` if ISO/IEC 18013-5 Second Edition direct BLE L2CAP modes
+     *   ([MdocConnectionMethod.Ble.DirectL2capPeripheral] and [MdocConnectionMethod.Ble.DirectL2capCentral])
+     *   should be offered/accepted during NFC handover.
      * @property transportOptions the [MdocTransportOptions] to use for newly created connections.
      * @property transportFactory the [MdocTransportFactory] to use for creating transports.
      * @property capabilities the capabilities to convey to the mdoc reader.
@@ -146,6 +147,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         val staticHandoverBleCentralClientModeEnabled: Boolean,
         val staticHandoverBlePeripheralServerModeEnabled: Boolean,
         val staticHandoverNfcDataTransferEnabled: Boolean,
+        val bleDirectL2capEnabled: Boolean = false,
 
         val transportOptions: MdocTransportOptions,
         val transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
@@ -214,10 +216,10 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         }
 
         suspend fun negotiatedHandoverPicker(connectionMethods: List<MdocConnectionMethod>): MdocConnectionMethod {
-            val eligibleMethods = if (settings.transportOptions.bleUseL2CAPInEngagement) {
+            val eligibleMethods = if (settings.bleDirectL2capEnabled) {
                 connectionMethods
             } else {
-                connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasDirectL2cap }
+                connectionMethods.filterNot { it is MdocConnectionMethod.Ble && it.isDirectL2cap }
             }
             check(eligibleMethods.isNotEmpty()) {
                 "No supported connection methods in Handover Request"
@@ -239,27 +241,25 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             val chosen = picked ?: eligibleMethods.first().also {
                 Logger.i(TAG, "Using method $it")
             }
-            if (chosen is MdocConnectionMethodBle &&
-                chosen.directL2capPeripheral &&
-                chosen.directL2capPsm == null
-            ) {
+            if (chosen is MdocConnectionMethod.Ble.DirectL2capPeripheral && chosen.psm == null) {
                 val prevJob = transactionJob
                 if (prevJob != null) {
                     prevJob.cancel(TransactionSupersededException())
                     prevJob.join()
                 }
-                val uuid = chosen.peripheralModeUuid ?: UUID.randomUUID()
-                val methodToAdvertise = chosen.copy(peripheralModeUuid = uuid)
+                val uuid = chosen.uuid ?: UUID.randomUUID()
+                val methodToAdvertise = chosen.copy(uuid = uuid)
                 val peripheralTransport = settings.transportFactory.createTransport(
                     connectionMethod = methodToAdvertise,
                     role = MdocRole.MDOC,
-                    options = settings.transportOptions.copy(bleUseL2CAPInEngagement = true),
+                    options = settings.transportOptions,
                 )
                 try {
                     peripheralTransport.advertise()
                     pendingPreAdvertisedTransports = listOf(peripheralTransport)
-                    val advertisedBle = peripheralTransport.connectionMethod as? MdocConnectionMethodBle
-                    return methodToAdvertise.copy(directL2capPsm = advertisedBle?.directL2capPsm)
+                    val advertisedBle =
+                        peripheralTransport.connectionMethod as? MdocConnectionMethod.Ble.DirectL2capPeripheral
+                    return methodToAdvertise.copy(psm = advertisedBle?.psm)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     try {
@@ -285,60 +285,51 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             val bleUuid = UUID.randomUUID()
             if (settings.staticHandoverBleCentralClientModeEnabled) {
                 staticHandoverConnectionMethods.add(
-                    MdocConnectionMethodBle(
-                        gattPeripheral = false,
-                        gattCentral = true,
-                        peripheralModeUuid = null,
-                        centralModeUuid = bleUuid,
-                    )
+                    MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
                 )
             }
             if (settings.staticHandoverBlePeripheralServerModeEnabled) {
-                if (settings.transportOptions.bleUseL2CAPInEngagement) {
+                if (settings.bleDirectL2capEnabled) {
                     val prevJob = transactionJob
                     if (prevJob != null) {
                         prevJob.cancel(TransactionSupersededException())
                         prevJob.join()
                     }
-                    val peripheralOffer = MdocConnectionMethodBle(
-                        gattPeripheral = true,
-                        gattCentral = false,
-                        directL2capPeripheral = true,
-                        peripheralModeUuid = bleUuid,
-                    )
-                    val peripheralTransport = settings.transportFactory.createTransport(
-                        connectionMethod = peripheralOffer,
+                    val peripheralTransports = settings.transportFactory.createTransports(
+                        connectionMethods = listOf(
+                            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid),
+                            MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid),
+                        ),
                         role = MdocRole.MDOC,
                         options = settings.transportOptions,
                     )
                     try {
-                        peripheralTransport.advertise()
-                        pendingPreAdvertisedTransports = listOf(peripheralTransport)
-                        staticHandoverConnectionMethods.add(
-                            peripheralTransport.connectionMethod ?: peripheralOffer
+                        for (transport in peripheralTransports) {
+                            transport.advertise()
+                        }
+                        pendingPreAdvertisedTransports = peripheralTransports
+                        staticHandoverConnectionMethods.addAll(
+                            peripheralTransports.flatMap { it.connectionMethods }
                         )
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
-                        try {
-                            peripheralTransport.close()
-                        } catch (_: Exception) {
+                        for (transport in peripheralTransports) {
+                            try {
+                                transport.close()
+                            } catch (_: Exception) {
+                            }
                         }
                         throw e
                     }
                 } else {
                     staticHandoverConnectionMethods.add(
-                        MdocConnectionMethodBle(
-                            gattPeripheral = true,
-                            gattCentral = false,
-                            peripheralModeUuid = bleUuid,
-                            centralModeUuid = null,
-                        )
+                        MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
                     )
                 }
             }
             if (settings.staticHandoverNfcDataTransferEnabled) {
                 staticHandoverConnectionMethods.add(
-                    MdocConnectionMethodNfc(
+                    MdocConnectionMethod.Nfc(
                         commandDataFieldMaxLength = 0xffff,
                         responseDataFieldMaxLength = 0x10000
                     )
@@ -459,26 +450,17 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             engagementCancelJob?.cancel()
 
             Logger.i(TAG, "startEngagement - advertising and waiting for connection")
-            val effectiveOptions = if (
-                settings.useNegotiatedHandover &&
-                connectionMethods.size == 1 &&
-                (connectionMethods[0] as? MdocConnectionMethodBle)?.hasDirectL2cap == false
-            ) {
-                settings.transportOptions.copy(bleUseL2CAPInEngagement = false)
-            } else {
-                settings.transportOptions
-            }
             val transports = if (preAdvertisedTransports.isNullOrEmpty()) {
                 connectionMethods.advertise(
                     role = MdocRole.MDOC,
                     transportFactory = settings.transportFactory,
-                    options = effectiveOptions,
+                    options = settings.transportOptions,
                 )
             } else {
                 val remainingMethods = if (settings.useNegotiatedHandover) {
                     emptyList()
                 } else {
-                    connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasPeripheralMode }
+                    connectionMethods.filterNot { it is MdocConnectionMethod.Ble && it.isMdocPeripheral }
                 }
                 val otherTransports = if (remainingMethods.isEmpty()) {
                     emptyList()
@@ -486,7 +468,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                     remainingMethods.advertise(
                         role = MdocRole.MDOC,
                         transportFactory = settings.transportFactory,
-                        options = effectiveOptions,
+                        options = settings.transportOptions,
                     )
                 }
                 preAdvertisedTransports + otherTransports

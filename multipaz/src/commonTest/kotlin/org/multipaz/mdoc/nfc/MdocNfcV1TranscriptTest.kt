@@ -45,8 +45,6 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.buildReaderEngagement
@@ -61,6 +59,7 @@ import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcTransportMdoc
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.mdoc.transport.extractFromDo53
+import org.multipaz.nfc.AlternativeCarrierRecord
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
@@ -91,7 +90,6 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testUtilSetupCryptoProvider
-import org.multipaz.util.ByteDataReader
 import org.multipaz.util.Constants
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
@@ -359,21 +357,12 @@ class MdocNfcV1TranscriptTest {
                 return "TNEP Status:\n  Status Code: ${ts.status}"
             }
 
-            if (record.tnf == NdefRecord.Tnf.WELL_KNOWN && record.type == Nfc.RTD_ALTERNATIVE_CARRIER) {
-                val reader = ByteDataReader(record.payload)
-                val cps = reader.getUInt8().toInt()
-                val cdrLen = reader.getUInt8().toInt()
-                val cdr = reader.getByteString(cdrLen).decodeToString()
-                val numAux = reader.getUInt8().toInt()
-                val auxRefs = mutableListOf<String>()
-                repeat(numAux) {
-                    val auxLen = reader.getUInt8().toInt()
-                    auxRefs.add("\"${reader.getByteString(auxLen).decodeToString()}\"")
-                }
+            AlternativeCarrierRecord.fromNdefRecord(record)?.let { ac ->
+                val auxRefs = ac.auxiliaryDataReferences.map { "\"$it\"" }
                 return """
                     Alternative Carrier:
-                      Carrier Power State: $cps
-                      Carrier Data Reference: "$cdr"
+                      Carrier Power State: ${ac.cps}
+                      Carrier Data Reference: "${ac.carrierDataReference}"
                       Auxiliary Data References: [${auxRefs.joinToString(", ")}]
                 """.trimIndent()
             }
@@ -397,14 +386,14 @@ class MdocNfcV1TranscriptTest {
             }
 
             if (record.tnf == NdefRecord.Tnf.MIME_MEDIA || record.tnf == NdefRecord.Tnf.EXTERNAL_TYPE) {
-                val cm = MdocConnectionMethod.fromNdefRecord(
+                val cms = MdocConnectionMethod.decodeNdefHandoverCarrier(
                     record = record,
-                    role = senderRole,
-                    uuid = null,
+                    senderRole = senderRole,
+                    fallbackUuid = null,
                     auxiliaryRecords = allRecords,
                 )
-                if (cm != null) {
-                    return "Carrier Configuration: $cm\nPayload Hex: ${record.payload.toByteArray().toHex(byteDivider = " ")}"
+                if (cms.isNotEmpty()) {
+                    return "Carrier Configuration: ${cms.joinToString(", ")}\nPayload Hex: ${record.payload.toByteArray().toHex(byteDivider = " ")}"
                 }
             }
 
@@ -685,8 +674,8 @@ class MdocNfcV1TranscriptTest {
     }
 
     /**
-     * [MdocTransportFactory] that uses an in-memory loopback channel for [MdocConnectionMethodBle]
-     * (recording BLE messages to [transcript]) and delegates [MdocConnectionMethodNfc] to
+     * [MdocTransportFactory] that uses an in-memory loopback channel for [MdocConnectionMethod.Ble]
+     * (recording BLE messages to [transcript]) and delegates [MdocConnectionMethod.Nfc] to
      * [MdocTransportFactory.Default] (creating real [NfcTransportMdoc] and [NfcTransportMdocReader]
      * instances).
      */
@@ -700,18 +689,21 @@ class MdocNfcV1TranscriptTest {
 
         private val channelPairs = mutableMapOf<Pair<Boolean, Boolean>, ChannelPair>()
 
-        private fun getChannelPair(cm: MdocConnectionMethodBle): ChannelPair =
-            channelPairs.getOrPut(Pair(cm.hasCentralMode, cm.hasPeripheralMode)) {
+        private fun getChannelPair(cm: MdocConnectionMethod.Ble): ChannelPair {
+            val isCentral = cm is MdocConnectionMethod.Ble.GattCentral ||
+                cm is MdocConnectionMethod.Ble.DirectL2capCentral
+            return channelPairs.getOrPut(Pair(isCentral, !isCentral)) {
                 ChannelPair()
             }
+        }
 
         override fun createTransport(
             connectionMethod: MdocConnectionMethod,
             role: MdocRole,
             options: MdocTransportOptions
         ): MdocTransport = when (connectionMethod) {
-            is MdocConnectionMethodBle -> BleEndpoint(connectionMethod, role, getChannelPair(connectionMethod))
-            is MdocConnectionMethodNfc -> when (role) {
+            is MdocConnectionMethod.Ble -> BleEndpoint(connectionMethod, role, getChannelPair(connectionMethod))
+            is MdocConnectionMethod.Nfc -> when (role) {
                 MdocRole.MDOC -> NfcTransportMdoc(role, options, connectionMethod)
                 MdocRole.MDOC_READER -> NfcTransportMdocReader(role, options, connectionMethod)
             }
@@ -719,7 +711,7 @@ class MdocNfcV1TranscriptTest {
         }
 
         private inner class BleEndpoint(
-            override val connectionMethod: MdocConnectionMethodBle,
+            override val connectionMethod: MdocConnectionMethod.Ble,
             override val role: MdocRole,
             private val pair: ChannelPair,
         ) : MdocTransport() {
@@ -850,24 +842,20 @@ class MdocNfcV1TranscriptTest {
         y = TestVectors.ISO_18013_5_ANNEX_D_STATIC_DEVICE_KEY_Y.fromHex(),
     )
 
-    private fun getStaticBleCentralClientMethod(): MdocConnectionMethodBle = MdocConnectionMethodBle(
-        gattPeripheral = false,
-        gattCentral = true,
-        peripheralModeUuid = null,
-        centralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
-    )
+    private fun getStaticBleCentralClientMethod(): MdocConnectionMethod.Ble.GattCentral =
+        MdocConnectionMethod.Ble.GattCentral(
+            uuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
+        )
 
-    private fun getStaticBlePeripheralServerMethod(): MdocConnectionMethodBle = MdocConnectionMethodBle(
-        gattPeripheral = true,
-        gattCentral = false,
-        peripheralModeUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
-        centralModeUuid = null,
-    )
+    private fun getStaticBlePeripheralServerMethod(): MdocConnectionMethod.Ble.GattPeripheral =
+        MdocConnectionMethod.Ble.GattPeripheral(
+            uuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
+        )
 
     private fun getStaticNfcConnectionMethod(
         commandMax: Long = 65535L,
         responseMax: Long = 65536L,
-    ): MdocConnectionMethodNfc = MdocConnectionMethodNfc(
+    ): MdocConnectionMethod.Nfc = MdocConnectionMethod.Nfc(
         commandDataFieldMaxLength = commandMax,
         responseDataFieldMaxLength = responseMax,
     )
@@ -1087,7 +1075,7 @@ class MdocNfcV1TranscriptTest {
         val nfcCm = getStaticNfcConnectionMethod()
         val transcript = runSingleRequestScenario(
             staticHandoverMethods = listOf(bleCc, nfcCm),
-            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethodBle>().first() },
+            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethod.Ble>().first() },
             expectedHandoverType = MdocHandoverType.STATIC_HANDOVER,
         )
         val expectedTranscript = """
@@ -1171,7 +1159,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6
+            #     Carrier Configuration: ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6
             #     Payload Hex: 02 1c 01 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             #   Record #4:
             #     TNF: EXTERNAL_TYPE
@@ -1223,7 +1211,7 @@ class MdocNfcV1TranscriptTest {
         val nfcCm = getStaticNfcConnectionMethod()
         val transcript = runSingleRequestScenario(
             staticHandoverMethods = listOf(nfcCm),
-            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethodNfc>().first() },
+            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethod.Nfc>().first() },
             expectedHandoverType = MdocHandoverType.STATIC_HANDOVER,
         )
         val expectedTranscript = """
@@ -1355,7 +1343,7 @@ class MdocNfcV1TranscriptTest {
         val blePs = getStaticBlePeripheralServerMethod()
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().first()
             },
             readerNegotiatedMethods = listOf(bleCc, blePs),
             expectedHandoverType = MdocHandoverType.NEGOTIATED_HANDOVER,
@@ -1454,7 +1442,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=null:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6
+            #     Carrier Configuration: ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6, ble:gatt_peripheral:uuid=null
             #     Payload Hex: 02 1c 02 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             C-APDU: 00d600004b004991020a487215d102046163010130005a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107e6733397764c6b89ce4823a101000000
             # The mdoc acknowledges the NDEF write.
@@ -1512,7 +1500,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 3 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=null
+            #     Carrier Configuration: ble:gatt_central:uuid=null
             #     Payload Hex: 02 1c 01
             R-APDU: 91020f487315d10209616301013001046d646f631c1e600469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a40063312e31018201d818584ba4010220012158205a88d182bce5f42efa59943f33359d2e8a968ff289d93e5fa444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a8cfcf3de6aa672fc60a557aa32fc67058006a203f504f55a2003016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c019000
 
@@ -1559,7 +1547,7 @@ class MdocNfcV1TranscriptTest {
         val nfcCm = getStaticNfcConnectionMethod()
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
-                methods.filterIsInstance<MdocConnectionMethodNfc>().first()
+                methods.filterIsInstance<MdocConnectionMethod.Nfc>().first()
             },
             readerNegotiatedMethods = listOf(bleCc, nfcCm),
             expectedHandoverType = MdocHandoverType.NEGOTIATED_HANDOVER,
@@ -1666,7 +1654,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6
+            #     Carrier Configuration: ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6
             #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             #   Record #3:
             #     TNF: EXTERNAL_TYPE
@@ -1778,7 +1766,7 @@ class MdocNfcV1TranscriptTest {
         val nfcCm = getStaticNfcConnectionMethod(commandMax = 100L, responseMax = 900L)
         val transcript = runSingleRequestScenario(
             staticHandoverMethods = listOf(nfcCm),
-            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethodNfc>().first() },
+            readerSelectConnectionMethod = { methods -> methods.filterIsInstance<MdocConnectionMethod.Nfc>().first() },
             expectedHandoverType = MdocHandoverType.STATIC_HANDOVER,
         )
         val expectedTranscript = """
@@ -2312,7 +2300,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6
+            #     Carrier Configuration: ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6
             #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             C-APDU: 00d600004b004991020a487215d102046163010130005a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c001107e6733397764c6b89ce4823a101000000
             # The mdoc acknowledges the NDEF write.
@@ -2370,7 +2358,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 3 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=null
+            #     Carrier Configuration: ble:gatt_central:uuid=null
             #     Payload Hex: 02 1c 01
             R-APDU: 91020f487315d10209616301013001046d646f631c1e600469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a40063312e31018201d818584ba4010220012158205a88d182bce5f42efa59943f33359d2e8a968ff289d93e5fa444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a8cfcf3de6aa672fc60a557aa32fc67058006a203f504f55a2003016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c019000
 
@@ -2410,22 +2398,18 @@ class MdocNfcV1TranscriptTest {
     fun testGoldenStaticHandoverBleDualRole() = runTest {
         val sharedUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
         val mdocAddress = BlePeripheralAddress.fromEncoded("28128b37282801".fromHex())
-        val dualRoleBle = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            peripheralModeUuid = sharedUuid,
-            centralModeUuid = sharedUuid,
-            peripheralAddress = mdocAddress,
+        val mdocMethods = listOf(
+            MdocConnectionMethod.Ble.GattCentral(uuid = sharedUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = sharedUuid, peripheralAddress = mdocAddress),
         )
-        val disambiguatedMdocMethods = MdocConnectionMethod.disambiguate(listOf(dualRoleBle), MdocRole.MDOC)
         val transcript = runSingleRequestScenario(
-            staticHandoverMethods = disambiguatedMdocMethods,
+            staticHandoverMethods = mdocMethods,
             staticMdocMethodSelector = { methods ->
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().first()
             },
             readerSelectConnectionMethod = { methods ->
                 assertEquals(2, methods.size)
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().first()
             },
             expectedHandoverType = MdocHandoverType.STATIC_HANDOVER,
         )
@@ -2502,7 +2486,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 30 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:addr=28-28-37-8b-12-28/random
+            #     Carrier Configuration: ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6, ble:gatt_peripheral:uuid=00000001-a123-48ce-896b-4c76973373e6:addr=28-28-37-8b-12-28/random
             #     Payload Hex: 02 1c 03 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00 08 1b 28 12 8b 37 28 28 01
             R-APDU: 91020f487315d10209616301013001046d646f631c1e600469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a40063312e31018201d818584ba4010220012158205a88d182bce5f42efa59943f33359d2e8a968ff289d93e5fa444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a8cfcf3de6aa672fc60a557aa32fc67058006a203f504f55a201e016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c031107e6733397764c6b89ce4823a101000000081b28128b372828019000
 
@@ -2541,26 +2525,19 @@ class MdocNfcV1TranscriptTest {
     @Test
     fun testGoldenStaticHandoverBleDirectL2capPeripheral() = runTest {
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val peripheralBle = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            directL2capPeripheral = true,
-            directL2capCentral = false,
-            peripheralModeUuid = peripheralUuid,
-            centralModeUuid = null,
-            directL2capPsm = 129,
+        val mdocMethods = listOf(
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = peripheralUuid, psm = 129),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = peripheralUuid),
         )
-        val disambiguatedMdocMethods = MdocConnectionMethod.disambiguate(listOf(peripheralBle), MdocRole.MDOC)
         val transcript = runSingleRequestScenario(
-            staticHandoverMethods = disambiguatedMdocMethods,
+            staticHandoverMethods = mdocMethods,
             staticMdocMethodSelector = { methods ->
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.directL2capPeripheral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.DirectL2capPeripheral>().first()
             },
             readerSelectConnectionMethod = { methods ->
                 assertEquals(2, methods.size)
-                val first = methods.first() as MdocConnectionMethodBle
-                assertEquals(true, first.directL2capPeripheral)
-                assertEquals(129, first.directL2capPsm)
+                val first = assertIs<MdocConnectionMethod.Ble.DirectL2capPeripheral>(methods.first())
+                assertEquals(129, first.psm)
                 first
             },
             expectedHandoverType = MdocHandoverType.STATIC_HANDOVER,
@@ -2638,7 +2615,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=00000002-a123-48ce-896b-4c76973373e6:peripheral_l2cap_mode:uuid=00000002-a123-48ce-896b-4c76973373e6:psm=129
+            #     Carrier Configuration: ble:direct_l2cap_peripheral:uuid=00000002-a123-48ce-896b-4c76973373e6:psm=129, ble:gatt_peripheral:uuid=00000002-a123-48ce-896b-4c76973373e6
             #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 02 00 00 00
             #   Record #4:
             #     TNF: EXTERNAL_TYPE
@@ -2688,17 +2665,12 @@ class MdocNfcV1TranscriptTest {
     @Test
     fun testGoldenNegotiatedHandoverGattPeripheralOnly() = runTest {
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = null,
-            centralModeUuid = null,
-        )
+        val readerOffer = MdocConnectionMethod.Ble.GattPeripheral(uuid = null)
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
-                val chosen = methods.single() as MdocConnectionMethodBle
-                assertNull(chosen.peripheralModeUuid)
-                chosen.copy(peripheralModeUuid = peripheralUuid)
+                val chosen = assertIs<MdocConnectionMethod.Ble.GattPeripheral>(methods.single())
+                assertNull(chosen.uuid)
+                chosen.copy(uuid = peripheralUuid)
             },
             readerNegotiatedMethods = listOf(readerOffer),
             expectedHandoverType = MdocHandoverType.NEGOTIATED_HANDOVER,
@@ -2797,7 +2769,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 3 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=null
+            #     Carrier Configuration: ble:gatt_peripheral:uuid=null
             #     Payload Hex: 02 1c 01
             C-APDU: 00d6000039003791020a487215d102046163010130005a2003016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c01
             # The mdoc acknowledges the NDEF write.
@@ -2855,7 +2827,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=00000002-a123-48ce-896b-4c76973373e6
+            #     Carrier Configuration: ble:gatt_peripheral:uuid=00000002-a123-48ce-896b-4c76973373e6
             #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 02 00 00 00
             R-APDU: 91020f487315d10209616301013001046d646f631c1e600469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a40063312e31018201d818584ba4010220012158205a88d182bce5f42efa59943f33359d2e8a968ff289d93e5fa444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a8cfcf3de6aa672fc60a557aa32fc67058006a203f504f55a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c001107e6733397764c6b89ce4823a1020000009000
 
@@ -2895,24 +2867,20 @@ class MdocNfcV1TranscriptTest {
     @Test
     fun testGoldenNegotiatedHandoverAllFourModesSelectDirectL2capCentral() = runTest {
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            directL2capPeripheral = true,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
-            directL2capPsm = 128,
+        val readerOffers = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = centralUuid, psm = 128),
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = null),
+            MdocConnectionMethod.Ble.GattCentral(uuid = centralUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = null),
         )
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
                 assertEquals(4, methods.size)
-                val first = methods.first() as MdocConnectionMethodBle
-                assertEquals(true, first.directL2capCentral)
-                assertEquals(128, first.directL2capPsm)
+                val first = assertIs<MdocConnectionMethod.Ble.DirectL2capCentral>(methods.first())
+                assertEquals(128, first.psm)
                 first
             },
-            readerNegotiatedMethods = listOf(readerOffer),
+            readerNegotiatedMethods = readerOffers,
             expectedHandoverType = MdocHandoverType.NEGOTIATED_HANDOVER,
         )
         val expectedTranscript = """
@@ -3009,7 +2977,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=null:peripheral_l2cap_mode:uuid=null:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:central_l2cap_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128
+            #     Carrier Configuration: ble:direct_l2cap_central:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128, ble:direct_l2cap_peripheral:uuid=null, ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6, ble:gatt_peripheral:uuid=null
             #     Payload Hex: 02 1c 02 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             #   Record #3:
             #     TNF: EXTERNAL_TYPE
@@ -3078,7 +3046,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 3 bytes
-            #     Carrier Configuration: ble:central_l2cap_mode:uuid=null
+            #     Carrier Configuration: ble:direct_l2cap_central:uuid=null
             #     Payload Hex: 02 1c 01
             #   Record #4:
             #     TNF: EXTERNAL_TYPE
@@ -3129,28 +3097,24 @@ class MdocNfcV1TranscriptTest {
     fun testGoldenNegotiatedHandoverAllFourModesSelectDirectL2capPeripheral() = runTest {
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
         val peripheralUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            directL2capPeripheral = true,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
-            directL2capPsm = 128,
+        val readerOffers = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = centralUuid, psm = 128),
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = null),
+            MdocConnectionMethod.Ble.GattCentral(uuid = centralUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = null),
         )
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
                 assertEquals(4, methods.size)
-                val chosen = methods.filterIsInstance<MdocConnectionMethodBle>()
-                    .first { it.directL2capPeripheral }
-                assertNull(chosen.peripheralModeUuid)
-                assertNull(chosen.directL2capPsm)
+                val chosen = methods.filterIsInstance<MdocConnectionMethod.Ble.DirectL2capPeripheral>().first()
+                assertNull(chosen.uuid)
+                assertNull(chosen.psm)
                 chosen.copy(
-                    peripheralModeUuid = peripheralUuid,
-                    directL2capPsm = 129,
+                    uuid = peripheralUuid,
+                    psm = 129,
                 )
             },
-            readerNegotiatedMethods = listOf(readerOffer),
+            readerNegotiatedMethods = readerOffers,
             expectedHandoverType = MdocHandoverType.NEGOTIATED_HANDOVER,
         )
         val expectedTranscript = """
@@ -3247,7 +3211,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=null:peripheral_l2cap_mode:uuid=null:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:central_l2cap_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128
+            #     Carrier Configuration: ble:direct_l2cap_central:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128, ble:direct_l2cap_peripheral:uuid=null, ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6, ble:gatt_peripheral:uuid=null
             #     Payload Hex: 02 1c 02 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             #   Record #3:
             #     TNF: EXTERNAL_TYPE
@@ -3316,7 +3280,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_l2cap_mode:uuid=00000002-a123-48ce-896b-4c76973373e6:psm=129
+            #     Carrier Configuration: ble:direct_l2cap_peripheral:uuid=00000002-a123-48ce-896b-4c76973373e6:psm=129
             #     Payload Hex: 02 1c 00 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 02 00 00 00
             #   Record #4:
             #     TNF: EXTERNAL_TYPE
@@ -3368,22 +3332,19 @@ class MdocNfcV1TranscriptTest {
     fun testGoldenNegotiatedHandoverAllFourModesWithReaderEngagementSelectGattCentral() = runTest {
         val centralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
         val eReaderKey = getAnnexDEReaderKey()
-        val readerOffer = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            directL2capPeripheral = true,
-            directL2capCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = centralUuid,
-            directL2capPsm = 128,
+        val readerOffers = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = centralUuid, psm = 128),
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = null),
+            MdocConnectionMethod.Ble.GattCentral(uuid = centralUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = null),
         )
         val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {}
         val transcript = runSingleRequestScenario(
             negotiatedHandoverPicker = { methods ->
                 assertEquals(4, methods.size)
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattCentral>().first()
             },
-            readerNegotiatedMethods = listOf(readerOffer),
+            readerNegotiatedMethods = readerOffers,
             handoverOptions = MdocReaderNfcHandoverOptions(
                 useCce = false,
                 readerEngagement = readerEngagement,
@@ -3517,7 +3478,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 21 bytes
-            #     Carrier Configuration: ble:peripheral_server_mode:uuid=null:peripheral_l2cap_mode:uuid=null:central_client_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:central_l2cap_mode:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128
+            #     Carrier Configuration: ble:direct_l2cap_central:uuid=00000001-a123-48ce-896b-4c76973373e6:psm=128, ble:direct_l2cap_peripheral:uuid=null, ble:gatt_central:uuid=00000001-a123-48ce-896b-4c76973373e6, ble:gatt_peripheral:uuid=null
             #     Payload Hex: 02 1c 02 11 07 e6 73 33 97 76 4c 6b 89 ce 48 23 a1 01 00 00 00
             #   Record #4:
             #     TNF: EXTERNAL_TYPE
@@ -3586,7 +3547,7 @@ class MdocNfcV1TranscriptTest {
             #     Type: "application/vnd.bluetooth.le.oob" (Hex: 6170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f62)
             #     ID: "0" (Hex: 30)
             #     Payload Size: 3 bytes
-            #     Carrier Configuration: ble:central_client_mode:uuid=null
+            #     Carrier Configuration: ble:gatt_central:uuid=null
             #     Payload Hex: 02 1c 01
             #   Record #4:
             #     TNF: EXTERNAL_TYPE

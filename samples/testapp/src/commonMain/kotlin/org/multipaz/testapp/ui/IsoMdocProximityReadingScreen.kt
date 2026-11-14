@@ -44,8 +44,6 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.nfc.scanMdocReader
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -317,7 +315,7 @@ fun IsoMdocProximityReadingScreen(
                                 allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
                                 insertSequenceNumbers = false,
                                 bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
-                                bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
+                                bleDirectL2capEnabled = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                 showToast = showToast,
                                 readerTransport = readerTransport,
                                 readerMostRecentTransportStats = readerMostRecentTransportStats,
@@ -660,27 +658,28 @@ fun IsoMdocProximityReadingScreen(
                             if (!nfcOnly) {
                                 val bleUuid = UUID.randomUUID()
                                 if (app.settingsModel.readerBleCentralClientModeEnabled.value) {
-                                    negotiatedHandoverConnectionMethods.add(
-                                        MdocConnectionMethodBle(
-                                            gattPeripheral = false,
-                                            gattCentral = true,
-                                            centralModeUuid = bleUuid,
+                                    if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
+                                        negotiatedHandoverConnectionMethods.add(
+                                            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid)
                                         )
+                                    }
+                                    negotiatedHandoverConnectionMethods.add(
+                                        MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
                                     )
                                 }
                                 if (app.settingsModel.readerBlePeripheralServerModeEnabled.value) {
-                                    negotiatedHandoverConnectionMethods.add(
-                                        MdocConnectionMethodBle(
-                                            gattPeripheral = true,
-                                            gattCentral = false,
-                                            directL2capPeripheral = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
-                                            peripheralModeUuid = null,
+                                    if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
+                                        negotiatedHandoverConnectionMethods.add(
+                                            MdocConnectionMethod.Ble.DirectL2capPeripheral()
                                         )
+                                    }
+                                    negotiatedHandoverConnectionMethods.add(
+                                        MdocConnectionMethod.Ble.GattPeripheral()
                                     )
                                 }
                                 if (app.settingsModel.readerNfcDataTransferEnabled.value) {
                                     negotiatedHandoverConnectionMethods.add(
-                                        MdocConnectionMethodNfc(
+                                        MdocConnectionMethod.Nfc(
                                             commandDataFieldMaxLength = 0xffff,
                                             responseDataFieldMaxLength = 0x10000
                                         )
@@ -703,7 +702,6 @@ fun IsoMdocProximityReadingScreen(
                                 },
                                 options = MdocTransportOptions(
                                     bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
-                                    bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value
                                 ),
                                 transportFactory = TestAppConfiguration.mdocTransportFactory,
                                 selectConnectionMethod = { connectionMethods ->
@@ -732,7 +730,7 @@ fun IsoMdocProximityReadingScreen(
                                         allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
                                         insertSequenceNumbers = scanResult.type == MdocHandoverType.CCE_HANDOVER,
                                         bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
-                                        bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
+                                        bleDirectL2capEnabled = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                         showToast = showToast,
                                         readerTransport = readerTransport,
                                         readerMostRecentTransportStats = readerMostRecentTransportStats,
@@ -925,7 +923,7 @@ private suspend fun doReaderFlow(
     allowMultipleRequests: Boolean,
     insertSequenceNumbers: Boolean,
     bleUseL2CAP: Boolean,
-    bleUseL2CAPInEngagement: Boolean,
+    bleDirectL2capEnabled: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerMostRecentTransportStats: MutableState<MdocTransportStats?>,
@@ -957,10 +955,16 @@ private suspend fun doReaderFlow(
         }
         existingTransport
     } else {
-        val connectionMethods = MdocConnectionMethod.disambiguate(
-            deviceEngagement.connectionMethods,
-            MdocRole.MDOC_READER
-        )
+        val connectionMethods = if (bleDirectL2capEnabled) {
+            deviceEngagement.connectionMethods
+        } else {
+            deviceEngagement.connectionMethods.filterNot {
+                it is MdocConnectionMethod.Ble && it.isDirectL2cap
+            }
+        }
+        if (connectionMethods.isEmpty()) {
+            throw IllegalStateException("No supported connection methods in DeviceEngagement")
+        }
         val connectionMethod = selectConnectionMethod(connectionMethods)
         if (connectionMethod == null) {
             // If user canceled
@@ -971,7 +975,6 @@ private suspend fun doReaderFlow(
             MdocRole.MDOC_READER,
             MdocTransportOptions(
                 bleUseL2CAP = bleUseL2CAP,
-                bleUseL2CAPInEngagement = bleUseL2CAPInEngagement
             )
         )
         if (transport is NfcTransportMdocReader) {

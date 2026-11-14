@@ -17,7 +17,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcDeactivationReason
 import org.multipaz.util.Logger
@@ -284,11 +283,11 @@ class NfcCceTransportMdoc(
         val cm = transport?.connectionMethod
             ?: closedSecondaryConnectionMethod
             ?: expectedConnectionMethod
-        if (cm is MdocConnectionMethodBle) {
-            if (cm.hasCentralMode) {
+        if (cm is MdocConnectionMethod.Ble) {
+            if (cm.isMdocCentral) {
                 return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
             }
-            if (cm.hasPeripheralMode) {
+            if (cm.isMdocPeripheral) {
                 return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
             }
         }

@@ -17,7 +17,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.nfc.nfcCceTransact
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcIsoTag
@@ -72,11 +71,11 @@ class NfcCceTransportMdocReader(
             else -> {}
         }
         val cm = transport.connectionMethod
-        if (cm is MdocConnectionMethodBle) {
-            if (cm.hasCentralMode) {
+        if (cm is MdocConnectionMethod.Ble) {
+            if (cm.isMdocCentral) {
                 return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
             }
-            if (cm.hasPeripheralMode) {
+            if (cm.isMdocPeripheral) {
                 return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
             }
         }

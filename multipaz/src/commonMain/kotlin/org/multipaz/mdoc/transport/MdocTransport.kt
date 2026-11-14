@@ -82,6 +82,16 @@ abstract class MdocTransport {
     abstract val connectionMethod: MdocConnectionMethod?
 
     /**
+     * All single-mode [MdocConnectionMethod] instances advertised or handled by this transport.
+     *
+     * Most transports handle a single [connectionMethod], whereas a dual-mode BLE Peripheral transport
+     * simultaneously advertises both a `DirectL2cap*` mode (once its L2CAP server PSM is published)
+     * and a `Gatt*` mode on the same service UUID.
+     */
+    open val connectionMethods: List<MdocConnectionMethod>
+        get() = listOfNotNull(connectionMethod)
+
+    /**
      * The time spent scanning for the other peer.
      *
      * This is always `null` until [open] completes and it's only set for transports that actually perform active

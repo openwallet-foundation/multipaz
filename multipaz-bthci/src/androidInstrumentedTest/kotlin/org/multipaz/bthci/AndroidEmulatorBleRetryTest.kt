@@ -17,7 +17,7 @@ import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.AndroidMdocTransportFactory
 import org.multipaz.mdoc.transport.BleCentralConfig
@@ -125,12 +125,11 @@ class AndroidEmulatorBleRetryTest {
         ),
     ): Pair<MdocTransportStats, MdocTransportStats> = coroutineScope {
         val serviceUuid = UUID.randomUUID()
-        val connectionMethod = MdocConnectionMethodBle(
-            gattPeripheral = !centralClientMode,
-            gattCentral = centralClientMode,
-            peripheralModeUuid = if (!centralClientMode) serviceUuid else null,
-            centralModeUuid = if (centralClientMode) serviceUuid else null,
-        )
+        val connectionMethod = if (centralClientMode) {
+            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid)
+        } else {
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
+        }
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
 
         val hciFactory = createNetsimHciFactory(faultConfig = faultConfig)
@@ -190,12 +189,11 @@ class AndroidEmulatorBleRetryTest {
         centralClientMode: Boolean = false,
     ): Pair<MdocTransportStats, MdocTransportStats> = coroutineScope {
         val serviceUuid = UUID.randomUUID()
-        val connectionMethod = MdocConnectionMethodBle(
-            gattPeripheral = !centralClientMode,
-            gattCentral = centralClientMode,
-            peripheralModeUuid = if (!centralClientMode) serviceUuid else null,
-            centralModeUuid = if (centralClientMode) serviceUuid else null,
-        )
+        val connectionMethod = if (centralClientMode) {
+            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid)
+        } else {
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
+        }
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
 
         val hciFactory = createNetsimHciFactory()

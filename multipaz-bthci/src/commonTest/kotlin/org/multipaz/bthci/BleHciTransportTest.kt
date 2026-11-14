@@ -40,8 +40,6 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import kotlinx.io.IOException
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.transport.BleCentralConfig
 import org.multipaz.mdoc.transport.BleCentralHal
@@ -1146,13 +1144,11 @@ class BleHciTransportTest {
         uuid: UUID,
         psm: Int?
     ): MdocTransport = centralManager.createTransport(
-        MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            directL2capCentral = psm != null,
-            centralModeUuid = uuid,
-            directL2capPsm = psm,
-        ),
+        if (psm != null) {
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = uuid, psm = psm)
+        } else {
+            MdocConnectionMethod.Ble.GattCentral(uuid = uuid)
+        },
         role,
         options,
     )
@@ -1161,13 +1157,14 @@ class BleHciTransportTest {
         role: MdocRole,
         options: MdocTransportOptions,
         peripheralManager: MdocTransportFactory,
-        uuid: UUID
+        uuid: UUID,
+        directL2capEnabled: Boolean = false,
     ): MdocTransport = peripheralManager.createTransport(
-        MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            centralModeUuid = uuid,
-        ),
+        if (directL2capEnabled) {
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = uuid)
+        } else {
+            MdocConnectionMethod.Ble.GattCentral(uuid = uuid)
+        },
         role,
         options,
     )
@@ -1176,13 +1173,14 @@ class BleHciTransportTest {
         role: MdocRole,
         options: MdocTransportOptions,
         peripheralManager: MdocTransportFactory,
-        uuid: UUID
+        uuid: UUID,
+        directL2capEnabled: Boolean = false,
     ): MdocTransport = peripheralManager.createTransport(
-        MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = uuid,
-        ),
+        if (directL2capEnabled) {
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid)
+        } else {
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
+        },
         role,
         options,
     )
@@ -1194,13 +1192,11 @@ class BleHciTransportTest {
         uuid: UUID,
         psm: Int?
     ): MdocTransport = centralManager.createTransport(
-        MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            directL2capPeripheral = psm != null,
-            peripheralModeUuid = uuid,
-            directL2capPsm = psm,
-        ),
+        if (psm != null) {
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = psm)
+        } else {
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
+        },
         role,
         options,
     )
@@ -1394,20 +1390,21 @@ class BleHciTransportTest {
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
             val mdocTransport = BleTransportPeripheralMdoc(
                 role = MdocRole.MDOC,
-                options = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                options = MdocTransportOptions(),
                 peripheralManager = peripheralManager,
-                uuid = serviceUuid
+                uuid = serviceUuid,
+                directL2capEnabled = true,
             )
 
             try {
                 mdocTransport.advertise()
-                val engagedPsm = (mdocTransport.connectionMethod as MdocConnectionMethodBle).directL2capPsm
+                val engagedPsm = (mdocTransport.connectionMethod as MdocConnectionMethod.Ble.DirectL2capPeripheral).psm
                 assertTrue(engagedPsm != null && engagedPsm > 0)
 
                 val centralManager = createCentralManager(bus.centralIo)
                 val readerTransport = BleTransportPeripheralMdocReader(
                     role = MdocRole.MDOC_READER,
-                    options = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                    options = MdocTransportOptions(),
                     centralManager = centralManager,
                     uuid = serviceUuid,
                     psm = engagedPsm
@@ -1613,22 +1610,22 @@ class BleHciTransportTest {
             override fun createTransport(
                 connectionMethod: MdocConnectionMethod,
                 role: MdocRole,
-                options: MdocTransportOptions
+                options: MdocTransportOptions,
             ): MdocTransport {
                 nfcFallbackInvoked.incrementAndGet()
-                return NfcTransportMdocReader(role, options, connectionMethod as MdocConnectionMethodNfc)
+                return NfcTransportMdocReader(role, options, connectionMethod as MdocConnectionMethod.Nfc)
             }
         }
         val factory = BtHciMdocTransportFactory(
             fallbackFactory = fallbackFactory,
             packetIoFactory = { bus.centralIo }
         )
-        val uuid = UUID.randomUUID()
-        val cmCentral = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            centralModeUuid = uuid
+        assertEquals(
+            emptyList(),
+            factory.createTransports(emptyList(), MdocRole.MDOC_READER, MdocTransportOptions())
         )
+        val uuid = UUID.randomUUID()
+        val cmCentral = MdocConnectionMethod.Ble.GattCentral(uuid = uuid)
         val t1 = factory.createTransport(
             cmCentral,
             MdocRole.MDOC_READER,
@@ -1637,11 +1634,7 @@ class BleHciTransportTest {
         assertEquals(MdocTransport.State.IDLE, t1.state.value)
         t1.close()
 
-        val cmPeripheral = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = uuid
-        )
+        val cmPeripheral = MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
         val t2 = factory.createTransport(
             cmPeripheral,
             MdocRole.MDOC_READER,
@@ -1650,7 +1643,28 @@ class BleHciTransportTest {
         assertEquals(MdocTransport.State.IDLE, t2.state.value)
         t2.close()
 
-        val cmNfc = MdocConnectionMethodNfc(
+        val dualTransports = factory.createTransports(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = uuid),
+                cmCentral,
+            ),
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+        )
+        val tDual = dualTransports.single()
+        assertEquals(MdocTransport.State.IDLE, tDual.state.value)
+        assertEquals(listOf<MdocConnectionMethod>(cmCentral), tDual.connectionMethods)
+        tDual.advertise()
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = uuid, psm = 0x80),
+                cmCentral,
+            ),
+            tDual.connectionMethods
+        )
+        tDual.close()
+
+        val cmNfc = MdocConnectionMethod.Nfc(
             commandDataFieldMaxLength = 0xFF,
             responseDataFieldMaxLength = 0x100
         )
@@ -2732,7 +2746,6 @@ class BleHciTransportTest {
             val peripheralRandomAddr = "aabbccddeecf".fromHex()
             val options = MdocTransportOptions(
                 bleUseL2CAP = useL2cap,
-                bleUseL2CAPInEngagement = useL2capInEngagement
             )
 
             val centralManager = createCentralManager(bus.centralIo, randomAddress = centralRandomAddr)
@@ -2741,7 +2754,8 @@ class BleHciTransportTest {
                 role = MdocRole.MDOC_READER,
                 options = options,
                 peripheralManager = peripheralManager,
-                uuid = serviceUuid
+                uuid = serviceUuid,
+                directL2capEnabled = useL2capInEngagement,
             )
             var mdocTransport: MdocTransport? = null
 
@@ -2749,16 +2763,12 @@ class BleHciTransportTest {
                 // Start peripheral advertising first so HCI command ordering between Peripheral and Central
                 // is 100% deterministic and the L2CAP PSM (if useL2capInEngagement is true) is allocated.
                 readerTransport.advertise()
-                val connectionMethod = readerTransport.connectionMethod as MdocConnectionMethodBle
-                assertEquals(if (useL2capInEngagement) 0x80 else null, connectionMethod.directL2capPsm)
+                val connectionMethod = readerTransport.connectionMethod as MdocConnectionMethod.Ble
+                val engagedPsm = (connectionMethod as? MdocConnectionMethod.Ble.DirectL2capCentral)?.psm
+                assertEquals(if (useL2capInEngagement) 0x80 else null, engagedPsm)
 
-                val selectedConnectionMethod = if (useL2capInEngagement) {
-                    MdocConnectionMethod.disambiguate(listOf(connectionMethod), MdocRole.MDOC).first()
-                } else {
-                    connectionMethod
-                }
                 val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                    addConnectionMethod(selectedConnectionMethod)
+                    addConnectionMethod(connectionMethod)
                 }.toDataItem(
                     if (useL2capInEngagement) MdocEngagementType.CCE_SELECT else MdocEngagementType.DEVICE_QR
                 )
@@ -2770,7 +2780,7 @@ class BleHciTransportTest {
                     options = options,
                     centralManager = centralManager,
                     uuid = serviceUuid,
-                    psm = connectionMethod.directL2capPsm
+                    psm = engagedPsm
                 )
                 mdocTransport = createdMdocTransport
 
@@ -4076,15 +4086,12 @@ class BleHciTransportTest {
                 packetIoFactory = { io },
             )
             val readerTransport = factory.createTransport(
-                MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = false,
-                    directL2capPeripheral = true,
-                    peripheralModeUuid = svcUuid,
-                    directL2capPsm = 0x0080,
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                    uuid = svcUuid,
+                    psm = 0x0080,
                 ),
                 MdocRole.MDOC_READER,
-                MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                MdocTransportOptions(),
             )
 
             try {

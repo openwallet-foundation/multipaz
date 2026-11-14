@@ -47,8 +47,8 @@ final class MdocPresentmentViewModel: ObservableObject {
                     eDeviceKey: eDeviceKey.publicKey,
                     version: "1.0"
                 ) { builder in
-                    advertisedTransports.forEach {
-                        if let connectionMethod = $0.connectionMethod {
+                    advertisedTransports.forEach { transport in
+                        transport.connectionMethods.forEach { connectionMethod in
                             builder.addConnectionMethod(connectionMethod: connectionMethod)
                         }
                     }

@@ -57,7 +57,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
@@ -1027,7 +1027,7 @@ private suspend fun handleAnnexABegin(
         eDeviceKey = eReaderKey.publicKey,
         version = "1.1",
     ) {
-        addConnectionMethod(connectionMethod = MdocConnectionMethodHttp(uri = requestUri))
+        addConnectionMethod(connectionMethod = MdocConnectionMethod.Http(uri = requestUri))
     }
     val readerEngagementEncodedBase64 = Cbor.encode(readerEngagement.toDataItem()).toBase64Url()
 

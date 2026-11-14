@@ -6,7 +6,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.TestVectors
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.origininfo.OriginInfoDomain
 import org.multipaz.util.UUID
@@ -28,16 +28,11 @@ class DeviceEngagementTest {
         assertEquals("1.0", deviceEngagement.version)
         val connectionMethods = deviceEngagement.connectionMethods
         assertEquals(1, connectionMethods.size.toLong())
-        assertTrue(connectionMethods[0] is MdocConnectionMethodBle)
-        val cmBle = connectionMethods[0] as MdocConnectionMethodBle
-        assertFalse(cmBle.gattPeripheral)
-        assertTrue(cmBle.gattCentral)
-        assertFalse(cmBle.directL2capPeripheral)
-        assertFalse(cmBle.directL2capCentral)
-        assertNull(cmBle.peripheralModeUuid)
+        assertTrue(connectionMethods[0] is MdocConnectionMethod.Ble.GattCentral)
+        val cmBle = connectionMethods[0] as MdocConnectionMethod.Ble.GattCentral
         assertEquals(
             "45efef74-2b2c-4837-a9a3-b0e1d05a6917",
-            cmBle.centralModeUuid.toString()
+            cmBle.uuid.toString()
         )
         assertEquals(
             TestVectors.ISO_18013_5_ANNEX_D_E_DEVICE_KEY_BYTES,
@@ -71,12 +66,7 @@ class DeviceEngagementTest {
             eDeviceKey = eDeviceKey.publicKey,
         ) {
             addConnectionMethod(
-                MdocConnectionMethodBle(
-                    gattPeripheral = false,
-                    gattCentral = true,
-                    peripheralModeUuid = null,
-                    centralModeUuid = uuid
-                )
+                MdocConnectionMethod.Ble.GattCentral(uuid = uuid)
             )
         }
         assertEquals("1.0", deviceEngagement.version)
@@ -87,11 +77,8 @@ class DeviceEngagementTest {
         assertEquals(eDeviceKey.publicKey, parsedDeviceEngagement.eDeviceKey)
         assertEquals("1.0", parsedDeviceEngagement.version)
         assertEquals(1, parsedDeviceEngagement.connectionMethods.size)
-        val cm = parsedDeviceEngagement.connectionMethods[0] as MdocConnectionMethodBle
-        assertFalse(cm.gattPeripheral)
-        assertTrue(cm.gattCentral)
-        assertNull(cm.peripheralModeUuid)
-        assertEquals(uuid, cm.centralModeUuid)
+        val cm = parsedDeviceEngagement.connectionMethods[0] as MdocConnectionMethod.Ble.GattCentral
+        assertEquals(uuid, cm.uuid)
         assertEquals(0, parsedDeviceEngagement.originInfos.size)
 
         assertEquals(
@@ -166,11 +153,8 @@ class DeviceEngagementTest {
     @Test
     fun testReaderEngagement() = runTest {
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val bleMethod = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = UUID.randomUUID()
+        val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+            uuid = UUID.randomUUID()
         )
         val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
             addConnectionMethod(bleMethod)
@@ -183,18 +167,16 @@ class DeviceEngagementTest {
             ReaderEngagement.fromDataItem(readerEngagement.toDataItem())
         )
 
-        // Verify READER_QR context allows reader-provided peripheralModeUuid and directL2capCentral
-        val readerQrBle = MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = true,
-            directL2capPeripheral = false,
-            directL2capCentral = true,
-            peripheralModeUuid = UUID.randomUUID(),
-            centralModeUuid = UUID.randomUUID(),
-            directL2capPsm = 128
+        // Verify READER_QR context allows reader-provided peripheralModeUuid and DirectL2capCentral
+        val centralUuid = UUID.randomUUID()
+        val peripheralUuid = UUID.randomUUID()
+        val readerQrMethods = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = centralUuid, psm = 128),
+            MdocConnectionMethod.Ble.GattCentral(uuid = centralUuid),
+            MdocConnectionMethod.Ble.GattPeripheral(uuid = peripheralUuid),
         )
         val readerQrEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
-            addConnectionMethod(readerQrBle)
+            readerQrMethods.forEach { addConnectionMethod(it) }
         }
         assertEquals(
             readerQrEngagement,
@@ -204,18 +186,10 @@ class DeviceEngagementTest {
         // Verify CCE_SELECT rejects multiple connection methods in DeviceEngagement
         val twoMethodDe = buildDeviceEngagement(eDeviceKey = eReaderKey.publicKey) {
             addConnectionMethod(
-                MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = false,
-                    peripheralModeUuid = UUID.randomUUID(),
-                )
+                MdocConnectionMethod.Ble.GattPeripheral(uuid = UUID.randomUUID())
             )
             addConnectionMethod(
-                MdocConnectionMethodBle(
-                    gattPeripheral = false,
-                    gattCentral = true,
-                    centralModeUuid = UUID.randomUUID(),
-                )
+                MdocConnectionMethod.Ble.GattCentral(uuid = UUID.randomUUID())
             )
         }
         assertFailsWith<IllegalArgumentException> {

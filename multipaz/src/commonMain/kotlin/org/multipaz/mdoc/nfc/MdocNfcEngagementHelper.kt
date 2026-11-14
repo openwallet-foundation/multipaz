@@ -5,7 +5,8 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocNfcHandoverType
+import org.multipaz.nfc.AlternativeCarrierRecord
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
@@ -184,11 +185,10 @@ class MdocNfcEngagementHelper(
                         }.toDataItem()
                     )
 
-                    val combinedStaticHandoverMethods = MdocConnectionMethod.combine(staticHandoverMethods!!)
                     val handoverSelectMessage = generateHandoverSelectMessage(
-                        methods = combinedStaticHandoverMethods,
+                        methods = staticHandoverMethods!!,
                         encodedDeviceEngagement = encodedDeviceEngagement,
-                        skipUuids = false,
+                        handoverType = MdocNfcHandoverType.STATIC_HS,
                     )
                     val hsPayload = handoverSelectMessage.encode()
                     Logger.dHex(TAG, "Prepared Handover Select message", hsPayload)
@@ -259,7 +259,7 @@ class MdocNfcEngagementHelper(
         val recordsById = tailRecords.associateBy { it.id.decodeToString() }
         val auxRecordsByCarrierId = mutableMapOf<String, List<NdefRecord>>()
         for (acRec in hrRecord.embeddedMessage.records) {
-            val parsedAc = MdocConnectionMethod.parseAlternativeCarrierRecord(acRec)
+            val parsedAc = AlternativeCarrierRecord.fromNdefRecord(acRec)
             if (parsedAc != null) {
                 auxRecordsByCarrierId[parsedAc.carrierDataReference] =
                     parsedAc.auxiliaryDataReferences.mapNotNull { recordsById[it] }
@@ -273,24 +273,25 @@ class MdocNfcEngagementHelper(
         val availableConnectionMethods = mutableListOf<MdocConnectionMethod>()
         for (record in tailRecords) {
             val auxRecords = auxRecordsByCarrierId[record.id.decodeToString()] ?: emptyList()
-            MdocConnectionMethod.fromNdefRecord(record, MdocRole.MDOC_READER, null, auxRecords)?.let {
-                availableConnectionMethods.add(it)
-            }
+            availableConnectionMethods.addAll(
+                MdocConnectionMethod.decodeNdefHandoverCarrier(
+                    record = record,
+                    senderRole = MdocRole.MDOC_READER,
+                    fallbackUuid = null,
+                    auxiliaryRecords = auxRecords,
+                )
+            )
         }
         if (availableConnectionMethods.isEmpty()) {
             throw IllegalStateException("No supported connection methods found in Handover Request method")
         }
-        val disambiguatedConnectionMethods = MdocConnectionMethod.disambiguate(
-            availableConnectionMethods,
-            MdocRole.MDOC
-        )
 
-        var selectedMethod = negotiatedHandoverPicker!!(disambiguatedConnectionMethods)
-        if (selectedMethod is MdocConnectionMethodBle &&
-            selectedMethod.hasPeripheralMode &&
-            selectedMethod.peripheralModeUuid == null
+        var selectedMethod = negotiatedHandoverPicker!!(availableConnectionMethods)
+        if (selectedMethod is MdocConnectionMethod.Ble &&
+            selectedMethod.isMdocPeripheral &&
+            selectedMethod.uuid == null
         ) {
-            selectedMethod = selectedMethod.copy(peripheralModeUuid = UUID.randomUUID())
+            selectedMethod = selectedMethod.withUuid(UUID.randomUUID())
         }
 
         val encodedDeviceEngagement = Cbor.encode(
@@ -301,16 +302,11 @@ class MdocNfcEngagementHelper(
             }.toDataItem()
         )
 
-        // When doing Negotiated Handover, omit the UUID in Handover Select when an mdoc central mode is selected
-        // (Reference: ISO/IEC 18013-5 Second Edition clause 11.1.3).
-        val skipUuids = selectedMethod is MdocConnectionMethodBle &&
-            selectedMethod.hasCentralMode &&
-            !selectedMethod.hasPeripheralMode
         val handoverSelectMessage = generateHandoverSelectMessage(
             methods = listOf(selectedMethod),
             encodedDeviceEngagement = encodedDeviceEngagement,
-            skipUuids = skipUuids,
-            includeChBleOptions = hrHadChBleOptions && selectedMethod is MdocConnectionMethodBle,
+            handoverType = MdocNfcHandoverType.NEGOTIATED_HS,
+            hrHadChBleOptions = hrHadChBleOptions,
         )
 
         val handover = buildCborArray {
@@ -332,22 +328,21 @@ class MdocNfcEngagementHelper(
     private fun generateHandoverSelectMessage(
         methods: List<MdocConnectionMethod>,
         encodedDeviceEngagement: ByteArray,
-        skipUuids: Boolean,
-        includeChBleOptions: Boolean = false,
+        handoverType: MdocNfcHandoverType,
+        hrHadChBleOptions: Boolean = false,
     ): NdefMessage {
-        val auxiliaryReferences = listOf("mdoc")
+        val ndefBundles = MdocConnectionMethod.encodeNdefHandoverCarriers(
+            methods = methods,
+            handoverType = handoverType,
+            sharedAuxiliaryReferences = listOf("mdoc"),
+            hrHadChBleOptions = hrHadChBleOptions,
+        )
         val carrierAndAuxiliaryRecords = mutableListOf<NdefRecord>()
         val alternativeCarrierRecords = mutableListOf<NdefRecord>()
-        for (method in methods) {
-            val ndefRecords = method.toNdefRecord(
-                auxiliaryReferences = auxiliaryReferences,
-                role = MdocRole.MDOC,
-                skipUuids = skipUuids,
-                includeChBleOptions = includeChBleOptions,
-            )!!
+        for (ndefRecords in ndefBundles) {
             carrierAndAuxiliaryRecords.add(ndefRecords.carrierRecord)
             carrierAndAuxiliaryRecords.addAll(ndefRecords.auxiliaryRecords)
-            alternativeCarrierRecords.add(ndefRecords.acRecord)
+            alternativeCarrierRecords.add(ndefRecords.alternativeCarrierRecord.generateNdefRecord())
         }
         val handoverSelectRecord = HandoverSelectRecord(
             version = 0x15,
