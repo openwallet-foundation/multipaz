@@ -1094,4 +1094,63 @@ class DeviceRequestDcqlConversionsTest {
             docReqRetain.nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]
         )
     }
+
+    @Test
+    fun multipleCredentialsWithoutCredentialSetsReferencesAllDocRequests() {
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = """
+                {
+                  "credentials": [
+                    {
+                      "id": "mdl",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "claims": [
+                        {"path": ["org.iso.18013.5.1", "given_name"]}
+                      ]
+                    },
+                    {
+                      "id": "pid",
+                      "format": "dc+sd-jwt",
+                      "meta": {
+                        "vct_values": ["urn:eudi:pid:1"]
+                      },
+                      "claims": [
+                        {"path": ["given_name"]}
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent()
+        )
+        val useCases = deviceRequest.deviceRequestInfo!!.useCases
+        assertEquals(1, useCases.size)
+        assertEquals(listOf(DocumentSet(listOf(0, 1))), useCases.single().documentSets)
+    }
+
+    @Test
+    fun documentSetRejectsEmptyAndInvalidDocRequestIds() {
+        assertFailsWith<IllegalArgumentException> {
+            DocumentSet(emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DocumentSet(listOf(-1))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DocumentSet.fromDataItem(buildCborArray {})
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DocumentSet.fromDataItem(buildCborArray { add(-1) })
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DocumentSet.fromDataItem(buildCborArray { add("0") })
+        }
+        assertEquals(
+            DocumentSet(listOf(0, 2)),
+            DocumentSet.fromDataItem(DocumentSet(listOf(0, 2)).toDataItem())
+        )
+    }
 }

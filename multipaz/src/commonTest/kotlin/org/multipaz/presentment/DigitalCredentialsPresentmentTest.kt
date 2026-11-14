@@ -1377,7 +1377,10 @@ class DigitalCredentialsPresentmentTest {
                         }
                       }
                     } >>)
-                  }
+                  },
+                  "docRequestIds": [
+                    0
+                  ]
                 }
               ]
             }
@@ -1505,12 +1508,15 @@ class DigitalCredentialsPresentmentTest {
         )
         val expectedResponseCdn = """
             {
-              "version": "1.1",
+              "version": "1.0",
               "status": 0,
               "otherDocuments": [
                 {
                   "docFormat": "dc+sd-jwt",
-                  "data": ${otherDoc.data.size} bytes
+                  "data": ${otherDoc.data.size} bytes,
+                  "docRequestIds": [
+                    0
+                  ]
                 }
               ]
             }
@@ -2711,6 +2717,84 @@ class DigitalCredentialsPresentmentTest {
         assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, telemetry6?.outcome)
         val event6 = assertIs<EventPresentmentDigitalCredentialsMdocApi>(events6.single())
         assertEquals(PresentmentOutcome.AUTHENTICATION_FAILED, event6.telemetry?.outcome)
+    }
+
+    @Test
+    fun mdocPresentment_omitsDocRequestIdsFor10AndIncludesFor11WithVersion10Response() = runTestWithSetup {
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val source = SimplePresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+            showConsentPromptFn = ::promptModelSilentConsent,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+            domainsKeyBoundSdJwt = listOf("sdjwt"),
+        )
+        val creationTime = Clock.System.now()
+
+        // 1. Version 1.0 DeviceRequest -> omits docRequestIds on MdocDocument, DeviceResponse.version == "1.0"
+        val request10 = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            version = "1.0"
+        ) {
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf("org.iso.18013.5.1" to mapOf("given_name" to false))
+            )
+        }
+        val response10 = mdocPresentment(
+            deviceRequest = request10,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = ORIGIN,
+            creationTime = creationTime,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {}
+        ).deviceResponse
+        response10.verify(sessionTranscript = sessionTranscript, deviceRequest = request10, atTime = creationTime)
+        assertEquals("1.0", response10.version)
+        assertEquals(null, response10.documents.single().docRequestIds)
+        assertEquals(null, response10.toDataItem()["documents"].asArray.single().getOrNull("docRequestIds"))
+
+        // 2. Version 1.1 DeviceRequest -> sets docRequestIds = [0] on MdocDocument, DeviceResponse.version == "1.0"
+        val request11 = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            version = "1.1",
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(mandatory = true, documentSets = listOf(DocumentSet(listOf(0))), purposeHints = emptyMap())
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf("org.iso.18013.5.1" to mapOf("given_name" to false))
+            )
+        }
+        val response11 = mdocPresentment(
+            deviceRequest = request11,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = ORIGIN,
+            creationTime = creationTime,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {}
+        ).deviceResponse
+        response11.verify(sessionTranscript = sessionTranscript, deviceRequest = request11, atTime = creationTime)
+        assertEquals("1.0", response11.version)
+        assertEquals(listOf(0), response11.documents.single().docRequestIds)
+        assertEquals(
+            listOf(0L),
+            response11.toDataItem()["documents"].asArray.single()["docRequestIds"].asArray.map { it.asNumber }
+        )
     }
 }
 

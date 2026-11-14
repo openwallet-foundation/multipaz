@@ -38,7 +38,7 @@ import kotlin.time.Instant
  * Note that you have to manually call [verify] before accessing the [documents] field
  * for instances created this way.
  *
- * @property version the version of the device response, e.g. `1.0` or `1.1`.
+ * @property version the version of the device response (`"1.0"`).
  * @property status the status field containing for example [STATUS_OK] or [STATUS_GENERAL_ERROR].
  * @property documents a list of returned and verified documents.
  * @property zkDocuments a list of returned documents with ZKP.
@@ -134,39 +134,53 @@ data class DeviceResponse internal constructor(
             val transactionData = if (deviceRequest == null) {
                 emptyList()
             } else {
-                val docRequestId = findDocRequestId(deviceRequest, documentTypeRepository, document)
-                if (docRequestId < 0) {
-                    throw IllegalStateException(
-                        "Cannot resolve DocRequest for document with docType '${document.docType}'"
-                    )
-                }
-                val reqIssuerIds = deviceRequest.docRequests[docRequestId].docRequestInfo?.issuerIdentifiers
-                if (!reqIssuerIds.isNullOrEmpty()) {
-                    val requiredAkis = reqIssuerIds.toSet()
-                    val matchesIssuer = document.issuerCertChain.certificates.any { cert ->
-                        cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
+                val explicitIds = document.docRequestIds
+                if (explicitIds != null) {
+                    if (explicitIds.distinct().size != explicitIds.size) {
+                        throw IllegalStateException("Duplicate docRequestIds $explicitIds in MdocDocument")
                     }
-                    if (!matchesIssuer) {
+                    for (id in explicitIds) {
+                        val req = deviceRequest.docRequests.getOrNull(id)
+                            ?: throw IllegalStateException("Invalid docRequestId $id in MdocDocument")
+                        validateMdocAgainstDocRequest(document, id, req)
+                    }
+                    if (documentTypeRepository == null) {
+                        emptyList()
+                    } else {
+                        validateSignedMdocTransactionDocRequestIds(
+                            document = document,
+                            allowedIds = explicitIds,
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
+                        resolveEncryptedMdocTransactions(
+                            document = document,
+                            reqIds = explicitIds,
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
+                    }
+                } else {
+                    val docRequestId = findDocRequestId(deviceRequest, documentTypeRepository, document)
+                    if (docRequestId < 0) {
+                        throw IllegalStateException(
+                            "Cannot resolve DocRequest for document with docType '${document.docType}'"
+                        )
+                    }
+                    if (!matchesMdocIssuerIdentifiers(document, deviceRequest.docRequests[docRequestId])) {
                         throw IllegalStateException(
                             "Document certificate chain does not match requested issuerIdentifiers for docType '${document.docType}'"
                         )
                     }
-                }
-                if (documentTypeRepository == null) {
-                    emptyList()
-                } else {
-                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
-                        documentTypeRepository
-                    )
-                    val returnedTxIdentifiers = document.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys
-                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
-                        if (returnedTxIdentifiers != null) {
-                            allTx.filter { returnedTxIdentifiers.contains(it.type.identifier) }
-                        } else {
-                            emptyList()
-                        }
+                    if (documentTypeRepository == null) {
+                        emptyList()
                     } else {
-                        allTx
+                        resolveEncryptedMdocTransactions(
+                            document = document,
+                            reqIds = listOf(docRequestId),
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
                     }
                 }
             }
@@ -180,105 +194,164 @@ data class DeviceResponse internal constructor(
         }
         if (deviceRequest != null) {
             zkDocuments.forEach { zkDocument ->
-                val matchingZkRequests = deviceRequest.docRequests.filter { req ->
-                    req.docType == zkDocument.documentData.docType &&
-                        (req.docRequestInfo?.docFormat ?: "mso_mdoc") in listOf("mso_mdoc", "mso_mdoc_zk") &&
-                        req.docRequestInfo?.zkRequest != null &&
-                        req.docRequestInfo.zkRequest.systemSpecs.any { it.id == zkDocument.documentData.zkSystemSpecId }
-                }
-                if (matchingZkRequests.isEmpty()) {
-                    throw IllegalStateException(
-                        "Cannot resolve DocRequest with matching zkRequest for ZkDocument with docType '${zkDocument.documentData.docType}'"
-                    )
-                }
-                if (matchingZkRequests.all {
-                        it.hasTransactionData() && it.docRequestInfo?.alternativeDataElements.isNullOrEmpty()
+                val explicitIds = zkDocument.docRequestIds
+                if (explicitIds != null) {
+                    if (explicitIds.distinct().size != explicitIds.size) {
+                        throw IllegalStateException("Duplicate docRequestIds $explicitIds in ZkDocument")
                     }
-                ) {
-                    throw IllegalStateException("Transaction data is not supported with ZkDocument")
-                }
-                val issuerMatchingZkRequests = matchingZkRequests.filter { req ->
-                    val reqIssuerIds = req.docRequestInfo?.issuerIdentifiers
-                    if (reqIssuerIds.isNullOrEmpty()) {
-                        true
-                    } else {
-                        val requiredAkis = reqIssuerIds.toSet()
-                        zkDocument.documentData.msoX5chain?.certificates?.any { cert ->
-                            cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
-                        } == true
+                    for (id in explicitIds) {
+                        val req = deviceRequest.docRequests.getOrNull(id)
+                            ?: throw IllegalStateException("Invalid docRequestId $id in ZkDocument")
+                        validateZkDocAgainstDocRequest(zkDocument, id, req)
                     }
-                }
-                if (issuerMatchingZkRequests.isEmpty()) {
-                    throw IllegalStateException(
-                        "ZkDocument certificate chain does not match requested issuerIdentifiers for docType '${zkDocument.documentData.docType}'"
-                    )
+                } else {
+                    val matchingZkRequests = deviceRequest.docRequests.filter { req ->
+                        req.docType == zkDocument.documentData.docType &&
+                            (req.docRequestInfo?.docFormat ?: "mso_mdoc") in listOf("mso_mdoc", "mso_mdoc_zk") &&
+                            req.docRequestInfo?.zkRequest != null &&
+                            req.docRequestInfo.zkRequest.systemSpecs.any { it.id == zkDocument.documentData.zkSystemSpecId }
+                    }
+                    if (matchingZkRequests.isEmpty()) {
+                        throw IllegalStateException(
+                            "Cannot resolve DocRequest with matching zkRequest for ZkDocument with docType '${zkDocument.documentData.docType}'"
+                        )
+                    }
+                    if (matchingZkRequests.all {
+                            it.hasTransactionData() && it.docRequestInfo?.alternativeDataElements.isNullOrEmpty()
+                        }
+                    ) {
+                        throw IllegalStateException("Transaction data is not supported with ZkDocument")
+                    }
+                    val issuerMatchingZkRequests = matchingZkRequests.filter { req ->
+                        matchesZkIssuerIdentifiers(zkDocument, req)
+                    }
+                    if (issuerMatchingZkRequests.isEmpty()) {
+                        throw IllegalStateException(
+                            "ZkDocument certificate chain does not match requested issuerIdentifiers for docType '${zkDocument.documentData.docType}'"
+                        )
+                    }
                 }
             }
             encryptedDocuments.forEach { encDoc ->
-                val req = deviceRequest.docRequests.getOrNull(encDoc.docRequestId)
-                    ?: throw IllegalStateException("Invalid docRequestId ${encDoc.docRequestId} for EncryptedDocuments")
-                if (req.docRequestInfo?.docResponseEncryption == null) {
-                    throw IllegalStateException(
-                        "Unexpected EncryptedDocuments for DocRequest ${encDoc.docRequestId} without docResponseEncryption"
-                    )
+                if (encDoc.docRequestIds.distinct().size != encDoc.docRequestIds.size) {
+                    throw IllegalStateException("Duplicate docRequestIds ${encDoc.docRequestIds} in EncryptedDocuments")
+                }
+                for (reqId in encDoc.docRequestIds) {
+                    val req = deviceRequest.docRequests.getOrNull(reqId)
+                        ?: throw IllegalStateException("Invalid docRequestId $reqId for EncryptedDocuments")
+                    if (req.docRequestInfo?.docResponseEncryption == null) {
+                        throw IllegalStateException(
+                            "Unexpected EncryptedDocuments for DocRequest $reqId without docResponseEncryption"
+                        )
+                    }
                 }
             }
         }
         otherDocuments.forEach { otherDocument ->
             otherDocument.clearVerificationState()
-            val docRequestId = if (deviceRequest == null) {
-                -1
-            } else {
-                findDocRequestId(deviceRequest, documentTypeRepository, otherDocument)
-            }
-            val docRequest = if (deviceRequest != null && docRequestId in deviceRequest.docRequests.indices) {
-                deviceRequest.docRequests[docRequestId]
-            } else {
-                null
-            }
-            if (deviceRequest != null && docRequest == null && deviceRequest.docRequests.any { it.hasTransactionData() }) {
-                throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
-            }
-            val transactionData = if (docRequest == null || documentTypeRepository == null) {
-                emptyList()
-            } else {
-                val allTx = docRequest.getTransactionData(
-                    documentTypeRepository
-                )
-                if (docRequest.docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
-                    try {
-                        val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                            otherDocument.data.toByteArray().zlibInflate().decodeToString()
+            val explicitIds = otherDocument.docRequestIds
+            if (deviceRequest != null && explicitIds != null) {
+                if (explicitIds.distinct().size != explicitIds.size) {
+                    throw IllegalStateException("Duplicate docRequestIds $explicitIds in OtherDocument")
+                }
+                for (id in explicitIds) {
+                    if (id !in deviceRequest.docRequests.indices) {
+                        throw IllegalStateException("Invalid docRequestId $id in OtherDocument")
+                    }
+                }
+                val expectedAudience: String?
+                val transactionData: List<TransactionData<*>>
+                if (otherDocument.docFormat == "dc+sd-jwt") {
+                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                        otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                    )
+                    val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
+                        ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
+                    for (id in explicitIds) {
+                        validateSdJwtAgainstDocRequest(
+                            sdJwtKb = sdJwtKb,
+                            vct = vct,
+                            reqId = id,
+                            docRequest = deviceRequest.docRequests[id],
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
                         )
-                        allTx.filter { sdJwtKb.jwtBody.containsKey(it.type.kbJwtResponseClaimName) }
-                    } catch (e: Exception) {
-                        allTx
+                    }
+                    val audiences = explicitIds.map { id ->
+                        deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[id])
+                    }.distinct()
+                    if (audiences.size != 1) {
+                        throw IllegalStateException("Inconsistent expected audiences across docRequestIds $explicitIds")
+                    }
+                    expectedAudience = audiences.single()
+                    transactionData = if (documentTypeRepository == null) {
+                        emptyList()
+                    } else {
+                        validateSignedSdJwtTransactionDocRequestIds(
+                            sdJwtKb = sdJwtKb,
+                            allowedIds = explicitIds,
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
+                        resolveEncryptedSdJwtTransactions(
+                            otherDocument = otherDocument,
+                            reqIds = explicitIds,
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
                     }
                 } else {
-                    allTx
+                    expectedAudience = null
+                    transactionData = emptyList()
                 }
-            }
-            val expectedAudience = deviceRequest?.getExpectedOtherDocumentAudience(docRequest)
-            otherDocument.verify(
-                sessionTranscript = sessionTranscript,
-                eReaderKey = eReaderKey,
-                transactionData = transactionData,
-                atTime = atTime,
-                expectedAudience = expectedAudience
-            )
-            val reqIssuerIds = docRequest?.docRequestInfo?.issuerIdentifiers
-            if (!reqIssuerIds.isNullOrEmpty() && otherDocument.docFormat == "dc+sd-jwt") {
-                val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                    otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                otherDocument.verify(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = eReaderKey,
+                    transactionData = transactionData,
+                    atTime = atTime,
+                    expectedAudience = expectedAudience
                 )
-                val requiredAkis = reqIssuerIds.toSet()
-                val matchesIssuer = sdJwtKb.sdJwt.x5c?.certificates?.any { cert ->
-                    cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
-                } == true
-                if (!matchesIssuer) {
-                    throw IllegalStateException(
-                        "OtherDocument certificate chain does not match requested issuerIdentifiers"
+            } else {
+                val docRequestId = if (deviceRequest == null) {
+                    -1
+                } else {
+                    findDocRequestId(deviceRequest, documentTypeRepository, otherDocument)
+                }
+                val docRequest = if (deviceRequest != null && docRequestId in deviceRequest.docRequests.indices) {
+                    deviceRequest.docRequests[docRequestId]
+                } else {
+                    null
+                }
+                if (deviceRequest != null && docRequest == null && deviceRequest.docRequests.any { it.hasTransactionData() }) {
+                    throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
+                }
+                val transactionData = if (docRequest == null || documentTypeRepository == null) {
+                    emptyList()
+                } else {
+                    resolveEncryptedSdJwtTransactions(
+                        otherDocument = otherDocument,
+                        reqIds = listOf(docRequestId),
+                        deviceRequest = deviceRequest!!,
+                        documentTypeRepository = documentTypeRepository
                     )
+                }
+                val expectedAudience = deviceRequest?.getExpectedOtherDocumentAudience(docRequest)
+                otherDocument.verify(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = eReaderKey,
+                    transactionData = transactionData,
+                    atTime = atTime,
+                    expectedAudience = expectedAudience
+                )
+                if (docRequest != null && otherDocument.docFormat == "dc+sd-jwt") {
+                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                        otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                    )
+                    if (!matchesSdJwtIssuerIdentifiers(sdJwtKb, docRequest)) {
+                        throw IllegalStateException(
+                            "OtherDocument certificate chain does not match requested issuerIdentifiers"
+                        )
+                    }
                 }
             }
         }
@@ -652,6 +725,7 @@ data class DeviceResponse internal constructor(
          * @param deviceNamespaces the device-signed data elements to return.
          * @param deviceKey a [AsymmetricKey] used to generate a signature or MAC.
          * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
          * @return the builder.
          */
         suspend fun addDocument(
@@ -660,7 +734,8 @@ data class DeviceResponse internal constructor(
             issuerNamespaces: IssuerNamespaces,
             deviceNamespaces: DeviceNamespaces,
             deviceKey: AsymmetricKey,
-            errors: Map<String, Map<String, Int>> = emptyMap()
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
         ) = apply {
             documents.add(MdocDocument.fromNamespaces(
                 sessionTranscript = sessionTranscript,
@@ -670,7 +745,8 @@ data class DeviceResponse internal constructor(
                 issuerNamespaces = issuerNamespaces,
                 deviceNamespaces = deviceNamespaces,
                 deviceKey = deviceKey,
-                errors = errors
+                errors = errors,
+                docRequestIds = docRequestIds,
             ))
         }
 
@@ -681,13 +757,15 @@ data class DeviceResponse internal constructor(
          * @param requestedClaims the claims in [credential] to return.
          * @param deviceNamespaces additional device-signed claims to return.
          * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
          * @return the builder.
          */
         suspend fun addDocument(
             credential: MdocCredential,
             requestedClaims: List<MdocRequestedClaim>,
             deviceNamespaces: DeviceNamespaces = buildDeviceNamespaces {},
-            errors: Map<String, Map<String, Int>> = emptyMap()
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
         ) = apply {
             documents.add(MdocDocument.fromPresentment(
                 sessionTranscript = sessionTranscript,
@@ -695,7 +773,8 @@ data class DeviceResponse internal constructor(
                 credential = credential,
                 requestedClaims = requestedClaims,
                 deviceNamespaces = deviceNamespaces,
-                errors = errors
+                errors = errors,
+                docRequestIds = docRequestIds,
             ))
         }
 
@@ -723,18 +802,18 @@ data class DeviceResponse internal constructor(
          * Add encrypted documents to a [DeviceResponse] being built.
          *
          * @param encryptionParameters the parameters to use including the recipient key.
-         * @param docRequestId the document request ID.
+         * @param docRequestIds the `DocRequest` indices satisfied by the encrypted documents.
          * @param builderAction the builder action.
          */
         suspend fun addEncryptedDocuments(
             encryptionParameters: EncryptionParameters,
-            docRequestId: Int,
+            docRequestIds: List<Int>,
             builderAction: suspend EncryptedDocuments.Builder.() -> Unit
         ) {
             val builder = EncryptedDocuments.Builder(
                 sessionTranscript = sessionTranscript,
                 encryptionParameters = encryptionParameters,
-                docRequestId = docRequestId
+                docRequestIds = docRequestIds
             )
             builder.builderAction()
             addEncryptedDocuments(builder.build())
@@ -770,11 +849,7 @@ data class DeviceResponse internal constructor(
          * @return a [DeviceResponse] object.
          */
         fun build(): DeviceResponse {
-            val versionToUse = version ?: if (
-                zkDocuments.isNotEmpty() ||
-                encryptedDocuments.isNotEmpty() ||
-                otherDocuments.isNotEmpty()
-            ) "1.1" else "1.0"
+            val versionToUse = version ?: "1.0"
 
             val deviceResponse = DeviceResponse(
                 version = versionToUse,

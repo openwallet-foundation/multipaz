@@ -26,6 +26,8 @@ import kotlin.time.Instant
  * @property transactionData transaction data that were sent in the presentation request,
  *   acknowledged in the response (with the acknowledgement verified).
  * @property revocationStatus the revocation status, if present.
+ * @property docRequestIds optional list of `DocRequest` indices in `DeviceRequest.docRequests`
+ *   that this presentation responds to when ISO/IEC 18013-5 is in use, or `null` if not specified.
  */
 sealed class VerifiedPresentation() {
     abstract val documentSignerCertChain: X509CertChain?
@@ -39,4 +41,5 @@ sealed class VerifiedPresentation() {
     abstract val vpTokenIdentifier: String?
     abstract val transactionData: List<TransactionData<*>>
     abstract val revocationStatus: RevocationStatus?
+    abstract val docRequestIds: List<Int>?
 }
