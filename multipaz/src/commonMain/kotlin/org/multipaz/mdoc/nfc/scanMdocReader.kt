@@ -3,6 +3,7 @@ package org.multipaz.mdoc.nfc
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
@@ -119,28 +120,70 @@ suspend fun <T> NfcTagReader.scanMdocReader(
     // Start creating transports for Negotiated Handover / CCE and start advertising these
     // immediately. This helps with connection time because the holder's device will
     // get a chance to opportunistically read the UUIDs which helps reduce scanning
-    // time.
+    // time. Note that peripheral-only BLE offers without a pre-assigned UUID cannot be
+    // instantiated before handover because the mdoc provides its peripheral UUID during
+    // Handover Select / CCEHandoverSelect.
     //
-    val negotiatedHandoverTransports = negotiatedHandoverConnectionMethods.map {
-        val transport = transportFactory.createTransport(
-            it,
-            MdocRole.MDOC_READER,
-            options
-        )
-        transport.advertise()
-        transport
-    }
-    // Make sure we don't leak connections...
-    val transportsToClose = negotiatedHandoverTransports.toMutableList()
+    val transportsToClose = mutableListOf<MdocTransport>()
+    val effectiveNegotiatedMethods = mutableListOf<MdocConnectionMethod>()
 
     try {
+        for (cm in negotiatedHandoverConnectionMethods) {
+            if (cm is MdocConnectionMethodBle && cm.hasCentralMode && cm.hasPeripheralMode) {
+                val centralOffer = cm.copy(
+                    gattPeripheral = false,
+                    directL2capPeripheral = false,
+                    peripheralModeUuid = null,
+                )
+                val centralTransport = transportFactory.createTransport(
+                    centralOffer,
+                    MdocRole.MDOC_READER,
+                    options
+                )
+                transportsToClose.add(centralTransport)
+                centralTransport.advertise()
+                centralTransport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
+
+                val peripheralOffer = cm.copy(
+                    gattCentral = false,
+                    directL2capCentral = false,
+                    centralModeUuid = null,
+                    directL2capPsm = null,
+                    peripheralAddress = null,
+                )
+                if (peripheralOffer.peripheralModeUuid != null) {
+                    val peripheralTransport = transportFactory.createTransport(
+                        peripheralOffer,
+                        MdocRole.MDOC_READER,
+                        options
+                    )
+                    transportsToClose.add(peripheralTransport)
+                    peripheralTransport.advertise()
+                    peripheralTransport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
+                } else {
+                    effectiveNegotiatedMethods.add(peripheralOffer)
+                }
+            } else if (cm is MdocConnectionMethodBle && cm.hasPeripheralMode && cm.peripheralModeUuid == null) {
+                effectiveNegotiatedMethods.add(cm)
+            } else {
+                val transport = transportFactory.createTransport(
+                    cm,
+                    MdocRole.MDOC_READER,
+                    options
+                )
+                transportsToClose.add(transport)
+                transport.advertise()
+                transport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
+            }
+        }
+
         val result = scan(
             message = message,
             tagInteractionFunc = tagInteractionFunc@{ tag ->
                 val t0 = Clock.System.now()
                 val handoverResult = mdocReaderNfcHandover(
                     tag = tag,
-                    negotiatedHandoverConnectionMethods = negotiatedHandoverTransports.mapNotNull { it.connectionMethod },
+                    negotiatedHandoverConnectionMethods = effectiveNegotiatedMethods,
                     options = handoverOptions
                 )
                 if (handoverResult == null) {
@@ -149,12 +192,25 @@ suspend fun <T> NfcTagReader.scanMdocReader(
                 val isCceNfcOnly = handoverResult.type == MdocHandoverType.CCE_HANDOVER &&
                         handoverResult.connectionMethods.isEmpty()
 
+                val candidateMethods = if (
+                    handoverResult.type == MdocHandoverType.STATIC_HANDOVER &&
+                    !options.bleUseL2CAPInEngagement
+                ) {
+                    handoverResult.connectionMethods.filterNot {
+                        it is MdocConnectionMethodBle && it.hasDirectL2cap && !it.hasGatt
+                    }
+                } else {
+                    handoverResult.connectionMethods
+                }
+
                 val connectionMethod = if (isCceNfcOnly) {
                     null
-                } else if (handoverResult.connectionMethods.size == 1) {
-                    handoverResult.connectionMethods[0]
+                } else if (candidateMethods.isEmpty()) {
+                    null
+                } else if (candidateMethods.size == 1) {
+                    candidateMethods[0]
                 } else {
-                    selectConnectionMethod(handoverResult.connectionMethods)
+                    selectConnectionMethod(candidateMethods)
                 }
                 if (!isCceNfcOnly && connectionMethod == null) {
                     return@tagInteractionFunc null
@@ -165,7 +221,9 @@ suspend fun <T> NfcTagReader.scanMdocReader(
                 //
                 var transport: MdocTransport? = null
                 transportsToClose.forEach {
-                    if (connectionMethod != null && it.connectionMethod == connectionMethod) {
+                    if (connectionMethod != null && transport == null &&
+                        matchesWarmedUpTransport(it.connectionMethod, connectionMethod)
+                    ) {
                         transport = it
                     } else {
                         Logger.i(TAG, "Closing connection with CM ${it.connectionMethod}")
@@ -261,6 +319,26 @@ suspend fun <T> NfcTagReader.scanMdocReader(
             it.close()
         }
     }
+}
+
+private fun matchesWarmedUpTransport(
+    warmedUpCm: MdocConnectionMethod?,
+    selectedCm: MdocConnectionMethod,
+): Boolean {
+    if (warmedUpCm == null) return false
+    if (warmedUpCm == selectedCm) return true
+    if (warmedUpCm is MdocConnectionMethodBle && selectedCm is MdocConnectionMethodBle) {
+        if (selectedCm.hasCentralMode && !selectedCm.hasPeripheralMode &&
+            warmedUpCm.hasCentralMode && !warmedUpCm.hasPeripheralMode &&
+            warmedUpCm.centralModeUuid == selectedCm.centralModeUuid
+        ) {
+            val gattMatch = !selectedCm.gattCentral || warmedUpCm.gattCentral
+            val l2capMatch = !selectedCm.directL2capCentral ||
+                (warmedUpCm.directL2capCentral && warmedUpCm.directL2capPsm == selectedCm.directL2capPsm)
+            return gattMatch && l2capMatch
+        }
+    }
+    return false
 }
 
 private fun Throwable.isTagLostOrTransportClosed(): Boolean {

@@ -14,6 +14,8 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
@@ -25,6 +27,7 @@ import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcDeactivationReason
 import org.multipaz.nfc.ResponseApdu
 import org.multipaz.util.Logger
+import org.multipaz.util.UUID
 import org.multipaz.util.toHex
 import kotlin.math.min
 
@@ -60,7 +63,7 @@ class MdocNfcCceEngagementHelper(
     ) -> Unit,
     val onMessageReceived: suspend (ByteString) -> Unit,
     val onError: (error: Exception) -> Unit,
-    val handoverPicker: ((connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?)? = null,
+    val handoverPicker: (suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?)? = null,
     val capabilities: Map<Capability, DataItem> = mapOf(
         Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
         Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
@@ -117,7 +120,7 @@ class MdocNfcCceEngagementHelper(
         )
     }
 
-    private fun nfcCceTransactHandleHandoverRequest(message: ByteString): ByteString {
+    private suspend fun nfcCceTransactHandleHandoverRequest(message: ByteString): ByteString {
         val cceHandoverRequest = Cbor.decode(message.toByteArray())
         Logger.dCbor(TAG, "Received cceHandoverRequest", cceHandoverRequest)
 
@@ -133,10 +136,16 @@ class MdocNfcCceEngagementHelper(
             MdocRole.MDOC
         )
 
-        val selectedMethod = if (disambiguatedConnectionMethods.isEmpty() || handoverPicker == null) {
+        var selectedMethod = if (disambiguatedConnectionMethods.isEmpty() || handoverPicker == null) {
             null
         } else {
             handoverPicker.invoke(disambiguatedConnectionMethods)
+        }
+        if (selectedMethod is MdocConnectionMethodBle &&
+            selectedMethod.hasPeripheralMode &&
+            selectedMethod.peripheralModeUuid == null
+        ) {
+            selectedMethod = selectedMethod.copy(peripheralModeUuid = UUID.randomUUID())
         }
 
         val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey) {
@@ -146,7 +155,7 @@ class MdocNfcCceEngagementHelper(
             capabilities.forEach { (capability, value) ->
                 addCapability(capability, value)
             }
-        }.toDataItem()
+        }.toDataItem(engagementType = MdocEngagementType.CCE_SELECT)
         val encodedDeviceEngagement = Cbor.encode(deviceEngagement)
 
         val cceHandoverSelect = buildCborMap {

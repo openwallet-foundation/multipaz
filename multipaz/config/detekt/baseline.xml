@@ -161,7 +161,6 @@
     <ID>UndocumentedPublicFunction:EcSignature.kt$EcSignature.Companion$fun fromCoseEncoded(coseSignature: ByteArray): EcSignature</ID>
     <ID>UndocumentedPublicFunction:EcSignature.kt$EcSignature.Companion$fun fromDataItem(dataItem: DataItem): EcSignature</ID>
     <ID>UndocumentedPublicFunction:EcSignature.kt$EcSignature.Companion$fun fromDerEncoded( keySizeBits: Int, derEncodedSignature: ByteArray ): EcSignature</ID>
-    <ID>UndocumentedPublicFunction:EngagementParser.kt$EngagementParser.Engagement$fun parse(encodedEngagement: ByteArray)</ID>
     <ID>UndocumentedPublicFunction:EphemeralStorage.kt$EphemeralStorage$suspend fun serialize(): ByteString</ID>
     <ID>UndocumentedPublicFunction:EphemeralStorage.kt$EphemeralStorage.Companion$fun deserialize(data: ByteString, clock: Clock = Clock.System): EphemeralStorage</ID>
     <ID>UndocumentedPublicFunction:EphemeralStorageEngine.kt$EphemeralStorageEngine$fun toCbor(): ByteArray</ID>
@@ -446,8 +445,6 @@
     <ID>UndocumentedPublicProperty:DocumentAttributeType.kt$DocumentAttributeType.StringOptions$val options: List&lt;StringOption></ID>
     <ID>UndocumentedPublicProperty:DocumentEvent.kt$DocumentEvent$val documentId: String</ID>
     <ID>UndocumentedPublicProperty:EcCurve.kt$EcCurve$val defaultKeyAgreementAlgorithm: Algorithm get() = when (this) { P256 -> Algorithm.ECDH_P256 P384 -> Algorithm.ECDH_P384 P521 -> Algorithm.ECDH_P521 BRAINPOOLP256R1 -> Algorithm.ECDH_BRAINPOOLP256R1 BRAINPOOLP320R1 -> Algorithm.ECDH_BRAINPOOLP320R1 BRAINPOOLP384R1 -> Algorithm.ECDH_BRAINPOOLP384R1 BRAINPOOLP512R1 -> Algorithm.ECDH_BRAINPOOLP512R1 ED25519 -> Algorithm.UNSET X25519 -> Algorithm.ECDH_X25519 ED448 -> Algorithm.UNSET X448 -> Algorithm.ECDH_X448 }</ID>
-    <ID>UndocumentedPublicProperty:EngagementGenerator.kt$EngagementGenerator.Companion$const val ENGAGEMENT_VERSION_1_0 = "1.0"</ID>
-    <ID>UndocumentedPublicProperty:EngagementGenerator.kt$EngagementGenerator.Companion$const val ENGAGEMENT_VERSION_1_1 = "1.1"</ID>
     <ID>UndocumentedPublicProperty:EphemeralStorageItem.kt$EphemeralStorageItem$val key: String</ID>
     <ID>UndocumentedPublicProperty:EphemeralStorageItem.kt$EphemeralStorageItem$val partitionId: String?</ID>
     <ID>UndocumentedPublicProperty:EphemeralStorageItem.kt$EphemeralStorageItem$var expiration: Instant = Instant.DISTANT_FUTURE</ID>

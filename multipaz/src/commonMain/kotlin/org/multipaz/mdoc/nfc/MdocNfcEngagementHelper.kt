@@ -22,6 +22,7 @@ import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborArray
@@ -29,6 +30,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.util.UUID
 import org.multipaz.util.getUInt16
 
 /**
@@ -57,7 +59,7 @@ class MdocNfcEngagementHelper(
         handover: DataItem) -> Unit,
     val onError: (error: Exception) -> Unit,
     val staticHandoverMethods: List<MdocConnectionMethod>? = null,
-    val negotiatedHandoverPicker: ((connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod)? = null,
+    val negotiatedHandoverPicker: (suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod)? = null,
     val capabilities: Map<Capability, DataItem> = mapOf(
         Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
         Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
@@ -246,16 +248,32 @@ class MdocNfcEngagementHelper(
     }
 
     private suspend fun ndefTransactHandleHandoverRequest(message: NdefMessage): NdefMessage {
-        // Handover Request Record must be the first record in Handover Request Message..
+        // Handover Request Record must be the first record in Handover Request Message.
         val hrRecord = HandoverRequestRecord.fromNdefRecord(message.records[0])
             ?: throw IllegalStateException("Handover Request Record not the first in message")
         check(hrRecord.version == 0x15) {
             "Expected Connection Handover version 1.5, got ${byteArrayOf(hrRecord.version.toByte()).toHex()}"
         }
 
+        val tailRecords = message.records.subList(1, message.records.size)
+        val recordsById = tailRecords.associateBy { it.id.decodeToString() }
+        val auxRecordsByCarrierId = mutableMapOf<String, List<NdefRecord>>()
+        for (acRec in hrRecord.embeddedMessage.records) {
+            val parsedAc = MdocConnectionMethod.parseAlternativeCarrierRecord(acRec)
+            if (parsedAc != null) {
+                auxRecordsByCarrierId[parsedAc.carrierDataReference] =
+                    parsedAc.auxiliaryDataReferences.mapNotNull { recordsById[it] }
+            }
+        }
+        val hrHadChBleOptions = tailRecords.any {
+            it.tnf == NdefRecord.Tnf.EXTERNAL_TYPE &&
+                it.type.decodeToString() == Nfc.EXTERNAL_TYPE_ISO_18013_5_CH_BLE_OPTIONS
+        }
+
         val availableConnectionMethods = mutableListOf<MdocConnectionMethod>()
-        for (record in message.records.subList(1, message.records.size)) {
-            MdocConnectionMethod.fromNdefRecord(record, MdocRole.MDOC_READER, null)?.let {
+        for (record in tailRecords) {
+            val auxRecords = auxRecordsByCarrierId[record.id.decodeToString()] ?: emptyList()
+            MdocConnectionMethod.fromNdefRecord(record, MdocRole.MDOC_READER, null, auxRecords)?.let {
                 availableConnectionMethods.add(it)
             }
         }
@@ -267,33 +285,32 @@ class MdocNfcEngagementHelper(
             MdocRole.MDOC
         )
 
-        val selectedMethod = negotiatedHandoverPicker!!(disambiguatedConnectionMethods)
+        var selectedMethod = negotiatedHandoverPicker!!(disambiguatedConnectionMethods)
+        if (selectedMethod is MdocConnectionMethodBle &&
+            selectedMethod.hasPeripheralMode &&
+            selectedMethod.peripheralModeUuid == null
+        ) {
+            selectedMethod = selectedMethod.copy(peripheralModeUuid = UUID.randomUUID())
+        }
 
-        // Handover Select message is defined in section 5.2 Handover Select Message
-        //
         val encodedDeviceEngagement = Cbor.encode(
-            buildDeviceEngagement(eDeviceKey = eDeviceKey) { }.toDataItem()
+            buildDeviceEngagement(eDeviceKey = eDeviceKey) {
+                capabilities.forEach { (capability, value) ->
+                    addCapability(capability, value)
+                }
+            }.toDataItem()
         )
 
-        // When doing Negotiated Handover, the standard says to don't include the UUIDs in Handover Select
-        // message for mdoc central client mode:
-        //
-        //   The following requirements apply for including the UUID field during NFC device engagement:
-        //
-        //     — for Negotiated Handover, if the mdoc reader supports mdoc central client mode, it shall include a
-        //       UUID in the Handover Request message, to be used for mdoc central client mode;
-        //     — for Negotiated Handover, if the mdoc chooses to use mdoc peripheral server mode, it shall include a
-        //       UUID in the Handover Select message, to be used for mdoc peripheral server mode;
-        //     — for Static Handover, the mdoc shall send one UUID in the handover select message, to be used for
-        //       mdoc central client mode, mdoc peripheral server mode or both.
-        //
-        // Reference: ISO/IEC 18013-5:2021 clause 8.3.3.1.1.2 Device engagement contents
-        //
-        val skipUuids = selectedMethod is MdocConnectionMethodBle && selectedMethod.supportsCentralClientMode == true
+        // When doing Negotiated Handover, omit the UUID in Handover Select when an mdoc central mode is selected
+        // (Reference: ISO/IEC 18013-5 Second Edition clause 11.1.3).
+        val skipUuids = selectedMethod is MdocConnectionMethodBle &&
+            selectedMethod.hasCentralMode &&
+            !selectedMethod.hasPeripheralMode
         val handoverSelectMessage = generateHandoverSelectMessage(
             methods = listOf(selectedMethod),
             encodedDeviceEngagement = encodedDeviceEngagement,
             skipUuids = skipUuids,
+            includeChBleOptions = hrHadChBleOptions && selectedMethod is MdocConnectionMethodBle,
         )
 
         val handover = buildCborArray {
@@ -316,18 +333,21 @@ class MdocNfcEngagementHelper(
         methods: List<MdocConnectionMethod>,
         encodedDeviceEngagement: ByteArray,
         skipUuids: Boolean,
+        includeChBleOptions: Boolean = false,
     ): NdefMessage {
-        val auxiliaryReferences = mutableListOf<String>("mdoc")
-        val carrierConfigurationRecords = mutableListOf<NdefRecord>()
+        val auxiliaryReferences = listOf("mdoc")
+        val carrierAndAuxiliaryRecords = mutableListOf<NdefRecord>()
         val alternativeCarrierRecords = mutableListOf<NdefRecord>()
         for (method in methods) {
-            val ndefRecordAndAlternativeCarrier = method.toNdefRecord(
+            val ndefRecords = method.toNdefRecord(
                 auxiliaryReferences = auxiliaryReferences,
                 role = MdocRole.MDOC,
-                skipUuids = skipUuids
+                skipUuids = skipUuids,
+                includeChBleOptions = includeChBleOptions,
             )!!
-            carrierConfigurationRecords.add(ndefRecordAndAlternativeCarrier.first)
-            alternativeCarrierRecords.add(ndefRecordAndAlternativeCarrier.second)
+            carrierAndAuxiliaryRecords.add(ndefRecords.carrierRecord)
+            carrierAndAuxiliaryRecords.addAll(ndefRecords.auxiliaryRecords)
+            alternativeCarrierRecords.add(ndefRecords.acRecord)
         }
         val handoverSelectRecord = HandoverSelectRecord(
             version = 0x15,
@@ -338,11 +358,11 @@ class MdocNfcEngagementHelper(
                 handoverSelectRecord.generateNdefRecord(),
                 NdefRecord(
                     tnf = NdefRecord.Tnf.EXTERNAL_TYPE,
-                    type = "iso.org:18013:deviceengagement".encodeToByteString(),
+                    type = Nfc.EXTERNAL_TYPE_ISO_18013_5_DEVICE_ENGAGEMENT.encodeToByteString(),
                     id = "mdoc".encodeToByteString(),
                     payload = ByteString(encodedDeviceEngagement)
                 )
-            ) + carrierConfigurationRecords
+            ) + carrierAndAuxiliaryRecords
         )
     }
 

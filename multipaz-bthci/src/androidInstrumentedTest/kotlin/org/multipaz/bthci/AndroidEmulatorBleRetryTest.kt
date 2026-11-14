@@ -126,10 +126,10 @@ class AndroidEmulatorBleRetryTest {
     ): Pair<MdocTransportStats, MdocTransportStats> = coroutineScope {
         val serviceUuid = UUID.randomUUID()
         val connectionMethod = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = !centralClientMode,
-            supportsCentralClientMode = centralClientMode,
-            peripheralServerModeUuid = if (!centralClientMode) serviceUuid else null,
-            centralClientModeUuid = if (centralClientMode) serviceUuid else null,
+            gattPeripheral = !centralClientMode,
+            gattCentral = centralClientMode,
+            peripheralModeUuid = if (!centralClientMode) serviceUuid else null,
+            centralModeUuid = if (centralClientMode) serviceUuid else null,
         )
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
 
@@ -191,10 +191,10 @@ class AndroidEmulatorBleRetryTest {
     ): Pair<MdocTransportStats, MdocTransportStats> = coroutineScope {
         val serviceUuid = UUID.randomUUID()
         val connectionMethod = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = !centralClientMode,
-            supportsCentralClientMode = centralClientMode,
-            peripheralServerModeUuid = if (!centralClientMode) serviceUuid else null,
-            centralClientModeUuid = if (centralClientMode) serviceUuid else null,
+            gattPeripheral = !centralClientMode,
+            gattCentral = centralClientMode,
+            peripheralModeUuid = if (!centralClientMode) serviceUuid else null,
+            centralModeUuid = if (centralClientMode) serviceUuid else null,
         )
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
 

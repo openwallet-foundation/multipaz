@@ -42,6 +42,7 @@ import kotlinx.io.IOException
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.transport.BleCentralConfig
 import org.multipaz.mdoc.transport.BleCentralHal
 import org.multipaz.mdoc.transport.BleL2capChannel
@@ -1146,11 +1147,11 @@ class BleHciTransportTest {
         psm: Int?
     ): MdocTransport = centralManager.createTransport(
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = uuid,
-            peripheralServerModePsm = psm,
+            gattPeripheral = false,
+            gattCentral = true,
+            directL2capCentral = psm != null,
+            centralModeUuid = uuid,
+            directL2capPsm = psm,
         ),
         role,
         options,
@@ -1163,10 +1164,9 @@ class BleHciTransportTest {
         uuid: UUID
     ): MdocTransport = peripheralManager.createTransport(
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = uuid,
+            gattPeripheral = false,
+            gattCentral = true,
+            centralModeUuid = uuid,
         ),
         role,
         options,
@@ -1179,10 +1179,9 @@ class BleHciTransportTest {
         uuid: UUID
     ): MdocTransport = peripheralManager.createTransport(
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = uuid,
-            centralClientModeUuid = null,
+            gattPeripheral = true,
+            gattCentral = false,
+            peripheralModeUuid = uuid,
         ),
         role,
         options,
@@ -1196,11 +1195,11 @@ class BleHciTransportTest {
         psm: Int?
     ): MdocTransport = centralManager.createTransport(
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = uuid,
-            centralClientModeUuid = null,
-            peripheralServerModePsm = psm,
+            gattPeripheral = true,
+            gattCentral = false,
+            directL2capPeripheral = psm != null,
+            peripheralModeUuid = uuid,
+            directL2capPsm = psm,
         ),
         role,
         options,
@@ -1402,7 +1401,7 @@ class BleHciTransportTest {
 
             try {
                 mdocTransport.advertise()
-                val engagedPsm = (mdocTransport.connectionMethod as MdocConnectionMethodBle).peripheralServerModePsm
+                val engagedPsm = (mdocTransport.connectionMethod as MdocConnectionMethodBle).directL2capPsm
                 assertTrue(engagedPsm != null && engagedPsm > 0)
 
                 val centralManager = createCentralManager(bus.centralIo)
@@ -1626,10 +1625,9 @@ class BleHciTransportTest {
         )
         val uuid = UUID.randomUUID()
         val cmCentral = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = uuid
+            gattPeripheral = false,
+            gattCentral = true,
+            centralModeUuid = uuid
         )
         val t1 = factory.createTransport(
             cmCentral,
@@ -1640,10 +1638,9 @@ class BleHciTransportTest {
         t1.close()
 
         val cmPeripheral = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = uuid,
-            centralClientModeUuid = null
+            gattPeripheral = true,
+            gattCentral = false,
+            peripheralModeUuid = uuid
         )
         val t2 = factory.createTransport(
             cmPeripheral,
@@ -2221,36 +2218,36 @@ class BleHciTransportTest {
             #     -2: h'60e3392385041f51403051f2415531cb56dd3f999c71687013aac6768bc8187e',
             #     -3: h'e58deb8fdbe907f7dd5368245551a34796f7d2215c440c339bb0f7b67beccdfa'
             #   } >>),
-            #   "data": h'c2cac2b56cc903e2c631862a210306d1edd8178d1ea16f8fd6033a280b726844a7fef0b4cbf332849e7cdf8d341c3e96a73c6e8f41b8137303ed7c046e9c0e1e7e2ce44e14ffd6c9dc6773ac6a4c691e509e78c3f3089fefb88c4152f61c85bb5828cf239c1a4cd82d5c9c32b92ee4e76be0e127e5e4bdf19837f555cddb1371533cc8a9079d7c'
+            #   "data": h'3d711b134434dfc655490529afab9353c43c39d7a209f34dc283db9eefb156762299d5cda3acff92f355b5a3c04962d45d6eaa64a5e23b13cf77033909fc00ea7ba77ab2d6c5734fe1c6c3d5f7ee30e6aab529f7e9e17bd76d28d428c51ce916cca8954925ca5d3f4263b0c2ab407de87a0cc135e08e38e1521c8cfbe755534aef40808337eb6c'
             # }
-            L2CAP-CoC Peripheral->Central: ed00000000e9a26a655265616465724b6579d818584ba40102200121582060e3392385041f51403051f2415531cb56dd3f999c71687013aac6768bc8187e225820e58deb8fdbe907f7dd5368245551a34796f7d2215c440c339bb0f7b67beccdfa64646174615887c2cac2b56cc903e2c631862a210306d1edd8178d1ea16f8fd6033a280b726844a7fef0b4cbf332849e7cdf8d341c3e96a73c6e8f41b8137303ed7c046e9c0e1e7e2ce44e14ffd6c9dc6773ac6a4c691e509e78c3f3089fefb88c4152f61c85bb5828cf239c1a4cd82d5c9c32b92ee4e76be0e127e5e4bdf19837f555cddb1371533cc8a9079d7c
+            L2CAP-CoC Peripheral->Central: ed00000000e9a26a655265616465724b6579d818584ba40102200121582060e3392385041f51403051f2415531cb56dd3f999c71687013aac6768bc8187e225820e58deb8fdbe907f7dd5368245551a34796f7d2215c440c339bb0f7b67beccdfa646461746158873d711b134434dfc655490529afab9353c43c39d7a209f34dc283db9eefb156762299d5cda3acff92f355b5a3c04962d45d6eaa64a5e23b13cf77033909fc00ea7ba77ab2d6c5734fe1c6c3d5f7ee30e6aab529f7e9e17bd76d28d428c51ce916cca8954925ca5d3f4263b0c2ab407de87a0cc135e08e38e1521c8cfbe755534aef40808337eb6c
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: 3c0700000738a1646461746159072f6e6b3d6d7d98fb0b7a5f3a3ef16e2b4514950b5f8728f2132c92ea0075ca1e4d9efb66c896cba2ff15467b17b93310376b62570f9e8631cd0de34c2d732692e0150a309786b6541d0452fc2e906f2904ee0b376a321aa76df6d33d8f343c9f431470e1f898265cf76bbd6a3d5978ab8457195ca36bfcb5d78a1a77a0e71bfb76f8fe62fe9f29007685845b4ff6b8358af51d9cc3ab19643df7a9b68803d0e429eb974ef8c198d9a08a3dabdf8507010b2898bd6d276d2789409c9354ae1e397bbf6cb16f3d0fdaaf61de4f77f94f7328ec04895b1601e5c116d0ff1763a7c43b10ca6864f7f9f1ba
+            L2CAP-CoC Central->Peripheral: 3c0700000738a1646461746159072f574b3adb1dd1e6dbd2045703b71cc11484f79d8fca692a4bc82a1d10e0a030112a9a60042571b96461c871dde3b92023a728294ef42db9adcab1cb36cf3d4cbd57ab1258a88819e2bb6ab87b5c91ede4f0b276a2cb862a298446a7bd22d4901d45eafd03414359a91646998bb456a20ac9cfca419f3001153b5367a544000eed7d4edd63449bd6d1ad1c6b5b0c3eb24bcd53a60c9e5b21020328058c4e51cef0bc59cf354097321d1bef5ed5828471b8d2dcd4f8684e3309ec094ab63f0eb01a5ba25e2b06078f0989d500066c8e89a514bdffb83131a6df37cf436f23b3d9bba692df525fa4d961
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: 08ae7a46a11561f4a89faa086ca08043979416c58223913232ddad287eb68ac1f1d14b65b1246b570e3a263de4525d00c0e9c60f0a84be47ab7dcd079e17c92f43cdaeee7cc28311646f000e3a3884bbf23134557c4e2ba12ec1e64132c56060abba3dd1c11f6f7f7f26bcaa5d7d294a8275e5a7442736b7f79abd91a085af04aefbd1a8670265a1591ce34a3683c7fd59e22554f196718b4d055f0d0da0d7419bdb009bf63b6d12dfe99d308bf05ede7840f817682a9463fe7f2e626c443b06c3ec66763a1c15bf6394b81e2e1ba1ac791c8e1a59a9dd571470a6cf2edc5f36f20e63778d562e512228cd1734703dd03bf7d433b7b0d5
+            L2CAP-CoC Central->Peripheral: dce8a30e05e2449e9129247d7133c54d545c1722f09fd62bd354ede2036f623c946a868c0d07ce6f1d3a2a30e600c5f8a0ffc2106af86443905e56885be7b7301fa39509c2000cdbe2ca9b9dc499fe416f8d7c49772df42bc2bbe3de573419938d16f9a2bebd280deab17f6659f49e014231889768acdb7d914f4ec66e1d74e0cb6e3b39c1f030c4239ce2498feeba315f0027807016bf5a50c90fad480b5d2597bcb4fd461c292dedf04cf3609f9373a35b1f0bc60ea3248df7d3b4ed43d4441c1bf7f6412b7b3130bf90314a69b3cb195affe317b526ac5a620a86e4764165c22f397a74f179bfa8e850dac7ec35ab75a154977d8629
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: c35a3a128165dfb6dae0afb041d2fdbc1ecb27c1cfe18071f161899dea970561e2ea41d9a2a60334ffdc85ff7377b8cb3005f78a30ffdcd23cc2a207465a923410742f538d617ddd037f3c713f031357ea503c1179c51723087616de59ac4eb2addcb23925e9e700a73db3156a2f7a1e35cbc6d4af95adf8669bb011238a034bff4332bea93e42d9d158caa22d7e486caa76e7939383a10d84b0eab127207536d9a7646189add59d2a42a8b100f259c8df7394eaf64bae24fad07833a46a17da209eba06aa7d516ffc39f70ba85d7b4c8781c968e905713ac75410e59766295f318cf225e595711fff413833520a3aae74ce729e1e736e
+            L2CAP-CoC Central->Peripheral: 3310d88cdaf34f783a24bba1c55317a6a1f585816d7831065fe70ae9dae3deffc3f4aab0dba8b7035ef7208e051d4f98f6cdc8f4a590cfb629b107dbaf155b52d3aef795b8eac62ab0d29d0350d3c1c5c7f422702c68d9be1e01374b8f051c5ee58292e79e4111715a45eb796165493ec26b8341adf3a034e0f67fb0d74298fe2c108fc7aabc92e64afd1918c557eb8cefe72a20bda3b277fd6996da02264f021de06ecbb6e4a70696ebb7e9efb91540b59c1bbf492af5bef4626d3bc8a82d962d595c1935dd40cca805a6f4a3130870e2037ff8891a2d773d977aed40ec9defc0e6016ce82f3f26fe4d2535bffd4f43487dbb72cccca8
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: eb0f2e4d83e851586185bfd7f799c1729210245496fcdd0c9e8e8786778ba63de59a4e9bbe8794856c4710d85cce6608227c0f0f936e661de8be754282c35866ababdc1b2b154796dedac295409930fa13893eca75c039f65b0dcd7159bdd66c712c4624d941b56bf9a82b6e6b8fdc2565f9e2eb9c390fccbfce73aaf9580536bcb93ace974199b706170672efc8bbf066ca62884e1afa3a5a0dda224195b9b8e60ea90c7bc3b04b2f8781bd83002aa6ad73bd107a35ea2624f47d19fc8093cf0f9d7d506b6d9281074e7374872efbf072e12a85338a33a837b2b455a3828bb71ddd09af66e856ce05280ceccfc12e9d03dbc8d1dd95a0
+            L2CAP-CoC Central->Peripheral: c155bac20cf69a943e17160fda40349b23fc251b972874b3e8b2a07642da9e4a3fd0fca85e690834a5e891286663dafeeab258816cfb5b5e7b200e8bbf10d0a2d2853f2d548823e690df8a0de7a3fbf536a9eebfc264718aa5959d200887665216654e52d05ed2efc46a065b997106d83cf26c90412a895a44a021c872dad1fbdbfa3cc5fe87f80b591c272e55e084fc1016e4b1d3bf36ed8f5280b221e0c1e3481f3be8a6bb660c15438154616c0f52a1c525d1129a7d355d17d57693a234801957ffdb30544e8923c8d6ebf87da22aeb47594a0256ca7ecdc751527f66b57e48ca760b7ff67e1e3e0bd11737bf3a7e4274e76e3670e5
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: 72e895604b4e89374d9eb3082644940a6679140cfc7223b8e4f8cd6aa0010667b71d7aae998615b16bc81b1681808b0d6706f120e048f59a517de3a7e3500f1e008b6038bd023fc2431ae8bbb877d5a5c9fccc4881de30daac1a263e0a0c30089fd0f0f53a5204d4e7e9a2311606f3e532c98d4e038fd05526cf4828bba9330f6d7f8825b396d45a86d17986510e37898e255913541dd709378745448b245f822659fa175ec888508966ce0acea72d15bdcf1f31316612b169cc674e899cceef89838ffe93b131de1241e9dcdc9378215b8ce11ac843005b8aef74880262d8f7559c3063ce2867f0921bfc54ac0046eaa842f73099aecb
+            L2CAP-CoC Central->Peripheral: 9427683d89e84de9ac1d6525da79320066a2e0cd6bca1dd181db4bf6cd090b86af9d80934b0be9a9f3598d36f721834f06abb67368abfd77c78444405d8908a2a4f3ff4f33875c4327e5dec60b6c297aa9907bf993f344fc71a8b5681e7408dc10af7182ed3d92b2c547ba2c1230d447b6328e168cf9cec81f5bd2c7bd6ed7bcb5e05cf947c91edcf9657d1853fa6fbcbba795c7b4126c246d1c8dfd6dacb24caed9ef9d4e4549c0f000a4c9bd0e59b7eb8904417e0b8db4ed9cf25ff5c28ccd071e84ee7747f9788c4c99e24e41489fa1df6bf89f65bd61f46e1d7dff8789b89992ab57229e80a72721ebd79de1d9bb28199bac1e1831
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: 24200b8240800f9c81b79f2f167dc02e60a151683320c5cd569791817eb22b24735e43225e57299c67dcbcbfa279bc20aa2fac32840812fb1634a235588c19b30c6278791c35c6a0793e46c1a29b7e8b4ee27238b77c29c8809d81f4f5bbd41cb41c17d22415c620e623107895d4049ed123ffc4f300963b29395951191ab3a663bf84efd3c608d1cd11774b2a4813e869ea6a1c72ee346c918c3e82d73af295898308b00fb24198a510bae4ba88baf7360ebf8d1c8da2fc325cefb8166fc9ba62bed9c2037aef84098713a0a19cd4a604469a9b33d96fdc02ee6514c6c353608ee5ad84913abcee325edf19db0c926f10e27b08d60ab8
+            L2CAP-CoC Central->Peripheral: 722e2cdf9cd3a6d45b9eda57572282767f89db1d51bce38f3df91e335dc02c556088a3da4ab3f94b589d2525648c44bc92ecfb6389ca48e449e64fcf614f973bd9ae2ab93a2b32aa976c51bc6848f330d3070d742fcbb10d90a07a7fb3669ae4df79e633313209c617895261fb230f734ef090788cb25b771a21df6979c4b23db7c525d321cf73ebbf8dbff4120fba82abf8e5fd6072cec17e579c9f7a89e65437fe2b070026f62201fab0dd3e0ae2fb67d762b8e7d99bef3a9106cbe30f28168c26b044e11771b7c80babf0234ff5fb1ad89d4029add59055667a6b68556b17add91db8acd2c0e9bd44fe5c78bdf93718992b3c3b2226
 
             # Central sends L2CAP CoC K-frame (247 bytes).
-            L2CAP-CoC Central->Peripheral: 2cce3219329a343b164b3f7a653a0f6e01f1394540f8c8be81ffcfbe9f21df5454824ac82d2664ae3dbd83a7e571d49811fdf093aa26574ebb882f6248e1053ec5359f178470a143efbb946a2513e80a07ce952dc084aba476e37473466dd2eeb0d4e29ea50d2031510314a300d70c85fc12cac27d237235541d4cf6e8368f2f2cd9e2a49c5dfadd09dfdb7d85a28c94c770e5b4e198e4d5348e0c53ddc83162e393dba21aad3eae2df0039db91155ec4fce4e7fcb0f050c53da4cbce4249c4f5948919bffb1e8e69df3fc55a60e94094f8d79b2a12b8064ca501d13e6f7edbc7e4baccd00b9e96a7cf3a441a339047a2a9dc80a83a635
+            L2CAP-CoC Central->Peripheral: 6974fbc07680254f0018a8918593701c63a345a6f146e10cd43746b049544c32010eae4a2e05ede0cadd702925507e9dea534f9d7d92ff31bd5c7dfb414acd2ea2dd2eeee0c231dd9b11dbc6326bb1086133bfbe715cb9abea6a51d243ff805ebf263b6c9c446284f7b348429d13bd5bedb27c073de0f08ef5f32c4309a997f18d289563d5459f8a7994b32fb23f09554415c659c78dbd7a01c9cb84a6297685f43c8a619803b43b7562facc70f418304d465cf65ab77509082e4967616a3e956a0c1f92c3cc20aeb580d04c9114cac67aa966fb8cca5c2de46f2127a9b52c83cef179c27f235d489824d1250228ee5b6c969ed84c6499
 
             # Central sends L2CAP CoC K-frame completing 1848-byte ISO 18013-5 message.
             # {
-            #   "data": h'6e6b3d6d7d98fb0b7a5f3a3ef16e2b4514950b5f8728f2132c92ea0075ca1e4d9efb66c896cba2ff15467b17b93310376b62570f9e8631cd0de34c2d732692e0150a309786b6541d0452fc2e906f2904ee0b376a321aa76df6d33d8f343c9f431470e1f898265cf76bbd6a3d5978ab8457195ca36bfcb5d78a1a77a0e71bfb76f8fe62fe9f29007685845b4ff6b8358af51d9cc3ab19643df7a9b68803d0e429eb974ef8c198d9a08a3dabdf8507010b2898bd6d276d2789409c9354ae1e397bbf6cb16f3d0fdaaf61de4f77f94f7328ec04895b1601e5c116d0ff1763a7c43b10ca6864f7f9f1ba08ae7a46a11561f4a89faa086ca08043979416c58223913232ddad287eb68ac1f1d14b65b1246b570e3a263de4525d00c0e9c60f0a84be47ab7dcd079e17c92f43cdaeee7cc28311646f000e3a3884bbf23134557c4e2ba12ec1e64132c56060abba3dd1c11f6f7f7f26bcaa5d7d294a8275e5a7442736b7f79abd91a085af04aefbd1a8670265a1591ce34a3683c7fd59e22554f196718b4d055f0d0da0d7419bdb009bf63b6d12dfe99d308bf05ede7840f817682a9463fe7f2e626c443b06c3ec66763a1c15bf6394b81e2e1ba1ac791c8e1a59a9dd571470a6cf2edc5f36f20e63778d562e512228cd1734703dd03bf7d433b7b0d5c35a3a128165dfb6dae0afb041d2fdbc1ecb27c1cfe18071f161899dea970561e2ea41d9a2a60334ffdc85ff7377b8cb3005f78a30ffdcd23cc2a207465a923410742f538d617ddd037f3c713f031357ea503c1179c51723087616de59ac4eb2addcb23925e9e700a73db3156a2f7a1e35cbc6d4af95adf8669bb011238a034bff4332bea93e42d9d158caa22d7e486caa76e7939383a10d84b0eab127207536d9a7646189add59d2a42a8b100f259c8df7394eaf64bae24fad07833a46a17da209eba06aa7d516ffc39f70ba85d7b4c8781c968e905713ac75410e59766295f318cf225e595711fff413833520a3aae74ce729e1e736eeb0f2e4d83e851586185bfd7f799c1729210245496fcdd0c9e8e8786778ba63de59a4e9bbe8794856c4710d85cce6608227c0f0f936e661de8be754282c35866ababdc1b2b154796dedac295409930fa13893eca75c039f65b0dcd7159bdd66c712c4624d941b56bf9a82b6e6b8fdc2565f9e2eb9c390fccbfce73aaf9580536bcb93ace974199b706170672efc8bbf066ca62884e1afa3a5a0dda224195b9b8e60ea90c7bc3b04b2f8781bd83002aa6ad73bd107a35ea2624f47d19fc8093cf0f9d7d506b6d9281074e7374872efbf072e12a85338a33a837b2b455a3828bb71ddd09af66e856ce05280ceccfc12e9d03dbc8d1dd95a072e895604b4e89374d9eb3082644940a6679140cfc7223b8e4f8cd6aa0010667b71d7aae998615b16bc81b1681808b0d6706f120e048f59a517de3a7e3500f1e008b6038bd023fc2431ae8bbb877d5a5c9fccc4881de30daac1a263e0a0c30089fd0f0f53a5204d4e7e9a2311606f3e532c98d4e038fd05526cf4828bba9330f6d7f8825b396d45a86d17986510e37898e255913541dd709378745448b245f822659fa175ec888508966ce0acea72d15bdcf1f31316612b169cc674e899cceef89838ffe93b131de1241e9dcdc9378215b8ce11ac843005b8aef74880262d8f7559c3063ce2867f0921bfc54ac0046eaa842f73099aecb24200b8240800f9c81b79f2f167dc02e60a151683320c5cd569791817eb22b24735e43225e57299c67dcbcbfa279bc20aa2fac32840812fb1634a235588c19b30c6278791c35c6a0793e46c1a29b7e8b4ee27238b77c29c8809d81f4f5bbd41cb41c17d22415c620e623107895d4049ed123ffc4f300963b29395951191ab3a663bf84efd3c608d1cd11774b2a4813e869ea6a1c72ee346c918c3e82d73af295898308b00fb24198a510bae4ba88baf7360ebf8d1c8da2fc325cefb8166fc9ba62bed9c2037aef84098713a0a19cd4a604469a9b33d96fdc02ee6514c6c353608ee5ad84913abcee325edf19db0c926f10e27b08d60ab82cce3219329a343b164b3f7a653a0f6e01f1394540f8c8be81ffcfbe9f21df5454824ac82d2664ae3dbd83a7e571d49811fdf093aa26574ebb882f6248e1053ec5359f178470a143efbb946a2513e80a07ce952dc084aba476e37473466dd2eeb0d4e29ea50d2031510314a300d70c85fc12cac27d237235541d4cf6e8368f2f2cd9e2a49c5dfadd09dfdb7d85a28c94c770e5b4e198e4d5348e0c53ddc83162e393dba21aad3eae2df0039db91155ec4fce4e7fcb0f050c53da4cbce4249c4f5948919bffb1e8e69df3fc55a60e94094f8d79b2a12b8064ca501d13e6f7edbc7e4baccd00b9e96a7cf3a441a339047a2a9dc80a83a63589ecd0218597cb84f28c735b8f8125ebdbb0c10202fd18c5a2e324bb2ad912ead7fd384271e2cb9abf57be06ddfad5df813119ff7dc91da12b7dd51cdb74c660f8ff337a9582299ee237f0c389bc83812d10a627b5f4db996695732f403e96181a115d2cf2edfa9b9bfa9bb188e86a4971c80a2d968759208313f0f2f3'
+            #   "data": h'574b3adb1dd1e6dbd2045703b71cc11484f79d8fca692a4bc82a1d10e0a030112a9a60042571b96461c871dde3b92023a728294ef42db9adcab1cb36cf3d4cbd57ab1258a88819e2bb6ab87b5c91ede4f0b276a2cb862a298446a7bd22d4901d45eafd03414359a91646998bb456a20ac9cfca419f3001153b5367a544000eed7d4edd63449bd6d1ad1c6b5b0c3eb24bcd53a60c9e5b21020328058c4e51cef0bc59cf354097321d1bef5ed5828471b8d2dcd4f8684e3309ec094ab63f0eb01a5ba25e2b06078f0989d500066c8e89a514bdffb83131a6df37cf436f23b3d9bba692df525fa4d961dce8a30e05e2449e9129247d7133c54d545c1722f09fd62bd354ede2036f623c946a868c0d07ce6f1d3a2a30e600c5f8a0ffc2106af86443905e56885be7b7301fa39509c2000cdbe2ca9b9dc499fe416f8d7c49772df42bc2bbe3de573419938d16f9a2bebd280deab17f6659f49e014231889768acdb7d914f4ec66e1d74e0cb6e3b39c1f030c4239ce2498feeba315f0027807016bf5a50c90fad480b5d2597bcb4fd461c292dedf04cf3609f9373a35b1f0bc60ea3248df7d3b4ed43d4441c1bf7f6412b7b3130bf90314a69b3cb195affe317b526ac5a620a86e4764165c22f397a74f179bfa8e850dac7ec35ab75a154977d86293310d88cdaf34f783a24bba1c55317a6a1f585816d7831065fe70ae9dae3deffc3f4aab0dba8b7035ef7208e051d4f98f6cdc8f4a590cfb629b107dbaf155b52d3aef795b8eac62ab0d29d0350d3c1c5c7f422702c68d9be1e01374b8f051c5ee58292e79e4111715a45eb796165493ec26b8341adf3a034e0f67fb0d74298fe2c108fc7aabc92e64afd1918c557eb8cefe72a20bda3b277fd6996da02264f021de06ecbb6e4a70696ebb7e9efb91540b59c1bbf492af5bef4626d3bc8a82d962d595c1935dd40cca805a6f4a3130870e2037ff8891a2d773d977aed40ec9defc0e6016ce82f3f26fe4d2535bffd4f43487dbb72cccca8c155bac20cf69a943e17160fda40349b23fc251b972874b3e8b2a07642da9e4a3fd0fca85e690834a5e891286663dafeeab258816cfb5b5e7b200e8bbf10d0a2d2853f2d548823e690df8a0de7a3fbf536a9eebfc264718aa5959d200887665216654e52d05ed2efc46a065b997106d83cf26c90412a895a44a021c872dad1fbdbfa3cc5fe87f80b591c272e55e084fc1016e4b1d3bf36ed8f5280b221e0c1e3481f3be8a6bb660c15438154616c0f52a1c525d1129a7d355d17d57693a234801957ffdb30544e8923c8d6ebf87da22aeb47594a0256ca7ecdc751527f66b57e48ca760b7ff67e1e3e0bd11737bf3a7e4274e76e3670e59427683d89e84de9ac1d6525da79320066a2e0cd6bca1dd181db4bf6cd090b86af9d80934b0be9a9f3598d36f721834f06abb67368abfd77c78444405d8908a2a4f3ff4f33875c4327e5dec60b6c297aa9907bf993f344fc71a8b5681e7408dc10af7182ed3d92b2c547ba2c1230d447b6328e168cf9cec81f5bd2c7bd6ed7bcb5e05cf947c91edcf9657d1853fa6fbcbba795c7b4126c246d1c8dfd6dacb24caed9ef9d4e4549c0f000a4c9bd0e59b7eb8904417e0b8db4ed9cf25ff5c28ccd071e84ee7747f9788c4c99e24e41489fa1df6bf89f65bd61f46e1d7dff8789b89992ab57229e80a72721ebd79de1d9bb28199bac1e1831722e2cdf9cd3a6d45b9eda57572282767f89db1d51bce38f3df91e335dc02c556088a3da4ab3f94b589d2525648c44bc92ecfb6389ca48e449e64fcf614f973bd9ae2ab93a2b32aa976c51bc6848f330d3070d742fcbb10d90a07a7fb3669ae4df79e633313209c617895261fb230f734ef090788cb25b771a21df6979c4b23db7c525d321cf73ebbf8dbff4120fba82abf8e5fd6072cec17e579c9f7a89e65437fe2b070026f62201fab0dd3e0ae2fb67d762b8e7d99bef3a9106cbe30f28168c26b044e11771b7c80babf0234ff5fb1ad89d4029add59055667a6b68556b17add91db8acd2c0e9bd44fe5c78bdf93718992b3c3b22266974fbc07680254f0018a8918593701c63a345a6f146e10cd43746b049544c32010eae4a2e05ede0cadd702925507e9dea534f9d7d92ff31bd5c7dfb414acd2ea2dd2eeee0c231dd9b11dbc6326bb1086133bfbe715cb9abea6a51d243ff805ebf263b6c9c446284f7b348429d13bd5bedb27c073de0f08ef5f32c4309a997f18d289563d5459f8a7994b32fb23f09554415c659c78dbd7a01c9cb84a6297685f43c8a619803b43b7562facc70f418304d465cf65ab77509082e4967616a3e956a0c1f92c3cc20aeb580d04c9114cac67aa966fb8cca5c2de46f2127a9b52c83cef179c27f235d489824d1250228ee5b6c969ed84c6499ce8d4e74ea842a4ba0523ee2e148e47475932e6078b28564ae5d687dad34c5593caee9d0b1ba41ba448117221e8f1190b6fc077fb58c6411c3f04c58e7f40fca5ca6d12655680100f56ba49d5112fa3973826a0ee73e70a7399690ca3e510c6d7b6810b41c34ade17ff678523cefa095a80d6136fc3f4e01cba222f6ec'
             # }
-            L2CAP-CoC Central->Peripheral: 89ecd0218597cb84f28c735b8f8125ebdbb0c10202fd18c5a2e324bb2ad912ead7fd384271e2cb9abf57be06ddfad5df813119ff7dc91da12b7dd51cdb74c660f8ff337a9582299ee237f0c389bc83812d10a627b5f4db996695732f403e96181a115d2cf2edfa9b9bfa9bb188e86a4971c80a2d968759208313f0f2f3
+            L2CAP-CoC Central->Peripheral: ce8d4e74ea842a4ba0523ee2e148e47475932e6078b28564ae5d687dad34c5593caee9d0b1ba41ba448117221e8f1190b6fc077fb58c6411c3f04c58e7f40fca5ca6d12655680100f56ba49d5112fa3973826a0ee73e70a7399690ca3e510c6d7b6810b41c34ade17ff678523cefa095a80d6136fc3f4e01cba222f6ec
 
             # Peripheral sends L2CAP CoC K-frame completing 9-byte ISO 18013-5 message.
             # {
@@ -2753,11 +2750,18 @@ class BleHciTransportTest {
                 // is 100% deterministic and the L2CAP PSM (if useL2capInEngagement is true) is allocated.
                 readerTransport.advertise()
                 val connectionMethod = readerTransport.connectionMethod as MdocConnectionMethodBle
-                assertEquals(if (useL2capInEngagement) 0x80 else null, connectionMethod.peripheralServerModePsm)
+                assertEquals(if (useL2capInEngagement) 0x80 else null, connectionMethod.directL2capPsm)
 
+                val selectedConnectionMethod = if (useL2capInEngagement) {
+                    MdocConnectionMethod.disambiguate(listOf(connectionMethod), MdocRole.MDOC).first()
+                } else {
+                    connectionMethod
+                }
                 val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
-                    addConnectionMethod(connectionMethod)
-                }.toDataItem()
+                    addConnectionMethod(selectedConnectionMethod)
+                }.toDataItem(
+                    if (useL2capInEngagement) MdocEngagementType.CCE_SELECT else MdocEngagementType.DEVICE_QR
+                )
                 val encodedDeviceEngagement = Cbor.encode(deviceEngagement)
                 val handover = Simple.NULL
 
@@ -2766,7 +2770,7 @@ class BleHciTransportTest {
                     options = options,
                     centralManager = centralManager,
                     uuid = serviceUuid,
-                    psm = connectionMethod.peripheralServerModePsm
+                    psm = connectionMethod.directL2capPsm
                 )
                 mdocTransport = createdMdocTransport
 
@@ -4073,11 +4077,11 @@ class BleHciTransportTest {
             )
             val readerTransport = factory.createTransport(
                 MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = true,
-                    supportsCentralClientMode = false,
-                    peripheralServerModeUuid = svcUuid,
-                    centralClientModeUuid = null,
-                    peripheralServerModePsm = 0x0080,
+                    gattPeripheral = true,
+                    gattCentral = false,
+                    directL2capPeripheral = true,
+                    peripheralModeUuid = svcUuid,
+                    directL2capPsm = 0x0080,
                 ),
                 MdocRole.MDOC_READER,
                 MdocTransportOptions(bleUseL2CAPInEngagement = true),

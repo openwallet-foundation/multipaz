@@ -63,10 +63,42 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
     @Volatile
     private var pendingEngagementDeviceKey: EcPrivateKey? = null
 
+    @Volatile
+    private var pendingPreAdvertisedTransports: List<MdocTransport>? = null
+
+    private fun closePendingPreAdvertisedTransportsAsync() {
+        val transportsToClose = pendingPreAdvertisedTransports ?: return
+        pendingPreAdvertisedTransports = null
+        CoroutineScope(Dispatchers.Default).launch {
+            transportsToClose.forEach { transport ->
+                try {
+                    transport.close()
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Logger.w(TAG, "Error closing pre-advertised transport", e)
+                }
+            }
+        }
+    }
+
+    private suspend fun closePendingPreAdvertisedTransports() {
+        val transportsToClose = pendingPreAdvertisedTransports ?: return
+        pendingPreAdvertisedTransports = null
+        transportsToClose.forEach { transport ->
+            try {
+                transport.close()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing pre-advertised transport", e)
+            }
+        }
+    }
+
     override fun stop() {
         Logger.i(TAG, "stop")
         super.stop()
         engagement = null
+        closePendingPreAdvertisedTransportsAsync()
         pendingEngagementDeviceKey?.close()
         pendingEngagementDeviceKey = null
         listenForCancellationFromUiJob?.cancel()
@@ -181,21 +213,66 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             }
         }
 
-        fun negotiatedHandoverPicker(connectionMethods: List<MdocConnectionMethod>): MdocConnectionMethod {
-            Logger.i(TAG, "Negotiated Handover available methods: $connectionMethods")
+        suspend fun negotiatedHandoverPicker(connectionMethods: List<MdocConnectionMethod>): MdocConnectionMethod {
+            val eligibleMethods = if (settings.transportOptions.bleUseL2CAPInEngagement) {
+                connectionMethods
+            } else {
+                connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasDirectL2cap }
+            }
+            check(eligibleMethods.isNotEmpty()) {
+                "No supported connection methods in Handover Request"
+            }
+            Logger.i(TAG, "Negotiated Handover available methods: $eligibleMethods")
+            var picked: MdocConnectionMethod? = null
             for (prefix in settings.negotiatedHandoverPreferredOrder) {
-                for (connectionMethod in connectionMethods) {
+                for (connectionMethod in eligibleMethods) {
                     if (connectionMethod.toString().startsWith(prefix)) {
                         Logger.i(TAG, "Using method $connectionMethod")
-                        return connectionMethod
+                        picked = connectionMethod
+                        break
                     }
                 }
+                if (picked != null) {
+                    break
+                }
             }
-            Logger.i(TAG, "Using method ${connectionMethods.first()}")
-            return connectionMethods.first()
+            val chosen = picked ?: eligibleMethods.first().also {
+                Logger.i(TAG, "Using method $it")
+            }
+            if (chosen is MdocConnectionMethodBle &&
+                chosen.directL2capPeripheral &&
+                chosen.directL2capPsm == null
+            ) {
+                val prevJob = transactionJob
+                if (prevJob != null) {
+                    prevJob.cancel(TransactionSupersededException())
+                    prevJob.join()
+                }
+                val uuid = chosen.peripheralModeUuid ?: UUID.randomUUID()
+                val methodToAdvertise = chosen.copy(peripheralModeUuid = uuid)
+                val peripheralTransport = settings.transportFactory.createTransport(
+                    connectionMethod = methodToAdvertise,
+                    role = MdocRole.MDOC,
+                    options = settings.transportOptions.copy(bleUseL2CAPInEngagement = true),
+                )
+                try {
+                    peripheralTransport.advertise()
+                    pendingPreAdvertisedTransports = listOf(peripheralTransport)
+                    val advertisedBle = peripheralTransport.connectionMethod as? MdocConnectionMethodBle
+                    return methodToAdvertise.copy(directL2capPsm = advertisedBle?.directL2capPsm)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    try {
+                        peripheralTransport.close()
+                    } catch (_: Exception) {
+                    }
+                    throw e
+                }
+            }
+            return chosen
         }
 
-        val negotiatedHandoverPicker: ((connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod)? =
+        val negotiatedHandoverPicker: (suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod)? =
             if (settings.useNegotiatedHandover) {
                 { connectionMethods -> negotiatedHandoverPicker(connectionMethods) }
             } else {
@@ -209,22 +286,55 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             if (settings.staticHandoverBleCentralClientModeEnabled) {
                 staticHandoverConnectionMethods.add(
                     MdocConnectionMethodBle(
-                        supportsPeripheralServerMode = false,
-                        supportsCentralClientMode = true,
-                        peripheralServerModeUuid = null,
-                        centralClientModeUuid = bleUuid,
+                        gattPeripheral = false,
+                        gattCentral = true,
+                        peripheralModeUuid = null,
+                        centralModeUuid = bleUuid,
                     )
                 )
             }
             if (settings.staticHandoverBlePeripheralServerModeEnabled) {
-                staticHandoverConnectionMethods.add(
-                    MdocConnectionMethodBle(
-                        supportsPeripheralServerMode = true,
-                        supportsCentralClientMode = false,
-                        peripheralServerModeUuid = bleUuid,
-                        centralClientModeUuid = null,
+                if (settings.transportOptions.bleUseL2CAPInEngagement) {
+                    val prevJob = transactionJob
+                    if (prevJob != null) {
+                        prevJob.cancel(TransactionSupersededException())
+                        prevJob.join()
+                    }
+                    val peripheralOffer = MdocConnectionMethodBle(
+                        gattPeripheral = true,
+                        gattCentral = false,
+                        directL2capPeripheral = true,
+                        peripheralModeUuid = bleUuid,
                     )
-                )
+                    val peripheralTransport = settings.transportFactory.createTransport(
+                        connectionMethod = peripheralOffer,
+                        role = MdocRole.MDOC,
+                        options = settings.transportOptions,
+                    )
+                    try {
+                        peripheralTransport.advertise()
+                        pendingPreAdvertisedTransports = listOf(peripheralTransport)
+                        staticHandoverConnectionMethods.add(
+                            peripheralTransport.connectionMethod ?: peripheralOffer
+                        )
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        try {
+                            peripheralTransport.close()
+                        } catch (_: Exception) {
+                        }
+                        throw e
+                    }
+                } else {
+                    staticHandoverConnectionMethods.add(
+                        MdocConnectionMethodBle(
+                            gattPeripheral = true,
+                            gattCentral = false,
+                            peripheralModeUuid = bleUuid,
+                            centralModeUuid = null,
+                        )
+                    )
+                }
             }
             if (settings.staticHandoverNfcDataTransferEnabled) {
                 staticHandoverConnectionMethods.add(
@@ -236,9 +346,6 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             }
         }
 
-        // TODO: Listen on methods _before_ starting the engagement helper so we can send the PSM
-        //   for mdoc Peripheral Server mode when using NFC Static Handover.
-        //
         engagement = MdocNfcEngagementHelper(
             eDeviceKey = eDeviceKey.publicKey,
             onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
@@ -250,6 +357,8 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 if (pendingEngagementDeviceKey === eDeviceKey) {
                     pendingEngagementDeviceKey = null
                 }
+                val preAdvertisedTransports = pendingPreAdvertisedTransports
+                pendingPreAdvertisedTransports = null
 
                 val previousTransactionJob = transactionJob
                 previousTransactionJob?.cancel(TransactionSupersededException())
@@ -270,6 +379,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                         encodedDeviceEngagement = encodedDeviceEngagement,
                         handover = handover,
                         eDeviceKey = eDeviceKey,
+                        preAdvertisedTransports = preAdvertisedTransports,
                     )
                 }
             },
@@ -279,6 +389,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 // here such as showing an error or vibrating the phone.
                 //
                 engagementComplete = true
+                closePendingPreAdvertisedTransportsAsync()
                 if (pendingEngagementDeviceKey === eDeviceKey) {
                     pendingEngagementDeviceKey?.close()
                     pendingEngagementDeviceKey = null
@@ -313,9 +424,10 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
         encodedDeviceEngagement: ByteString,
         handover: DataItem,
         eDeviceKey: EcPrivateKey,
+        preAdvertisedTransports: List<MdocTransport>? = null,
     ) {
         val context = currentCoroutineContext()
-        var advertisedTransports: List<MdocTransport>? = null
+        var advertisedTransports: List<MdocTransport>? = preAdvertisedTransports
         var connectedTransport: MdocTransport? = null
         var enteredPresentment = false
         var monitorJob: Job? = null
@@ -347,11 +459,38 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             engagementCancelJob?.cancel()
 
             Logger.i(TAG, "startEngagement - advertising and waiting for connection")
-            val transports = connectionMethods.advertise(
-                role = MdocRole.MDOC,
-                transportFactory = settings.transportFactory,
-                options = settings.transportOptions,
-            )
+            val effectiveOptions = if (
+                settings.useNegotiatedHandover &&
+                connectionMethods.size == 1 &&
+                (connectionMethods[0] as? MdocConnectionMethodBle)?.hasDirectL2cap == false
+            ) {
+                settings.transportOptions.copy(bleUseL2CAPInEngagement = false)
+            } else {
+                settings.transportOptions
+            }
+            val transports = if (preAdvertisedTransports.isNullOrEmpty()) {
+                connectionMethods.advertise(
+                    role = MdocRole.MDOC,
+                    transportFactory = settings.transportFactory,
+                    options = effectiveOptions,
+                )
+            } else {
+                val remainingMethods = if (settings.useNegotiatedHandover) {
+                    emptyList()
+                } else {
+                    connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasPeripheralMode }
+                }
+                val otherTransports = if (remainingMethods.isEmpty()) {
+                    emptyList()
+                } else {
+                    remainingMethods.advertise(
+                        role = MdocRole.MDOC,
+                        transportFactory = settings.transportFactory,
+                        options = effectiveOptions,
+                    )
+                }
+                preAdvertisedTransports + otherTransports
+            }
             advertisedTransports = transports
             val transport = transports.waitForConnection(
                 eSenderKey = eDeviceKey.publicKey,
@@ -470,6 +609,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 Logger.i(TAG, "Received SELECT APPLICATION while engagement already in progress; resetting for new engagement")
                 engagement?.processDeactivated(NfcDeactivationReason.DESELECTED)
                 engagement = null
+                closePendingPreAdvertisedTransports()
                 pendingEngagementDeviceKey?.close()
                 pendingEngagementDeviceKey = null
                 engagementStarted = false
@@ -525,6 +665,7 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
             // The service might be reused for the next tap. So reset everything so next time
             // processCommandApdu() is called we're ready to go with a new engagement.
             engagement = null
+            closePendingPreAdvertisedTransports()
             pendingEngagementDeviceKey?.close()
             pendingEngagementDeviceKey = null
             engagementStarted = false

@@ -33,11 +33,15 @@ internal class BleTransportPeripheralMdoc(
     override val role: MdocRole,
     private val options: MdocTransportOptions,
     private val peripheralManager: BlePeripheralManager,
-    private val uuid: UUID
+    private val uuid: UUID,
+    private val gattEnabled: Boolean = true,
+    private val directL2capRequested: Boolean = false,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdoc"
     }
+
+    private val useDirectL2cap: Boolean = directL2capRequested || options.bleUseL2CAPInEngagement
 
     private val transportScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val mutex = Mutex()
@@ -49,13 +53,16 @@ internal class BleTransportPeripheralMdoc(
 
     override val connectionMethod: MdocConnectionMethod
         get() {
+            val psm = if (useDirectL2cap) peripheralManager.l2capPsm else null
             return MdocConnectionMethodBle(
-                supportsPeripheralServerMode = true,
-                supportsCentralClientMode = false,
-                peripheralServerModeUuid = uuid,
-                centralClientModeUuid = null,
-                peripheralServerModePsm = if (options.bleUseL2CAPInEngagement) peripheralManager.l2capPsm else null,
-                peripheralServerModeMacAddress = null
+                gattPeripheral = gattEnabled,
+                gattCentral = false,
+                directL2capPeripheral = psm != null,
+                directL2capCentral = false,
+                peripheralModeUuid = uuid,
+                centralModeUuid = null,
+                directL2capPsm = psm,
+                peripheralAddress = null,
             )
         }
 
@@ -70,7 +77,7 @@ internal class BleTransportPeripheralMdoc(
             } else {
                 null
             },
-            startL2capServer = options.bleUseL2CAPInEngagement
+            startL2capServer = useDirectL2cap
         )
         peripheralManager.setCallbacks(
             onError = { error ->
@@ -144,7 +151,7 @@ internal class BleTransportPeripheralMdoc(
             bleScanningTime = null,
             bleConnectingTime = _connectingTime,
             bleUsingL2cap = peripheralManager.usingL2cap,
-            bleL2capPsmInEngagement = options.bleUseL2CAPInEngagement && peripheralManager.l2capPsm != null,
+            bleL2capPsmInEngagement = useDirectL2cap && peripheralManager.l2capPsm != null,
             bleNegotiatedMtu = peripheralManager.negotiatedMtu,
             bleMtuInferredFromWrite = peripheralManager.mtuInferredFromWrite,
             bleNumChunksSent = peripheralManager.numChunksSent,

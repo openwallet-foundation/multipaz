@@ -39,9 +39,9 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.engagement.EngagementGenerator
-import org.multipaz.mdoc.engagement.EngagementParser
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.engagement.EngagementGenerator
+import com.android.identity.mdoc.engagement.EngagementParser
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.time.Clock

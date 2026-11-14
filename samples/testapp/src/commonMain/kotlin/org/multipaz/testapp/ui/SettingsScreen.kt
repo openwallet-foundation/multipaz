@@ -570,8 +570,10 @@ fun SettingsScreen(
 }
 
 private val prefixToDisplayNameMap = mapOf<String, String>(
-    "ble:central_client_mode:" to "BLE (mdoc central client mode)",
-    "ble:peripheral_server_mode:" to "BLE (mdoc peripheral server mode)",
+    "ble:central_l2cap_mode:" to "BLE Direct L2CAP (mdoc central mode)",
+    "ble:peripheral_l2cap_mode:" to "BLE Direct L2CAP (mdoc peripheral mode)",
+    "ble:central_client_mode:" to "BLE GATT (mdoc central client mode)",
+    "ble:peripheral_server_mode:" to "BLE GATT (mdoc peripheral server mode)",
     "nfc:" to "NFC Data Transfer"
 )
 

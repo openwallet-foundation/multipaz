@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.engagement
+package com.android.identity.mdoc.engagement
 
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.cbor.ArrayBuilder
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
@@ -22,7 +23,6 @@ import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.origininfo.OriginInfo
 
 /**
@@ -32,7 +32,6 @@ import org.multipaz.mdoc.origininfo.OriginInfo
  * `DeviceEngagement`) or the reader (when generating `ReaderEngagement`).
  * @param version the version to use.
  */
-@Deprecated(message = "This class is deprecated, use DeviceEngagement instead.")
 class EngagementGenerator(
     private val eSenderKey: EcPublicKey,
     private val version: String
@@ -49,7 +48,8 @@ class EngagementGenerator(
     fun addConnectionMethods(connectionMethods: List<MdocConnectionMethod>): EngagementGenerator {
         for (connectionMethod in connectionMethods) {
             deviceRetrievalMethodsArrayBuilder.add(
-                Cbor.decode(connectionMethod.toDeviceEngagement()))
+                Cbor.decode(connectionMethod.toDeviceEngagement())
+            )
         }
         return this
     }

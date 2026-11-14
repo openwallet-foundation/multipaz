@@ -17,11 +17,11 @@ package com.android.identity.android.mdoc.transport
 
 import android.content.Context
 import android.os.Build
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodHttp
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodNfc
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import java.util.ArrayDeque
 import java.util.Queue
 import java.util.concurrent.Executor

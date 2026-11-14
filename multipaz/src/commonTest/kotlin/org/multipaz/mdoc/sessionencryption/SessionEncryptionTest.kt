@@ -22,7 +22,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.mdoc.TestVectors
-import org.multipaz.mdoc.engagement.EngagementParser
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.Constants
@@ -55,9 +55,8 @@ class SessionEncryptionTest {
         val sessionTranscript = Cbor.decode(encodedSessionTranscriptBytes).asTaggedEncodedCbor
         val deviceEngagementBytes = sessionTranscript[0]
         val encodedDeviceEngagement = deviceEngagementBytes.asTagged.asBstr
-        val engagementParser = EngagementParser(encodedDeviceEngagement)
-        val engagement = engagementParser.parse()
-        val eDeviceKey = engagement.eSenderKey
+        val engagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
+        val eDeviceKey = engagement.eDeviceKey
         val sessionEncryption = SessionEncryption(
             MdocRole.MDOC_READER,
             eReaderKey,

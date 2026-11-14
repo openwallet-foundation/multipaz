@@ -153,13 +153,25 @@ class TestAppSettingsModel private constructor(
         bind(presentmentBleL2CapInEngagementEnabled, "presentmentBleL2CapInEngagementEnabled", true)
         bind(presentmentUseNegotiatedHandover, "presentmentUseNegotiatedHandover", true)
         bind(presentmentNfcCceOnlyAllowNfc, "presentmentNfcCceOnlyAllowNfc", false)
-        bind(presentmentNegotiatedHandoverPreferredOrder, "presentmentNegotiatedHandoverPreferredOrder",
-            listOf(
-                "ble:central_client_mode:",
-                "ble:peripheral_server_mode:",
-                "nfc:"
-            )
+        val defaultHandoverOrder = listOf(
+            "ble:central_l2cap_mode:",
+            "ble:peripheral_l2cap_mode:",
+            "ble:central_client_mode:",
+            "ble:peripheral_server_mode:",
+            "nfc:"
         )
+        bind(
+            presentmentNegotiatedHandoverPreferredOrder,
+            "presentmentNegotiatedHandoverPreferredOrder",
+            defaultHandoverOrder
+        )
+        val missingHandoverPrefixes = defaultHandoverOrder.filter {
+            it !in presentmentNegotiatedHandoverPreferredOrder.value
+        }
+        if (missingHandoverPrefixes.isNotEmpty()) {
+            presentmentNegotiatedHandoverPreferredOrder.value =
+                missingHandoverPrefixes + presentmentNegotiatedHandoverPreferredOrder.value
+        }
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
         bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", false)
         bind(presentmentRequireAuthentication, "presentmentRequireAuthentication", true)

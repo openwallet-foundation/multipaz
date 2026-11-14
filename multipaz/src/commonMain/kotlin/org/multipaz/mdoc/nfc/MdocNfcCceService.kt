@@ -24,6 +24,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.request.DeviceRequest
@@ -53,6 +54,7 @@ import org.multipaz.presentment.classifyPresentmentException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
+import org.multipaz.util.UUID
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -144,6 +146,33 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
     @Volatile
     private var pendingEngagementDeviceKey: EcPrivateKey? = null
 
+    @Volatile
+    private var pendingPreAdvertisedTransport: MdocTransport? = null
+
+    private fun closePendingPreAdvertisedTransportAsync() {
+        val transportToClose = pendingPreAdvertisedTransport ?: return
+        pendingPreAdvertisedTransport = null
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                transportToClose.close()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing pre-advertised secondary transport", e)
+            }
+        }
+    }
+
+    private suspend fun closePendingPreAdvertisedTransport() {
+        val transportToClose = pendingPreAdvertisedTransport ?: return
+        pendingPreAdvertisedTransport = null
+        try {
+            transportToClose.close()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.w(TAG, "Error closing pre-advertised secondary transport", e)
+        }
+    }
+
     override fun stop() {
         Logger.i(TAG, "stop")
         super.stop()
@@ -156,6 +185,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
             }
             engagement = null
         }
+        closePendingPreAdvertisedTransportAsync()
         pendingEngagementDeviceKey?.close()
         pendingEngagementDeviceKey = null
         listenForCancellationFromUiJob?.cancel()
@@ -214,6 +244,8 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 if (pendingEngagementDeviceKey === eDeviceKey) {
                     pendingEngagementDeviceKey = null
                 }
+                val preAdvertisedTransport = pendingPreAdvertisedTransport
+                pendingPreAdvertisedTransport = null
                 activeEngagement = currentEngagement
 
                 val matchingEReaderKey = eReaderKey.takeIf { it.curve == eDeviceKey.curve }
@@ -281,6 +313,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                         settings = settings,
                         connectionMethod = connectionMethod,
                         engagementParamsFlow = paramsFlow,
+                        preAdvertisedSecondaryTransport = preAdvertisedTransport,
                     )
                 }
             },
@@ -386,6 +419,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 // here such as showing an error or vibrating the phone.
                 //
                 engagementComplete = true
+                closePendingPreAdvertisedTransportAsync()
                 if (pendingEngagementDeviceKey === eDeviceKey) {
                     pendingEngagementDeviceKey?.close()
                     pendingEngagementDeviceKey = null
@@ -402,17 +436,54 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 Logger.w(TAG, "Engagement failed. Maybe this wasn't an ISO mdoc reader.", error)
             },
             handoverPicker = { connectionMethods ->
-                if (settings.onlyAllowNfc || connectionMethods.isEmpty()) {
+                val eligibleMethods = if (settings.transportOptions.bleUseL2CAPInEngagement) {
+                    connectionMethods
+                } else {
+                    connectionMethods.filterNot { it is MdocConnectionMethodBle && it.hasDirectL2cap }
+                }
+                if (settings.onlyAllowNfc || eligibleMethods.isEmpty()) {
                     null
                 } else {
+                    var picked: MdocConnectionMethod? = null
                     for (prefix in settings.handoverPreferredOrder) {
-                        for (connectionMethod in connectionMethods) {
-                            if (connectionMethod.toString().startsWith(prefix)) {
-                                return@MdocNfcCceEngagementHelper connectionMethod
-                            }
+                        picked = eligibleMethods.firstOrNull { it.toString().startsWith(prefix) }
+                        if (picked != null) {
+                            break
                         }
                     }
-                    return@MdocNfcCceEngagementHelper connectionMethods.firstOrNull()
+                    val chosen = picked ?: eligibleMethods.first()
+                    if (chosen is MdocConnectionMethodBle &&
+                        chosen.directL2capPeripheral &&
+                        chosen.directL2capPsm == null
+                    ) {
+                        val prevJob = transactionJob
+                        if (prevJob != null) {
+                            prevJob.cancel(TransactionSupersededException())
+                            prevJob.join()
+                        }
+                        val uuid = chosen.peripheralModeUuid ?: UUID.randomUUID()
+                        val methodToAdvertise = chosen.copy(peripheralModeUuid = uuid)
+                        val secondaryTransport = settings.transportFactory.createTransport(
+                            connectionMethod = methodToAdvertise,
+                            role = MdocRole.MDOC,
+                            options = settings.transportOptions.copy(bleUseL2CAPInEngagement = true),
+                        )
+                        try {
+                            secondaryTransport.advertise()
+                            pendingPreAdvertisedTransport = secondaryTransport
+                            val advertisedBle = secondaryTransport.connectionMethod as? MdocConnectionMethodBle
+                            methodToAdvertise.copy(directL2capPsm = advertisedBle?.directL2capPsm)
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            try {
+                                secondaryTransport.close()
+                            } catch (_: Exception) {
+                            }
+                            throw e
+                        }
+                    } else {
+                        chosen
+                    }
                 }
             },
             capabilities = settings.capabilities
@@ -428,9 +499,11 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
         settings: Settings,
         connectionMethod: MdocConnectionMethod?,
         engagementParamsFlow: StateFlow<EngagementParams>,
+        preAdvertisedSecondaryTransport: MdocTransport? = null,
     ) {
         val transactionJobContext = currentCoroutineContext()
         val isNfcOnly = connectionMethod == null
+        var unconsumedPreAdvertisedTransport = preAdvertisedSecondaryTransport
         var enteredPresentment = false
         var waitForTransportJob: Job? = null
         var uiCancelJob: Job? = null
@@ -484,14 +557,20 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 transport.setExpectTransport(true, connectionMethod)
                 // Wait for the non-NFC transport in a coroutine so we are not blocking
                 // initiating presentment....
+                val preAdvertisedForSecondary = unconsumedPreAdvertisedTransport
+                unconsumedPreAdvertisedTransport = null
                 waitForTransportJob = CoroutineScope(transactionJobContext).launch(Dispatchers.Default) {
-                    var secondaryTransport: MdocTransport? = null
+                    var secondaryTransport: MdocTransport? = preAdvertisedForSecondary
                     var handedOffToHybrid = false
                     try {
-                        val createdTransport = settings.transportFactory.createTransport(
+                        val createdTransport = preAdvertisedForSecondary ?: settings.transportFactory.createTransport(
                             connectionMethod = connectionMethod,
                             role = MdocRole.MDOC,
-                            options = settings.transportOptions
+                            options = if (connectionMethod is MdocConnectionMethodBle && !connectionMethod.hasDirectL2cap) {
+                                settings.transportOptions.copy(bleUseL2CAPInEngagement = false)
+                            } else {
+                                settings.transportOptions
+                            }
                         )
                         secondaryTransport = createdTransport
                         createdTransport.open(eSenderKey = eDeviceKey.publicKey)
@@ -582,6 +661,14 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                     it.cancel()
                     it.join()
                 }
+                unconsumedPreAdvertisedTransport?.let {
+                    try {
+                        it.close()
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Logger.w(TAG, "Error closing unconsumed pre-advertised transport", e)
+                    }
+                }
                 if (!enteredPresentment) {
                     try {
                         engagementParamsFlow.value.eDeviceKey.close()
@@ -636,6 +723,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                     activeEngagement = null
                 }
                 engagement = null
+                closePendingPreAdvertisedTransport()
                 pendingEngagementDeviceKey?.close()
                 pendingEngagementDeviceKey = null
                 engagementStarted = false
@@ -689,6 +777,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 activeEngagement = null
             }
             engagement = null
+            closePendingPreAdvertisedTransport()
             pendingEngagementDeviceKey?.close()
             pendingEngagementDeviceKey = null
             engagementStarted = false

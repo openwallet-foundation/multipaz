@@ -13,15 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.engagement
+package com.android.identity.mdoc.engagement
 
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod.Companion.fromDeviceEngagement
 import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod.Companion.fromDeviceEngagement
 import org.multipaz.mdoc.origininfo.OriginInfo
 import org.multipaz.util.Logger
 
@@ -30,7 +30,6 @@ import org.multipaz.util.Logger
  *
  * @param encodedEngagement the bytes of the `Engagement` structure.
  */
-@Deprecated(message = "This class is deprecated, use DeviceEngagement instead.")
 class EngagementParser(private val encodedEngagement: ByteArray) {
     /**
      * Parses the given `Engagement` structure.
@@ -102,7 +101,6 @@ class EngagementParser(private val encodedEngagement: ByteArray) {
             connectionMethods = cms
             val ois = mutableListOf<OriginInfo>()
             if (version >= "1.1") {
-                // 18013-7 defines key 5 as having origin info
                 if (map.hasKey(5)) {
                     val originInfoItems: List<DataItem> = (map[5] as CborArray?)!!.items
                     for (oiDataItem in originInfoItems) {
@@ -119,7 +117,8 @@ class EngagementParser(private val encodedEngagement: ByteArray) {
                 }
             } else {
                 if (map.hasKey(5)) {
-                    Logger.w(TAG,
+                    Logger.w(
+                        TAG,
                         "Ignoring key 5 in Engagement as version is set to $version. "
                                 + "The mdoc application producing this DeviceEngagement is "
                                 + "not compliant to ISO/IEC 18013-5:2021."

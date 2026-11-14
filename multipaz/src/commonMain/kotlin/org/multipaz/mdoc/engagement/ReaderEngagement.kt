@@ -11,6 +11,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 
 /**
  * Reader Engagement according to ISO/IEC 18013-5.
@@ -32,22 +33,43 @@ data class ReaderEngagement private constructor(
     val connectionMethods: List<MdocConnectionMethod>,
 ) {
     /**
-     * Generates CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5.
+     * Generates CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5
+     * using [MdocEngagementType.READER_QR].
      *
      * @return a [DataItem].
      */
-    fun toDataItem(): DataItem = buildCborMap {
-        put(0, version)
-        if (eReaderKey != null) {
-            putCborArray(1) {
-                add(1) // cipher suite
-                addTaggedEncodedCbor(Cbor.encode(this@ReaderEngagement.eReaderKey.toCoseKey().toDataItem()))
-            }
+    fun toDataItem(): DataItem = toDataItem(MdocEngagementType.READER_QR)
+
+    /**
+     * Generates CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5.
+     *
+     * @param engagementType the engagement context ([MdocEngagementType.READER_QR] or
+     *   [MdocEngagementType.CCE_REQUEST]).
+     * @return a [DataItem].
+     */
+    fun toDataItem(
+        engagementType: MdocEngagementType,
+    ): DataItem {
+        require(
+            engagementType == MdocEngagementType.READER_QR ||
+                engagementType == MdocEngagementType.CCE_REQUEST
+        ) {
+            "Invalid engagementType $engagementType for ReaderEngagement"
         }
-        if (connectionMethods.isNotEmpty()) {
-            putCborArray(2) {
-                connectionMethods.forEach { connectionMethod ->
-                    add(RawCbor(connectionMethod.toDeviceEngagement()))
+        val methodsToEncode = MdocConnectionMethod.combine(connectionMethods)
+        return buildCborMap {
+            put(0, version)
+            if (eReaderKey != null) {
+                putCborArray(1) {
+                    add(1) // cipher suite
+                    addTaggedEncodedCbor(Cbor.encode(this@ReaderEngagement.eReaderKey.toCoseKey().toDataItem()))
+                }
+            }
+            if (methodsToEncode.isNotEmpty()) {
+                putCborArray(2) {
+                    methodsToEncode.forEach { connectionMethod ->
+                        add(RawCbor(connectionMethod.toDeviceEngagement(engagementType)))
+                    }
                 }
             }
         }
@@ -143,7 +165,7 @@ data class ReaderEngagement private constructor(
                 version = versionToUse,
                 eReaderKey = eReaderKey,
                 eReaderKeyBytes = eReaderKeyBytes,
-                connectionMethods = connectionMethods
+                connectionMethods = MdocConnectionMethod.combine(connectionMethods)
             )
         }
     }

@@ -12,9 +12,9 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod.Companion.disambiguate
-import org.multipaz.mdoc.engagement.EngagementGenerator
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod.Companion.disambiguate
+import com.android.identity.mdoc.engagement.EngagementGenerator
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 import java.util.concurrent.Executor

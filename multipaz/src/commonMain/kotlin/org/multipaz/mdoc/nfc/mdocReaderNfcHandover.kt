@@ -17,7 +17,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.encapsulateInDo53
@@ -81,11 +84,15 @@ data class MdocReaderNfcHandoverResult(
  * @property useCce if `true`, will attempt to use NFC Concurrent Channel Engagement (CCE) from ISO/IEC 18013-5 Second Edition.
  * @property eReaderKeyCurve the curve to use when generating the ephemeral reader key for CCE if [eReaderKey] is `null`.
  * @property eReaderKey optional explicit ephemeral reader private key to include in `ReaderEngagement` during CCE handover.
+ * @property readerEngagement optional [ReaderEngagement] to include as an `"mdocreader"` auxiliary data record in
+ *   NFC Negotiated Handover `HandoverRequest` messages (ISO/IEC 18013-5 Second Edition clause 9.4.3). When `null`
+ *   (the default), the `"mdocreader"` record is omitted.
  */
 data class MdocReaderNfcHandoverOptions(
     val useCce: Boolean = false,
     val eReaderKeyCurve: EcCurve = EcCurve.P256,
     val eReaderKey: EcPrivateKey? = null,
+    val readerEngagement: ReaderEngagement? = null,
 )
 
 /**
@@ -210,16 +217,19 @@ suspend fun mdocReaderNfcHandover(
     // Now send Handover Request message, the resulting NDEF message is Handover Response..
     //
     val combinedNegotiatedHandoverConnectionMethods = MdocConnectionMethod.combine(negotiatedHandoverConnectionMethods)
-    val hrMessage = generateHandoverRequestMessage(combinedNegotiatedHandoverConnectionMethods)
+    val hrMessage = generateHandoverRequestMessage(
+        methods = combinedNegotiatedHandoverConnectionMethods,
+        readerEngagement = options.readerEngagement,
+    )
     val hsMessage = tag.ndefTransact(hrMessage, hspr.wtInt, hspr.nWait)
 
-    val bleUuid = extractBleUuid(negotiatedHandoverConnectionMethods)
+    val bleUuid = extractBleUuid(combinedNegotiatedHandoverConnectionMethods)
     Logger.i(TAG, "Supplementing with UUID $bleUuid")
     val (encodedDeviceEngagement, connectionMethods) = parseHandoverSelectMessage(hsMessage, bleUuid)
     check(connectionMethods.size >= 1) { "No Alternative Carriers in HS message" }
     val supplementedConnectionMethods = supplementBleConnectionMethods(
         connectionMethods,
-        negotiatedHandoverConnectionMethods
+        combinedNegotiatedHandoverConnectionMethods
     )
 
     val handover = buildCborArray {
@@ -240,13 +250,8 @@ suspend fun mdocReaderNfcHandover(
 
 private fun extractBleUuid(methods: List<MdocConnectionMethod>): UUID? {
     for (cm in methods) {
-        if (cm is MdocConnectionMethodBle) {
-            if (cm.peripheralServerModeUuid != null) {
-                return cm.peripheralServerModeUuid
-            }
-            if (cm.centralClientModeUuid != null) {
-                return cm.centralClientModeUuid
-            }
+        if (cm is MdocConnectionMethodBle && cm.centralModeUuid != null) {
+            return cm.centralModeUuid
         }
     }
     return null
@@ -254,44 +259,37 @@ private fun extractBleUuid(methods: List<MdocConnectionMethod>): UUID? {
 
 private fun supplementBleConnectionMethods(
     methods: List<MdocConnectionMethod>,
-    negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>
+    combinedReaderConnectionMethods: List<MdocConnectionMethod>
 ): List<MdocConnectionMethod> {
-    val bleUuid = extractBleUuid(negotiatedHandoverConnectionMethods)
-    val readerCentralClientBle = negotiatedHandoverConnectionMethods
+    val bleUuid = extractBleUuid(combinedReaderConnectionMethods)
+    val readerCentralBle = combinedReaderConnectionMethods
         .filterIsInstance<MdocConnectionMethodBle>()
-        .firstOrNull { it.supportsCentralClientMode }
+        .firstOrNull { it.hasCentralMode }
     return methods.map { cm ->
         if (cm is MdocConnectionMethodBle) {
-            var peripheralUuid = cm.peripheralServerModeUuid
-            var centralUuid = cm.centralClientModeUuid
-            var psm = cm.peripheralServerModePsm
-            var macAddress = cm.peripheralServerModeMacAddress
-            if (cm.supportsPeripheralServerMode && peripheralUuid == null) {
-                peripheralUuid = bleUuid
+            val centralUuid = if (cm.hasCentralMode && cm.centralModeUuid == null) {
+                readerCentralBle?.centralModeUuid ?: bleUuid
+            } else {
+                cm.centralModeUuid
             }
-            if (cm.supportsCentralClientMode && centralUuid == null) {
-                centralUuid = readerCentralClientBle?.centralClientModeUuid ?: bleUuid
+            val psm = if (cm.directL2capCentral && !cm.hasPeripheralMode && cm.directL2capPsm == null) {
+                readerCentralBle?.directL2capPsm
+            } else {
+                cm.directL2capPsm
             }
-            if (cm.supportsCentralClientMode && !cm.supportsPeripheralServerMode) {
-                if (psm == null) {
-                    psm = readerCentralClientBle?.peripheralServerModePsm
-                }
-                if (macAddress == null) {
-                    macAddress = readerCentralClientBle?.peripheralServerModeMacAddress
-                }
+            val peripheralAddress = if (cm.hasCentralMode && !cm.hasPeripheralMode && cm.peripheralAddress == null) {
+                readerCentralBle?.peripheralAddress
+            } else {
+                cm.peripheralAddress
             }
-            if (peripheralUuid != cm.peripheralServerModeUuid ||
-                centralUuid != cm.centralClientModeUuid ||
-                psm != cm.peripheralServerModePsm ||
-                macAddress != cm.peripheralServerModeMacAddress
+            if (centralUuid != cm.centralModeUuid ||
+                psm != cm.directL2capPsm ||
+                peripheralAddress != cm.peripheralAddress
             ) {
-                MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = cm.supportsPeripheralServerMode,
-                    supportsCentralClientMode = cm.supportsCentralClientMode,
-                    peripheralServerModeUuid = peripheralUuid,
-                    centralClientModeUuid = centralUuid,
-                    peripheralServerModePsm = psm,
-                    peripheralServerModeMacAddress = macAddress
+                cm.copy(
+                    centralModeUuid = centralUuid,
+                    directL2capPsm = psm,
+                    peripheralAddress = peripheralAddress,
                 )
             } else {
                 cm
@@ -310,16 +308,19 @@ private suspend fun mdocReaderNfcCceHandover(
     options: MdocReaderNfcHandoverOptions,
 ): MdocReaderNfcHandoverResult {
     val eReaderKey = options.eReaderKey ?: Crypto.createEcPrivateKey(options.eReaderKeyCurve)
-    val combinedNegotiatedHandoverConnectionMethods = MdocConnectionMethod.combine(negotiatedHandoverConnectionMethods)
+    // Per ISO/IEC 18013-5 Second Edition clauses 9.5.1 and 11.2.1, NfcOptions are never sent in CCEHandoverRequest
+    // because NFC is already the active CCE engagement and primary transport channel.
+    val cceSecondaryMethods = negotiatedHandoverConnectionMethods.filterNot { it is MdocConnectionMethodNfc }
+    val combinedSecondaryMethods = MdocConnectionMethod.combine(cceSecondaryMethods)
 
     val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
-        for (method in combinedNegotiatedHandoverConnectionMethods) {
+        for (method in combinedSecondaryMethods) {
             addConnectionMethod(method)
         }
     }
 
     val cceHandoverRequest = buildCborMap {
-        put(0, readerEngagement.toDataItem())
+        put(0, readerEngagement.toDataItem(engagementType = MdocEngagementType.CCE_REQUEST))
     }
     val encodedCceHandoverRequest = Cbor.encode(cceHandoverRequest)
     Logger.dCbor(TAG, "CCE Handover Request", cceHandoverRequest)
@@ -346,7 +347,7 @@ private suspend fun mdocReaderNfcCceHandover(
 
     val supplementedConnectionMethods = supplementBleConnectionMethods(
         deviceEngagement.connectionMethods,
-        negotiatedHandoverConnectionMethods
+        combinedSecondaryMethods
     )
 
     val handover = buildCborArray {
@@ -370,42 +371,44 @@ private suspend fun mdocReaderNfcCceHandover(
 
 private fun generateHandoverRequestMessage(
     methods: List<MdocConnectionMethod>,
+    readerEngagement: ReaderEngagement? = null,
 ): NdefMessage {
-    val auxiliaryReferences = listOf<String>()
-    val carrierConfigurationRecords = mutableListOf<NdefRecord>()
+    val auxiliaryReferences = if (readerEngagement != null) listOf("mdocreader") else emptyList()
+    val carrierAndAuxiliaryRecords = mutableListOf<NdefRecord>()
     val alternativeCarrierRecords = mutableListOf<NdefRecord>()
     for (method in methods) {
-        val ndefRecordAndAlternativeCarrier = method.toNdefRecord(
+        val ndefRecords = method.toNdefRecord(
             auxiliaryReferences = auxiliaryReferences,
             role = MdocRole.MDOC_READER,
             skipUuids = false
         )
-        if (ndefRecordAndAlternativeCarrier != null) {
-            carrierConfigurationRecords.add(ndefRecordAndAlternativeCarrier.first)
-            alternativeCarrierRecords.add(ndefRecordAndAlternativeCarrier.second)
+        if (ndefRecords != null) {
+            carrierAndAuxiliaryRecords.add(ndefRecords.carrierRecord)
+            carrierAndAuxiliaryRecords.addAll(ndefRecords.auxiliaryRecords)
+            alternativeCarrierRecords.add(ndefRecords.acRecord)
         }
     }
     val handoverRequestRecord = HandoverRequestRecord(
         version = 0x15,
         embeddedMessage = NdefMessage(alternativeCarrierRecords)
     )
-    // TODO: make it possible for caller to specify readerEngagement
-    val encodedReaderEngagement = Cbor.encode(
-        buildCborMap {
-            put(0L, "1.0")
-        }
-    )
-    return NdefMessage(
-        listOf(
-            handoverRequestRecord.generateNdefRecord(),
-            NdefRecord(
-                tnf = NdefRecord.Tnf.EXTERNAL_TYPE,
-                type = "iso.org:18013:readerengagement".encodeToByteString(),
-                id = "mdocreader".encodeToByteString(),
-                payload = ByteString(encodedReaderEngagement)
+    val headerRecords = buildList {
+        add(handoverRequestRecord.generateNdefRecord())
+        if (readerEngagement != null) {
+            val encodedReaderEngagement = Cbor.encode(
+                readerEngagement.toDataItem(engagementType = MdocEngagementType.CCE_REQUEST)
             )
-        ) + carrierConfigurationRecords
-    )
+            add(
+                NdefRecord(
+                    tnf = NdefRecord.Tnf.EXTERNAL_TYPE,
+                    type = Nfc.EXTERNAL_TYPE_ISO_18013_5_READER_ENGAGEMENT.encodeToByteString(),
+                    id = "mdocreader".encodeToByteString(),
+                    payload = ByteString(encodedReaderEngagement)
+                )
+            )
+        }
+    }
+    return NdefMessage(headerRecords + carrierAndAuxiliaryRecords)
 }
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -414,25 +417,36 @@ private fun parseHandoverSelectMessage(
     uuid: UUID?,
 ): Pair<ByteArray, List<MdocConnectionMethod>> {
     var hasHandoverSelectRecord = false
-
-    var encodedDeviceEngagement: ByteString? = null
-    val connectionMethods = mutableListOf<MdocConnectionMethod>()
+    val recordsById = message.records.associateBy { it.id.decodeToString() }
+    val auxRecordsByCarrierId = mutableMapOf<String, List<NdefRecord>>()
     for (r in message.records) {
-        // Handle Handover Select record for NFC Forum Connection Handover specification
-        // version 1.5 (encoded as 0x15 below).
         val hsRecord = HandoverSelectRecord.fromNdefRecord(r)
         if (hsRecord != null) {
             check(hsRecord.version == 0x15) { "Only Connection Handover version 1.5 is supported" }
             hasHandoverSelectRecord = true
+            for (acRec in hsRecord.embeddedMessage.records) {
+                val parsedAc = MdocConnectionMethod.parseAlternativeCarrierRecord(acRec)
+                if (parsedAc != null) {
+                    auxRecordsByCarrierId[parsedAc.carrierDataReference] =
+                        parsedAc.auxiliaryDataReferences.mapNotNull { recordsById[it] }
+                }
+            }
         }
+    }
+
+    var encodedDeviceEngagement: ByteString? = null
+    val connectionMethods = mutableListOf<MdocConnectionMethod>()
+    for (r in message.records) {
         if (r.tnf == NdefRecord.Tnf.EXTERNAL_TYPE &&
-            r.type.decodeToString() == "iso.org:18013:deviceengagement" &&
-            r.id.decodeToString() == "mdoc") {
+            r.type.decodeToString() == Nfc.EXTERNAL_TYPE_ISO_18013_5_DEVICE_ENGAGEMENT &&
+            r.id.decodeToString() == "mdoc"
+        ) {
             encodedDeviceEngagement = r.payload
         }
 
         if (r.tnf == NdefRecord.Tnf.MIME_MEDIA || r.tnf == NdefRecord.Tnf.EXTERNAL_TYPE) {
-            val cm = MdocConnectionMethod.fromNdefRecord(r, MdocRole.MDOC, uuid)
+            val auxRecords = auxRecordsByCarrierId[r.id.decodeToString()] ?: emptyList()
+            val cm = MdocConnectionMethod.fromNdefRecord(r, MdocRole.MDOC, uuid, auxRecords)
             if (cm != null) {
                 connectionMethods.add(cm)
             }

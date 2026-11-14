@@ -108,10 +108,9 @@ class TcpHciPacketIoTest {
                     packetIoFactory = { bus.peripheralIo },
                 )
                 val connectionMethod = MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = true,
-                    supportsCentralClientMode = false,
-                    peripheralServerModeUuid = serviceUuid,
-                    centralClientModeUuid = null,
+                    gattPeripheral = true,
+                    gattCentral = false,
+                    peripheralModeUuid = serviceUuid,
                 )
 
                 val peripheral = peripheralFactory.createTransport(
