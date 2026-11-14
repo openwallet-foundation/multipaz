@@ -13,10 +13,10 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
+import org.multipaz.util.UUID
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -145,7 +145,7 @@ class ConnectionHelperTest {
         val nfc = NfcTransportMdoc(
             role = MdocRole.MDOC,
             options = MdocTransportOptions(),
-            connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
         val other = TestTransport()
         try {
@@ -210,12 +210,12 @@ class ConnectionHelperTest {
             override fun createTransport(
                 connectionMethod: MdocConnectionMethod,
                 role: MdocRole,
-                options: MdocTransportOptions
+                options: MdocTransportOptions,
             ): MdocTransport = transports.removeFirst()
         }
         val methods = listOf(
-            MdocConnectionMethodNfc(0xffff, 0x10000),
-            MdocConnectionMethodNfc(0xffff, 0x10000),
+            MdocConnectionMethod.Nfc(0xffff, 0x10000),
+            MdocConnectionMethod.Nfc(0xffff, 0x10000),
         )
 
         assertFailsWith<IllegalStateException> {
@@ -243,12 +243,12 @@ class ConnectionHelperTest {
             override fun createTransport(
                 connectionMethod: MdocConnectionMethod,
                 role: MdocRole,
-                options: MdocTransportOptions
+                options: MdocTransportOptions,
             ): MdocTransport = transports.removeFirst()
         }
         val methods = listOf(
-            MdocConnectionMethodNfc(0xffff, 0x10000),
-            MdocConnectionMethodNfc(0xffff, 0x10000),
+            MdocConnectionMethod.Nfc(0xffff, 0x10000),
+            MdocConnectionMethod.Nfc(0xffff, 0x10000),
         )
 
         val deferred = async {
@@ -272,10 +272,92 @@ class ConnectionHelperTest {
         assertEquals(MdocTransport.State.CLOSED, second.state.value)
     }
 
+    @Test
+    fun createMdocTransportsCoalescesCoHostedBlePeripheralModes() = runTest {
+        val sharedUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
+        val otherUuid = UUID.fromString("11111111-2222-3333-4444-555555555555")
+
+        val factory = object : MdocTransportFactory {
+            override fun createTransport(
+                connectionMethod: MdocConnectionMethod,
+                role: MdocRole,
+                options: MdocTransportOptions,
+            ): MdocTransport = createTransports(listOf(connectionMethod), role, options).single()
+
+            override fun createTransports(
+                connectionMethods: List<MdocConnectionMethod>,
+                role: MdocRole,
+                options: MdocTransportOptions,
+            ): List<MdocTransport> = createMdocTransports(
+                connectionMethods = connectionMethods,
+                role = role,
+                options = options,
+                centralHalFactory = { NoOpBleCentralHal() },
+                peripheralHalFactory = { NoOpBlePeripheralHal(allocatedPsm = 129) },
+                nonBleTransportFactory = { TestTransport() },
+            )
+        }
+
+        // 0. Empty list returns emptyList().
+        assertEquals(
+            emptyList(),
+            emptyList<MdocConnectionMethod>().advertise(
+                role = MdocRole.MDOC,
+                transportFactory = factory,
+                options = MdocTransportOptions(),
+            )
+        )
+
+        // 1. MDOC role coalesces DirectL2capPeripheral + GattPeripheral sharing the same non-null UUID
+        //    onto a single dual-mode BLE peripheral transport, leaving GattCentral and Non-BLE methods
+        //    as separate transports in their original encounter order.
+        val mdocDirect = MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = sharedUuid)
+        val mdocGatt = MdocConnectionMethod.Ble.GattPeripheral(uuid = sharedUuid)
+        val mdocCentral = MdocConnectionMethod.Ble.GattCentral(uuid = sharedUuid)
+        val nfc = MdocConnectionMethod.Nfc(0xffff, 0x10000)
+        val mdocTransports = listOf(mdocGatt, nfc, mdocCentral, mdocDirect).advertise(
+            role = MdocRole.MDOC,
+            transportFactory = factory,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+        )
+        assertEquals(3, mdocTransports.size)
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = sharedUuid, psm = 129),
+                mdocGatt,
+            ),
+            mdocTransports[0].connectionMethods
+        )
+        assertEquals(listOf<MdocConnectionMethod>(nfc), mdocTransports[1].connectionMethods)
+        assertEquals(listOf<MdocConnectionMethod>(mdocCentral), mdocTransports[2].connectionMethods)
+        mdocTransports.forEach { it.close() }
+
+        // 2. MDOC_READER role coalesces DirectL2capCentral + GattCentral sharing the same non-null UUID,
+        //    leaving methods with a different UUID as separate transports.
+        val readerDirect = MdocConnectionMethod.Ble.DirectL2capCentral(uuid = sharedUuid)
+        val readerGattSameUuid = MdocConnectionMethod.Ble.GattCentral(uuid = sharedUuid)
+        val readerGattOtherUuid = MdocConnectionMethod.Ble.GattCentral(uuid = otherUuid)
+        val readerTransports = listOf(readerDirect, readerGattOtherUuid, readerGattSameUuid).advertise(
+            role = MdocRole.MDOC_READER,
+            transportFactory = factory,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+        )
+        assertEquals(2, readerTransports.size)
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = sharedUuid, psm = 129),
+                readerGattSameUuid,
+            ),
+            readerTransports[0].connectionMethods
+        )
+        assertEquals(listOf<MdocConnectionMethod>(readerGattOtherUuid), readerTransports[1].connectionMethods)
+        readerTransports.forEach { it.close() }
+    }
+
     private class TestTransport : MdocTransport() {
         override val state = MutableStateFlow(State.IDLE)
         override val role = MdocRole.MDOC
-        override val connectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+        override val connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         override val scanningTime: Duration? = null
         val finishOpen = CompletableDeferred<Unit>()
         var finishAdvertise: CompletableDeferred<Unit>? = null
@@ -324,5 +406,71 @@ class ConnectionHelperTest {
         override suspend fun waitForMessage(): ByteArray {
             throw UnsupportedOperationException()
         }
+    }
+
+    private class NoOpBleCentralHal : BleCentralHal {
+        override val isConnected: Boolean = false
+        override fun setCallback(callback: BleCentralHal.Callback) {}
+        override fun waitForPowerOn() {}
+        override fun startScan(serviceUuid: UUID) {}
+        override fun stopScan() {}
+        override fun onScanStoppedAfterDiscovery() {}
+        override fun connectToPeripheral() {}
+        override fun requestMtu(mtu: Int) {}
+        override fun discoverServices(serviceUuid: UUID) {}
+        override fun discoverCharacteristics(
+            stateCharacteristicUuid: UUID,
+            client2ServerCharacteristicUuid: UUID,
+            server2ClientCharacteristicUuid: UUID,
+            identCharacteristicUuid: UUID?,
+            l2capCharacteristicUuid: UUID?,
+        ) {}
+        override fun readCharacteristic(uuid: UUID) {}
+        override fun enableNotifications(characteristicUuid: UUID) {}
+        override fun writeCharacteristic(uuid: UUID, value: ByteArray) {}
+        override fun connectL2cap(psm: Int) {}
+        override fun closeConnectedL2capAttempt() {}
+        override fun close() {}
+    }
+
+    private class NoOpBlePeripheralHal(
+        private val allocatedPsm: Int?,
+    ) : BlePeripheralHal {
+        private lateinit var callback: BlePeripheralHal.Callback
+
+        override fun setCallback(callback: BlePeripheralHal.Callback) {
+            this.callback = callback
+        }
+
+        override fun waitForPowerOn() {
+            callback.onPowerOn(null)
+        }
+
+        override fun publishL2capChannel() {
+            callback.onL2capPublished(allocatedPsm, null)
+        }
+
+        override fun closeL2capServer() {}
+
+        override fun setupGattServerAndAddService(
+            serviceUuid: UUID,
+            stateCharacteristicUuid: UUID,
+            client2ServerCharacteristicUuid: UUID,
+            server2ClientCharacteristicUuid: UUID,
+            identCharacteristicUuid: UUID?,
+            l2capCharacteristicUuid: UUID?,
+            encodedL2capPsm: ByteArray?,
+        ) {
+            callback.onServiceAdded(null)
+        }
+
+        override fun startAdvertising(serviceUuid: UUID) {
+            callback.onAdvertisingStarted(null)
+        }
+
+        override fun stopAdvertising() {}
+        override fun sendReadResponse(requestId: Int, statusSuccess: Boolean, value: ByteArray) {}
+        override fun notifyCharacteristicChanged(uuid: UUID, value: ByteArray) {}
+        override fun close() {}
     }
 }

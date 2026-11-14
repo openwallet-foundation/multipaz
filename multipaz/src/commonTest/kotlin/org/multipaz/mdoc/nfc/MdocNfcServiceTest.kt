@@ -46,8 +46,6 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -371,8 +369,12 @@ class MdocNfcServiceTest {
                 throw it
             }
             val cm = _connectionMethod
-            if (advertisedL2capPsm != null && cm is MdocConnectionMethodBle) {
-                _connectionMethod = cm.copy(directL2capPsm = advertisedL2capPsm)
+            if (advertisedL2capPsm != null) {
+                _connectionMethod = when (cm) {
+                    is MdocConnectionMethod.Ble.DirectL2capPeripheral -> cm.copy(psm = advertisedL2capPsm)
+                    is MdocConnectionMethod.Ble.DirectL2capCentral -> cm.copy(psm = advertisedL2capPsm)
+                    else -> cm
+                }
             }
             state.value = State.ADVERTISING
         }
@@ -786,11 +788,8 @@ class MdocNfcServiceTest {
                 }
             }
 
-            val bleMethod = MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = UUID.randomUUID(),
+            val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+                uuid = UUID.randomUUID(),
             )
 
             fun buildSettings() = MdocNfcCceService.Settings(
@@ -913,11 +912,8 @@ class MdocNfcServiceTest {
                 }
             }
 
-            val bleMethod = MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = UUID.randomUUID(),
+            val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+                uuid = UUID.randomUUID(),
             )
 
             fun buildSettings() = MdocNdefService.Settings(
@@ -1083,8 +1079,8 @@ class MdocNfcServiceTest {
 
     /**
      * Verifies that in [MdocNfcCceService], when Tap 1 is an NFC-only session
-     * ([MdocConnectionMethodNfcV2]) and Tap 2 negotiates a BLE handover
-     * ([MdocConnectionMethodBle]) on a recreated service instance:
+     * (`selectedConnectionMethod == null`) and Tap 2 negotiates a BLE handover
+     * ([MdocConnectionMethod.Ble]) on a recreated service instance:
      * 1. Tap 2 is not mistaken for an NFC-only multi-tap re-engagement (which only applies when
      *    both the active session and the new tap are NFC-only).
      * 2. Instead, Tap 1's NFC-only transaction is superseded and cancelled, [PresentmentModel.isNfcOnly]
@@ -1151,11 +1147,8 @@ class MdocNfcServiceTest {
             tag2.service = service2
             service2.start()
 
-            val bleMethod = MdocConnectionMethodBle(
-                gattPeripheral = false,
-                gattCentral = true,
-                peripheralModeUuid = null,
-                centralModeUuid = UUID.randomUUID(),
+            val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+                uuid = UUID.randomUUID(),
             )
 
             try {
@@ -2117,11 +2110,8 @@ class MdocNfcServiceTest {
                 combinedService.deactivate(NfcDeactivationReason.LINK_LOSS)
 
                 // 3. Tap 2 (NFCv2 BLE handover) -> supersedes cross1 and opens cross2 in MdocNfcCceService
-                val bleMethod = MdocConnectionMethodBle(
-                    gattPeripheral = false,
-                    gattCentral = true,
-                    peripheralModeUuid = null,
-                    centralModeUuid = UUID.randomUUID(),
+                val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+                    uuid = UUID.randomUUID(),
                 )
                 assertNotNull(
                     mdocReaderNfcHandover(
@@ -2285,7 +2275,7 @@ class MdocNfcServiceTest {
      * ([org.multipaz.mdoc.transport.NfcCceTransportMdoc]) when the [DeviceRequest] arrives over
      * NFC while BLE is still connecting, and the [DeviceResponse] is delivered over BLE after the
      * phone leaves the NFC field:
-     * 1. Reader negotiates [MdocConnectionMethodBle] during NFCv2 handover.
+     * 1. Reader negotiates [MdocConnectionMethod.Ble] during NFCv2 handover.
      * 2. While the secondary BLE transport (`hybridBle`) is still in `open()`, the reader sends the
      *    encrypted [DeviceRequest] (`given_name`) over NFC (`tag1`).
      * 3. The mdoc receives the request via NFC and enters the consent prompt. The user pulls the
@@ -2337,11 +2327,8 @@ class MdocNfcServiceTest {
             service1.start()
 
             try {
-                val bleMethod = MdocConnectionMethodBle(
-                    gattPeripheral = false,
-                    gattCentral = true,
-                    peripheralModeUuid = null,
-                    centralModeUuid = UUID.randomUUID(),
+                val bleMethod = MdocConnectionMethod.Ble.GattCentral(
+                    uuid = UUID.randomUUID(),
                 )
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
@@ -3046,7 +3033,7 @@ class MdocNfcServiceTest {
      * immediately by NFC data transfer ([MdocNfcDataTransferService]) routed through
      * [NfcApduRouter] without dropping the RF field between the two AIDs:
      * 1. Reader selects `D2760000850101` ([Nfc.NDEF_APPLICATION_ID]) and performs static handover
-     *    offering [MdocConnectionMethodNfc].
+     *    offering [MdocConnectionMethod.Nfc].
      * 2. Reader immediately selects `A0000002480400` ([Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID])
      *    in the same tap.
      * 3. [NfcApduRouter] deactivates [MdocNdefService] with [NfcDeactivationReason.DESELECTED]
@@ -3112,7 +3099,7 @@ class MdocNfcServiceTest {
                     negotiatedHandoverConnectionMethods = emptyList(),
                 )
                 assertNotNull(handover)
-                val nfcMethod = handover.connectionMethods.filterIsInstance<MdocConnectionMethodNfc>().single()
+                val nfcMethod = handover.connectionMethods.filterIsInstance<MdocConnectionMethod.Nfc>().single()
 
                 val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
                 val deviceEngagementItem = Cbor.decode(handover.encodedDeviceEngagement.toByteArray())
@@ -3481,12 +3468,13 @@ class MdocNfcServiceTest {
     }
 
     /**
-     * Verifies ISO/IEC 18013-5 Second Edition `directL2capPeripheral` selection in [MdocNfcCceService]:
-     * When the reader offers `gattPeripheral = true, directL2capPeripheral = true` (with no UUID or PSM
-     * in `CCEHandoverRequest`) and the mdoc has `bleUseL2CAPInEngagement = true` with
-     * `handoverPreferredOrder = listOf("ble:peripheral_l2cap_mode:")`, [MdocNfcCceService] generates
+     * Verifies ISO/IEC 18013-5 Second Edition [MdocConnectionMethod.Ble.DirectL2capPeripheral] selection in
+     * [MdocNfcCceService]:
+     * When the reader offers [MdocConnectionMethod.Ble.DirectL2capPeripheral] and
+     * [MdocConnectionMethod.Ble.GattPeripheral] (with no UUID or PSM in `CCEHandoverRequest`) and the mdoc has
+     * `handoverPreferredOrder = listOf("ble:direct_l2cap_peripheral:")`, [MdocNfcCceService] generates
      * a `peripheralModeUuid`, pre-creates and calls `advertise()` on the peripheral BLE transport during
-     * `handoverPicker` to obtain the OS-allocated `directL2capPsm` (`129`), returns both in
+     * `handoverPicker` to obtain the OS-allocated `psm` (`129`), returns both in
      * `CCEHandoverSelect`, and reuses that pre-advertised transport in `waitForTransportJob` without
      * creating or advertising a second transport.
      */
@@ -3526,8 +3514,9 @@ class MdocNfcServiceTest {
                     launchUi = null,
                     sessionEncryptionCurve = EcCurve.P256,
                     onlyAllowNfc = false,
-                    handoverPreferredOrder = listOf("ble:peripheral_l2cap_mode:"),
-                    transportOptions = MdocTransportOptions(bleUseL2CAPInEngagement = true),
+                    handoverPreferredOrder = listOf("ble:direct_l2cap_peripheral:"),
+                    bleDirectL2capEnabled = true,
+                    transportOptions = MdocTransportOptions(bleUseL2CAP = true),
                     transportFactory = transportFactory,
                 )
             }
@@ -3535,27 +3524,20 @@ class MdocNfcServiceTest {
             service.start()
 
             try {
-                val readerOffer = MdocConnectionMethodBle(
-                    gattPeripheral = true,
-                    gattCentral = false,
-                    directL2capPeripheral = true,
-                    directL2capCentral = false,
+                val readerOffers = listOf(
+                    MdocConnectionMethod.Ble.DirectL2capPeripheral(),
+                    MdocConnectionMethod.Ble.GattPeripheral(),
                 )
                 val handover = mdocReaderNfcHandover(
                     tag = tag,
-                    negotiatedHandoverConnectionMethods = listOf(readerOffer),
+                    negotiatedHandoverConnectionMethods = readerOffers,
                     options = MdocReaderNfcHandoverOptions(useCce = true),
                 )
                 assertNotNull(handover)
                 assertEquals(1, handover.connectionMethods.size)
-                val selected = handover.connectionMethods.single() as MdocConnectionMethodBle
-                assertFalse(selected.gattPeripheral)
-                assertFalse(selected.gattCentral)
-                assertTrue(selected.directL2capPeripheral)
-                assertFalse(selected.directL2capCentral)
-                assertNotNull(selected.peripheralModeUuid)
-                assertNull(selected.centralModeUuid)
-                assertEquals(129, selected.directL2capPsm)
+                val selected = handover.connectionMethods.single() as MdocConnectionMethod.Ble.DirectL2capPeripheral
+                assertNotNull(selected.uuid)
+                assertEquals(129, selected.psm)
 
                 // Only 1 transport was created, advertised once during handoverPicker, and then opened!
                 assertEquals(1, createdTransports.size)

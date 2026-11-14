@@ -34,7 +34,7 @@ import org.multipaz.document.Document
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
@@ -312,10 +312,10 @@ private suspend fun mdocUriSchemePresentment(
         readerEngagementDataItemLogged = readerEngagement.toDataItem()
         val eReaderKey = readerEngagement.eDeviceKey
 
-        val httpRetrievalMethod = readerEngagement.connectionMethods.find { it is MdocConnectionMethodHttp } as MdocConnectionMethodHttp?
-        if (httpRetrievalMethod == null) {
-            throw IllegalArgumentException("No MdocConnectionMethodHttp method found")
-        }
+        val httpRetrievalMethod = readerEngagement.connectionMethods
+            .filterIsInstance<MdocConnectionMethod.Http>()
+            .firstOrNull()
+            ?: throw IllegalArgumentException("No MdocConnectionMethod.Http method found")
         val readerUrl = httpRetrievalMethod.uri
 
         // TODO: handle this curve not being supported...

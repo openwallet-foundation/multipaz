@@ -3,7 +3,6 @@ package org.multipaz.mdoc.nfc
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
@@ -128,54 +127,38 @@ suspend fun <T> NfcTagReader.scanMdocReader(
     val effectiveNegotiatedMethods = mutableListOf<MdocConnectionMethod>()
 
     try {
+        val warmUpMethods = negotiatedHandoverConnectionMethods.filterNot {
+            it is MdocConnectionMethod.Ble && it.isMdocPeripheral && it.uuid == null
+        }
+        val createdTransports = transportFactory.createTransports(
+            connectionMethods = warmUpMethods,
+            role = MdocRole.MDOC_READER,
+            options = options,
+        )
+        transportsToClose.addAll(createdTransports)
+        for (transport in createdTransports) {
+            transport.advertise()
+        }
+        val advertisedBleMethods = createdTransports
+            .flatMap { it.connectionMethods }
+            .filterIsInstance<MdocConnectionMethod.Ble>()
         for (cm in negotiatedHandoverConnectionMethods) {
-            if (cm is MdocConnectionMethodBle && cm.hasCentralMode && cm.hasPeripheralMode) {
-                val centralOffer = cm.copy(
-                    gattPeripheral = false,
-                    directL2capPeripheral = false,
-                    peripheralModeUuid = null,
-                )
-                val centralTransport = transportFactory.createTransport(
-                    centralOffer,
-                    MdocRole.MDOC_READER,
-                    options
-                )
-                transportsToClose.add(centralTransport)
-                centralTransport.advertise()
-                centralTransport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
-
-                val peripheralOffer = cm.copy(
-                    gattCentral = false,
-                    directL2capCentral = false,
-                    centralModeUuid = null,
-                    directL2capPsm = null,
-                    peripheralAddress = null,
-                )
-                if (peripheralOffer.peripheralModeUuid != null) {
-                    val peripheralTransport = transportFactory.createTransport(
-                        peripheralOffer,
-                        MdocRole.MDOC_READER,
-                        options
-                    )
-                    transportsToClose.add(peripheralTransport)
-                    peripheralTransport.advertise()
-                    peripheralTransport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
-                } else {
-                    effectiveNegotiatedMethods.add(peripheralOffer)
-                }
-            } else if (cm is MdocConnectionMethodBle && cm.hasPeripheralMode && cm.peripheralModeUuid == null) {
+            if (cm is MdocConnectionMethod.Ble && cm.isMdocPeripheral && cm.uuid == null) {
                 effectiveNegotiatedMethods.add(cm)
+            } else if (cm is MdocConnectionMethod.Ble) {
+                val advertised = advertisedBleMethods.find {
+                    it::class == cm::class && it.uuid == cm.uuid
+                }
+                if (advertised != null) {
+                    effectiveNegotiatedMethods.add(advertised)
+                }
             } else {
-                val transport = transportFactory.createTransport(
-                    cm,
-                    MdocRole.MDOC_READER,
-                    options
-                )
-                transportsToClose.add(transport)
-                transport.advertise()
-                transport.connectionMethod?.let { effectiveNegotiatedMethods.add(it) }
+                effectiveNegotiatedMethods.add(cm)
             }
         }
+
+        val readerBleOffers = negotiatedHandoverConnectionMethods.filterIsInstance<MdocConnectionMethod.Ble>()
+        val readerSupportsDirectL2cap = readerBleOffers.isEmpty() || readerBleOffers.any { it.isDirectL2cap }
 
         val result = scan(
             message = message,
@@ -194,10 +177,10 @@ suspend fun <T> NfcTagReader.scanMdocReader(
 
                 val candidateMethods = if (
                     handoverResult.type == MdocHandoverType.STATIC_HANDOVER &&
-                    !options.bleUseL2CAPInEngagement
+                    !readerSupportsDirectL2cap
                 ) {
                     handoverResult.connectionMethods.filterNot {
-                        it is MdocConnectionMethodBle && it.hasDirectL2cap && !it.hasGatt
+                        it is MdocConnectionMethod.Ble && it.isDirectL2cap
                     }
                 } else {
                     handoverResult.connectionMethods
@@ -222,7 +205,7 @@ suspend fun <T> NfcTagReader.scanMdocReader(
                 var transport: MdocTransport? = null
                 transportsToClose.forEach {
                     if (connectionMethod != null && transport == null &&
-                        matchesWarmedUpTransport(it.connectionMethod, connectionMethod)
+                        matchesWarmedUpTransport(it, connectionMethod)
                     ) {
                         transport = it
                     } else {
@@ -322,20 +305,16 @@ suspend fun <T> NfcTagReader.scanMdocReader(
 }
 
 private fun matchesWarmedUpTransport(
-    warmedUpCm: MdocConnectionMethod?,
+    transport: MdocTransport,
     selectedCm: MdocConnectionMethod,
 ): Boolean {
-    if (warmedUpCm == null) return false
-    if (warmedUpCm == selectedCm) return true
-    if (warmedUpCm is MdocConnectionMethodBle && selectedCm is MdocConnectionMethodBle) {
-        if (selectedCm.hasCentralMode && !selectedCm.hasPeripheralMode &&
-            warmedUpCm.hasCentralMode && !warmedUpCm.hasPeripheralMode &&
-            warmedUpCm.centralModeUuid == selectedCm.centralModeUuid
-        ) {
-            val gattMatch = !selectedCm.gattCentral || warmedUpCm.gattCentral
-            val l2capMatch = !selectedCm.directL2capCentral ||
-                (warmedUpCm.directL2capCentral && warmedUpCm.directL2capPsm == selectedCm.directL2capPsm)
-            return gattMatch && l2capMatch
+    if (selectedCm in transport.connectionMethods) return true
+    if (selectedCm is MdocConnectionMethod.Ble && selectedCm.isMdocCentral) {
+        return transport.connectionMethods.any { warmedUpCm ->
+            warmedUpCm is MdocConnectionMethod.Ble &&
+                warmedUpCm::class == selectedCm::class &&
+                warmedUpCm.uuid == selectedCm.uuid &&
+                warmedUpCm.directL2capPsm == selectedCm.directL2capPsm
         }
     }
     return false

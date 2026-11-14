@@ -42,7 +42,6 @@ import org.multipaz.facematch.CameraFrame
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.nfc.MdocHandoverType
 import org.multipaz.mdoc.nfc.MdocNfcCceEngagementHelper
@@ -794,7 +793,7 @@ class Iso18013PresentmentTest {
             private val _state = MutableStateFlow(State.CONNECTED)
             override val state: StateFlow<State> = _state
             override val role: MdocRole = MdocRole.MDOC
-            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
             override val scanningTime: Duration? = null
             private val hangForever = CompletableDeferred<ByteArray>()
 
@@ -854,7 +853,7 @@ class Iso18013PresentmentTest {
         private val _state = MutableStateFlow(initialState)
         override val state: StateFlow<State> = _state
         override val role: MdocRole = MdocRole.MDOC
-        override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+        override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         override val scanningTime: Duration? = null
 
         override suspend fun advertise() {}
@@ -1435,7 +1434,7 @@ class Iso18013PresentmentTest {
             private val _state = MutableStateFlow(State.CONNECTED)
             override val state: StateFlow<State> = _state
             override val role: MdocRole = MdocRole.MDOC
-            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}
@@ -1583,7 +1582,7 @@ class Iso18013PresentmentTest {
             private val _state = MutableStateFlow(State.CONNECTED)
             override val state: StateFlow<State> = _state
             override val role: MdocRole = MdocRole.MDOC
-            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}
@@ -1644,7 +1643,7 @@ class Iso18013PresentmentTest {
             private val _state = MutableStateFlow(State.CONNECTED)
             override val state: StateFlow<State> = _state
             override val role: MdocRole = MdocRole.MDOC
-            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodNfc(0xffff, 0x10000)
+            override val connectionMethod: MdocConnectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}

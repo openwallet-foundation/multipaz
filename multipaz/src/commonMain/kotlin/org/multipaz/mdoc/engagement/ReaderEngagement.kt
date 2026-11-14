@@ -5,13 +5,13 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
+import org.multipaz.mdoc.role.MdocRole
 
 /**
  * Reader Engagement according to ISO/IEC 18013-5.
@@ -56,7 +56,10 @@ data class ReaderEngagement private constructor(
         ) {
             "Invalid engagementType $engagementType for ReaderEngagement"
         }
-        val methodsToEncode = MdocConnectionMethod.combine(connectionMethods)
+        val encodedMethods = MdocConnectionMethod.encodeDeviceRetrievalMethods(
+            methods = connectionMethods,
+            engagementType = engagementType,
+        )
         return buildCborMap {
             put(0, version)
             if (eReaderKey != null) {
@@ -65,11 +68,9 @@ data class ReaderEngagement private constructor(
                     addTaggedEncodedCbor(Cbor.encode(this@ReaderEngagement.eReaderKey.toCoseKey().toDataItem()))
                 }
             }
-            if (methodsToEncode.isNotEmpty()) {
+            if (encodedMethods.isNotEmpty()) {
                 putCborArray(2) {
-                    methodsToEncode.forEach { connectionMethod ->
-                        add(RawCbor(connectionMethod.toDeviceEngagement(engagementType)))
-                    }
+                    encodedMethods.forEach { add(it) }
                 }
             }
         }
@@ -97,17 +98,12 @@ data class ReaderEngagement private constructor(
                 eReaderKeyBytes = null
             }
             val connectionMethodsArray = dataItem.getOrNull(2)
-            val connectionMethods = mutableListOf<MdocConnectionMethod>()
-            if (connectionMethodsArray != null) {
-                for (cmDataItem in (connectionMethodsArray as CborArray).items) {
-                    val connectionMethod = MdocConnectionMethod.fromDeviceEngagement(
-                        Cbor.encode(cmDataItem)
-                    )
-                    if (connectionMethod != null) {
-                        connectionMethods.add(connectionMethod)
-                    }
-                }
-            }
+            val connectionMethods = connectionMethodsArray?.let {
+                MdocConnectionMethod.decodeDeviceRetrievalMethods(
+                    items = (it as CborArray).items,
+                    senderRole = MdocRole.MDOC_READER,
+                )
+            } ?: emptyList()
             return ReaderEngagement(
                 version = version,
                 eReaderKey = eReaderKey,
@@ -165,7 +161,7 @@ data class ReaderEngagement private constructor(
                 version = versionToUse,
                 eReaderKey = eReaderKey,
                 eReaderKeyBytes = eReaderKeyBytes,
-                connectionMethods = MdocConnectionMethod.combine(connectionMethods)
+                connectionMethods = connectionMethods.toList()
             )
         }
     }

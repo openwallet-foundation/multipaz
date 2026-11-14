@@ -24,7 +24,6 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -35,13 +34,11 @@ internal class BleTransportPeripheralMdoc(
     private val peripheralManager: BlePeripheralManager,
     private val uuid: UUID,
     private val gattEnabled: Boolean = true,
-    private val directL2capRequested: Boolean = false,
+    private val directL2capEnabled: Boolean = false,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdoc"
     }
-
-    private val useDirectL2cap: Boolean = directL2capRequested || options.bleUseL2CAPInEngagement
 
     private val transportScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val mutex = Mutex()
@@ -51,22 +48,27 @@ internal class BleTransportPeripheralMdoc(
     private val _state = MutableStateFlow<State>(State.IDLE)
     override val state: StateFlow<State> = _state.asStateFlow()
 
-    override val connectionMethod: MdocConnectionMethod
-        get() {
-            val psm = if (useDirectL2cap) peripheralManager.l2capPsm else null
-            return MdocConnectionMethodBle(
-                gattPeripheral = gattEnabled,
-                gattCentral = false,
-                directL2capPeripheral = psm != null,
-                directL2capCentral = false,
-                peripheralModeUuid = uuid,
-                centralModeUuid = null,
-                directL2capPsm = psm,
-                peripheralAddress = null,
-            )
+    override val connectionMethods: List<MdocConnectionMethod>
+        get() = buildList {
+            val psm = if (directL2capEnabled) peripheralManager.l2capPsm else null
+            if (psm != null) {
+                add(MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = psm))
+            }
+            if (gattEnabled) {
+                add(MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid))
+            }
+            if (isEmpty()) {
+                add(MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = null))
+            }
         }
 
+    override val connectionMethod: MdocConnectionMethod
+        get() = connectionMethods.first()
+
     init {
+        require(gattEnabled || directL2capEnabled) {
+            "At least one of gattEnabled or directL2capEnabled must be true"
+        }
         peripheralManager.setUuids(
             stateCharacteristicUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6"),
             client2ServerCharacteristicUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6"),
@@ -77,7 +79,7 @@ internal class BleTransportPeripheralMdoc(
             } else {
                 null
             },
-            startL2capServer = useDirectL2cap
+            startL2capServer = directL2capEnabled
         )
         peripheralManager.setCallbacks(
             onError = { error ->
@@ -151,7 +153,7 @@ internal class BleTransportPeripheralMdoc(
             bleScanningTime = null,
             bleConnectingTime = _connectingTime,
             bleUsingL2cap = peripheralManager.usingL2cap,
-            bleL2capPsmInEngagement = useDirectL2cap && peripheralManager.l2capPsm != null,
+            bleL2capPsmInEngagement = directL2capEnabled && peripheralManager.l2capPsm != null,
             bleNegotiatedMtu = peripheralManager.negotiatedMtu,
             bleMtuInferredFromWrite = peripheralManager.mtuInferredFromWrite,
             bleNumChunksSent = peripheralManager.numChunksSent,

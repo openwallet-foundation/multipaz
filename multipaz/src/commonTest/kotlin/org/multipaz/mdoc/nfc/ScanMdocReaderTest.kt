@@ -11,8 +11,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
@@ -66,7 +64,7 @@ import kotlin.time.Duration
  *   `tagInteractionFunc` while tracking whether the NFC scanning dialog (`isScanning`) is currently active.
  * - [FakeMdocTransport] & [FakeMdocTransportFactory]: Tracks `createTransport()`, `advertise()`, and `close()`
  *   lifecycle events on reader transports, while returning a real [NfcTransportMdocReader] when
- *   [MdocConnectionMethodNfc] is selected so `setTag()` can be verified.
+ *   [MdocConnectionMethod.Nfc] is selected so `setTag()` can be verified.
  * - Loopback [NfcIsoTag] implementations backed by [MdocNfcEngagementHelper] (for NDEF Static and Negotiated
  *   Handover) and [MdocNfcCceEngagementHelper] (for NFC CCE Handover).
  */
@@ -78,6 +76,7 @@ class ScanMdocReaderTest {
     private class FakeMdocTransport(
         override val role: MdocRole,
         override val connectionMethod: MdocConnectionMethod,
+        override val connectionMethods: List<MdocConnectionMethod> = listOf(connectionMethod),
     ) : MdocTransport() {
         private val _state = MutableStateFlow(State.IDLE)
         override val state: StateFlow<State> = _state.asStateFlow()
@@ -110,9 +109,9 @@ class ScanMdocReaderTest {
     /**
      * Fake [MdocTransportFactory] that records every transport it creates.
      *
-     * For [MdocConnectionMethodNfc], it creates a real [NfcTransportMdocReader] so that
+     * For [MdocConnectionMethod.Nfc], it creates a real [NfcTransportMdocReader] so that
      * [scanMdocReader]'s `if (transport is NfcTransportMdocReader) transport.setTag(tag)` branch is exercised.
-     * For all other connection methods (such as [MdocConnectionMethodBle]), it creates a [FakeMdocTransport].
+     * For all other connection methods (such as [MdocConnectionMethod.Ble]), it creates a [FakeMdocTransport].
      */
     private class FakeMdocTransportFactory(
         private val onBeforeScanAssert: (() -> Unit)? = null
@@ -123,17 +122,57 @@ class ScanMdocReaderTest {
         override fun createTransport(
             connectionMethod: MdocConnectionMethod,
             role: MdocRole,
-            options: MdocTransportOptions
-        ): MdocTransport {
-            val transport = if (connectionMethod is MdocConnectionMethodNfc) {
-                NfcTransportMdocReader(role, options, connectionMethod)
-            } else {
-                FakeMdocTransport(role, connectionMethod).also {
-                    createdFakeTransports.add(it)
+            options: MdocTransportOptions,
+        ): MdocTransport = createTransports(listOf(connectionMethod), role, options).single()
+
+        override fun createTransports(
+            connectionMethods: List<MdocConnectionMethod>,
+            role: MdocRole,
+            options: MdocTransportOptions,
+        ): List<MdocTransport> {
+            val result = mutableListOf<MdocTransport>()
+            val consumedIndices = mutableSetOf<Int>()
+            for ((index, cm) in connectionMethods.withIndex()) {
+                if (index in consumedIndices) continue
+                if (cm is MdocConnectionMethod.Nfc) {
+                    val transport = NfcTransportMdocReader(role, options, cm)
+                    createdTransports.add(transport)
+                    result.add(transport)
+                    continue
                 }
+                val partnerIndex = if (
+                    role == MdocRole.MDOC_READER &&
+                    cm is MdocConnectionMethod.Ble &&
+                    cm.isMdocCentral &&
+                    cm.uuid != null
+                ) {
+                    ((index + 1) until connectionMethods.size).firstOrNull { candidateIndex ->
+                        if (candidateIndex in consumedIndices) return@firstOrNull false
+                        val candidate = connectionMethods[candidateIndex] as? MdocConnectionMethod.Ble
+                            ?: return@firstOrNull false
+                        candidate.isMdocCentral &&
+                            candidate.uuid == cm.uuid &&
+                            candidate.isDirectL2cap != cm.isDirectL2cap
+                    }
+                } else {
+                    null
+                }
+                val methodsForTransport = if (partnerIndex != null) {
+                    consumedIndices.add(partnerIndex)
+                    listOf(cm, connectionMethods[partnerIndex])
+                } else {
+                    listOf(cm)
+                }
+                val transport = FakeMdocTransport(
+                    role = role,
+                    connectionMethod = methodsForTransport.first(),
+                    connectionMethods = methodsForTransport,
+                )
+                createdFakeTransports.add(transport)
+                createdTransports.add(transport)
+                result.add(transport)
             }
-            createdTransports.add(transport)
-            return transport
+            return result
         }
 
         fun assertWarmedUpBeforeScan() {
@@ -266,24 +305,14 @@ class ScanMdocReaderTest {
         }
     }
 
-    private fun createBleCentralClientMethod(uuid: UUID = UUID(1UL, 2UL)): MdocConnectionMethodBle =
-        MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            peripheralModeUuid = null,
-            centralModeUuid = uuid,
-        )
+    private fun createBleCentralClientMethod(uuid: UUID = UUID(1UL, 2UL)): MdocConnectionMethod.Ble.GattCentral =
+        MdocConnectionMethod.Ble.GattCentral(uuid = uuid)
 
-    private fun createBlePeripheralServerMethod(uuid: UUID? = UUID(1UL, 2UL)): MdocConnectionMethodBle =
-        MdocConnectionMethodBle(
-            gattPeripheral = true,
-            gattCentral = false,
-            peripheralModeUuid = uuid,
-            centralModeUuid = null,
-        )
+    private fun createBlePeripheralServerMethod(uuid: UUID? = UUID(1UL, 2UL)): MdocConnectionMethod.Ble.GattPeripheral =
+        MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
 
-    private fun createNfcMethod(): MdocConnectionMethodNfc =
-        MdocConnectionMethodNfc(
+    private fun createNfcMethod(): MdocConnectionMethod.Nfc =
+        MdocConnectionMethod.Nfc(
             commandDataFieldMaxLength = 0xffff,
             responseDataFieldMaxLength = 0x10000
         )
@@ -372,7 +401,7 @@ class ScanMdocReaderTest {
             selectConnectionMethod = { methods ->
                 presentedMethods = methods
                 // Choose NFC data transfer
-                methods.filterIsInstance<MdocConnectionMethodNfc>().first()
+                methods.filterIsInstance<MdocConnectionMethod.Nfc>().first()
             },
             // Offer bleCc for negotiated handover so 1 warmed-up transport is created prior to scanning
             negotiatedHandoverConnectionMethods = listOf(bleCc),
@@ -464,7 +493,7 @@ class ScanMdocReaderTest {
             onError = { error -> fail("Unexpected engagement error: $error") },
             handoverPicker = { methods ->
                 // Pick the BLE method offered by the reader
-                methods.filterIsInstance<MdocConnectionMethodBle>().first()
+                methods.filterIsInstance<MdocConnectionMethod.Ble>().first()
             }
         )
         val tag = NfcCceLoopbackIsoTag(engagementHelper)
@@ -667,8 +696,8 @@ class ScanMdocReaderTest {
             onHandoverComplete = { _, _, _ -> },
             onError = { error -> fail("Unexpected engagement error: $error") },
             negotiatedHandoverPicker = { methods ->
-                // Pick gattPeripheral (which has peripheralModeUuid == null from Hr; helper auto-generates UUID)
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattPeripheral }
+                // Pick GattPeripheral (which has uuid == null from Hr; helper auto-generates UUID)
+                methods.filterIsInstance<MdocConnectionMethod.Ble.GattPeripheral>().single()
             }
         )
         val tag = NdefLoopbackIsoTag(engagementHelper)
@@ -702,21 +731,19 @@ class ScanMdocReaderTest {
         assertTrue(warmedUpCc.closed)
         assertSame(createdPs, result.transport)
         assertFalse(createdPs.closed)
-        val selectedBle = assertIs<MdocConnectionMethodBle>(createdPs.connectionMethod)
-        assertTrue(selectedBle.gattPeripheral)
-        assertNotNull(selectedBle.peripheralModeUuid)
+        val selectedBle = assertIs<MdocConnectionMethod.Ble.GattPeripheral>(createdPs.connectionMethod)
+        assertNotNull(selectedBle.uuid)
     }
 
     @Test
     fun cceHandoverReusesDualModeWarmedUpCentralReaderTransportWhenSingleModeSelected() = runTest {
         val readerCentralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
-        val dualCentralReaderOffer = MdocConnectionMethodBle(
-            gattPeripheral = false,
-            gattCentral = true,
-            directL2capPeripheral = false,
-            directL2capCentral = true,
-            centralModeUuid = readerCentralUuid,
-            directL2capPsm = 128,
+        val directL2capCentral = MdocConnectionMethod.Ble.DirectL2capCentral(
+            uuid = readerCentralUuid,
+            psm = 128,
+        )
+        val gattCentral = MdocConnectionMethod.Ble.GattCentral(
+            uuid = readerCentralUuid,
         )
 
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -726,9 +753,9 @@ class ScanMdocReaderTest {
             onMessageReceived = {},
             onError = { error -> fail("Unexpected engagement error: $error") },
             handoverPicker = { methods ->
-                // Mdoc sees 2 disambiguated choices (directL2capCentral and gattCentral) and selects directL2capCentral
+                // Mdoc sees 2 single-mode choices (DirectL2capCentral and GattCentral) and selects DirectL2capCentral
                 assertEquals(2, methods.size)
-                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.directL2capCentral }
+                methods.filterIsInstance<MdocConnectionMethod.Ble.DirectL2capCentral>().single()
             }
         )
         val tag = NfcCceLoopbackIsoTag(engagementHelper)
@@ -737,11 +764,11 @@ class ScanMdocReaderTest {
 
         val customResult = reader.scanMdocReader(
             message = "Hold near mdoc",
-            options = MdocTransportOptions(bleUseL2CAP = true, bleUseL2CAPInEngagement = true),
+            options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
             transportFactory = factory,
             selectConnectionMethod = { fail("Single method should not invoke selectConnectionMethod") },
-            negotiatedHandoverConnectionMethods = listOf(dualCentralReaderOffer),
+            negotiatedHandoverConnectionMethods = listOf(directL2capCentral, gattCentral),
             context = coroutineContext,
             onHandover = { scanResult ->
                 assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
