@@ -73,10 +73,10 @@ class NfcCceTransportMdocReader(
         }
         val cm = transport.connectionMethod
         if (cm is MdocConnectionMethodBle) {
-            if (cm.supportsCentralClientMode) {
+            if (cm.hasCentralMode) {
                 return MdocTransportType.NFC_CCE_MDOC_CENTRAL_CLIENT_MODE
             }
-            if (cm.supportsPeripheralServerMode) {
+            if (cm.hasPeripheralMode) {
                 return MdocTransportType.NFC_CCE_MDOC_PERIPHERAL_SERVER_MODE
             }
         }

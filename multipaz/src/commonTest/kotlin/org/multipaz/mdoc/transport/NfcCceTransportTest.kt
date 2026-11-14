@@ -522,10 +522,10 @@ class NfcCceTransportTest {
         override val state: StateFlow<State> = _state.asStateFlow()
 
         override val connectionMethod: MdocConnectionMethod = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = UUID.fromString("12345678-1234-5678-1234-567812345678"),
-            centralClientModeUuid = null
+            gattPeripheral = true,
+            gattCentral = false,
+            peripheralModeUuid = UUID.fromString("12345678-1234-5678-1234-567812345678"),
+            centralModeUuid = null
         )
 
         override val scanningTime: Duration? = null

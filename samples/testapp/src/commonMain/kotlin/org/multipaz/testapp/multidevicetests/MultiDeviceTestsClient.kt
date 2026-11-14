@@ -58,9 +58,13 @@ class MultiDeviceTestsClient(
                 val getPsmFromReader = if (parts[6] == "true") true else false
                 val encodedDeviceEngagement = parts[7].fromBase64Url()
                 val test = Test.valueOf(testName)
+                val bleUseL2CAPInEngagement = (
+                    test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT ||
+                        test == Test.MDOC_PERIPHERAL_SERVER_MODE_L2CAP_PSM_IN_DEVICE_ENGAGEMENT
+                )
                 val options = MdocTransportOptions(
                     bleUseL2CAP = bleUseL2CAP,
-                    bleUseL2CAPInEngagement = bleUseL2CAP,
+                    bleUseL2CAPInEngagement = bleUseL2CAPInEngagement,
                 )
 
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
@@ -80,7 +84,7 @@ class MultiDeviceTestsClient(
                 }
                 if (getPsmFromReader) {
                     val cm = transport.connectionMethod as MdocConnectionMethodBle
-                    sendChannel.writeStringUtf8("${cm.peripheralServerModePsm!!}\n")
+                    sendChannel.writeStringUtf8("${cm.directL2capPsm!!}\n")
                 }
                 val nextCmd = receiveChannel.readUTF8Line(LINE_LIMIT)
                 if (nextCmd != "TestPresentationStart") {

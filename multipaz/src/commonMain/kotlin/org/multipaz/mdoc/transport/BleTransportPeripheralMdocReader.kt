@@ -34,11 +34,16 @@ internal class BleTransportPeripheralMdocReader(
     private val options: MdocTransportOptions,
     private val centralManager: BleCentralManager,
     private val uuid: UUID,
-    private val psm: Int?
+    private val psm: Int?,
+    private val gattEnabled: Boolean = true,
+    private val directL2capEnabled: Boolean = false,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdocReader"
     }
+
+    private val useDirectL2cap: Boolean =
+        psm != null && (options.bleUseL2CAPInEngagement || (!gattEnabled && directL2capEnabled))
 
     private val transportScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val mutex = Mutex()
@@ -50,10 +55,13 @@ internal class BleTransportPeripheralMdocReader(
 
     override val connectionMethod: MdocConnectionMethod
         get() = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = uuid,
-            centralClientModeUuid = null
+            gattPeripheral = gattEnabled,
+            gattCentral = false,
+            directL2capPeripheral = directL2capEnabled,
+            directL2capCentral = false,
+            peripheralModeUuid = uuid,
+            centralModeUuid = null,
+            directL2capPsm = if (useDirectL2cap) psm else null,
         )
 
     init {
@@ -114,7 +122,7 @@ internal class BleTransportPeripheralMdocReader(
             bleScanningTime = _scanningTime,
             bleConnectingTime = _connectingTime,
             bleUsingL2cap = centralManager.usingL2cap,
-            bleL2capPsmInEngagement = options.bleUseL2CAPInEngagement && psm != null,
+            bleL2capPsmInEngagement = useDirectL2cap,
             bleNegotiatedMtu = centralManager.negotiatedMtu,
             bleMtuInferredFromWrite = false,
             bleNumScanRestarts = centralManager.numScanRestarts,
@@ -146,11 +154,11 @@ internal class BleTransportPeripheralMdocReader(
                 _scanningTime = nowAfterScan - timeScanningStarted!!
                 timeConnectingStarted = nowAfterScan
                 mutex.withLock { _state.value = State.CONNECTING }
-                if (psm != null && options.bleUseL2CAPInEngagement) {
+                if (useDirectL2cap) {
                     // If the PSM is known at engagement-time we can bypass the entire GATT server
                     // and just connect directly.
                     Logger.i(TAG, "Connecting directly to PSM $psm")
-                    centralManager.connectL2cap(psm)
+                    centralManager.connectL2cap(psm!!)
                 } else {
                     while (true) {
                         try {

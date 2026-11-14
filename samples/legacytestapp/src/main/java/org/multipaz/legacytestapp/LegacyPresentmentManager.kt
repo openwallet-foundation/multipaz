@@ -22,9 +22,9 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.presentment.mdocPresentment
 import org.multipaz.util.Constants

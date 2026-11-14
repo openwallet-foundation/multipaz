@@ -318,12 +318,12 @@ fun createBleMdocTransport(
     centralHalFactory: () -> BleCentralHal,
     peripheralHalFactory: () -> BlePeripheralHal,
 ): MdocTransport {
-    if (connectionMethod.supportsCentralClientMode && connectionMethod.supportsPeripheralServerMode) {
+    if (connectionMethod.hasCentralMode && connectionMethod.hasPeripheralMode) {
         throw IllegalArgumentException(
             "Only Central Client or Peripheral Server mode is supported at one time, not both"
         )
     }
-    if (!connectionMethod.supportsCentralClientMode && !connectionMethod.supportsPeripheralServerMode) {
+    if (!connectionMethod.hasCentralMode && !connectionMethod.hasPeripheralMode) {
         throw IllegalArgumentException(
             "Either Central Client or Peripheral Server mode must be enabled"
         )
@@ -347,42 +347,50 @@ fun createBleMdocTransport(
     fun buildPeripheralManager(): BlePeripheralManager = BlePeripheralManagerImpl(
         hal = peripheralHalFactory()
     )
-    return if (connectionMethod.supportsCentralClientMode) {
-        val uuid = requireNotNull(connectionMethod.centralClientModeUuid) {
-            "centralClientModeUuid is required when supportsCentralClientMode is true"
+    return if (connectionMethod.hasCentralMode) {
+        val uuid = requireNotNull(connectionMethod.centralModeUuid) {
+            "centralModeUuid is required when a central mode is enabled"
         }
         when (role) {
             MdocRole.MDOC -> BleTransportCentralMdoc(
-                role,
-                options,
-                buildCentralManager(),
-                uuid,
-                connectionMethod.peripheralServerModePsm
+                role = role,
+                options = options,
+                centralManager = buildCentralManager(),
+                uuid = uuid,
+                psm = connectionMethod.directL2capPsm,
+                gattEnabled = connectionMethod.gattCentral,
+                directL2capEnabled = connectionMethod.directL2capCentral,
             )
             MdocRole.MDOC_READER -> BleTransportCentralMdocReader(
-                role,
-                options,
-                buildPeripheralManager(),
-                uuid
+                role = role,
+                options = options,
+                peripheralManager = buildPeripheralManager(),
+                uuid = uuid,
+                gattEnabled = connectionMethod.gattCentral,
+                directL2capRequested = connectionMethod.directL2capCentral,
             )
         }
     } else {
-        val uuid = requireNotNull(connectionMethod.peripheralServerModeUuid) {
-            "peripheralServerModeUuid is required when supportsPeripheralServerMode is true"
+        val uuid = requireNotNull(connectionMethod.peripheralModeUuid) {
+            "peripheralModeUuid is required when a peripheral mode is enabled"
         }
         when (role) {
             MdocRole.MDOC -> BleTransportPeripheralMdoc(
-                role,
-                options,
-                buildPeripheralManager(),
-                uuid
+                role = role,
+                options = options,
+                peripheralManager = buildPeripheralManager(),
+                uuid = uuid,
+                gattEnabled = connectionMethod.gattPeripheral,
+                directL2capRequested = connectionMethod.directL2capPeripheral,
             )
             MdocRole.MDOC_READER -> BleTransportPeripheralMdocReader(
-                role,
-                options,
-                buildCentralManager(),
-                uuid,
-                connectionMethod.peripheralServerModePsm
+                role = role,
+                options = options,
+                centralManager = buildCentralManager(),
+                uuid = uuid,
+                psm = connectionMethod.directL2capPsm,
+                gattEnabled = connectionMethod.gattPeripheral,
+                directL2capEnabled = connectionMethod.directL2capPeripheral,
             )
         }
     }

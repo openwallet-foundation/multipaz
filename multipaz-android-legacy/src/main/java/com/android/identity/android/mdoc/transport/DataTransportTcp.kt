@@ -20,7 +20,7 @@ import android.net.wifi.WifiManager
 import android.nfc.NdefRecord
 import android.text.format.Formatter
 import android.util.Pair
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
 import java.io.IOException

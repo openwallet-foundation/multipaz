@@ -3,7 +3,7 @@ package com.android.identity.android.mdoc.transport
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborMap
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NdefRecord
 import org.multipaz.util.Logger

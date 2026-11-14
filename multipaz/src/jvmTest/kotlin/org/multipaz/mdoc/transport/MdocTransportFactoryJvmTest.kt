@@ -33,10 +33,10 @@ class MdocTransportFactoryJvmTest {
         nfcReader.close()
 
         val bleMethod = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = UUID.randomUUID()
+            gattPeripheral = false,
+            gattCentral = true,
+            peripheralModeUuid = null,
+            centralModeUuid = UUID.randomUUID()
         )
         val err = assertFailsWith<IllegalArgumentException> {
             MdocTransportFactory.Default.createTransport(

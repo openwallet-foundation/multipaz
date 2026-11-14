@@ -14,10 +14,10 @@ import com.android.identity.android.mdoc.transport.DataTransportTcp
 import com.android.identity.android.mdoc.transport.DataTransportUdp
 import com.android.identity.android.mdoc.transport.DataTransportWifiAware
 import org.multipaz.cbor.Cbor
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodNfc
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import org.multipaz.util.Logger
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex

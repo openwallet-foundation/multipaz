@@ -13,25 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.engagement
+package com.android.identity.mdoc.engagement
 
-import kotlinx.coroutines.test.runTest
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.origininfo.OriginInfo
-import org.multipaz.mdoc.origininfo.OriginInfoDomain
 import org.multipaz.util.UUID
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class EngagementGeneratorTest {
     @Test
-    fun testNoConnectionMethodsOrOriginInfos() = runTest {
+    fun testNoConnectionMethodsOrOriginInfos() = runBlocking {
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eg = EngagementGenerator(
             eSenderKey.publicKey,
@@ -47,8 +45,7 @@ class EngagementGeneratorTest {
     }
 
     @Test
-    @Throws(Exception::class)
-    fun testDeviceEngagementQrBleCentralClientMode() = runTest {
+    fun testDeviceEngagementQrBleCentralClientMode() = runBlocking {
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val uuid = UUID.randomUUID()
         val eg = EngagementGenerator(

@@ -127,20 +127,18 @@ fun IsoMdocProximitySharingScreen(
                         if (settingsModel.presentmentBleCentralClientModeEnabled.value) {
                             connectionMethods.add(
                                 MdocConnectionMethodBle(
-                                    supportsPeripheralServerMode = false,
-                                    supportsCentralClientMode = true,
-                                    peripheralServerModeUuid = null,
-                                    centralClientModeUuid = bleUuid,
+                                    gattPeripheral = false,
+                                    gattCentral = true,
+                                    centralModeUuid = bleUuid,
                                 )
                             )
                         }
                         if (settingsModel.presentmentBlePeripheralServerModeEnabled.value) {
                             connectionMethods.add(
                                 MdocConnectionMethodBle(
-                                    supportsPeripheralServerMode = true,
-                                    supportsCentralClientMode = false,
-                                    peripheralServerModeUuid = bleUuid,
-                                    centralClientModeUuid = null,
+                                    gattPeripheral = true,
+                                    gattCentral = false,
+                                    peripheralModeUuid = bleUuid,
                                 )
                             )
                         }

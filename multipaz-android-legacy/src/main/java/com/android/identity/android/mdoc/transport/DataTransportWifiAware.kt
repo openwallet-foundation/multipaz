@@ -45,8 +45,8 @@ import androidx.annotation.RequiresApi
 import com.android.identity.android.legacy.Hkdf
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import org.multipaz.util.HexUtil
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
