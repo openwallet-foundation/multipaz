@@ -9,6 +9,9 @@ enum class EngagementType {
     /** QR code engagement according to ISO/IEC 18013-5:2021 section 8.2. */
     QR_CODE,
 
+    /** Reader QR code engagement according to ISO/IEC 18013-5 Second Edition section 9.7. */
+    READER_QR_CODE,
+
     /** Static NFC handover according to ISO/IEC 18013-5:2021 section 8.3.3.1.1. */
     NFC_STATIC_HANDOVER,
 

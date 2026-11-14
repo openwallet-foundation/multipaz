@@ -228,6 +228,8 @@ internal class BleCentralManagerImpl(
     @Volatile
     private var hasL2capCharacteristic = false
     @Volatile
+    private var hasIdentCharacteristic = false
+    @Volatile
     private var expectedIdentValue: ByteArray? = null
     @Volatile
     private var _l2capPsm: Int? = null
@@ -479,7 +481,8 @@ internal class BleCentralManagerImpl(
         override fun onCharacteristicsDiscovered(
             maxWriteSize: Int?,
             hasL2capCharacteristic: Boolean,
-            error: Throwable?
+            error: Throwable?,
+            hasIdentCharacteristic: Boolean,
         ) {
             val continuation = claimWaitCondition(WaitState.PERIPHERAL_DISCOVER_CHARACTERISTICS)
             if (continuation != null) {
@@ -495,6 +498,7 @@ internal class BleCentralManagerImpl(
                         }
                     }
                     this@BleCentralManagerImpl.hasL2capCharacteristic = hasL2capCharacteristic
+                    this@BleCentralManagerImpl.hasIdentCharacteristic = hasIdentCharacteristic
                     continuation.resume(true)
                 }
             } else {
@@ -533,6 +537,13 @@ internal class BleCentralManagerImpl(
                                 GattOperationFailedException(error.message ?: "Ident read failed", error)
                             )
                         } else if (value != null && expectedIdentValue contentEquals value) {
+                            continuation.resume(true)
+                        } else if (value != null && (value.isEmpty() || value.all { it == 0.toByte() })) {
+                            Logger.w(
+                                TAG,
+                                "Peripheral returned unset Ident value (${value.toHex()}); continuing with warning"
+                            )
+                            addWarning(TransportWarning(TransportWarningCode.BLE_IDENT_NOT_SET))
                             continuation.resume(true)
                         } else {
                             continuation.resumeWithException(
@@ -757,6 +768,7 @@ internal class BleCentralManagerImpl(
             _negotiatedMtu = null
             maxCharacteristicSize = -1
             hasL2capCharacteristic = false
+            hasIdentCharacteristic = false
             _l2capPsm = null
             incomingMessage = ByteStringBuilder()
         }
@@ -944,6 +956,11 @@ internal class BleCentralManagerImpl(
 
     override suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey) = withGattHandshake {
         val identUuid = checkNotNull(identCharacteristicUuid) { "identCharacteristicUuid is null" }
+        if (!hasIdentCharacteristic) {
+            Logger.w(TAG, "Peripheral omitted Ident characteristic ($identUuid); continuing with warning")
+            addWarning(TransportWarning(TransportWarningCode.BLE_IDENT_NOT_SET))
+            return@withGattHandshake
+        }
         expectedIdentValue = deriveBleIdent(eSenderKey)
         var retryCount = 0
         while (true) {

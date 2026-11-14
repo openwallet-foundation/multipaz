@@ -76,7 +76,8 @@ interface BleCentralHal {
         fun onCharacteristicsDiscovered(
             maxWriteSize: Int?,
             hasL2capCharacteristic: Boolean,
-            error: Throwable?
+            error: Throwable?,
+            hasIdentCharacteristic: Boolean = true,
         )
 
         /** Invoked when a GATT characteristic read completes. */

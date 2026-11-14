@@ -20,10 +20,12 @@
 		7B04AE812FCDDD1700DAEA40 /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE692FCDDD1700DAEA40 /* FloatingItemList.swift */; };
 		7B04AE822FCDDD1700DAEA40 /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5A2FCDDD1700DAEA40 /* CardCarousel.swift */; };
 		7B04AE832FCDDD1700DAEA40 /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6C2FCDDD1700DAEA40 /* MdocProximityQrSettings.swift */; };
+		C0A5E1812FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1802FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift */; };
 		7B04AE842FCDDD1700DAEA40 /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5B2FCDDD1700DAEA40 /* CardInfo.swift */; };
 		7B04AE852FCDDD1700DAEA40 /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */; };
 		7B04AE862FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE682FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift */; };
 		7B04AE872FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6B2FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift */; };
+		C0A5E1842FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1832FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift */; };
 		7B04AE882FCDDD1700DAEA40 /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE702FCDDD1700DAEA40 /* PromptModelExt.swift */; };
 		7B04AE892FCDDD1700DAEA40 /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6A2FCDDD1700DAEA40 /* FloatingItemText.swift */; };
 		7B04AE8A2FCDDD1700DAEA40 /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE642FCDDD1700DAEA40 /* FloatingItemContainer.swift */; };
@@ -53,10 +55,12 @@
 		7B04AEA12FCDDD1700DAEA40 /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE692FCDDD1700DAEA40 /* FloatingItemList.swift */; };
 		7B04AEA22FCDDD1700DAEA40 /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5A2FCDDD1700DAEA40 /* CardCarousel.swift */; };
 		7B04AEA32FCDDD1700DAEA40 /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6C2FCDDD1700DAEA40 /* MdocProximityQrSettings.swift */; };
+		C0A5E1822FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1802FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift */; };
 		7B04AEA42FCDDD1700DAEA40 /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5B2FCDDD1700DAEA40 /* CardInfo.swift */; };
 		7B04AEA52FCDDD1700DAEA40 /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */; };
 		7B04AEA62FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE682FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift */; };
 		7B04AEA72FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6B2FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift */; };
+		C0A5E1852FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1832FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift */; };
 		7B04AEA82FCDDD1700DAEA40 /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE702FCDDD1700DAEA40 /* PromptModelExt.swift */; };
 		7B04AEA92FCDDD1700DAEA40 /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6A2FCDDD1700DAEA40 /* FloatingItemText.swift */; };
 		7B04AEAA2FCDDD1700DAEA40 /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE642FCDDD1700DAEA40 /* FloatingItemContainer.swift */; };
@@ -134,6 +138,8 @@
 		7B04AE6A2FCDDD1700DAEA40 /* FloatingItemText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemText.swift; sourceTree = "<group>"; };
 		7B04AE6B2FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrPresentment.swift; sourceTree = "<group>"; };
 		7B04AE6C2FCDDD1700DAEA40 /* MdocProximityQrSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrSettings.swift; sourceTree = "<group>"; };
+		C0A5E1832FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityReaderQrPresentment.swift; sourceTree = "<group>"; };
+		C0A5E1802FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityReaderQrSettings.swift; sourceTree = "<group>"; };
 		7B04AE6D2FCDDD1700DAEA40 /* PassphraseInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseInputView.swift; sourceTree = "<group>"; };
 		7B04AE6E2FCDDD1700DAEA40 /* PassphrasePromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphrasePromptDialog.swift; sourceTree = "<group>"; };
 		7B04AE6F2FCDDD1700DAEA40 /* PromptDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptDialogs.swift; sourceTree = "<group>"; };
@@ -258,6 +264,8 @@
 				7B04AE6A2FCDDD1700DAEA40 /* FloatingItemText.swift */,
 				7B04AE6B2FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift */,
 				7B04AE6C2FCDDD1700DAEA40 /* MdocProximityQrSettings.swift */,
+				C0A5E1832FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift */,
+				C0A5E1802FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift */,
 				7B04AE6D2FCDDD1700DAEA40 /* PassphraseInputView.swift */,
 				7B04AE6E2FCDDD1700DAEA40 /* PassphrasePromptDialog.swift */,
 				7B04AE6F2FCDDD1700DAEA40 /* PromptDialogs.swift */,
@@ -444,10 +452,12 @@
 				7B04AEA12FCDDD1700DAEA40 /* FloatingItemList.swift in Sources */,
 				7B04AEA22FCDDD1700DAEA40 /* CardCarousel.swift in Sources */,
 				7B04AEA32FCDDD1700DAEA40 /* MdocProximityQrSettings.swift in Sources */,
+				C0A5E1822FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift in Sources */,
 				7B04AEA42FCDDD1700DAEA40 /* CardInfo.swift in Sources */,
 				7B04AEA52FCDDD1700DAEA40 /* VerticalCardList.swift in Sources */,
 				7B04AEA62FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift in Sources */,
 				7B04AEA72FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift in Sources */,
+				C0A5E1852FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift in Sources */,
 				7B04AEA82FCDDD1700DAEA40 /* PromptModelExt.swift in Sources */,
 				7B04AEA92FCDDD1700DAEA40 /* FloatingItemText.swift in Sources */,
 				7B04AEAA2FCDDD1700DAEA40 /* FloatingItemContainer.swift in Sources */,
@@ -487,10 +497,12 @@
 				7B04AE812FCDDD1700DAEA40 /* FloatingItemList.swift in Sources */,
 				7B04AE822FCDDD1700DAEA40 /* CardCarousel.swift in Sources */,
 				7B04AE832FCDDD1700DAEA40 /* MdocProximityQrSettings.swift in Sources */,
+				C0A5E1812FCDDD1700DAEA40 /* MdocProximityReaderQrSettings.swift in Sources */,
 				7B04AE842FCDDD1700DAEA40 /* CardInfo.swift in Sources */,
 				7B04AE852FCDDD1700DAEA40 /* VerticalCardList.swift in Sources */,
 				7B04AE862FCDDD1700DAEA40 /* FloatingItemHeadingAndText.swift in Sources */,
 				7B04AE872FCDDD1700DAEA40 /* MdocProximityQrPresentment.swift in Sources */,
+				C0A5E1842FCDDD1700DAEA40 /* MdocProximityReaderQrPresentment.swift in Sources */,
 				7B04AE882FCDDD1700DAEA40 /* PromptModelExt.swift in Sources */,
 				7B04AE892FCDDD1700DAEA40 /* FloatingItemText.swift in Sources */,
 				7B04AE8A2FCDDD1700DAEA40 /* FloatingItemContainer.swift in Sources */,

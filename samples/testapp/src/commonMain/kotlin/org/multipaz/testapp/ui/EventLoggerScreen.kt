@@ -351,6 +351,7 @@ private fun EventItemVerification(
         is EventVerificationIso18013Proximity -> {
             val engagement = when (event.engagementType) {
                 EngagementType.QR_CODE -> "QR Code"
+                EngagementType.READER_QR_CODE -> "Reader QR"
                 EngagementType.NFC_STATIC_HANDOVER -> "NFC Static"
                 EngagementType.NFC_NEGOTIATED_HANDOVER -> "NFC Negotiated"
                 EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT -> "NFC Concurrent Channel"

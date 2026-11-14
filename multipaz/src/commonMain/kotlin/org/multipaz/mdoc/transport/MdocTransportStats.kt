@@ -37,6 +37,9 @@ enum class TransportWarningCode {
     /** BLE MTU negotiation did not complete or fell back to the default 23-byte ATT MTU. */
     BLE_MTU_NOT_NEGOTIATED,
 
+    /** BLE peripheral omitted the `Ident` characteristic or left its value empty/unset. */
+    BLE_IDENT_NOT_SET,
+
     /** Android `onMtuChanged` callback was missed; MTU was inferred from incoming `Client2Server` chunk size. */
     BLE_MTU_INFERRED_FROM_WRITE,
 

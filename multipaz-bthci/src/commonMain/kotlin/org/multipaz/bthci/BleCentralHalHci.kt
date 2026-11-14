@@ -667,14 +667,21 @@ class BleCentralHalHci(
                         "CCCD not found for Server2Client characteristic $server2ClientCharacteristicUuid"
                     )
                 }
-                if (identCharacteristicUuid != null && !characteristicsByUuid.containsKey(identCharacteristicUuid)) {
-                    throw IllegalStateException("Ident characteristic $identCharacteristicUuid not found")
+                val hasIdent = identCharacteristicUuid != null &&
+                    characteristicsByUuid.containsKey(identCharacteristicUuid)
+                if (identCharacteristicUuid != null && !hasIdent) {
+                    Logger.w(TAG, "Ident characteristic $identCharacteristicUuid requested but not found")
                 }
 
                 val hasL2cap = l2capCharacteristicUuid != null &&
                     characteristicsByUuid.containsKey(l2capCharacteristicUuid)
                 if (!closed) {
-                    callback.onCharacteristicsDiscovered(null, hasL2cap, null)
+                    callback.onCharacteristicsDiscovered(
+                        maxWriteSize = null,
+                        hasL2capCharacteristic = hasL2cap,
+                        error = null,
+                        hasIdentCharacteristic = hasIdent,
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e

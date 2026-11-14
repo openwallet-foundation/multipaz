@@ -335,10 +335,15 @@ internal class BleCentralHalIos : BleCentralHal {
                 characteristicsByUuid[client2ServerCharacteristicUuid] = c2sChar
                 characteristicsByUuid[server2ClientCharacteristicUuid] = s2cChar
 
+                var hasIdent = false
                 if (identCharacteristicUuid != null) {
                     val identChar = findCharacteristic(chars, identCharacteristicUuid)
-                        ?: throw IllegalStateException("Missing characteristic with UUID $identCharacteristicUuid")
-                    characteristicsByUuid[identCharacteristicUuid] = identChar
+                    if (identChar != null) {
+                        characteristicsByUuid[identCharacteristicUuid] = identChar
+                        hasIdent = true
+                    } else {
+                        Logger.w(TAG, "Ident characteristic requested ($identCharacteristicUuid) but not found")
+                    }
                 }
 
                 var hasL2cap = false
@@ -354,7 +359,8 @@ internal class BleCentralHalIos : BleCentralHal {
                 callback.onCharacteristicsDiscovered(
                     maxWriteSize = maxWriteLen,
                     hasL2capCharacteristic = hasL2cap,
-                    error = null
+                    error = null,
+                    hasIdentCharacteristic = hasIdent,
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
