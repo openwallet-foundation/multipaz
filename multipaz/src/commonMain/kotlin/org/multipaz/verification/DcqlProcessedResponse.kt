@@ -22,9 +22,6 @@ import org.multipaz.request.JsonRequestedClaim
  * Helper object that organizes verified presentation response, so that presentation
  * documents and claims can be accessed in terms of DCQL ids.
  *
- * TODO: currently id mapping for ISO 18013 protocols is built based on docType/VCT. Once/if
- *  docRequestId is generally available, this can be improved.  
- *
  * @param dcql DCQL that was used to generate the request
  * @param presentations a list of verified credential presentations generated in the response
  * @param documentTypeRepository optional [DocumentTypeRepository] used to resolve verifier-approved
@@ -57,10 +54,11 @@ class DcqlProcessedResponse(
         val dcqlQuery = DcqlQuery.fromJson(dcqlJson)
         val credQueryById = dcqlQuery.credentialQueries.associateBy { it.id }
         multipleQueryIds = dcqlQuery.credentialQueries.filter { it.multiple }.map { it.id }.toSet()
+        val credentialsJsonArray = dcqlJson["credentials"]!!.jsonArray
         val byDocType = mutableMapOf<String, MutableList<JsonObject>>()
         val byVct = mutableMapOf<String, MutableList<JsonObject>>()
         val byId = mutableMapOf<String, JsonObject>()
-        for (query in dcqlJson["credentials"]!!.jsonArray) {
+        for (query in credentialsJsonArray) {
             query as JsonObject
             val meta = query["meta"]!!.jsonObject
             byId[query["id"]!!.jsonPrimitive.content] = query
@@ -79,9 +77,21 @@ class DcqlProcessedResponse(
         val presentationsByQueryId = mutableMapOf<String, MutableList<VerifiedPresentation>>()
         val credentialListsMap = mutableMapOf<String, MutableList<Credential>>()
         for (presentation in presentations) {
-            val query = if (presentation.vpTokenIdentifier != null) {
-                byId[presentation.vpTokenIdentifier]
+            val explicitIds = presentation.docRequestIds
+            val matchedQueries: List<JsonObject> = if (presentation.vpTokenIdentifier != null) {
+                val query = byId[presentation.vpTokenIdentifier]
                     ?: throw IllegalStateException("query not found")
+                listOf(query)
+            } else if (explicitIds != null) {
+                if (explicitIds.isEmpty() || explicitIds.distinct().size != explicitIds.size) {
+                    throw IllegalStateException("invalid docRequestIds: $explicitIds")
+                }
+                explicitIds.map { reqId ->
+                    if (reqId !in credentialsJsonArray.indices) {
+                        throw IllegalStateException("docRequestId $reqId out of bounds for DCQL credentials")
+                    }
+                    credentialsJsonArray[reqId].jsonObject
+                }
             } else {
                 val list = when (presentation) {
                     is JsonVerifiedPresentation -> byVct[presentation.vct]
@@ -97,17 +107,19 @@ class DcqlProcessedResponse(
                     is MdocVerifiedPresentation -> byDocType[presentation.docType]
                 } ?: throw IllegalStateException("query not found")
                 if (list.size > 1) {
-                    throw IllegalStateException("duplicate vct or docTypes are not yet supported")
+                    throw IllegalStateException("duplicate vct or docTypes require docRequestIds")
                 }
-                list.first()
+                listOf(list.first())
             }
-            val queryId = query["id"]!!.jsonPrimitive.content
-            val credQuery = credQueryById[queryId]
-                ?: throw IllegalStateException("query not found")
-            presentationsByQueryId.getOrPut(queryId) { mutableListOf() }.add(presentation)
-            credentialListsMap.getOrPut(queryId) { mutableListOf() }.add(
-                Credential(presentation, query, credQuery)
-            )
+            for (query in matchedQueries) {
+                val queryId = query["id"]!!.jsonPrimitive.content
+                val credQuery = credQueryById[queryId]
+                    ?: throw IllegalStateException("query not found")
+                presentationsByQueryId.getOrPut(queryId) { mutableListOf() }.add(presentation)
+                credentialListsMap.getOrPut(queryId) { mutableListOf() }.add(
+                    Credential(presentation, query, credQuery)
+                )
+            }
         }
         dcqlQuery.checkResponseSatisfiesQuery(
             presentationsByQueryId = presentationsByQueryId,

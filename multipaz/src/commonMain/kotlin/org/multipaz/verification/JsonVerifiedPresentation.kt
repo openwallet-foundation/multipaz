@@ -29,4 +29,5 @@ data class JsonVerifiedPresentation(
     override val vpTokenIdentifier: String?,
     override val transactionData: List<TransactionData<*>>,
     override val revocationStatus: RevocationStatus? = null,
+    override val docRequestIds: List<Int>? = null,
 ): VerifiedPresentation()

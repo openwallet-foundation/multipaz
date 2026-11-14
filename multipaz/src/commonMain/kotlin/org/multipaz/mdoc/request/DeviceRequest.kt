@@ -1664,7 +1664,7 @@ internal fun deviceRequestCalcDeviceRequestInfo(
                     mandatory = true,
                     documentSets = listOf(
                         DocumentSet(
-                            docRequestIds = listOf(0)
+                            docRequestIds = dcqlQuery.credentialQueries.indices.toList().ifEmpty { listOf(0) }
                         )
                     ),
                     purposeHints = emptyMap()
