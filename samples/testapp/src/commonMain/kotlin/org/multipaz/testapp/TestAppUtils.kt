@@ -133,6 +133,7 @@ object TestAppUtils {
         signRequest: Boolean = true,
         issuerIdentifiers: List<ByteString> = emptyList(),
         uniqueDocSetRequired: Boolean = true,
+        forceVersion10: Boolean = false,
     ): VerificationSession {
         val requestDefinition = when (request) {
             is SingleDocumentCannedRequest -> if (requestSdJwtVc) {
@@ -177,6 +178,7 @@ object TestAppUtils {
             handover = handover,
             documentTypeRepository = app.documentTypeRepository,
             uniqueDocSetRequired = uniqueDocSetRequired,
+            deviceRequestVersion = if (forceVersion10) "1.0" else null,
         )
     }
 
@@ -916,6 +918,10 @@ object TestAppUtils {
                     Pair(
                         CoseNumberLabel(Cose.COSE_LABEL_ALG),
                         Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                    ),
+                    Pair(
+                        CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                        dsKey.certChain.toCoseX5t()
                     )
                 )
                 val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
@@ -1061,6 +1067,10 @@ object TestAppUtils {
                 Pair(
                     CoseNumberLabel(Cose.COSE_LABEL_ALG),
                     Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                Pair(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                    dsKey.certChain.toCoseX5t()
                 )
             )
             val unprotectedHeaders = mapOf<CoseLabel, DataItem>(

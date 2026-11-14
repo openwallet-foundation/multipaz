@@ -119,13 +119,17 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
             )
         )
 
+        val signingKey = getSigningKey()
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                signingKey.certChain.toCoseX5t()
             )
         )
-        val signingKey = getSigningKey()
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),

@@ -2,8 +2,8 @@ package org.multipaz.asn1
 
 import org.multipaz.crypto.Crypto
 import org.multipaz.util.toHex
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
-import org.multipaz.asn1.ASN1Integer
 import kotlin.random.Random
 
 class ASN1Integer(
@@ -39,6 +39,18 @@ class ASN1Integer(
             throw IllegalStateException("Value doesn't fit in a Long")
         }
         return value.derDecodeAsLong()
+    }
+
+    /**
+     * Returns the unsigned big-endian byte representation of a non-negative [ASN1Integer],
+     * stripping any leading `0x00` sign byte added by two's-complement DER encoding.
+     */
+    fun toUnsignedByteString(): ByteString {
+        var start = 0
+        while (start < value.size - 1 && value[start] == 0.toByte()) {
+            start++
+        }
+        return ByteString(value, start, value.size)
     }
 
     companion object {

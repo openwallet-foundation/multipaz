@@ -146,7 +146,11 @@ WgP97pb4HjvveikPDRECIDkQB2rDBcFJJb4Qv9ALFvXYAH4zm4mcjYMP0RkUCzCB
         assertEquals("Credence ID Reader Root CA", ci0.name)
         assertEquals("US", ci0.issuingCountry)
         assertEquals("California", ci0.stateOrProvinceName)
-        assertEquals(true, ci0.isTrustAnchor)
+        assertEquals(ci0.certificate.serialNumber.toUnsignedByteString(), ci0.serialNumber)
+        assertEquals(ci0.certificate.encodedIssuer, ci0.issuer)
+        assertEquals(ci0.certificate.encodedSubject, ci0.subject)
+        assertEquals(ci0.certificate.validityNotBefore, ci0.notBefore)
+        assertEquals(ci0.certificate.validityNotAfter, ci0.notAfter)
 
         // Inspect cert 11 (verifier.multipaz.org) which has negative bignum (Tag 3) serial number
         val ci11 = r.certificateInfos[11]
@@ -156,7 +160,11 @@ WgP97pb4HjvveikPDRECIDkQB2rDBcFJJb4Qv9ALFvXYAH4zm4mcjYMP0RkUCzCB
         )
         assertEquals("verifier.multipaz.org Reader Root", ci11.name)
         assertEquals("US", ci11.issuingCountry)
-        assertEquals(true, ci11.isTrustAnchor)
+        assertEquals(ci11.certificate.serialNumber.toUnsignedByteString(), ci11.serialNumber)
+        assertEquals(ci11.certificate.encodedIssuer, ci11.issuer)
+        assertEquals(ci11.certificate.encodedSubject, ci11.subject)
+        assertEquals(ci11.certificate.validityNotBefore, ci11.notBefore)
+        assertEquals(ci11.certificate.validityNotAfter, ci11.notAfter)
     }
 
 }

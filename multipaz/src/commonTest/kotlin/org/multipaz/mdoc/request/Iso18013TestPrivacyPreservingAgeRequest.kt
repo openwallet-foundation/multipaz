@@ -76,7 +76,16 @@ class Iso18013TestPrivacyPreservingAgeRequest {
 
         private fun ageMdlQuery(): DeviceRequest {
             return buildDeviceRequest(
-                sessionTranscript = buildCborArray { add("doesn't"); add("matter") }
+                sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = DeviceRequestInfo.fromValues(
+                    useCases = listOf(
+                        UseCase(
+                            mandatory = true,
+                            documentSets = listOf(DocumentSet(listOf(0))),
+                            purposeHints = emptyMap()
+                        )
+                    )
+                )
             ) {
                 addDocRequest(
                     docType = DrivingLicense.MDL_DOCTYPE,
@@ -172,6 +181,16 @@ class Iso18013TestPrivacyPreservingAgeRequest {
                         [
                           "claim0",
                           "claim3"
+                        ]
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
                         ]
                       ]
                     }
@@ -308,7 +327,7 @@ class Iso18013TestPrivacyPreservingAgeRequest {
             )
         }
         assertEquals(
-            "No matching credentials for first DocRequest: missing data element 'age_over_18' in namespace 'org.iso.18013.5.1'",
+            "No credentials match required UseCase: missing data element 'age_over_18' in namespace 'org.iso.18013.5.1'",
             e.message
         )
     }

@@ -7,15 +7,22 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.buildX509Cert
+import org.multipaz.asn1.ASN1Integer
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.fromHex
+import org.multipaz.util.toHex
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.test.BeforeTest
 
 import kotlin.test.Test
@@ -493,5 +500,106 @@ class CoseTests {
         val y = "7d57d8983e1b37d3a539f4d588365e38cbbf5b94d68c547b5bc8731dcd2f146b".fromHex()
         val publicKey = EcPublicKeyDoubleCoordinate(EcCurve.P256, x, y)
         assertEquals(publicKey, cert.ecPublicKey)
+    }
+
+    @Test
+    fun coseSign1X5tProtectedHeaderWireFormatAndDeterministicOrder() = runTest {
+        val now = Clock.System.now()
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Test Root CA"),
+            issuer = X500Name.fromName("CN=Test Root CA"),
+            validFrom = now,
+            validUntil = now + 1.days,
+        ) {
+            setBasicConstraints(ca = true, pathLenConstraint = null)
+        }
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Test Leaf Signer"),
+            issuer = X500Name.fromName("CN=Test Root CA"),
+            validFrom = now,
+            validUntil = now + 1.days,
+        ) {}
+        val certChain = X509CertChain(listOf(leafCert, rootCert))
+        val signingKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = certChain,
+            privateKey = leafKey,
+            algorithm = Algorithm.ES256,
+        )
+
+        val leafSha256Hex = Crypto.digest(Algorithm.SHA256, leafCert.encoded.toByteArray()).toHex()
+        // Expected protected header map CBOR (41 bytes = 0x29):
+        //   a2                   # map(2)
+        //      01                # unsigned(1) = alg
+        //      26                # negative(6) = -7 (ES256)
+        //      18 22             # unsigned(34) = x5t (RFC 9360 Section 2)
+        //      82                # array(2) = COSE_CertHash
+        //         2f             # negative(15) = -16 (SHA-256, RFC 9054 Section 2.1)
+        //         58 20 <32B>    # bstr(32)
+        val expectedProtectedMapHex = "a201261822822f5820$leafSha256Hex"
+        // COSE_Sign1 starts with array(4) = 0x84 followed by bstr(41) = 0x58 0x29 <protectedMap>
+        val expectedCoseSign1PrefixHex = "845829$expectedProtectedMapHex"
+
+        val payload = "COSE_Sign1 x5t test payload".encodeToByteArray()
+
+        // 1. Explicit {1: -7, 34: x5t} in canonical order
+        val sigExplicit = Cose.coseSign1Sign(
+            signingKey = signingKey,
+            message = payload,
+            includeMessageInPayload = true,
+            protectedHeaders = mapOf(
+                Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem(),
+                Cose.COSE_LABEL_X5T.toCoseLabel to certChain.toCoseX5t(),
+            ),
+            unprotectedHeaders = mapOf(
+                Cose.COSE_LABEL_X5CHAIN.toCoseLabel to certChain.toCoseX5Chain(excludeRoot = true),
+            ),
+        )
+        val encodedExplicit = Cbor.encode(sigExplicit.toDataItem())
+        assertTrue(encodedExplicit.toHex().startsWith(expectedCoseSign1PrefixHex))
+        val decodedExplicit = Cbor.decode(encodedExplicit).asCoseSign1
+        leafCert.verifyCoseX5t(decodedExplicit.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel]!!)
+        Cose.coseSign1Check(leafCert.publicKey, null, decodedExplicit, Algorithm.ES256)
+
+        // 2. Caller omits COSE_LABEL_ALG (1) and only passes COSE_LABEL_X5T (34):
+        //    coseSign1Sign() must still sort 1 (0x01) before 34 (0x18 0x22) per RFC 9052 Section 9
+        val sigAutoAlg = Cose.coseSign1Sign(
+            signingKey = signingKey,
+            message = payload,
+            includeMessageInPayload = true,
+            protectedHeaders = mapOf(
+                Cose.COSE_LABEL_X5T.toCoseLabel to certChain.toCoseX5t(),
+            ),
+            unprotectedHeaders = mapOf(
+                Cose.COSE_LABEL_X5CHAIN.toCoseLabel to certChain.toCoseX5Chain(excludeRoot = true),
+            ),
+        )
+        val encodedAutoAlg = Cbor.encode(sigAutoAlg.toDataItem())
+        assertTrue(encodedAutoAlg.toHex().startsWith(expectedCoseSign1PrefixHex))
+        val decodedAutoAlg = Cbor.decode(encodedAutoAlg).asCoseSign1
+        Cose.coseSign1Check(leafCert.publicKey, null, decodedAutoAlg, Algorithm.ES256)
+
+        // 3. Caller passes {34: x5t, 1: -7} in reverse insertion order:
+        //    coseSign1Sign() must sort keys deterministically into {1: -7, 34: x5t}
+        val sigReversed = Cose.coseSign1Sign(
+            signingKey = signingKey,
+            message = payload,
+            includeMessageInPayload = false,
+            protectedHeaders = linkedMapOf(
+                Cose.COSE_LABEL_X5T.toCoseLabel to certChain.toCoseX5t(),
+                Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem(),
+            ),
+        )
+        val encodedReversed = Cbor.encode(sigReversed.toDataItem())
+        assertTrue(encodedReversed.toHex().startsWith(expectedCoseSign1PrefixHex))
+        val decodedReversed = Cbor.decode(encodedReversed).asCoseSign1
+        Cose.coseSign1Check(leafCert.publicKey, payload, decodedReversed, Algorithm.ES256)
     }
 }

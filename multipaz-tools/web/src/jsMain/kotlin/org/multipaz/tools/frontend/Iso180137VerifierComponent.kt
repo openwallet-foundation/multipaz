@@ -464,19 +464,46 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                 }
 
                 // DeviceRequestInfo
+                val needsSecondEdition = forcedVersion == "1.1" ||
+                    useReaderAuthAll ||
+                    docRequests.any { it.docRequestInfoEnabled }
                 val devReqInfo = if (deviceRequestInfoEnabled) {
-                    val ucList = useCases.map { uc ->
-                        val docSets = uc.documentSets.map { ds ->
-                            DocumentSet(ds.docRequestIds)
+                    val ucList = if (useCases.isNotEmpty()) {
+                        useCases.map { uc ->
+                            val docSets = uc.documentSets.map { ds ->
+                                DocumentSet(ds.docRequestIds)
+                            }
+                            val hints = uc.purposeHints.associate { p -> p.namespace to p.code }
+                            UseCase(
+                                mandatory = uc.mandatory,
+                                documentSets = docSets,
+                                purposeHints = hints
+                            )
                         }
-                        val hints = uc.purposeHints.associate { p -> p.namespace to p.code }
-                        UseCase(
-                            mandatory = uc.mandatory,
-                            documentSets = docSets,
-                            purposeHints = hints
+                    } else {
+                        listOf(
+                            UseCase(
+                                mandatory = true,
+                                documentSets = listOf(
+                                    DocumentSet(docRequests.indices.toList().ifEmpty { listOf(0) })
+                                ),
+                                purposeHints = emptyMap()
+                            )
                         )
                     }
                     DeviceRequestInfo.fromValues(useCases = ucList)
+                } else if (forcedVersion != "1.0" && needsSecondEdition) {
+                    DeviceRequestInfo.fromValues(
+                        useCases = listOf(
+                            UseCase(
+                                mandatory = true,
+                                documentSets = listOf(
+                                    DocumentSet(docRequests.indices.toList().ifEmpty { listOf(0) })
+                                ),
+                                purposeHints = emptyMap()
+                            )
+                        )
+                    )
                 } else null
 
                 val versionToUse = when (forcedVersion) {

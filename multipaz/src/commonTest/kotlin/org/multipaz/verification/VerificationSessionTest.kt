@@ -33,6 +33,9 @@ import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DeviceRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.OtherDocument
@@ -805,7 +808,18 @@ class VerificationSessionTest {
                 )
             )
         }
-        val signedDeviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val signedDeviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf("_" to mapOf("given_name" to false)),

@@ -370,6 +370,7 @@ fun IsoMdocProximityReadingScreen(
                                 signRequest = app.settingsModel.signRequest.value,
                                 issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                 uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
+                                forceVersion10 = app.settingsModel.readerForceVersion10.value,
                             )
                             if (readerMostRecentDeviceResponse.value != null) {
                                 val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
@@ -504,6 +505,7 @@ fun IsoMdocProximityReadingScreen(
                                         requestSdJwtVc = requestSelected.value.requestSdJwtVc,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                         uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
+                                        forceVersion10 = app.settingsModel.readerForceVersion10.value,
                                     )
                                     readerSession.value = session
                                     readerMostRecentDeviceResponse.value = byteArrayOf()
@@ -777,6 +779,7 @@ fun IsoMdocProximityReadingScreen(
                                         signRequest = app.settingsModel.signRequest.value,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                         uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
+                                        forceVersion10 = app.settingsModel.readerForceVersion10.value,
                                         alreadyOpened = true,
                                         sendSessionEstablishment = false,
                                     )
@@ -955,6 +958,7 @@ fun IsoMdocProximityReadingScreen(
                                         signRequest = app.settingsModel.signRequest.value,
                                         issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                         uniqueDocSetRequired = app.settingsModel.readerUniqueDocSetRequired.value,
+                                        forceVersion10 = app.settingsModel.readerForceVersion10.value,
                                     )
                                     if (readerMostRecentDeviceResponse.value != null) {
                                         scanResult
@@ -1093,6 +1097,22 @@ fun IsoMdocProximityReadingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
+                            checked = app.settingsModel.readerForceVersion10.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerForceVersion10.value = value
+                            },
+                        )
+                        Text(
+                            text = "Force version 1.0 for DeviceRequest",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
                             checked = app.settingsModel.observeModeEmitPollingFramesAsReader.collectAsState().value,
                             onCheckedChange = { value ->
                                 app.settingsModel.observeModeEmitPollingFramesAsReader.value = value
@@ -1150,6 +1170,7 @@ private suspend fun doReaderFlow(
     signRequest: Boolean,
     issuerIdentifiers: List<ByteString> = emptyList(),
     uniqueDocSetRequired: Boolean = true,
+    forceVersion10: Boolean = false,
 ) {
     Logger.dCbor(TAG, "DeviceEngagement", encodedDeviceEngagement.toByteArray())
     val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement.toByteArray()))
@@ -1218,6 +1239,7 @@ private suspend fun doReaderFlow(
                         signRequest = signRequest,
                         issuerIdentifiers = issuerIdentifiers,
                         uniqueDocSetRequired = uniqueDocSetRequired,
+                        forceVersion10 = forceVersion10,
                     )
                 }
             )
@@ -1247,6 +1269,7 @@ private suspend fun doReaderFlow(
         signRequest = signRequest,
         issuerIdentifiers = issuerIdentifiers,
         uniqueDocSetRequired = uniqueDocSetRequired,
+        forceVersion10 = forceVersion10,
     )
 }
 
@@ -1272,6 +1295,7 @@ private suspend fun doReaderFlowWithTransport(
     signRequest: Boolean,
     issuerIdentifiers: List<ByteString> = emptyList(),
     uniqueDocSetRequired: Boolean = true,
+    forceVersion10: Boolean = false,
     alreadyOpened: Boolean = false,
     sendSessionEstablishment: Boolean = true,
 ) {
@@ -1285,6 +1309,7 @@ private suspend fun doReaderFlowWithTransport(
         requestSdJwtVc = selectedRequest.value.requestSdJwtVc,
         issuerIdentifiers = issuerIdentifiers,
         uniqueDocSetRequired = uniqueDocSetRequired,
+        forceVersion10 = forceVersion10,
     )
     val proximityRequest = session.find<VerificationSession.Iso18013ProximityRequest>()
     val deviceRequest = Cbor.encode(proximityRequest.deviceRequest)

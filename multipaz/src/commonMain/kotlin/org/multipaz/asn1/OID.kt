@@ -150,11 +150,20 @@ enum class OID(
     /** Mobile Driving Licence (mDL) Reader Auth. */
     ISO_18013_5_MDL_READER_AUTH("1.0.18013.5.1.6", "Mobile Driving Licence (mDL) Reader Auth"),
 
+    /** Mobile Driving Licence (mDL) VICAL. */
+    ISO_18013_5_MDL_VICAL("1.0.18013.5.1.8", "Mobile Driving Licence (mDL) VICAL"),
+
     /** mDoc Document Signer (DS). */
     ISO_23220_4_MDOC_DS("1.0.23220.4.1.2", "mDoc Document Signer (DS)"),
 
     /** mDoc Reader Auth. */
     ISO_23220_4_MDOC_READER_AUTH("1.0.23220.4.1.6", "mDoc Reader Auth"),
+
+    /** mDoc VICAL. */
+    ISO_23220_4_MDOC_VICAL("1.0.23220.4.1.8", "mDoc VICAL"),
+
+    /** mDoc RICAL. */
+    ISO_23220_4_MDOC_RICAL("1.0.23220.4.1.10", "mDoc RICAL"),
 
     /** PKCS #7 Data content type. */
     PKCS7_DATA("1.2.840.113549.1.7.1", "PKCS #7 Data"),

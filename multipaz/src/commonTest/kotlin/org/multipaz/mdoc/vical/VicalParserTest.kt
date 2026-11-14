@@ -1059,5 +1059,12 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
             ci.docTypes.joinToString()
         )
         assertNull(ci.certificateProfiles)
+        assertEquals(ci.certificate.serialNumber.toUnsignedByteString(), ci.serialNumber)
+        assertEquals("US", ci.issuingCountry)
+        assertEquals("US-MD", ci.stateOrProvinceName)
+        assertEquals(ci.certificate.encodedIssuer, ci.issuer)
+        assertEquals(ci.certificate.encodedSubject, ci.subject)
+        assertEquals(ci.certificate.validityNotBefore, ci.notBefore)
+        assertEquals(ci.certificate.validityNotAfter, ci.notAfter)
     }
 }

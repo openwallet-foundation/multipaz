@@ -29,6 +29,7 @@ import org.multipaz.cbor.putCborMap
  * @property docFormat optional document format.
  * @property dataElementIdentifierMapping optional data element identifier mapping.
  * @property transactionData optional information about requested transaction data.
+ * @property nonKeyBoundSupported optional indication that a non key-bound credential may satisfy the request.
  * @property otherInfo other request info.
  */
 data class DocRequestInfo(
@@ -41,6 +42,7 @@ data class DocRequestInfo(
     val docFormat: String? = null,
     val dataElementIdentifierMapping: Map<String, JsonArray> = emptyMap(),
     val transactionData: TransactionsInfo? = null,
+    val nonKeyBoundSupported: Boolean? = null,
     val otherInfo: Map<String, DataItem> = emptyMap(),
 ) {
     internal fun toDataItem() = buildCborMap {
@@ -106,6 +108,9 @@ data class DocRequestInfo(
                 }
             }
         }
+        nonKeyBoundSupported?.let {
+            put("nonKeyBoundSupported", it)
+        }
         otherInfo.forEach { (key, value) ->
             put(key, value)
         }
@@ -121,11 +126,15 @@ data class DocRequestInfo(
                 docResponseEncryption != null ||
                 docFormat != null ||
                 dataElementIdentifierMapping.isNotEmpty() ||
-                transactionData != null
+                transactionData != null ||
+                nonKeyBoundSupported != null
     }
 
     companion object {
         internal fun fromDataItem(dataItem: DataItem): DocRequestInfo {
+            require(dataItem.asMap.isNotEmpty()) {
+                "DocRequestInfo must contain at least one key-value pair"
+            }
             val alternativeDataElements = dataItem.getOrNull("alternativeDataElements")?.asArray?.map {
                 AlternativeDataElementSet.fromDataItem(it)
             } ?: emptyList()
@@ -158,6 +167,7 @@ data class DocRequestInfo(
                     data = it.asMap.entries.associate { (k, v) -> Pair(k.asTstr, v) }
                 )
             }
+            val nonKeyBoundSupported = dataItem.getOrNull("nonKeyBoundSupported")?.asBoolean
             val otherInfo = mutableMapOf<String, DataItem>()
             for ((otherKeyDataItem, otherValue) in dataItem.asMap) {
                 when (val otherKey = otherKeyDataItem.asTstr) {
@@ -170,6 +180,7 @@ data class DocRequestInfo(
                     "docFormat",
                     "dataElementIdentifierMapping",
                     "transactionData",
+                    "nonKeyBoundSupported",
                     "transactions" -> continue
                     else -> otherInfo[otherKey] = otherValue
                 }
@@ -184,6 +195,7 @@ data class DocRequestInfo(
                 docFormat = docFormat,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
                 transactionData = transactionData,
+                nonKeyBoundSupported = nonKeyBoundSupported,
                 otherInfo = otherInfo
             )
         }

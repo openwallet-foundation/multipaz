@@ -988,7 +988,16 @@ class DeviceRequestDcqlConversionsTest {
     @Test
     fun toDcql_omitsTransactionDataNamespace() {
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = buildCborArray { add("doesn't"); add("matter") }
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -1036,6 +1045,16 @@ class DeviceRequestDcqlConversionsTest {
                           ],
                           "intent_to_retain": false
                         }
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
+                        ]
                       ]
                     }
                   ]

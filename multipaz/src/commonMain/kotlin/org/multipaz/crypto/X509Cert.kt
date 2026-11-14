@@ -14,7 +14,12 @@ import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.ASN1Time
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborInt
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.util.Logger
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
@@ -63,10 +68,22 @@ data class X509Cert(
         get() = parseName(tbsCert.elements[5] as ASN1Sequence)
 
     /**
+     * The DER-encoded X.500 `Name` of the subject of the certificate.
+     */
+    val encodedSubject: ByteString
+        get() = ByteString(ASN1.encode(tbsCert.elements[5]))
+
+    /**
      * The issuer of the certificate.
      */
     val issuer: X500Name
         get() = parseName(tbsCert.elements[3] as ASN1Sequence)
+
+    /**
+     * The DER-encoded X.500 `Name` of the issuer of the certificate.
+     */
+    val encodedIssuer: ByteString
+        get() = ByteString(ASN1.encode(tbsCert.elements[3]))
 
     /**
      * The point in time where the certificate is valid from.
@@ -227,10 +244,54 @@ data class X509Cert(
             // BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
             // In DER, a component with a DEFAULT value is omitted when equal to its default, so CA:FALSE
             // without pathLenConstraint is encoded as an empty SEQUENCE.
-            val ca = (seq.elements.firstOrNull() as? ASN1Boolean)?.value ?: false
+        val ca = (seq.elements.firstOrNull() as? ASN1Boolean)?.value ?: false
             val pathLen = seq.elements.filterIsInstance<ASN1Integer>().firstOrNull()?.toLong()
             return Pair(ca, pathLen)
         }
+
+    /**
+     * Encodes the SHA-256 certificate hash as a CBOR `COSE_CertHash` structure for use in the
+     * COSE `x5t` header parameter (label 34) according to RFC 9360 Section 2 and ISO/IEC 18013-5
+     * Second Edition Clauses 12.3.4 and 12.5.4.
+     *
+     * @return a [DataItem] encoding `[ -16, sha256(encoded) ]`.
+     */
+    suspend fun toCoseX5t(): DataItem = buildCborArray {
+        add(Algorithm.SHA256.coseAlgorithmIdentifier!!)
+        add(Crypto.digest(Algorithm.SHA256, encoded.toByteArray()))
+    }
+
+    /**
+     * Verifies a CBOR `COSE_CertHash` structure from the COSE `x5t` header parameter (label 34)
+     * against this certificate according to RFC 9360 Section 2 and ISO/IEC 18013-5 Second Edition
+     * Clauses 12.3.4 and 12.5.4 (which mandate SHA-256).
+     *
+     * @param x5tDataItem the [DataItem] from the `x5t` header parameter.
+     * @throws IllegalArgumentException if [x5tDataItem] is malformed, does not use SHA-256, or
+     *   does not match this certificate's SHA-256 digest.
+     */
+    suspend fun verifyCoseX5t(x5tDataItem: DataItem) {
+        val items = (x5tDataItem as? CborArray)?.items
+            ?: throw IllegalArgumentException("COSE x5t must be a CBOR array")
+        if (items.size != 2) {
+            throw IllegalArgumentException("COSE x5t array must have 2 elements, got ${items.size}")
+        }
+        val hashAlgItem = items[0]
+        val isSha256 = when (hashAlgItem) {
+            is CborInt -> hashAlgItem.asNumber == Algorithm.SHA256.coseAlgorithmIdentifier!!.toLong()
+            is Tstr -> hashAlgItem.asTstr == Algorithm.SHA256.hashAlgorithmName
+            else -> false
+        }
+        if (!isSha256) {
+            throw IllegalArgumentException("COSE x5t must use SHA-256 algorithm, got $hashAlgItem")
+        }
+        val hashValue = (items[1] as? Bstr)?.value
+            ?: throw IllegalArgumentException("COSE x5t hashValue must be a byte string")
+        val expectedHash = Crypto.digest(Algorithm.SHA256, encoded.toByteArray())
+        if (!hashValue.contentEquals(expectedHash)) {
+            throw IllegalArgumentException("COSE x5t hashValue does not match certificate")
+        }
+    }
 
     companion object {
         private const val NAME = "CERTIFICATE"

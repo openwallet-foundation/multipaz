@@ -178,10 +178,17 @@ data class DocRequest internal constructor(
 
 internal fun CoseSign1.isReaderAuthStructurallyEquivalent(other: CoseSign1): Boolean {
     val x5chainLabel = Cose.COSE_LABEL_X5CHAIN.toCoseLabel
-    if (protectedHeaders.minus(x5chainLabel) != other.protectedHeaders.minus(x5chainLabel)) return false
-    if (unprotectedHeaders.minus(x5chainLabel) != other.unprotectedHeaders.minus(x5chainLabel)) return false
+    val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+    if (protectedHeaders.minus(x5chainLabel).minus(x5tLabel) !=
+        other.protectedHeaders.minus(x5chainLabel).minus(x5tLabel)
+    ) return false
+    if (unprotectedHeaders.minus(x5chainLabel).minus(x5tLabel) !=
+        other.unprotectedHeaders.minus(x5chainLabel).minus(x5tLabel)
+    ) return false
     if ((x5chainLabel in protectedHeaders) != (x5chainLabel in other.protectedHeaders)) return false
     if ((x5chainLabel in unprotectedHeaders) != (x5chainLabel in other.unprotectedHeaders)) return false
+    if ((x5tLabel in protectedHeaders) != (x5tLabel in other.protectedHeaders)) return false
+    if ((x5tLabel in unprotectedHeaders) != (x5tLabel in other.unprotectedHeaders)) return false
 
     val certChain1 = (protectedHeaders[x5chainLabel] ?: unprotectedHeaders[x5chainLabel])?.asX509CertChain
     val certChain2 = (other.protectedHeaders[x5chainLabel] ?: other.unprotectedHeaders[x5chainLabel])?.asX509CertChain

@@ -24,8 +24,11 @@ import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.mdoc.request.AlternativeDataElementSet
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.ElementReference
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
@@ -43,6 +46,16 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MdocFaceMatchingTest {
+
+    private val singleDocRequestInfo = DeviceRequestInfo.fromValues(
+        useCases = listOf(
+            UseCase(
+                mandatory = true,
+                documentSets = listOf(DocumentSet(listOf(0))),
+                purposeHints = emptyMap()
+            )
+        )
+    )
 
     private class TestFaceMatcherSession(referencePortrait: ByteString) : FaceMatcherSession(referencePortrait) {
         override suspend fun feedFrame(frame: CameraFrame) {}
@@ -539,7 +552,8 @@ class MdocFaceMatchingTest {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            version = "1.1"
+            version = "1.1",
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -606,7 +620,8 @@ class MdocFaceMatchingTest {
         )
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            version = "1.1"
+            version = "1.1",
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -702,7 +717,8 @@ class MdocFaceMatchingTest {
         )
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            version = "1.1"
+            version = "1.1",
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -794,7 +810,8 @@ class MdocFaceMatchingTest {
         )
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            version = "1.1"
+            version = "1.1",
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -885,7 +902,8 @@ class MdocFaceMatchingTest {
         )
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            version = "1.1"
+            version = "1.1",
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,

@@ -150,4 +150,91 @@ class VicalGeneratorTest {
         assertEquals(null, decodedSignedVical.vical.certificateInfos[2].certificateProfiles)
         assertTrue(decodedSignedVical.vical.certificateInfos[2].extensions.isEmpty())
     }
+
+    @Test
+    fun testVicalOptionalFieldsDefaultsAndOmission() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = X509Cert.Builder(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(10),
+            subject = X500Name.fromName("C=US,CN=VICAL Root CA"),
+            issuer = X500Name.fromName("C=US,CN=VICAL Root CA"),
+            validFrom = now - 10.minutes,
+            validUntil = now + 10.minutes,
+        ).includeSubjectKeyIdentifier().setBasicConstraints(ca = true, pathLenConstraint = null).build()
+
+        val signerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val signerCert = X509Cert.Builder(
+            publicKey = signerKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(11),
+            subject = X500Name.fromName("C=US,CN=VICAL Signer"),
+            issuer = rootCert.subject,
+            validFrom = now - 10.minutes,
+            validUntil = now + 10.minutes,
+        ).includeSubjectKeyIdentifier().setAuthorityKeyIdentifierToCertificate(rootCert).build()
+
+        val caCert = createSelfsignedCert(
+            Crypto.createEcPrivateKey(EcCurve.P256),
+            X500Name.fromName("C=US,ST=US-CA,CN=California IACA")
+        )
+
+        // Entry 0 uses Option B constructor defaults; Entry 1 explicitly passes null for optional fields
+        val signedVical = SignedVical(
+            vical = Vical(
+                version = "1.0",
+                vicalProvider = "Provider",
+                date = now,
+                nextUpdate = null,
+                notAfter = null,
+                vicalIssueID = 1L,
+                certificateInfos = listOf(
+                    VicalCertificateInfo(
+                        certificate = caCert,
+                        docTypes = listOf("org.iso.18013.5.1.mDL"),
+                    ),
+                    VicalCertificateInfo(
+                        certificate = caCert,
+                        docTypes = listOf("org.iso.18013.5.1.mDL"),
+                        issuingCountry = null,
+                        stateOrProvinceName = null,
+                        issuer = null,
+                        subject = null,
+                        notBefore = null,
+                        notAfter = null,
+                    )
+                ),
+                vicalUrl = null,
+                extensions = emptyMap(),
+            ),
+            vicalProviderCertificateChain = X509CertChain(listOf(signerCert, rootCert))
+        )
+        val encoded = signedVical.generate(
+            signingKey = AsymmetricKey.anonymous(signerKey, signerKey.curve.defaultSigningAlgorithm)
+        )
+        val parsed = SignedVical.parse(encoded)
+
+        assertEquals(listOf(signerCert, rootCert), parsed.vicalProviderCertificateChain.certificates)
+
+        val info0 = parsed.vical.certificateInfos[0]
+        assertEquals(caCert.serialNumber.toUnsignedByteString(), info0.serialNumber)
+        assertEquals("US", info0.issuingCountry)
+        assertEquals("US-CA", info0.stateOrProvinceName)
+        assertEquals(caCert.encodedIssuer, info0.issuer)
+        assertEquals(caCert.encodedSubject, info0.subject)
+        assertEquals(caCert.validityNotBefore, info0.notBefore)
+        assertEquals(caCert.validityNotAfter, info0.notAfter)
+
+        // Omitted optional CBOR fields parse strictly as null (Option B)
+        val info1 = parsed.vical.certificateInfos[1]
+        assertEquals(caCert.serialNumber.toUnsignedByteString(), info1.serialNumber)
+        assertEquals(null, info1.issuingCountry)
+        assertEquals(null, info1.stateOrProvinceName)
+        assertEquals(null, info1.issuer)
+        assertEquals(null, info1.subject)
+        assertEquals(null, info1.notBefore)
+        assertEquals(null, info1.notAfter)
+    }
 }

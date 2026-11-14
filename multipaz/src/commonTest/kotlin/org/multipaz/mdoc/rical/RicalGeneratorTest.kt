@@ -150,4 +150,102 @@ class RicalGeneratorTest {
         assertTrue(decodedSignedRical.rical.certificateInfos[2].trustConstraints.isEmpty())
         assertEquals(lastCertExt, decodedSignedRical.rical.certificateInfos[2].extensions)
     }
+
+    @Test
+    fun testRicalSecondEditionFieldsDefaultsOmissionAndRootExclusion() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = X509Cert.Builder(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(20),
+            subject = X500Name.fromName("C=US,CN=RICAL Root CA"),
+            issuer = X500Name.fromName("C=US,CN=RICAL Root CA"),
+            validFrom = now - 10.minutes,
+            validUntil = now + 10.minutes,
+        ).includeSubjectKeyIdentifier().setBasicConstraints(ca = true, pathLenConstraint = null).build()
+
+        val signerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val signerCert = X509Cert.Builder(
+            publicKey = signerKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(21),
+            subject = X500Name.fromName("C=US,CN=RICAL Signer"),
+            issuer = rootCert.subject,
+            validFrom = now - 10.minutes,
+            validUntil = now + 10.minutes,
+        ).includeSubjectKeyIdentifier().setAuthorityKeyIdentifierToCertificate(rootCert).build()
+
+        val rpCert = createSelfsignedCert(
+            Crypto.createEcPrivateKey(EcCurve.P256),
+            X500Name.fromName("C=US,ST=US-NY,CN=NY Reader CA")
+        )
+        val constraintWithOtherInfo = RicalTrustConstraint(
+            extensions = emptyMap(),
+            otherInfo = mapOf("futureConstraint" to "allowed".toDataItem())
+        )
+
+        val signedRical = SignedRical(
+            rical = Rical(
+                type = Rical.RICAL_TYPE_READER_AUTHENTICATION,
+                version = "1.0",
+                provider = "Test RICAL Provider",
+                date = now,
+                nextUpdate = null,
+                notAfter = null,
+                certificateInfos = listOf(
+                    RicalCertificateInfo(
+                        certificate = rpCert,
+                        trustConstraints = listOf(constraintWithOtherInfo),
+                    ),
+                    RicalCertificateInfo(
+                        certificate = rpCert,
+                        issuingCountry = null,
+                        stateOrProvinceName = null,
+                        issuer = null,
+                        subject = null,
+                        notBefore = null,
+                        notAfter = null,
+                    )
+                ),
+                id = 7L,
+                latestRicalUrl = "https://example.com/rical",
+                extensions = emptyMap()
+            ),
+            ricalProviderCertificateChain = X509CertChain(listOf(signerCert, rootCert))
+        )
+
+        val encoded = signedRical.generate(
+            signingKey = AsymmetricKey.anonymous(signerKey, signerKey.curve.defaultSigningAlgorithm)
+        )
+        // Verify wire CBOR omits "isTrustAnchor" and omits empty "extensions"
+        val coseSign1 = CoseSign1.fromDataItem(Cbor.decode(encoded))
+        val payloadMap = Cbor.decode(coseSign1.payload!!)
+        assertTrue(!payloadMap.hasKey("extensions"))
+        val certInfo0Map = payloadMap["certificateInfos"].asArray[0]
+        assertTrue(!certInfo0Map.hasKey("isTrustAnchor"))
+        assertTrue(!certInfo0Map.hasKey("extensions"))
+        assertTrue(!certInfo0Map["trustConstraints"].asArray[0].hasKey("extensions"))
+
+        val parsed = SignedRical.parse(encoded)
+        assertEquals(listOf(signerCert), parsed.ricalProviderCertificateChain.certificates)
+        assertEquals("https://example.com/rical", parsed.rical.latestRicalUrl)
+
+        val info0 = parsed.rical.certificateInfos[0]
+        assertEquals("US", info0.issuingCountry)
+        assertEquals("US-NY", info0.stateOrProvinceName)
+        assertEquals(rpCert.encodedIssuer, info0.issuer)
+        assertEquals(rpCert.encodedSubject, info0.subject)
+        assertEquals(rpCert.validityNotBefore, info0.notBefore)
+        assertEquals(rpCert.validityNotAfter, info0.notAfter)
+        assertEquals(listOf(constraintWithOtherInfo), info0.trustConstraints)
+
+        val info1 = parsed.rical.certificateInfos[1]
+        assertEquals(null, info1.issuingCountry)
+        assertEquals(null, info1.stateOrProvinceName)
+        assertEquals(null, info1.issuer)
+        assertEquals(null, info1.subject)
+        assertEquals(null, info1.notBefore)
+        assertEquals(null, info1.notAfter)
+    }
 }

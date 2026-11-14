@@ -17,6 +17,12 @@ data class UseCase(
     val documentSets: List<DocumentSet>,
     val purposeHints: Map<String, Int>
 ) {
+    init {
+        require(documentSets.isNotEmpty()) {
+            "UseCase documentSets must not be empty"
+        }
+    }
+
     internal fun toDataItem() = buildCborMap {
         put("mandatory", mandatory)
         putCborArray("documentSets") {

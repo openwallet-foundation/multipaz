@@ -40,13 +40,13 @@ class IdentifierListTest {
         val expectedCdn = """
             18([ # COSE_Sign1
               /protected/ << {
+                /alg/ 1: -9, # ESP256: ECDSA using P-256 curve and SHA-256
                 16: "application/identifierlist+cwt",
                 /x5chain/ 33:
                 # Subject DN: C=US,CN=DS test key
                 # Issuer DN: C=US,CN=IACA test key
                 cert'''${"\n" + dsCert.toPem().trimEnd().prependIndent("                  ")}
-                ''',
-                /alg/ 1: -9 # ESP256: ECDSA using P-256 curve and SHA-256
+                '''
               } >>,
               /unprotected/ {},
               /payload/ << {
