@@ -569,6 +569,13 @@ val MdocViewerComponent = FC {
                                     span { css { color = Color("#cbd5e1") } }
                                     +doc.mso.validUntil.toString()
                                 }
+                                doc.docRequestIds?.let { reqIds ->
+                                    div {
+                                        +"docRequestIds: "
+                                        span { css { color = Color("#cbd5e1"); fontFamily = FontFamily.monospace } }
+                                        +reqIds.joinToString(", ", "[", "]")
+                                    }
+                                }
                             }
 
                             // Namespaces
@@ -709,6 +716,14 @@ val MdocViewerComponent = FC {
                                 span { css { color = Color("#4ade80"); fontWeight = FontWeight.bold }; +oDoc.docFormat }
                             }
 
+                            oDoc.docRequestIds?.let { reqIds ->
+                                div {
+                                    css { marginBottom = 12.px; fontSize = 13.px; color = Color("#cbd5e1") }
+                                    +"docRequestIds: "
+                                    span { css { color = Color("#f1f5f9"); fontFamily = FontFamily.monospace }; +reqIds.joinToString(", ", "[", "]") }
+                                }
+                            }
+
                             label {
                                 css { display = Display.block; fontSize = 12.px; fontWeight = FontWeight.bold; color = Color("#94a3b8"); marginBottom = 6.px }
                                 +"Decompressed Payload Data:"
@@ -775,6 +790,14 @@ val MdocViewerComponent = FC {
                                 span { css { color = Color("#a78bfa"); fontWeight = FontWeight.bold }; +"${zkDoc.proof.size} bytes" }
                             }
 
+                            zkDoc.docRequestIds?.let { reqIds ->
+                                div {
+                                    css { marginBottom = 12.px; fontSize = 13.px; color = Color("#cbd5e1") }
+                                    +"docRequestIds: "
+                                    span { css { color = Color("#f1f5f9"); fontFamily = FontFamily.monospace }; +reqIds.joinToString(", ", "[", "]") }
+                                }
+                            }
+
                             label {
                                 css { display = Display.block; fontSize = 12.px; fontWeight = FontWeight.bold; color = Color("#94a3b8"); marginBottom = 6.px }
                                 +"ZkDocument CBOR CDN View:"
@@ -811,7 +834,7 @@ val MdocViewerComponent = FC {
 
                             h4 {
                                 css { fontSize = 1.2.rem; color = Color("#f59e0b"); marginTop = 0.px; marginBottom = 8.px }
-                                +"EncryptedDocument #${eIdx + 1} (docRequestId: ${encDoc.docRequestId})"
+                                +"EncryptedDocument #${eIdx + 1} (docRequestIds: ${encDoc.docRequestIds.joinToString(", ", "[", "]")})"
                             }
 
                             div {
@@ -830,8 +853,8 @@ val MdocViewerComponent = FC {
                             div {
                                 css { display = Display.flex; flexDirection = FlexDirection.column; gap = 8.px; fontSize = 13.px }
                                 div {
-                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"docRequestId: " }
-                                    span { css { color = Color("#f1f5f9") }; +encDoc.docRequestId.toString() }
+                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"docRequestIds: " }
+                                    span { css { color = Color("#f1f5f9"); fontFamily = FontFamily.monospace }; +encDoc.docRequestIds.joinToString(", ", "[", "]") }
                                 }
                                 div {
                                     span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Encapsulated Key (enc): " }

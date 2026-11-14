@@ -25,9 +25,11 @@ import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Uint
 import org.multipaz.document.DocumentRequest
 import org.multipaz.document.DocumentRequest.DataElement
 import org.multipaz.document.NameSpacedData
@@ -712,5 +714,26 @@ fun String.mdocVersionCompareTo(otherVersion: String): Int {
         return -1
     }
     return 0
+}
+
+internal fun validateDocRequestIds(
+    docRequestIds: List<Int>,
+    fieldName: String = "docRequestIds"
+) {
+    require(docRequestIds.isNotEmpty()) { "'$fieldName' must not be empty" }
+    require(docRequestIds.all { it >= 0 }) { "'$fieldName' must not contain negative values" }
+}
+
+internal fun DataItem.asDocRequestIds(
+    fieldName: String = "docRequestIds"
+): List<Int> {
+    val array = asArray
+    require(array.isNotEmpty()) { "'$fieldName' must not be empty" }
+    return array.map { item ->
+        require(item is Uint && item.value <= Int.MAX_VALUE.toULong()) {
+            "Invalid DocRequestId in '$fieldName': $item"
+        }
+        item.value.toInt()
+    }
 }
 

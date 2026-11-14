@@ -32,4 +32,5 @@ data class MdocVerifiedPresentation(
     override val transactionData: List<TransactionData<*>>,
     override val revocationStatus: RevocationStatus? = null,
     val zkSystemSpecId: String? = null,
+    override val docRequestIds: List<Int>? = null,
 ): VerifiedPresentation()

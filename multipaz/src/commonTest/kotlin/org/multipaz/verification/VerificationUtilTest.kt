@@ -38,7 +38,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
@@ -1077,6 +1080,231 @@ class VerificationUtilTest {
             request = zkRequestTwoClaims,
         )
         assertEquals(1, verified.size)
+    }
+
+    @Test
+    fun verifyMdocDeviceResponse_andDcqlProcessedResponse_respectDocRequestIds() = runTest {
+        val identity = createTestVerifierIdentity()
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val spec = ZkSystemSpec(id = "mock_spec_1", system = "mock_zk")
+        val zkRepo = ZkSystemRepository().add(createMockZkSystem(listOf(spec)))
+        val sessionTranscript = Simple.NULL
+
+        val partialZkDoc = ZkDocument(
+            documentData = ZkDocumentData(
+                zkSystemSpecId = spec.id,
+                docType = "org.iso.18013.5.1.mDL",
+                timestamp = now,
+                issuerSigned = mapOf(
+                    "org.iso.18013.5.1" to mapOf("given_name" to "Erika".toDataItem())
+                ),
+                deviceSigned = emptyMap(),
+                msoX5chain = identity.key.certChain,
+            ),
+            proof = ByteString(1, 2, 3),
+        )
+        val fullZkDoc = partialZkDoc.copy(
+            documentData = partialZkDoc.documentData.copy(
+                issuerSigned = mapOf(
+                    "org.iso.18013.5.1" to mapOf(
+                        "given_name" to "Erika".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem(),
+                    )
+                )
+            )
+        )
+
+        // Request with UseCase allowing [0] OR [1], where 0 asks for given_name and 1 asks for given_name + family_name
+        val eitherOrRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0)), DocumentSet(listOf(1))),
+                        purposeHints = emptyMap(),
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf("org.iso.18013.5.1" to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(zkRequest = ZkRequest(listOf(spec), zkRequired = true))
+            )
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf(
+                    "org.iso.18013.5.1" to mapOf("given_name" to false, "family_name" to false)
+                ),
+                docRequestInfo = DocRequestInfo(zkRequest = ZkRequest(listOf(spec), zkRequired = true))
+            )
+        }
+
+        // Partial disclosure claiming docRequestIds = [1] is rejected even though [0] would have matched
+        val wrongDeclaredIdResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addZkDocument(partialZkDoc.copy(docRequestIds = listOf(1)))
+        }.toDataItem()
+        val wrongIdError = assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifyMdocDeviceResponse(
+                now = now,
+                deviceResponse = wrongDeclaredIdResponse,
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                documentTypeRepository = null,
+                zkSystemRepository = zkRepo,
+                request = eitherOrRequest,
+            )
+        }
+        assertEquals("Presented credential does not satisfy declared DocRequest at index 1", wrongIdError.message)
+
+        // Partial disclosure claiming docRequestIds = [0] succeeds
+        val rightDeclaredIdResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addZkDocument(partialZkDoc.copy(docRequestIds = listOf(0)))
+        }.toDataItem()
+        val verifiedSingle = VerificationUtil.verifyMdocDeviceResponse(
+            now = now,
+            deviceResponse = rightDeclaredIdResponse,
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            documentTypeRepository = null,
+            zkSystemRepository = zkRepo,
+            request = eitherOrRequest,
+        )
+        assertEquals(listOf(0), verifiedSingle.single().docRequestIds)
+
+        // Request requiring BOTH [0, 1] satisfied by a single presentation declaring docRequestIds = [0, 1]
+        val bothRequiredRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0, 1))),
+                        purposeHints = emptyMap(),
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf("org.iso.18013.5.1" to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(zkRequest = ZkRequest(listOf(spec), zkRequired = true))
+            )
+            addDocRequest(
+                docType = "org.iso.18013.5.1.mDL",
+                nameSpaces = mapOf("org.iso.18013.5.1" to mapOf("family_name" to false)),
+                docRequestInfo = DocRequestInfo(zkRequest = ZkRequest(listOf(spec), zkRequired = true))
+            )
+        }
+        val sharedPresentationResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addZkDocument(fullZkDoc.copy(docRequestIds = listOf(0, 1)))
+        }.toDataItem()
+        val verifiedShared = VerificationUtil.verifyMdocDeviceResponse(
+            now = now,
+            deviceResponse = sharedPresentationResponse,
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            documentTypeRepository = null,
+            zkSystemRepository = zkRepo,
+            request = bothRequiredRequest,
+        )
+        assertEquals(listOf(0, 1), verifiedShared.single().docRequestIds)
+
+        // DcqlProcessedResponse maps duplicate docType queries via docRequestIds (both separate and shared [0, 1])
+        val duplicateMdocDcql = """
+            {
+              "credentials": [
+                {
+                  "id": "mdl_first",
+                  "format": "mso_mdoc_zk",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL",
+                    "zk_system_type": [{ "system": "mock_zk", "id": "mock_spec_1" }]
+                  },
+                  "claims": [{ "id": "first_given", "path": ["org.iso.18013.5.1", "given_name"] }]
+                },
+                {
+                  "id": "mdl_second",
+                  "format": "mso_mdoc_zk",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL",
+                    "zk_system_type": [{ "system": "mock_zk", "id": "mock_spec_1" }]
+                  },
+                  "claims": [{ "id": "second_family", "path": ["org.iso.18013.5.1", "family_name"] }]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        // Without docRequestIds, duplicate docType fails
+        val withoutIds = (verifiedShared.single() as MdocVerifiedPresentation).copy(docRequestIds = null)
+        assertFailsWith<IllegalStateException> {
+            DcqlProcessedResponse(duplicateMdocDcql, listOf(withoutIds))
+        }
+
+        // With docRequestIds = [0, 1], single presentation maps to both mdl_first and mdl_second
+        val processedShared = DcqlProcessedResponse(duplicateMdocDcql, verifiedShared)
+        assertEquals(
+            "Erika",
+            (processedShared.credentials["mdl_first"]!!.issuerSignedClaims["first_given"] as MdocClaim).value.asTstr
+        )
+        assertEquals(
+            "Mustermann",
+            (processedShared.credentials["mdl_second"]!!.issuerSignedClaims["second_family"] as MdocClaim).value.asTstr
+        )
+
+        // Duplicate VCT dc+sd-jwt queries with distinct presentations carrying docRequestIds = [0] and [1]
+        val duplicateSdJwtDcql = """
+            {
+              "credentials": [
+                {
+                  "id": "pid_primary",
+                  "format": "dc+sd-jwt",
+                  "meta": { "vct_values": ["urn:eudi:pid:1"] },
+                  "claims": [{ "path": ["given_name"] }]
+                },
+                {
+                  "id": "pid_secondary",
+                  "format": "dc+sd-jwt",
+                  "meta": { "vct_values": ["urn:eudi:pid:1"] },
+                  "claims": [{ "path": ["given_name"] }]
+                }
+              ]
+            }
+        """.trimIndent()
+        fun makePidPresentation(name: String, reqIds: List<Int>?) = JsonVerifiedPresentation(
+            documentSignerCertChain = identity.key.certChain,
+            issuerSignedClaims = listOf(
+                JsonClaim("given_name", null, "urn:eudi:pid:1", JsonArray(listOf(JsonPrimitive("given_name"))), JsonPrimitive(name))
+            ),
+            deviceSignedClaims = emptyList(),
+            zkpUsed = false,
+            validFrom = now,
+            validUntil = now + 365.days,
+            signedAt = now,
+            expectedUpdate = null,
+            vct = "urn:eudi:pid:1",
+            transactionResponses = null,
+            vpTokenIdentifier = null,
+            transactionData = emptyList(),
+            docRequestIds = reqIds,
+        )
+        val processedSdJwt = DcqlProcessedResponse(
+            duplicateSdJwtDcql,
+            listOf(
+                makePidPresentation("Alice", listOf(0)),
+                makePidPresentation("Bob", listOf(1)),
+            )
+        )
+        assertEquals(
+            "Alice",
+            (processedSdJwt.credentials["pid_primary"]!!.issuerSignedClaims["given_name"] as JsonClaim).value.jsonPrimitive.content
+        )
+        assertEquals(
+            "Bob",
+            (processedSdJwt.credentials["pid_secondary"]!!.issuerSignedClaims["given_name"] as JsonClaim).value.jsonPrimitive.content
+        )
     }
 }
 

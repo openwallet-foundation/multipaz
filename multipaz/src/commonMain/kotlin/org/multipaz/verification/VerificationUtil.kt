@@ -1057,6 +1057,7 @@ object VerificationUtil {
      * @param expectedAudience the expected KB-JWT `aud` claim value.
      * @param requireCryptographicHolderBinding whether a Key Binding JWT is required even if the
      *  credential does not contain a `cnf` claim.
+     * @param docRequestIds optional list of `DocRequest` indices satisfied by this presentation.
      * @return a [VerifiedPresentation] instance.
      */
     suspend fun verifySdJwtPresentation(
@@ -1068,6 +1069,7 @@ object VerificationUtil {
         now: Instant = Clock.System.now(),
         expectedAudience: String?,
         requireCryptographicHolderBinding: Boolean = true,
+        docRequestIds: List<Int>? = null,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
             Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
@@ -1181,7 +1183,8 @@ object VerificationUtil {
             transactionResponses = transactionResults,
             vpTokenIdentifier = identifier,
             transactionData = transactionData,
-            revocationStatus = sdJwt.revocationStatus
+            revocationStatus = sdJwt.revocationStatus,
+            docRequestIds = docRequestIds,
         )
     }
 
@@ -1278,19 +1281,43 @@ object VerificationUtil {
         presentations: List<VerifiedPresentation>,
         documentTypeRepository: DocumentTypeRepository?,
     ) {
-        val matchingIndicesPerPresentation = presentations.map { presentation ->
-            val indices = request.docRequests.indices.filter { reqIndex ->
-                presentationMatchesDocRequest(presentation, reqIndex, request, documentTypeRepository)
+        val counts = IntArray(request.docRequests.size)
+        val unassignedMatchingIndices = mutableListOf<List<Int>>()
+
+        for (presentation in presentations) {
+            val explicitIds = presentation.docRequestIds
+            if (explicitIds != null) {
+                if (explicitIds.isEmpty() || explicitIds.distinct().size != explicitIds.size) {
+                    throw IllegalStateException("Invalid docRequestIds $explicitIds in VerifiedPresentation")
+                }
+                for (reqIndex in explicitIds) {
+                    if (reqIndex !in request.docRequests.indices) {
+                        throw IllegalStateException("Invalid docRequestId $reqIndex in VerifiedPresentation")
+                    }
+                    if (!presentationMatchesDocRequest(presentation, reqIndex, request, documentTypeRepository)) {
+                        throw IllegalStateException(
+                            "Presented credential does not satisfy declared DocRequest at index $reqIndex"
+                        )
+                    }
+                    val allowMultiple = request.docRequests[reqIndex].docRequestInfo?.uniqueDocSetRequired == false
+                    if (!allowMultiple && counts[reqIndex] >= 1) {
+                        throw IllegalStateException("DeviceResponse does not satisfy DeviceRequest constraints")
+                    }
+                    counts[reqIndex] += 1
+                }
+            } else {
+                val indices = request.docRequests.indices.filter { reqIndex ->
+                    presentationMatchesDocRequest(presentation, reqIndex, request, documentTypeRepository)
+                }
+                if (indices.isEmpty()) {
+                    throw IllegalStateException(
+                        "Presented credential does not satisfy any requested DocRequest in DeviceRequest"
+                    )
+                }
+                unassignedMatchingIndices.add(indices)
             }
-            if (indices.isEmpty()) {
-                throw IllegalStateException(
-                    "Presented credential does not satisfy any requested DocRequest in DeviceRequest"
-                )
-            }
-            indices
         }
 
-        val counts = IntArray(request.docRequests.size)
         fun areUseCasesSatisfied(): Boolean {
             val useCases = request.deviceRequestInfo?.useCases
             if (useCases.isNullOrEmpty()) {
@@ -1304,10 +1331,10 @@ object VerificationUtil {
         }
 
         fun assign(presIndex: Int): Boolean {
-            if (presIndex == matchingIndicesPerPresentation.size) {
+            if (presIndex == unassignedMatchingIndices.size) {
                 return areUseCasesSatisfied()
             }
-            for (reqIndex in matchingIndicesPerPresentation[presIndex]) {
+            for (reqIndex in unassignedMatchingIndices[presIndex]) {
                 val allowMultiple = request.docRequests[reqIndex].docRequestInfo?.uniqueDocSetRequired == false
                 if (!allowMultiple && counts[reqIndex] >= 1) {
                     continue
@@ -1501,7 +1528,8 @@ object VerificationUtil {
                     transactionResponses = transactionResponses.ifEmpty { null },
                     vpTokenIdentifier = vpTokenIdentifier,
                     transactionData = document.transactionData,
-                    revocationStatus = document.mso.revocationStatus
+                    revocationStatus = document.mso.revocationStatus,
+                    docRequestIds = document.docRequestIds,
                 )
             )
         }
@@ -1578,6 +1606,7 @@ object VerificationUtil {
                     vpTokenIdentifier = vpTokenIdentifier,
                     transactionData = listOf(),  // No transactions for ZKP
                     zkSystemSpecId = zkDocument.documentData.zkSystemSpecId,
+                    docRequestIds = zkDocument.docRequestIds,
                 )
             )
         }
@@ -1606,6 +1635,7 @@ object VerificationUtil {
                     transactionData = document.transactionData,
                     now = now,
                     expectedAudience = document.expectedAudience,
+                    docRequestIds = document.docRequestIds,
                 )
             )
         }

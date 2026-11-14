@@ -6,9 +6,12 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
+import org.multipaz.mdoc.util.asDocRequestIds
+import org.multipaz.mdoc.util.validateDocRequestIds
 import org.multipaz.presentment.TransactionData
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.toBase64Url
@@ -24,11 +27,20 @@ private const val TAG = "OtherDocument"
  * @property docFormat the format of the document, e.g. "dc+sd-jwt".
  * @property data the compressed data of the document, using the DEFLATE algorithm according
  * to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
+ * @property docRequestIds optional list of `DocRequest` indices in `DeviceRequest.docRequests`
+ *   that this document responds to, or `null` if not specified.
  */
 data class OtherDocument(
     val docFormat: String,
-    val data: ByteString
+    val data: ByteString,
+    val docRequestIds: List<Int>? = null,
 ) {
+    init {
+        if (docRequestIds != null) {
+            validateDocRequestIds(docRequestIds)
+        }
+    }
+
     /**
      * List of verified transaction data which was sent in the request
      */
@@ -51,6 +63,11 @@ data class OtherDocument(
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
         put("data", data.toByteArray())
+        if (docRequestIds != null) {
+            putCborArray("docRequestIds") {
+                docRequestIds.forEach { add(it) }
+            }
+        }
     }
 
     internal suspend fun verify(
@@ -122,9 +139,11 @@ data class OtherDocument(
         internal fun fromDataItem(dataItem: DataItem): OtherDocument {
             val docFormat = dataItem["docFormat"].asTstr
             val data = ByteString(dataItem["data"].asBstr)
+            val docRequestIds = dataItem.getOrNull("docRequestIds")?.asDocRequestIds()
             return OtherDocument(
                 docFormat = docFormat,
-                data = data
+                data = data,
+                docRequestIds = docRequestIds,
             )
         }
     }

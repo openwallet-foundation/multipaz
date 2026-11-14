@@ -6,25 +6,37 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.toDataItem
-import org.multipaz.util.Logger
+import org.multipaz.mdoc.util.asDocRequestIds
+import org.multipaz.mdoc.util.validateDocRequestIds
 
 /**
  * Represents a document that contains a zero-knowledge (ZK) proof.
  *
  * @property documentData The structured data of the document.
  * @property proof The ZK proof that attests to the integrity and validity of the document data.
+ * @property docRequestIds Optional list of `DocRequest` indices in `DeviceRequest.docRequests`
+ *   that this document responds to, or `null` if not specified.
  */
 data class ZkDocument(
     val documentData: ZkDocumentData,
-    val proof: ByteString
+    val proof: ByteString,
+    val docRequestIds: List<Int>? = null,
 ) {
+    init {
+        if (docRequestIds != null) {
+            validateDocRequestIds(docRequestIds)
+        }
+    }
+
     /**
      * Converts this ZkDocument instance to a CBOR DataItem representation.
      *
-     * The resulting DataItem will be a CBOR map containing two entries:
+     * The resulting DataItem will be a CBOR map containing:
      * - "proof": The proof as a CBOR byte string
      * - "documentData": The document data serialized to its CBOR representation
+     * - "docRequestIds" (optional): The list of `DocRequest` indices satisfied by this document
      *
      * @return A DataItem representing this ZkDocument in CBOR format
      */
@@ -32,6 +44,11 @@ data class ZkDocument(
         return buildCborMap {
             put("proof", proof.toByteArray().toDataItem())
             put("documentData", Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(documentData.toDataItem()))))
+            if (docRequestIds != null) {
+                putCborArray("docRequestIds") {
+                    docRequestIds.forEach { add(it) }
+                }
+            }
         }
     }
 
@@ -43,6 +60,8 @@ data class ZkDocument(
          * It expects the DataItem to be a CBOR map with the following required fields:
          * - "proof": A CBOR byte string containing the ZK proof
          * - "documentData": A CBOR structure that can be deserialized into ZkDocumentData
+         * and optional field:
+         * - "docRequestIds": A non-empty CBOR array of unsigned integers
          *
          * @param dataItem The CBOR DataItem to deserialize
          * @return A new ZkDocument instance
@@ -57,9 +76,11 @@ data class ZkDocument(
                 zkDocumentDataBytes is Tagged && zkDocumentDataBytes.tagNumber == Tagged.ENCODED_CBOR &&
                         zkDocumentDataBytes.asTagged is Bstr
             ) { "zkDocumentDataBytes is not a tagged ByteString" }
+            val docRequestIds = dataItem.getOrNull("docRequestIds")?.asDocRequestIds()
             return ZkDocument(
                 documentData = ZkDocumentData.fromDataItem(Cbor.decode(zkDocumentDataBytes.asTagged.asBstr)),
-                proof = ByteString(proof)
+                proof = ByteString(proof),
+                docRequestIds = docRequestIds,
             )
         }
     }

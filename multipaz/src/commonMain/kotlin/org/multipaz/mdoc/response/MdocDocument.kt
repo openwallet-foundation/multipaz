@@ -7,6 +7,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
@@ -30,6 +31,8 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.mdoc.util.asDocRequestIds
+import org.multipaz.mdoc.util.validateDocRequestIds
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.PresentmentUnlockReason
@@ -45,6 +48,8 @@ import kotlin.time.Instant
  * @property deviceAuth a structure with the device signed signature or MAC.
  * @property deviceNamespaces the device-signed data elements.
  * @property errors the errors in the document.
+ * @property docRequestIds optional list of `DocRequest` indices in `DeviceRequest.docRequests`
+ *   that this document responds to, or `null` if not specified.
  */
 class MdocDocument(
     val docType: String,
@@ -53,8 +58,14 @@ class MdocDocument(
     val deviceAuth: DeviceAuth,
     val deviceNamespaces: DeviceNamespaces,
     val errors: Map<String, Map<String, Int>>,
+    val docRequestIds: List<Int>? = null,
     private val issuerNamespaceDigests: Map<String, Map<String, ByteString>>? = null
 ) {
+    init {
+        if (docRequestIds != null) {
+            validateDocRequestIds(docRequestIds)
+        }
+    }
     /**
      * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
      */
@@ -106,6 +117,11 @@ class MdocDocument(
                 tagNumber = Tagged.ENCODED_CBOR,
                 taggedItem = Bstr(Cbor.encode(deviceNamespaces.toDataItem()))
             ))
+        }
+        if (docRequestIds != null) {
+            putCborArray("docRequestIds") {
+                docRequestIds.forEach { add(it) }
+            }
         }
         if (errors.isNotEmpty()) {
             putCborMap("errors") {
@@ -288,7 +304,6 @@ class MdocDocument(
 
     // This should only be used for testing
     // Don't include issuerNamespaceDigests in comparison
-    // TODO: consider either removing this or doing hashCode as well
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MdocDocument) return false
@@ -298,7 +313,19 @@ class MdocDocument(
         if (deviceAuth != other.deviceAuth) return false
         if (deviceNamespaces != other.deviceNamespaces) return false
         if (errors != other.errors) return false
+        if (docRequestIds != other.docRequestIds) return false
         return true
+    }
+
+    override fun hashCode(): Int {
+        var result = docType.hashCode()
+        result = 31 * result + issuerAuth.hashCode()
+        result = 31 * result + issuerNamespaces.hashCode()
+        result = 31 * result + deviceAuth.hashCode()
+        result = 31 * result + deviceNamespaces.hashCode()
+        result = 31 * result + errors.hashCode()
+        result = 31 * result + (docRequestIds?.hashCode() ?: 0)
+        return result
     }
 
     companion object {
@@ -344,6 +371,7 @@ class MdocDocument(
                 DeviceAuth.Mac(deviceAuthDataItem["deviceMac"].asCoseMac0)
             }
             val deviceNamespaces = DeviceNamespaces.fromDataItem(deviceSigned["nameSpaces"].asTaggedEncodedCbor)
+            val docRequestIds = dataItem.getOrNull("docRequestIds")?.asDocRequestIds()
             val errors = dataItem.getOrNull("errors")?.asMap?.entries?.associate { (namespace, errorItems) ->
                 namespace.asTstr to errorItems.asMap.entries.associate { (dataElementName, errorCode) ->
                     dataElementName.asTstr to errorCode.asNumber.toInt()
@@ -356,6 +384,7 @@ class MdocDocument(
                 deviceAuth = deviceAuth,
                 deviceNamespaces = deviceNamespaces,
                 errors = errors ?: emptyMap(),
+                docRequestIds = docRequestIds,
                 issuerNamespaceDigests = issuerNamespaceDigests,
             )
         }
@@ -371,6 +400,7 @@ class MdocDocument(
          * @param deviceNamespaces the device-signed data elements to return.
          * @param deviceKey a [AsymmetricKey] used to generate a signature or MAC.
          * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
          * @return a [MdocDocument].
          */
         suspend fun fromNamespaces(
@@ -381,7 +411,8 @@ class MdocDocument(
             issuerNamespaces: IssuerNamespaces,
             deviceNamespaces: DeviceNamespaces,
             deviceKey: AsymmetricKey,
-            errors: Map<String, Map<String, Int>> = emptyMap()
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
         ): MdocDocument {
             val deviceAuthentication = buildCborArray {
                 add("DeviceAuthentication")
@@ -441,6 +472,7 @@ class MdocDocument(
                 deviceAuth = deviceAuth,
                 deviceNamespaces = deviceNamespaces,
                 errors = errors,
+                docRequestIds = docRequestIds,
                 issuerNamespaceDigests = null
             )
         }
@@ -454,6 +486,7 @@ class MdocDocument(
          * @param requestedClaims the claims in [credential] to present.
          * @param deviceNamespaces additional device-signed claims to present.
          * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
          * @return a [MdocDocument].
          */
         suspend fun fromPresentment(
@@ -463,6 +496,7 @@ class MdocDocument(
             requestedClaims: List<MdocRequestedClaim>,
             deviceNamespaces: DeviceNamespaces = buildDeviceNamespaces {},
             errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
         ): MdocDocument {
             val issuerAuth = credential.issuerAuth
             val filteredIssuerNamespaces = credential.issuerNamespaces.filter(requestedClaims)
@@ -479,7 +513,8 @@ class MdocDocument(
                     keyInfo = credential.secureArea.getKeyInfo(credential.alias),
                     unlockReason = PresentmentUnlockReason(credential),
                 ),
-                errors = errors
+                errors = errors,
+                docRequestIds = docRequestIds,
             )
         }
     }

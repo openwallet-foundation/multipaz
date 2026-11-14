@@ -32,6 +32,7 @@ import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.OtherDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.transport.MdocTransportClosedException
+import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP.processTransactions
@@ -327,6 +328,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
     val credentialsPresented = mutableListOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
 
+    val includeDocRequestIds = deviceRequest.version.mdocVersionCompareTo("1.1") >= 0
     val deviceResponse = try {
         buildDeviceResponse(
             sessionTranscript = sessionTranscript,
@@ -337,6 +339,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
             match.source as PresentmentCredentialMatchSourceIso18013
             val docRequest = deviceRequest.docRequests.getOrNull(match.source.docRequest.docRequestId)
                 ?: match.source.docRequest
+            val docRequestIds = if (includeDocRequestIds) listOf(docRequest.docRequestId) else null
             val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
             var zkSystemMatch: ZkSystem? = null
@@ -388,7 +391,8 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
                         deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),
-                        errors = mapOf()
+                        errors = mapOf(),
+                        docRequestIds = docRequestIds,
                     )
 
                     if (zkSystemMatch != null) {
@@ -399,11 +403,13 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                             zkSystemSpec = zkSystemSpec!!,
                             document = document,
                             sessionTranscript = sessionTranscriptToUse
+                        ).copy(
+                            docRequestIds = listOf(docRequest.docRequestId)
                         )
                         docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = docRequest.docRequestId
+                                docRequestIds = listOf(docRequest.docRequestId)
                             ) {
                                 addZkDocument(zkDocument)
                             }
@@ -412,7 +418,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                             addEncryptedDocuments(
                                 encryptionParameters = encryptionParameters,
-                                docRequestId = docRequest.docRequestId
+                                docRequestIds = listOf(docRequest.docRequestId)
                             ) {
                                 addDocument(document)
                             }
@@ -491,12 +497,13 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                     }
                     val otherDocument = OtherDocument(
                         docFormat = "dc+sd-jwt",
-                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
+                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate()),
+                        docRequestIds = listOf(docRequest.docRequestId),
                     )
                     docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                         addEncryptedDocuments(
                             encryptionParameters = encryptionParameters,
-                            docRequestId = docRequest.docRequestId
+                            docRequestIds = listOf(docRequest.docRequestId)
                         ) {
                             addOtherDocument(otherDocument)
                         }

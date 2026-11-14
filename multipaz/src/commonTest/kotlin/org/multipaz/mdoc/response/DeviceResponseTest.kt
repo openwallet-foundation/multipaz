@@ -26,6 +26,8 @@ import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
+import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
@@ -57,10 +59,13 @@ import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
+import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
@@ -85,6 +90,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -954,14 +960,14 @@ class DeviceResponseTest {
                 )
             )
         }
-        assertEquals("1.1", deviceResponse.version)
+        assertEquals("1.0", deviceResponse.version)
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
         assertEquals(drParsed, deviceResponse)
         assertEquals(
             """
                 {
-                  "version": "1.1",
+                  "version": "1.0",
                   "status": 0,
                   "zkDocuments": [
                     {
@@ -1011,7 +1017,7 @@ class DeviceResponseTest {
         ) {
             addEncryptedDocuments(
                 encryptionParameters = encryptionParameters,
-                docRequestId = 1
+                docRequestIds = listOf(1)
             ) {
                 addDocument(
                     credential = mdlCredentialSignature,
@@ -1032,7 +1038,7 @@ class DeviceResponseTest {
                 )
             }
         }
-        assertEquals("1.1", deviceResponse.version)
+        assertEquals("1.0", deviceResponse.version)
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
         assertEquals(drParsed, deviceResponse)
@@ -1138,7 +1144,7 @@ class DeviceResponseTest {
         ) {
             addEncryptedDocuments(
                 encryptionParameters = encryptionParameters,
-                docRequestId = 1
+                docRequestIds = listOf(1)
             ) {
                 addOtherDocument(
                     OtherDocument(
@@ -1148,7 +1154,7 @@ class DeviceResponseTest {
                 )
             }
         }
-        assertEquals("1.1", deviceResponse.version)
+        assertEquals("1.0", deviceResponse.version)
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
         assertEquals(drParsed, deviceResponse)
@@ -1257,7 +1263,7 @@ class DeviceResponseTest {
                 )
             )
         }
-        assertEquals("1.1", deviceResponse.version)
+        assertEquals("1.0", deviceResponse.version)
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
         assertEquals(drParsed, deviceResponse)
@@ -1433,7 +1439,7 @@ class DeviceResponseTest {
         val encryptedBuilder = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
-            docRequestId = 0
+            docRequestIds = listOf(0)
         )
         encryptedBuilder.addOtherDocument(otherDocument)
         val encrypted = encryptedBuilder.build()
@@ -1913,7 +1919,7 @@ class DeviceResponseTest {
         val outOfRangeEncrypted = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
-            docRequestId = 5
+            docRequestIds = listOf(5)
         ).apply { addOtherDocument(otherDocument) }.build()
 
         val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
@@ -1946,7 +1952,7 @@ class DeviceResponseTest {
         val mismatchedEncrypted = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
-            docRequestId = 0
+            docRequestIds = listOf(0)
         ).apply { addOtherDocument(otherDocument) }.build()
         val mismatchedError = assertFailsWith<IllegalStateException> {
             mismatchedEncrypted.decrypt(
@@ -1991,7 +1997,7 @@ class DeviceResponseTest {
         val validOtherVctEncrypted = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
-            docRequestId = 0
+            docRequestIds = listOf(0)
         ).apply { addOtherDocument(otherDocument) }.build()
 
         // Without a verifier-configured otherVcts alias in documentTypeRepository, mismatched vct is rejected.
@@ -2034,7 +2040,7 @@ class DeviceResponseTest {
         val wrongEncryptionParamsDocRequestId = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
-            docRequestId = 1
+            docRequestIds = listOf(1)
         ).apply { addOtherDocument(otherDocument) }.build()
         val wrongEncryptionParamsError = assertFailsWith<IllegalStateException> {
             wrongEncryptionParamsDocRequestId.decrypt(
@@ -2675,5 +2681,578 @@ class DeviceResponseTest {
             txMisboundError.message,
         )
         assertEquals(null, txResponse.otherDocuments.single().expectedAudience)
+    }
+
+    @Test
+    fun docRequestIdsRoundTripAndValidation() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionParameters = EncryptionParameters.fromValues(encryptionKey.publicKey)
+
+        val zkDoc = ZkDocument(
+            documentData = ZkDocumentData(
+                zkSystemSpecId = "spec1",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                timestamp = mdlTimeSigned,
+                issuerSigned = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to true.toDataItem())),
+                deviceSigned = emptyMap(),
+                msoX5chain = X509CertChain(listOf(mdlDsCert))
+            ),
+            proof = ByteString(1, 2, 3),
+            docRequestIds = listOf(1, 3),
+        )
+        val otherDoc = OtherDocument(
+            docFormat = "dc+sd-jwt",
+            data = ByteString(byteArrayOf(4, 5, 6)),
+            docRequestIds = listOf(2),
+        )
+
+        val response = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                docRequestIds = listOf(0, 2),
+            )
+            addZkDocument(zkDoc)
+            addEncryptedDocuments(
+                encryptionParameters = encryptionParameters,
+                docRequestIds = listOf(0, 1),
+            ) {
+                addOtherDocument(otherDoc)
+            }
+            addOtherDocument(otherDoc)
+        }
+
+        // DeviceResponse version always defaults to "1.0" per ISO/IEC 18013-5 Second Edition Clause 10.3.2
+        assertEquals("1.0", response.version)
+        val dataItem = response.toDataItem()
+        assertEquals(listOf(0L, 2L), dataItem["documents"].asArray[0]["docRequestIds"].asArray.map { it.asNumber })
+        assertEquals(listOf(1L, 3L), dataItem["zkDocuments"].asArray[0]["docRequestIds"].asArray.map { it.asNumber })
+        assertEquals(listOf(0L, 1L), dataItem["encryptedDocuments"].asArray[0]["docRequestIds"].asArray.map { it.asNumber })
+        assertFalse(dataItem["encryptedDocuments"].asArray[0].hasKey("docRequestID"))
+        assertEquals(listOf(2L), dataItem["otherDocuments"].asArray[0]["docRequestIds"].asArray.map { it.asNumber })
+
+        val parsed = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(dataItem)))
+        assertEquals(response, parsed)
+        assertEquals(listOf(1, 3), parsed.zkDocuments[0].docRequestIds)
+        assertEquals(listOf(0, 1), parsed.encryptedDocuments[0].docRequestIds)
+        assertEquals(listOf(2), parsed.otherDocuments[0].docRequestIds)
+
+        // Constructor validation rejects empty or negative docRequestIds
+        assertFailsWith<IllegalArgumentException> {
+            OtherDocument("dc+sd-jwt", ByteString(1), docRequestIds = emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OtherDocument("dc+sd-jwt", ByteString(1), docRequestIds = listOf(-1))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            zkDoc.copy(docRequestIds = emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EncryptedDocuments(ByteString(1), ByteString(2), emptyList())
+        }
+
+        // CBOR parser rejects empty array, negative integer, non-integer, and legacy "docRequestID"
+        for (invalidIds in listOf(
+            buildCborArray {},
+            buildCborArray { add(-1) },
+            buildCborArray { add("0") },
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                OtherDocument.fromDataItem(buildCborMap {
+                    put("docFormat", "dc+sd-jwt")
+                    put("data", byteArrayOf(1))
+                    put("docRequestIds", invalidIds)
+                })
+            }
+            assertFailsWith<IllegalArgumentException> {
+                EncryptedDocuments.fromDataItem(buildCborMap {
+                    put("enc", byteArrayOf(1))
+                    put("cipherText", byteArrayOf(2))
+                    put("docRequestIds", invalidIds)
+                })
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EncryptedDocuments.fromDataItem(buildCborMap {
+                put("enc", byteArrayOf(1))
+                put("cipherText", byteArrayOf(2))
+                put("docRequestID", 0)
+            })
+        }
+    }
+
+    @Test
+    fun docRequestIdsDisambiguatesMultipleRequestsAndSupportsSharedPresentation() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+
+        // 1. Two dc+sd-jwt DocRequests for the same VCT signed with distinct per-request readerAuth keys
+        val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.AnonymousExplicit(readerRootKey),
+            subject = X500Name.fromName("CN=Test Reader Root"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = euPidTimeValidityBegin,
+            validUntil = euPidTimeValidityEnd,
+            crlUrl = "https://verifier.example.com/crl"
+        )
+        suspend fun createReaderKey(cn: String): AsymmetricKey.X509Certified {
+            val priv = Crypto.createEcPrivateKey(EcCurve.P256)
+            val cert = MdocUtil.generateReaderCertificate(
+                readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(readerRootCert)), readerRootKey),
+                readerKey = priv.publicKey,
+                subject = X500Name.fromName("CN=$cn"),
+                dnsName = null,
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = euPidTimeValidityBegin,
+                validUntil = euPidTimeValidityEnd,
+                extensions = emptyList()
+            )
+            return AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert, readerRootCert)), priv)
+        }
+        val readerKey0 = createReaderKey("Reader 0")
+        val readerKey1 = createReaderKey("Reader 1")
+
+        val twoPidRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                ),
+                readerKey = readerKey0
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_family_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_family_name" to buildJsonArray { add(JsonPrimitive("family_name")) }
+                    )
+                ),
+                readerKey = readerKey1
+            )
+        }
+        val reader1Audience = Crypto.digest(
+            algorithm = Algorithm.SHA256,
+            message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(twoPidRequest.docRequests[1].readerAuth!!.toDataItem()))))
+        ).toBase64Url()
+        val otherDocWithoutIds = arbitraryAudienceOtherDocument(sessionTranscript, audience = reader1Audience)
+
+        // Without docRequestIds, two requests with different per-request readerAuth audiences cannot be disambiguated
+        val ambiguousResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(otherDocWithoutIds)
+        }
+        assertFailsWith<IllegalStateException> {
+            ambiguousResponse.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
+        }
+
+        // With docRequestIds = [1], verification resolves DocRequest 1's audience and succeeds
+        val disambiguatedResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(1)))
+        }
+        disambiguatedResponse.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
+        assertEquals(reader1Audience, disambiguatedResponse.otherDocuments.single().expectedAudience)
+
+        // Pointing docRequestIds to index 0 (wrong readerKey) or [0, 1] (conflicting audiences) fails
+        assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(0)))
+            }.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
+        }
+        assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(0, 1)))
+            }.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
+        }
+
+        // 2. Two mso_mdoc DocRequests with the same docType: disambiguating AKI and satisfying [0, 1] with one document
+        val mdlAki = ByteString(mdlDsCert.authorityKeyIdentifier!!)
+        val wrongAki = ByteString(ByteArray(mdlAki.size) { 0x55 })
+        val twoMdlDiffAkiRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(wrongAki))
+            )
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(mdlAki))
+            )
+        }
+        // Without docRequestIds, fallback picks index 0 (wrong AKI) and fails; with docRequestIds = [1], it succeeds!
+        val mdlGivenNameClaim = MdocRequestedClaim(
+            docType = DrivingLicense.MDL_DOCTYPE,
+            namespaceName = DrivingLicense.MDL_NAMESPACE,
+            dataElementName = "given_name",
+            intentToRetain = false
+        )
+        val mdlFamilyNameClaim = MdocRequestedClaim(
+            docType = DrivingLicense.MDL_DOCTYPE,
+            namespaceName = DrivingLicense.MDL_NAMESPACE,
+            dataElementName = "family_name",
+            intentToRetain = false
+        )
+        val mdlDocReq1Response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(mdlGivenNameClaim),
+                docRequestIds = listOf(1)
+            )
+        }
+        mdlDocReq1Response.verify(sessionTranscript, deviceRequest = twoMdlDiffAkiRequest, atTime = mdlTimeValidityBegin)
+
+        // Claiming [0, 1] fails when DocRequest 0's issuerIdentifiers do not match
+        assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addDocument(
+                    credential = mdlCredentialSignature,
+                    requestedClaims = listOf(mdlGivenNameClaim),
+                    docRequestIds = listOf(0, 1)
+                )
+            }.verify(sessionTranscript, deviceRequest = twoMdlDiffAkiRequest, atTime = mdlTimeValidityBegin)
+        }
+
+        // Duplicate IDs [1, 1] are rejected
+        assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addDocument(
+                    credential = mdlCredentialSignature,
+                    requestedClaims = listOf(mdlGivenNameClaim),
+                    docRequestIds = listOf(1, 1)
+                )
+            }.verify(sessionTranscript, deviceRequest = twoMdlDiffAkiRequest, atTime = mdlTimeValidityBegin)
+        }
+
+        // When both DocRequest 0 and DocRequest 1 match, a single MdocDocument with docRequestIds = [0, 1] succeeds
+        val twoMdlCompatibleRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(mdlAki))
+            )
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(mdlAki))
+            )
+        }
+        val sharedMdlResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(mdlGivenNameClaim, mdlFamilyNameClaim),
+                docRequestIds = listOf(0, 1)
+            )
+        }
+        sharedMdlResponse.verify(sessionTranscript, deviceRequest = twoMdlCompatibleRequest, atTime = mdlTimeValidityBegin)
+    }
+
+    @Test
+    fun docRequestIdsCrossCheckedAgainstSignedTransactions() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val txRepo = DocumentTypeRepository().apply {
+            addTransactionType(TestTxType)
+        }
+        val mdlGivenNameClaim = MdocRequestedClaim(
+            docType = DrivingLicense.MDL_DOCTYPE,
+            namespaceName = DrivingLicense.MDL_NAMESPACE,
+            dataElementName = "given_name",
+            intentToRetain = false
+        )
+
+        // 1. Mdoc: signed transaction binds to docRequestId = 0, outer docRequestIds claims [1] -> rejected
+        val mdlWithTxAuth = createMdlCredentialWithAuthorizations(
+            authorizedNamespaces = listOf(ISO_18013_TRANSACTION_DATA_NAMESPACE)
+        )
+        val twoMdlTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false),
+                ),
+                docRequestInfo = DocRequestInfo(
+                    transactionData = TransactionsInfo(
+                        mapOf(TestTxType.identifier to TestTxType.serializeIso18013Request("tx-0"))
+                    )
+                )
+            )
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false),
+                ),
+                docRequestInfo = DocRequestInfo(
+                    transactionData = TransactionsInfo(
+                        mapOf(TestTxType.identifier to TestTxType.serializeIso18013Request("tx-1"))
+                    )
+                )
+            )
+        }
+        val txData0 = twoMdlTxRequest.docRequests[0].getTransactionData(txRepo).single()
+        val txElements0 = txData0.generateMdocResponseElements(mdlWithTxAuth, null, docRequestId = 0)
+        val devNamespaces0 = buildDeviceNamespaces {
+            addNamespace(ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                addDataElement(
+                    TestTxType.identifier,
+                    buildCborMap {
+                        for ((k, v) in txElements0) {
+                            put(k, v)
+                        }
+                    }
+                )
+            }
+        }
+        // Matching outer docRequestIds = [0] succeeds
+        buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = mdlWithTxAuth,
+                requestedClaims = listOf(mdlGivenNameClaim),
+                deviceNamespaces = devNamespaces0,
+                docRequestIds = listOf(0)
+            )
+        }.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = twoMdlTxRequest,
+            documentTypeRepository = txRepo,
+            atTime = mdlTimeValidityBegin
+        )
+        // Mismatched outer docRequestIds = [1] is rejected
+        val mdocMismatchError = assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addDocument(
+                    credential = mdlWithTxAuth,
+                    requestedClaims = listOf(mdlGivenNameClaim),
+                    deviceNamespaces = devNamespaces0,
+                    docRequestIds = listOf(1)
+                )
+            }.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = twoMdlTxRequest,
+                documentTypeRepository = txRepo,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+        assertEquals(
+            "Signed transaction 'docRequestId' 0 is not in document docRequestIds [1]",
+            mdocMismatchError.message
+        )
+
+        // 2. SD-JWT: signed KB-JWT binds to doc_request_id = 0, outer docRequestIds claims [1] -> rejected
+        val twoPidTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            for (i in 0..1) {
+                addDocRequest(
+                    docType = EUPersonalID.EUPID_VCT,
+                    nameSpaces = mapOf(
+                        "_" to mapOf("sdjwtvc_given_name" to false),
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(TestTxType.identifier to false),
+                    ),
+                    docRequestInfo = DocRequestInfo(
+                        docFormat = "dc+sd-jwt",
+                        dataElementIdentifierMapping = mapOf(
+                            "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                        ),
+                        transactionData = TransactionsInfo(
+                            mapOf(TestTxType.identifier to TestTxType.serializeIso18013Request("pid-tx-$i"))
+                        )
+                    )
+                )
+            }
+        }
+        val pidTx0 = twoPidTxRequest.docRequests[0].getTransactionData(txRepo).single()
+        val pidTx0Claims = pidTx0.generateSdJwtResponseClaims(euPidCredential, null, docRequestId = 0)
+        val taggedTranscript = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(sessionTranscript)))
+        val nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(taggedTranscript)).toBase64Url()
+        val sdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val sdJwtKb0 = sdJwt.present(
+            signingKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = euPidCredential.alias,
+                secureArea = euPidCredential.secureArea,
+                keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias)
+            ),
+            nonce = nonce,
+            audience = "none",
+            creationTime = euPidTimeSigned
+        ) {
+            putJsonObject(TestTxType.kbJwtResponseClaimName) {
+                for ((k, v) in pidTx0Claims) {
+                    put(k, v)
+                }
+            }
+        }
+        val sdJwtBytes = ByteString(sdJwtKb0.compactSerialization.encodeToByteArray().zlibDeflate())
+
+        // Matching outer docRequestIds = [0] succeeds
+        buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(OtherDocument("dc+sd-jwt", sdJwtBytes, docRequestIds = listOf(0)))
+        }.verify(
+            sessionTranscript = sessionTranscript,
+            deviceRequest = twoPidTxRequest,
+            documentTypeRepository = txRepo,
+            atTime = euPidTimeSigned
+        )
+        // Mismatched outer docRequestIds = [1] is rejected
+        val sdJwtMismatchError = assertFailsWith<IllegalStateException> {
+            buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addOtherDocument(OtherDocument("dc+sd-jwt", sdJwtBytes, docRequestIds = listOf(1)))
+            }.verify(
+                sessionTranscript = sessionTranscript,
+                deviceRequest = twoPidTxRequest,
+                documentTypeRepository = txRepo,
+                atTime = euPidTimeSigned
+            )
+        }
+        assertEquals(
+            "Signed transaction 'doc_request_id' 0 is not in document docRequestIds [1]",
+            sdJwtMismatchError.message
+        )
+    }
+
+    @Test
+    fun encryptedDocumentsMultiDocRequestIdsSubsetAndZkValidation() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
+        val encSessionTranscript = buildCborArray {
+            add(sessionTranscript.asArray[0])
+            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
+            add(sessionTranscript.asArray[2])
+        }
+        val otherDoc1 = arbitraryAudienceOtherDocument(encSessionTranscript, audience = "none")
+            .copy(docRequestIds = listOf(1))
+        val zkSpec = ZkSystemSpec(id = "zk_spec_1", system = "mock_zk")
+        val zkDoc2 = ZkDocument(
+            documentData = ZkDocumentData(
+                zkSystemSpecId = zkSpec.id,
+                docType = DrivingLicense.MDL_DOCTYPE,
+                timestamp = mdlTimeSigned,
+                issuerSigned = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to true.toDataItem())),
+                deviceSigned = emptyMap(),
+                msoX5chain = X509CertChain(listOf(mdlDsCert))
+            ),
+            proof = ByteString(9, 8, 7),
+            docRequestIds = listOf(2),
+        )
+
+        val multiEncryptedRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(docResponseEncryption = encryptionParameters)
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    docResponseEncryption = encryptionParameters,
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
+            )
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docResponseEncryption = encryptionParameters,
+                    zkRequest = ZkRequest(systemSpecs = listOf(zkSpec), zkRequired = true)
+                )
+            )
+        }
+
+        // Single EncryptedDocuments carrying mdoc (0), OtherDocument (1), and ZkDocument (2)
+        val combinedResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addEncryptedDocuments(
+                encryptionParameters = encryptionParameters,
+                docRequestIds = listOf(0, 1, 2)
+            ) {
+                addDocument(
+                    credential = mdlCredentialSignature,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
+                            namespaceName = DrivingLicense.MDL_NAMESPACE,
+                            dataElementName = "given_name",
+                            intentToRetain = false
+                        )
+                    ),
+                    docRequestIds = listOf(0)
+                )
+                addOtherDocument(otherDoc1)
+                addZkDocument(zkDoc2)
+            }
+        }
+        combinedResponse.verify(sessionTranscript, deviceRequest = multiEncryptedRequest, atTime = mdlTimeValidityBegin)
+        val decrypted = combinedResponse.encryptedDocuments.single().decrypt(
+            recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+            encryptionParameters = encryptionParameters,
+            sessionTranscript = sessionTranscript,
+            atTime = euPidTimeSigned,
+            deviceRequest = multiEncryptedRequest
+        )
+        assertEquals(listOf(0), decrypted.documents.single().docRequestIds)
+        assertEquals(listOf(1), decrypted.otherDocuments.single().docRequestIds)
+        assertEquals(listOf(2), decrypted.zkDocuments.single().docRequestIds)
+
+        // Inner docRequestIds outside outer EncryptedDocuments.docRequestIds is rejected by decrypt()
+        val subsetViolation = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestIds = listOf(0)
+        ).apply {
+            addOtherDocument(otherDoc1) // inner docRequestIds = [1], outer = [0]
+        }.build()
+        val subsetError = assertFailsWith<IllegalStateException> {
+            subsetViolation.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                deviceRequest = multiEncryptedRequest
+            )
+        }
+        assertEquals(
+            "Decrypted document docRequestIds [1] is not a subset of EncryptedDocuments docRequestIds [0]",
+            subsetError.cause?.message
+        )
+
+        // ZkDocument inside EncryptedDocuments pointing to non-ZK DocRequest 0 is rejected by decrypt()
+        val badZkEncrypted = EncryptedDocuments.Builder(
+            sessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters,
+            docRequestIds = listOf(0)
+        ).apply {
+            addZkDocument(zkDoc2.copy(docRequestIds = listOf(0)))
+        }.build()
+        assertFailsWith<IllegalStateException> {
+            badZkEncrypted.decrypt(
+                recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+                encryptionParameters = encryptionParameters,
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin,
+                deviceRequest = multiEncryptedRequest
+            )
+        }
     }
 }
