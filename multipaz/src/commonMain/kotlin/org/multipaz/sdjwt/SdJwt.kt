@@ -669,6 +669,10 @@ class SdJwt private constructor(
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
+     * @param type the `typ` header of the Key Binding JWT. Defaults to `kb+jwt`, the ordinary key
+     *   binding; a specification that extends the key binding gives it its own media type (for
+     *   instance Delegate SD-JWT requires `kb+sd-jwt`), and a verifier written to that
+     *   specification reads the `typ` to tell an extended key binding from a plain one.
      * @param additionalClaimBuilderAction builder block to add extra claims into SD-JWT+KB body
      */
     suspend fun present(
@@ -676,13 +680,64 @@ class SdJwt private constructor(
         nonce: String,
         audience: String,
         creationTime: Instant = Clock.System.now(),
+        type: String = "kb+jwt",
         additionalClaimBuilderAction: JsonObjectBuilder.() -> Unit = {}
     ): SdJwtKb {
+        val kbJwt = buildKbJwt(signingKey, nonce, audience, creationTime, type, additionalClaimBuilderAction)
+        return SdJwtKb.fromCompactSerialization(compactSerialization + kbJwt)
+    }
+
+    /**
+     * Presents an SD-JWT to a verifier with a Key Binding SD-JWT: a Key-Binding JWT followed by
+     * disclosures of its own.
+     *
+     * This is the Delegated SD-JWT compact serialization of draft-ietf-oauth-delegate-sd-jwt
+     * §5.1.1, `<SD-JWT>~~<KB-JWT>~<Disclosure 1>~...~<Disclosure M>~`, used when the Key Binding
+     * JWT commits to disclosures it carries, for instance a digest of a delegated payload. The
+     * Key-Binding JWT is built as in [present], with the same `sd_hash`.
+     *
+     * The result is returned as a string because it is not a SD-JWT+KB: it ends with `~`, which
+     * [SdJwtKb.fromCompactSerialization] rejects.
+     *
+     * @param signingKey private key associated with this SD-JWT.
+     * @param nonce the nonce, obtained from the verifier.
+     * @param audience the audience, obtained from the verifier.
+     * @param kbDisclosures the disclosures that follow the Key-Binding JWT, at least one.
+     * @param creationTime the time the presentation was made.
+     * @param type the `typ` header of the Key Binding JWT, see [present].
+     * @param additionalClaimBuilderAction builder block to add extra claims into the Key-Binding JWT.
+     * @return the compact serialization of the presentation.
+     */
+    suspend fun presentWithKbDisclosures(
+        signingKey: AsymmetricKey,
+        nonce: String,
+        audience: String,
+        kbDisclosures: List<String>,
+        creationTime: Instant = Clock.System.now(),
+        type: String = "kb+jwt",
+        additionalClaimBuilderAction: JsonObjectBuilder.() -> Unit = {}
+    ): String {
+        require(kbDisclosures.isNotEmpty()) { "Use present() for a Key-Binding JWT without disclosures" }
+        require(kbDisclosures.none { it.isEmpty() || '~' in it }) { "A disclosure cannot be empty or contain '~'" }
+        val kbJwt = buildKbJwt(signingKey, nonce, audience, creationTime, type, additionalClaimBuilderAction)
+        // compactSerialization ends with '~'; one more leaves the empty component §5.1.1 requires
+        // between the SD-JWT and the Key Binding SD-JWT that follows it.
+        return compactSerialization + "~" + kbJwt + "~" + kbDisclosures.joinToString("") { "$it~" }
+    }
+
+    private suspend fun buildKbJwt(
+        signingKey: AsymmetricKey,
+        nonce: String,
+        audience: String,
+        creationTime: Instant,
+        type: String,
+        additionalClaimBuilderAction: JsonObjectBuilder.() -> Unit,
+    ): String {
         require(signingKey.publicKey == this.kbKey) {
             "Public part of signing key does not match key in `cnf` claim"
         }
-        val kbJwt = buildJwt(
-            type = "kb+jwt",
+        return buildJwt(
+            type = type,
             key = signingKey,
             creationTime = creationTime
         ) {
@@ -691,7 +746,6 @@ class SdJwt private constructor(
             put("sd_hash", Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url())
             additionalClaimBuilderAction.invoke(this)
         }
-        return SdJwtKb.fromCompactSerialization(compactSerialization + kbJwt)
     }
 
     companion object {

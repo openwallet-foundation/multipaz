@@ -32,6 +32,8 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
+import org.multipaz.documenttype.SdJwtTransactionResponse
+import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.webtoken.buildJwt
@@ -773,6 +775,14 @@ object OpenID4VP {
     }
 
     /**
+     * The Key Binding JWT's own claims (RFC 9901 §4.3) and the transaction data hashes OpenID4VP
+     * puts beside them: no transaction type may set these.
+     */
+    private val RESERVED_KB_JWT_CLAIMS = setOf(
+        "iat", "aud", "nonce", "sd_hash", "transaction_data_hashes", "transaction_data_hashes_alg",
+    )
+
+    /**
      * Processes transaction data for the given SD-JWT credential.
      *
      * @param credential credential which transactions are targeting, must be key-bound if any
@@ -780,25 +790,64 @@ object OpenID4VP {
      * @param transactionData transaction data for the credential
      * @param docRequestId index of the specific document request in the context of ISO 18013
      *   presentation
-     * @return additional attributes to add to the SD-JWT+KB body
+     * @return the claims to add to the Key Binding JWT body, and the disclosures that follow it,
+     *   in request order without repeats
+     * @throws IllegalStateException if a transaction type sets one of the Key Binding JWT's own
+     *   claims, a claim another type sets, or a value another item of its type sets differently
      */
     suspend fun processTransactions(
         credential: SdJwtVcCredential,
         transactionData: List<TransactionData<*>>,
         transactionUserInput: Map<String, TransactionUserInput>,
         docRequestId: Int? = null
-    ): Map<String, JsonElement> {
+    ): SdJwtTransactionResponse {
         val transactionResponse = mutableMapOf<String, JsonElement>()
+        val disclosures = LinkedHashSet<String>()
+        // Which type set each claim: one type may not overwrite another's, nor the KB-JWT's own.
+        val claimOwners = mutableMapOf<String, TransactionType<*>>()
+        fun claim(name: String, type: TransactionType<*>) {
+            check(name !in RESERVED_KB_JWT_CLAIMS) {
+                "Transaction type '${type.identifier}' cannot set the Key Binding JWT's '$name' claim"
+            }
+            val owner = claimOwners.getOrPut(name) { type }
+            check(owner == type) {
+                "Transaction types '${owner.identifier}' and '${type.identifier}' both set the '$name' claim"
+            }
+        }
         for (data in transactionData) {
-            val responseClaims = data.generateSdJwtResponseClaims(
+            val response = data.generateSdJwtResponse(
                 credential as Credential,
                 transactionUserInput[data.type.identifier],
                 docRequestId
             )
+            disclosures += response.disclosures
+            val responseClaims = response.claims
             if (responseClaims.isNotEmpty()) {
-                transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                if (data.type.nestSdJwtResponseClaims) {
+                    claim(data.type.kbJwtResponseClaimName, data.type)
+                    transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                        for ((name, value) in responseClaims) {
+                            put(name, value)
+                        }
+                    }
+                } else {
+                    // Verbatim, and arrays accumulate across items rather than overwriting: a
+                    // request may carry several items of the same type, and a plain put kept only
+                    // the last — so the user was shown several authorizations and signed one.
+                    // Anything else the items set must agree; one would silently replace the other.
                     for ((name, value) in responseClaims) {
-                        put(name, value)
+                        claim(name, data.type)
+                        val existing = transactionResponse[name]
+                        transactionResponse[name] = when {
+                            existing == null -> value
+                            existing is JsonArray && value is JsonArray -> JsonArray(existing + value)
+                            else -> {
+                                check(existing == value) {
+                                    "Items of transaction type '${data.type.identifier}' set different values for '$name'"
+                                }
+                                value
+                            }
+                        }
                     }
                 }
             }
@@ -822,7 +871,7 @@ object OpenID4VP {
                 }
             }
         }
-        return transactionResponse
+        return SdJwtTransactionResponse(claims = transactionResponse, disclosures = disclosures.toList())
     }
 
     private suspend fun openID4VPSdJwt(
@@ -846,33 +895,51 @@ object OpenID4VP {
         val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData, match.transactionUserInput)
 
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
-            filteredSdJwt.present(
-                signingKey = AsymmetricKey.anonymous(
-                    alias = sdjwtVcCredential.alias,
-                    secureArea = sdjwtVcCredential.secureArea,
-                    unlockReason = PresentmentUnlockReason(sdjwtVcCredential),
-                ),
-                nonce = nonce,
-                audience = if (version == Version.DRAFT_29) {
-                    // From B.3.6. Presentation Response:
-                    //
-                    // the aud claim MUST be the value of the Client Identifier, except for requests over the DC API
-                    // where it MUST be the Origin prefixed with origin:, as described in Appendix A.4.
-                    when(responseMode) {
-                        ResponseMode.DIRECT_POST -> clientId
-                        ResponseMode.DC_API -> "origin:$origin"
-                    }
-                } else {
-                    clientId
-                },
-                creationTime = Clock.System.now()
-            ) {
+            val signingKey = AsymmetricKey.anonymous(
+                alias = sdjwtVcCredential.alias,
+                secureArea = sdjwtVcCredential.secureArea,
+                unlockReason = PresentmentUnlockReason(sdjwtVcCredential),
+            )
+            val audience = if (version == Version.DRAFT_29) {
+                // From B.3.6. Presentation Response:
+                //
+                // the aud claim MUST be the value of the Client Identifier, except for requests over the DC API
+                // where it MUST be the Origin prefixed with origin:, as described in Appendix A.4.
+                when(responseMode) {
+                    ResponseMode.DIRECT_POST -> clientId
+                    ResponseMode.DC_API -> "origin:$origin"
+                }
+            } else {
+                clientId
+            }
+            val type = TransactionData.sdJwtKbType(match.transactionData)
+            val claims: JsonObjectBuilder.() -> Unit = {
                 if (!match.transactionData.isEmpty()) {
-                    for ((key, response) in transactionResponse) {
+                    for ((key, response) in transactionResponse.claims) {
                         put(key, response)
                     }
                 }
-            }.compactSerialization
+            }
+            if (transactionResponse.disclosures.isEmpty()) {
+                filteredSdJwt.present(
+                    signingKey = signingKey,
+                    nonce = nonce,
+                    audience = audience,
+                    creationTime = Clock.System.now(),
+                    type = type,
+                    additionalClaimBuilderAction = claims,
+                ).compactSerialization
+            } else {
+                filteredSdJwt.presentWithKbDisclosures(
+                    signingKey = signingKey,
+                    nonce = nonce,
+                    audience = audience,
+                    kbDisclosures = transactionResponse.disclosures,
+                    creationTime = Clock.System.now(),
+                    type = type,
+                    additionalClaimBuilderAction = claims,
+                )
+            }
         } else {
             filteredSdJwt.compactSerialization
         }

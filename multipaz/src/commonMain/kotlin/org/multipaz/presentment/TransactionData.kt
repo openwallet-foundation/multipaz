@@ -7,6 +7,7 @@ import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
+import org.multipaz.documenttype.SdJwtTransactionResponse
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 
@@ -88,6 +89,21 @@ class TransactionData<PayloadT: Any>(
     ): Map<String, JsonElement> = type.generateSdJwtResponseClaims(this, credential, userInput, docRequestId)
 
     /**
+     * Generates the Key Binding JWT claims and the disclosures that follow the Key Binding JWT
+     * for an SD-JWT credential (see [TransactionType.generateSdJwtResponse]).
+     *
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return the claims and the disclosures to add to the presentation
+     */
+    suspend fun generateSdJwtResponse(
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): SdJwtTransactionResponse = type.generateSdJwtResponse(this, credential, userInput, docRequestId)
+
+    /**
      * Verifies transaction response returned in an Mdoc presentation.
      *
      * @param responseElements key-value-map for values returned in the mdoc presentation
@@ -107,4 +123,30 @@ class TransactionData<PayloadT: Any>(
      * Creates equivalent transaction data for use in ISO 18013-5 protocols.
      */
     fun serializeIso18013Request(): DataItem = type.serializeIso18013Request(payload)
+
+    companion object {
+        /**
+         * The `typ` header of a Key Binding JWT that signs all of [transactionData], as decided by
+         * each transaction type over all of its own items (see [TransactionType.sdJwtKbType]), or
+         * `kb+jwt` when none asks for another.
+         *
+         * @throws IllegalArgumentException if two transaction types ask for different values.
+         */
+        fun sdJwtKbType(transactionData: List<TransactionData<*>>): String {
+            val requested = transactionData
+                .groupBy { it.type }
+                .mapNotNull { (type, items) -> type.sdJwtKbTypeFor(items) }
+                .distinct()
+            require(requested.size <= 1) {
+                "Transaction types ask for different Key Binding JWT types: $requested"
+            }
+            return requested.singleOrNull() ?: "kb+jwt"
+        }
+
+        // Every item was grouped under this type, so their payloads are its PayloadT.
+        @Suppress("UNCHECKED_CAST")
+        private fun <PayloadT : Any> TransactionType<PayloadT>.sdJwtKbTypeFor(
+            items: List<TransactionData<*>>
+        ): String? = sdJwtKbType(items as List<TransactionData<PayloadT>>)
+    }
 }
