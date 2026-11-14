@@ -203,7 +203,7 @@ fun SettingsScreen(
             )
         }
         item {
-            SettingHeadline("ISO mdoc NFC Negotiated Handover & NFC CCE Preferred Order")
+            SettingHeadline("ISO mdoc Reader QR, NFC Negotiated Handover & NFC CCE Preferred Order")
         }
         for (n in negotiatedHandoverOrder.indices) {
             val prefix = negotiatedHandoverOrder[n]
@@ -275,7 +275,7 @@ fun SettingsScreen(
         }
 
         item {
-            SettingHeadline("ISO mdoc reader Transports (NFC Negotiated Handover)")
+            SettingHeadline("ISO mdoc reader Transports (Reader QR, NFC Negotiated Handover & NFC CCE)")
         }
         item {
             SettingToggle(
@@ -307,6 +307,17 @@ fun SettingsScreen(
         }
         item {
             SettingHeadline("ISO mdoc reader Transport Options")
+        }
+        item {
+            SettingMultipleChoice(
+                title = "Session Encryption Curve",
+                choices = EcCurve.entries.mapNotNull { if (it.supportsKeyAgreement) it.name else null },
+                initialChoice = app.settingsModel.readerSessionEncryptionCurve.collectAsState().value.toString(),
+                onChoiceSelected = { choice ->
+                    app.settingsModel.readerSessionEncryptionCurve.value =
+                        EcCurve.entries.find { it.name == choice }!!
+                },
+            )
         }
         item {
             SettingToggle(

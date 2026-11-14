@@ -59,6 +59,7 @@ private fun inferEngagementType(
     handover is CborArray && handover.items.size == 2 &&
             handover.items[0] is Tagged && handover.items[1] is Tagged -> EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT
     handover == Simple.NULL -> EngagementType.QR_CODE
+    handover is Bstr -> EngagementType.READER_QR_CODE
     handover is CborArray && handover.items.getOrNull(1) == Simple.NULL -> EngagementType.NFC_STATIC_HANDOVER
     else -> EngagementType.NFC_NEGOTIATED_HANDOVER
 }
@@ -78,8 +79,8 @@ private class Iso18013PresentmentSession(
     private val onSendingResponse: () -> Unit,
     private val onDeviceRequest: (deviceRequest: DeviceRequest) -> Unit,
     private val onTelemetry: (telemetry: PresentmentTelemetry) -> Unit,
+    private val startTime: Instant = Clock.System.now(),
 ) {
-    private val startTime = Clock.System.now()
     private var connectedTime: Instant? = null
     private var durationEngagementToConnected: Duration? = null
     private var durationConnectedToRequestReceived: Duration? = null
@@ -179,6 +180,14 @@ private class Iso18013PresentmentSession(
         }
     }
 
+    private fun resolveEngagementEReaderKey(params: EngagementParams): EReaderKey? {
+        val matchingKey = params.eReaderKey?.takeIf { it.curve == params.eDeviceKey.curve } ?: return null
+        val encodedCoseKey = params.eReaderKeyBytes?.let {
+            Cbor.decode(it.toByteArray()).asTagged.asBstr
+        } ?: Cbor.encode(matchingKey.toCoseKey().toDataItem())
+        return EReaderKey(matchingKey, encodedCoseKey)
+    }
+
     private suspend fun updateSessionForLatestEngagement(
         currentParams: EngagementParams,
         currentDeviceRequest: DeviceRequest,
@@ -194,10 +203,7 @@ private class Iso18013PresentmentSession(
         val latestEDeviceKey = latestParams.eDeviceKey
         val latestDeviceEngagement = latestParams.deviceEngagement
         val latestHandover = latestParams.handover
-        val matchingLatestEReaderKey = latestParams.eReaderKey?.takeIf { it.curve == latestEDeviceKey.curve }
-        val resolvedEReaderKey = matchingLatestEReaderKey?.let {
-            EReaderKey(it, Cbor.encode(it.toCoseKey().toDataItem()))
-        } ?: retapMessage?.let {
+        val resolvedEReaderKey = resolveEngagementEReaderKey(latestParams) ?: retapMessage?.let {
             SessionEncryption.getEReaderKey(it.toByteArray())
         } ?: activeEReaderKey!!
         activeEReaderKey = resolvedEReaderKey
@@ -315,6 +321,20 @@ private class Iso18013PresentmentSession(
             val initialParams = engagementParams.value
             Logger.dCbor(TAG, "Handover", initialParams.handover)
             Logger.dCbor(TAG, "DeviceEngagement", initialParams.deviceEngagement)
+            var initialEncodedDeviceEngagement: ByteArray? = null
+            if (inferEngagementType(transport, initialParams.handover) == EngagementType.READER_QR_CODE) {
+                val initialEReaderKey = requireNotNull(initialParams.eReaderKey) {
+                    "eReaderKey is required in EngagementParams for READER_QR_CODE"
+                }
+                require(initialParams.eDeviceKey.curve == initialEReaderKey.curve) {
+                    "EDeviceKey curve (${initialParams.eDeviceKey.curve}) must match " +
+                        "EReaderKey curve (${initialEReaderKey.curve}) for READER_QR_CODE"
+                }
+                val encodedDe = Cbor.encode(initialParams.deviceEngagement)
+                initialEncodedDeviceEngagement = encodedDe
+                Logger.i(TAG, "Sending initial DeviceEngagement message for Reader QR")
+                transport.sendMessage(SessionEncryption.encodeDeviceEngagementMessage(encodedDe))
+            }
             while (true) {
                 val sessionData = receiveReaderMessage()
                 if (sessionData.isEmpty()) {
@@ -332,22 +352,27 @@ private class Iso18013PresentmentSession(
                 val eDeviceKeyToUse = currentParams.eDeviceKey
                 val deviceEngagementToUse = currentParams.deviceEngagement
                 val handoverToUse = currentParams.handover
-                val eReaderKeyToUse = currentParams.eReaderKey
 
                 // Per ISO/IEC 18013-5 Second Edition clause 12.2.4, if the mdoc received an EReaderKey in
                 // ReaderEngagement (step 0) matching the curve of EDeviceKey (step 1), it uses that key and
                 // ignores any EReaderKey in the first SessionMessage (step 2); otherwise it extracts EReaderKey
                 // from the first SessionMessage.
-                val matchingEngagementEReaderKey = eReaderKeyToUse?.takeIf { it.curve == eDeviceKeyToUse.curve }
+                val engagementEReaderKey = resolveEngagementEReaderKey(currentParams)
                 if (sessionEncryption == null ||
-                    (matchingEngagementEReaderKey != null && matchingEngagementEReaderKey != activeEReaderKey?.publicKey)
+                    (engagementEReaderKey != null && engagementEReaderKey.publicKey != activeEReaderKey?.publicKey)
                 ) {
-                    val currentEReaderKey = matchingEngagementEReaderKey?.let {
-                        EReaderKey(it, Cbor.encode(it.toCoseKey().toDataItem()))
-                    } ?: SessionEncryption.getEReaderKey(sessionData)
+                    val currentEReaderKey = engagementEReaderKey ?: SessionEncryption.getEReaderKey(sessionData)
                     activeEReaderKey = currentEReaderKey
+                    val encodedDeviceEngagement = if (
+                        initialEncodedDeviceEngagement != null &&
+                        deviceEngagementToUse === initialParams.deviceEngagement
+                    ) {
+                        initialEncodedDeviceEngagement
+                    } else {
+                        Cbor.encode(deviceEngagementToUse)
+                    }
                     sessionTranscript = buildCborArray {
-                        add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(deviceEngagementToUse))))
+                        add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedDeviceEngagement)))
                         add(Tagged(Tagged.ENCODED_CBOR, Bstr(currentEReaderKey.encodedCoseKey)))
                         add(handoverToUse)
                     }
@@ -483,6 +508,42 @@ private class Iso18013PresentmentSession(
     }
 }
 
+internal suspend fun runIso18013Presentment(
+    transport: MdocTransport,
+    engagementParams: StateFlow<EngagementParams>,
+    source: PresentmentSource,
+    keyAgreementPossible: List<EcCurve>,
+    preselectedDocuments: List<Document>,
+    insertSequenceNumbers: Boolean,
+    timeout: Duration?,
+    timeoutSubsequentRequests: Duration?,
+    onWaitingForRequest: () -> Unit,
+    onWaitingForUserInput: () -> Unit,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit,
+    onSendingResponse: () -> Unit,
+    onDeviceRequest: (deviceRequest: DeviceRequest) -> Unit,
+    onTelemetry: (telemetry: PresentmentTelemetry) -> Unit,
+    startTime: Instant = Clock.System.now(),
+) {
+    Iso18013PresentmentSession(
+        transport = transport,
+        engagementParams = engagementParams,
+        source = source,
+        keyAgreementPossible = keyAgreementPossible,
+        preselectedDocuments = preselectedDocuments,
+        insertSequenceNumbers = insertSequenceNumbers,
+        timeout = timeout,
+        timeoutSubsequentRequests = timeoutSubsequentRequests,
+        onWaitingForRequest = onWaitingForRequest,
+        onWaitingForUserInput = onWaitingForUserInput,
+        onDocumentsInFocus = onDocumentsInFocus,
+        onSendingResponse = onSendingResponse,
+        onDeviceRequest = onDeviceRequest,
+        onTelemetry = onTelemetry,
+        startTime = startTime,
+    ).run()
+}
+
 /**
  * Performs proximity presentment according to ISO/IEC 18013-5:2021.
  *
@@ -534,7 +595,7 @@ suspend fun Iso18013Presentment(
     onDeviceRequest: (deviceRequest: DeviceRequest) -> Unit = {},
     onTelemetry: (telemetry: PresentmentTelemetry) -> Unit = {},
 ) {
-    Iso18013PresentmentSession(
+    runIso18013Presentment(
         transport = transport,
         engagementParams = engagementParams,
         source = source,
@@ -549,7 +610,7 @@ suspend fun Iso18013Presentment(
         onSendingResponse = onSendingResponse,
         onDeviceRequest = onDeviceRequest,
         onTelemetry = onTelemetry,
-    ).run()
+    )
 }
 
 /**

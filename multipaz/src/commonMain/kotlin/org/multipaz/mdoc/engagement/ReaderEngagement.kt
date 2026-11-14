@@ -8,6 +8,8 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
@@ -78,12 +80,43 @@ data class ReaderEngagement private constructor(
 
     companion object {
         /**
+         * Computes the `ReaderQrHandover` (`bstr` SHA-256 digest of `ReaderEngagementBytes`, i.e.,
+         * `#6.24(bstr .cbor ReaderEngagement)`) according to ISO/IEC 18013-5 Second Edition
+         * clause 12.7.1.
+         *
+         * @param encodedReaderEngagement the exact raw CBOR-encoded `ReaderEngagement` bytes.
+         * @return the `ReaderQrHandover` [Bstr] [DataItem].
+         */
+        suspend fun computeHandover(encodedReaderEngagement: ByteArray): DataItem =
+            Bstr(
+                Crypto.digest(
+                    Algorithm.SHA256,
+                    Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedReaderEngagement)))
+                )
+            )
+
+        /**
          * Parses CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5.
          *
          * @param dataItem the `ReaderEngagement` CBOR.
          * @return the parsed [ReaderEngagement].
          */
-        fun fromDataItem(dataItem: DataItem): ReaderEngagement {
+        fun fromDataItem(dataItem: DataItem): ReaderEngagement =
+            fromDataItem(dataItem = dataItem, engagementType = null)
+
+        /**
+         * Parses CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5,
+         * optionally enforcing context-specific constraints for [engagementType].
+         *
+         * @param dataItem the `ReaderEngagement` CBOR.
+         * @param engagementType optional engagement context ([MdocEngagementType.READER_QR] or
+         *   [MdocEngagementType.CCE_REQUEST]) to validate against.
+         * @return the parsed [ReaderEngagement].
+         */
+        fun fromDataItem(
+            dataItem: DataItem,
+            engagementType: MdocEngagementType?,
+        ): ReaderEngagement {
             val version = dataItem[0].asTstr
             val security = dataItem.getOrNull(1)
             val eReaderKey: EcPublicKey?
@@ -98,12 +131,57 @@ data class ReaderEngagement private constructor(
                 eReaderKeyBytes = null
             }
             val connectionMethodsArray = dataItem.getOrNull(2)
+            if (engagementType == MdocEngagementType.READER_QR) {
+                require(version >= "1.1") {
+                    "ReaderEngagement version must be at least 1.1 for READER_QR, got $version"
+                }
+                require(eReaderKey != null) {
+                    "Security (key 1) with EReaderKey is required in ReaderEngagement for READER_QR"
+                }
+                require(connectionMethodsArray != null) {
+                    "DeviceRetrievalMethods (key 2) is required in ReaderEngagement for READER_QR"
+                }
+                for (item in (connectionMethodsArray as CborArray).items) {
+                    val methodType = item[0].asNumber
+                    require(methodType == MdocConnectionMethod.Ble.METHOD_TYPE) {
+                        "Only BLE DeviceRetrievalMethod (type 2) is allowed in READER_QR, got type $methodType"
+                    }
+                }
+            } else if (engagementType == MdocEngagementType.CCE_REQUEST) {
+                require(version >= "1.1") {
+                    "ReaderEngagement version must be at least 1.1 for CCE_REQUEST, got $version"
+                }
+                require(eReaderKey != null) {
+                    "Security (key 1) with EReaderKey is required in ReaderEngagement for CCE_REQUEST"
+                }
+            }
             val connectionMethods = connectionMethodsArray?.let {
                 MdocConnectionMethod.decodeDeviceRetrievalMethods(
                     items = (it as CborArray).items,
                     senderRole = MdocRole.MDOC_READER,
                 )
             } ?: emptyList()
+            if (engagementType == MdocEngagementType.READER_QR) {
+                require(connectionMethods.isNotEmpty()) {
+                    "At least one BLE connection method is required in ReaderEngagement for READER_QR"
+                }
+                for (method in connectionMethods) {
+                    require(method is MdocConnectionMethod.Ble) {
+                        "Only BLE connection methods are allowed in ReaderEngagement for READER_QR, got $method"
+                    }
+                    require(method !is MdocConnectionMethod.Ble.DirectL2capPeripheral) {
+                        "DirectL2capPeripheral cannot be used in ReaderEngagement for READER_QR"
+                    }
+                    require(method.uuid != null) {
+                        "uuid is required for BLE connection method in ReaderEngagement for READER_QR: $method"
+                    }
+                    if (method is MdocConnectionMethod.Ble.DirectL2capCentral) {
+                        require(method.psm != null) {
+                            "psm is required for DirectL2capCentral in ReaderEngagement for READER_QR"
+                        }
+                    }
+                }
+            }
             return ReaderEngagement(
                 version = version,
                 eReaderKey = eReaderKey,

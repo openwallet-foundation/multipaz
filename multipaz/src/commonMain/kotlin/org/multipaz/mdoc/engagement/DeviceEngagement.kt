@@ -122,7 +122,27 @@ data class DeviceEngagement private constructor(
          * @param dataItem the `DeviceEngagement` CBOR.
          * @return the parsed [DeviceEngagement].
          */
-        fun fromDataItem(dataItem: DataItem): DeviceEngagement {
+        fun fromDataItem(dataItem: DataItem): DeviceEngagement =
+            fromDataItem(dataItem = dataItem, engagementType = null)
+
+        /**
+         * Parses CBOR compliant with the CDDL for `DeviceEngagement` according to ISO 18013-5,
+         * optionally enforcing context-specific constraints for [engagementType].
+         *
+         * @param dataItem the `DeviceEngagement` CBOR.
+         * @param engagementType optional engagement context ([MdocEngagementType.DEVICE_QR],
+         *   [MdocEngagementType.READER_QR], or [MdocEngagementType.CCE_SELECT]) to validate against.
+         * @return the parsed [DeviceEngagement].
+         */
+        fun fromDataItem(
+            dataItem: DataItem,
+            engagementType: MdocEngagementType?,
+        ): DeviceEngagement {
+            if (engagementType == MdocEngagementType.READER_QR) {
+                require(!dataItem.hasKey(2)) {
+                    "DeviceRetrievalMethods must not be present in DeviceEngagement for READER_QR"
+                }
+            }
             val version = dataItem[0].asTstr
             val security = dataItem[1]
             val cipherSuite = security[0].asNumber

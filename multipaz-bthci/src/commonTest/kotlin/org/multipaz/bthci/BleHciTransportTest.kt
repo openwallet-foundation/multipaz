@@ -52,8 +52,13 @@ import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.mdoc.transport.TransportWarning
 import org.multipaz.mdoc.transport.TransportWarningCode
+import org.multipaz.mdoc.transport.createMdocTransports
 import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.EngagementType
+import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
+import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.role.MdocRole
@@ -61,6 +66,7 @@ import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.presentment.EngagementParams
 import org.multipaz.presentment.FaceMatchingMode
 import org.multipaz.presentment.Iso18013Presentment
+import org.multipaz.presentment.Iso18013ReaderQrPresentment
 import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentOutcome
 import org.multipaz.presentment.PresentmentSelection
@@ -78,6 +84,7 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Constants
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
+import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
 import kotlin.concurrent.Volatile
 import kotlin.math.min
@@ -4328,6 +4335,402 @@ class BleHciTransportTest {
             engine.close()
             bus.centralIo.close()
             bus.peripheralIo.close()
+        }
+    }
+
+    private suspend fun runReaderQrOverHciSession(
+        presentmentSource: PresentmentSource,
+        readerFactory: MdocTransportFactory,
+        holderFactory: MdocTransportFactory,
+        requestedReaderMethods: List<MdocConnectionMethod.Ble>,
+        readerOptions: MdocTransportOptions,
+        holderOptions: MdocTransportOptions,
+        bleDirectL2capEnabled: Boolean = true,
+        expectedUsingL2cap: Boolean,
+        expectedPsmInEngagement: Boolean,
+        expectedReaderPsmInEngagement: Boolean = expectedPsmInEngagement,
+        expectedHolderWarnings: List<TransportWarning> = emptyList(),
+    ) {
+        val eReaderKey = getAnnexDEReaderKey()
+        val readerTransport = readerFactory.createTransports(
+            connectionMethods = requestedReaderMethods,
+            role = MdocRole.MDOC_READER,
+            options = readerOptions,
+        ).single()
+        try {
+            readerTransport.advertise()
+            val readerEngagement = buildReaderEngagement(
+                eReaderKey = eReaderKey.publicKey,
+                version = "1.1",
+            ) {
+                for (cm in readerTransport.connectionMethods) {
+                    addConnectionMethod(cm)
+                }
+            }
+            val encodedReaderEngagement = Cbor.encode(
+                readerEngagement.toDataItem(MdocEngagementType.READER_QR)
+            )
+            val qrUri = "mdoc:" + encodedReaderEngagement.toBase64Url()
+
+            var holderTelemetry: PresentmentTelemetry? = null
+            coroutineScope {
+                val holderJob = launch {
+                    Iso18013ReaderQrPresentment(
+                        uri = qrUri,
+                        source = presentmentSource,
+                        supportedCurves = listOf(EcCurve.P256),
+                        transportFactory = holderFactory,
+                        options = holderOptions,
+                        bleDirectL2capEnabled = bleDirectL2capEnabled,
+                        connectionTimeout = 10.seconds,
+                        onTelemetry = { holderTelemetry = it },
+                    )
+                }
+
+                readerTransport.open(eReaderKey.publicKey)
+                assertEquals(expectedUsingL2cap, readerTransport.stats.bleUsingL2cap)
+                assertEquals(expectedReaderPsmInEngagement, readerTransport.stats.bleL2capPsmInEngagement)
+                val firstMessage = readerTransport.waitForMessage()
+                val encodedDeviceEngagement = SessionEncryption.getDeviceEngagementBytes(firstMessage)
+                val decodedDeviceEngagement = DeviceEngagement.fromDataItem(
+                    dataItem = Cbor.decode(encodedDeviceEngagement),
+                    engagementType = MdocEngagementType.READER_QR,
+                )
+                assertTrue(decodedDeviceEngagement.connectionMethods.isEmpty())
+
+                val handover = ReaderEngagement.computeHandover(encodedReaderEngagement)
+                val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
+                val sessionTranscript = buildCborArray {
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedDeviceEngagement)))
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedEReaderKey)))
+                    add(handover)
+                }
+                val readerSessionEncryption = SessionEncryption(
+                    role = MdocRole.MDOC_READER,
+                    eSelfKey = eReaderKey,
+                    remotePublicKey = decodedDeviceEngagement.eDeviceKey,
+                    encodedSessionTranscript = Cbor.encode(sessionTranscript),
+                )
+
+                val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "family_name" to false
+                            )
+                        )
+                    )
+                }
+                readerTransport.sendMessage(
+                    readerSessionEncryption.encryptMessage(
+                        messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
+                        statusCode = null,
+                    )
+                )
+
+                val encryptedResponse = readerTransport.waitForMessage()
+                val (encodedDeviceResponse, status) = readerSessionEncryption.decryptMessage(encryptedResponse)
+                assertNull(status)
+                assertNotNull(encodedDeviceResponse)
+
+                val deviceResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+                deviceResponse.verify(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = AsymmetricKey.AnonymousExplicit(eReaderKey, Algorithm.ECDH_P256),
+                    atTime = LocalDate.parse("2021-01-01").atStartOfDayIn(TimeZone.UTC),
+                )
+                assertEquals(1, deviceResponse.documents.size)
+                assertEquals(
+                    "Doe",
+                    deviceResponse.documents[0]
+                        .issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["family_name"]!!
+                        .dataElementValue.asTstr
+                )
+
+                readerTransport.sendMessage(
+                    readerSessionEncryption.encryptMessage(
+                        messagePlaintext = null,
+                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                    )
+                )
+                holderJob.join()
+            }
+
+            val telemetry = assertNotNull(holderTelemetry)
+            assertEquals(PresentmentOutcome.SUCCESS, telemetry.outcome)
+            assertEquals(EngagementType.READER_QR_CODE, telemetry.engagementType)
+            assertEquals(expectedUsingL2cap, telemetry.transportStats?.bleUsingL2cap)
+            assertEquals(expectedPsmInEngagement, telemetry.transportStats?.bleL2capPsmInEngagement)
+            assertEquals(expectedHolderWarnings, telemetry.warnings)
+        } finally {
+            readerTransport.close()
+        }
+    }
+
+    @Test
+    fun readerQrOverHciAllBleModes() = runTest {
+        withContext(Dispatchers.Default) {
+            val presentmentSource = createAnnexDPresentmentSource()
+            val serviceUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
+
+            // 1. DirectL2capCentral (Reader advertises [DirectL2capCentral, GattCentral] on Peripheral;
+            //    Holder connects via DirectL2capCentral on Central)
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createPeripheralManager(bus.peripheralIo),
+                        holderFactory = createCentralManager(bus.centralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = serviceUuid),
+                            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        bleDirectL2capEnabled = true,
+                        expectedUsingL2cap = true,
+                        expectedPsmInEngagement = true,
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 2. GattCentral with GATT-L2CAP when Holder has bleDirectL2capEnabled = false
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createPeripheralManager(bus.peripheralIo),
+                        holderFactory = createCentralManager(bus.centralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = serviceUuid),
+                            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        bleDirectL2capEnabled = false,
+                        expectedUsingL2cap = true,
+                        expectedPsmInEngagement = false,
+                        expectedReaderPsmInEngagement = true,
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 3. GattCentral over pure GATT (bleUseL2CAP = false)
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createPeripheralManager(bus.peripheralIo),
+                        holderFactory = createCentralManager(bus.centralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        expectedUsingL2cap = false,
+                        expectedPsmInEngagement = false,
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 4. GattPeripheral over GATT-L2CAP (Reader scans on Central; Holder advertises on Peripheral)
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createCentralManager(bus.centralIo),
+                        holderFactory = createPeripheralManager(bus.peripheralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = true),
+                        expectedUsingL2cap = true,
+                        expectedPsmInEngagement = false,
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 5. GattPeripheral over pure GATT (Reader scans on Central; Holder advertises on Peripheral)
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createCentralManager(bus.centralIo),
+                        holderFactory = createPeripheralManager(bus.peripheralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        expectedUsingL2cap = false,
+                        expectedPsmInEngagement = false,
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun readerQrOverHciCentralContinuesWithWarningWhenPeripheralOmitsOrZerosIdent() = runTest {
+        withContext(Dispatchers.Default) {
+            val presentmentSource = createAnnexDPresentmentSource()
+            val serviceUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
+
+            fun createReaderPeripheralFactoryWithIdentOverride(
+                io: HciPacketIo,
+                omitIdentCharacteristic: Boolean,
+                overrideIdentBytes: ByteArray?,
+            ): MdocTransportFactory = object : MdocTransportFactory {
+                override fun createTransport(
+                    connectionMethod: MdocConnectionMethod,
+                    role: MdocRole,
+                    options: MdocTransportOptions,
+                ): MdocTransport = createTransports(listOf(connectionMethod), role, options).single()
+
+                override fun createTransports(
+                    connectionMethods: List<MdocConnectionMethod>,
+                    role: MdocRole,
+                    options: MdocTransportOptions,
+                ): List<MdocTransport> = createMdocTransports(
+                    connectionMethods = connectionMethods,
+                    role = role,
+                    options = options,
+                    centralHalFactory = { BleCentralHalHci(packetIoFactory = { io }) },
+                    peripheralHalFactory = {
+                        val baseHal = BlePeripheralHalHci(packetIoFactory = { io })
+                        val identReadRequestIds = HciSyncMap<Int, Boolean>()
+                        var configuredIdentUuid: UUID? = null
+                        object : BlePeripheralHal by baseHal {
+                            override fun setCallback(callback: BlePeripheralHal.Callback) {
+                                baseHal.setCallback(object : BlePeripheralHal.Callback by callback {
+                                    override fun onCharacteristicReadRequest(requestId: Int, uuid: UUID) {
+                                        if (uuid == configuredIdentUuid) {
+                                            identReadRequestIds[requestId] = true
+                                        }
+                                        callback.onCharacteristicReadRequest(requestId, uuid)
+                                    }
+                                })
+                            }
+
+                            override fun setupGattServerAndAddService(
+                                serviceUuid: UUID,
+                                stateCharacteristicUuid: UUID,
+                                client2ServerCharacteristicUuid: UUID,
+                                server2ClientCharacteristicUuid: UUID,
+                                identCharacteristicUuid: UUID?,
+                                l2capCharacteristicUuid: UUID?,
+                                encodedL2capPsm: ByteArray?,
+                            ) {
+                                configuredIdentUuid = identCharacteristicUuid
+                                baseHal.setupGattServerAndAddService(
+                                    serviceUuid = serviceUuid,
+                                    stateCharacteristicUuid = stateCharacteristicUuid,
+                                    client2ServerCharacteristicUuid = client2ServerCharacteristicUuid,
+                                    server2ClientCharacteristicUuid = server2ClientCharacteristicUuid,
+                                    identCharacteristicUuid = if (omitIdentCharacteristic) null else identCharacteristicUuid,
+                                    l2capCharacteristicUuid = l2capCharacteristicUuid,
+                                    encodedL2capPsm = encodedL2capPsm,
+                                )
+                            }
+
+                            override fun sendReadResponse(
+                                requestId: Int,
+                                statusSuccess: Boolean,
+                                value: ByteArray,
+                            ) {
+                                val isIdent = identReadRequestIds.remove(requestId) != null
+                                val effectiveValue = if (isIdent && overrideIdentBytes != null) {
+                                    overrideIdentBytes
+                                } else {
+                                    value
+                                }
+                                baseHal.sendReadResponse(requestId, statusSuccess, effectiveValue)
+                            }
+                        }
+                    },
+                    nonBleTransportFactory = { throw IllegalArgumentException("Unexpected non-BLE method $it") },
+                )
+            }
+
+            // Case 1: Third-party reader GATT server omits Ident characteristic (00000008-...) completely
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createReaderPeripheralFactoryWithIdentOverride(
+                            io = bus.peripheralIo,
+                            omitIdentCharacteristic = true,
+                            overrideIdentBytes = null,
+                        ),
+                        holderFactory = createCentralManager(bus.centralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        expectedUsingL2cap = false,
+                        expectedPsmInEngagement = false,
+                        expectedHolderWarnings = listOf(
+                            TransportWarning(TransportWarningCode.BLE_IDENT_NOT_SET)
+                        ),
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // Case 2: Third-party reader GATT server exposes Ident characteristic with 16 all-zero bytes
+            run {
+                val bus = VirtualHciBus()
+                try {
+                    runReaderQrOverHciSession(
+                        presentmentSource = presentmentSource,
+                        readerFactory = createReaderPeripheralFactoryWithIdentOverride(
+                            io = bus.peripheralIo,
+                            omitIdentCharacteristic = false,
+                            overrideIdentBytes = ByteArray(16),
+                        ),
+                        holderFactory = createCentralManager(bus.centralIo),
+                        requestedReaderMethods = listOf(
+                            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                        ),
+                        readerOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        holderOptions = MdocTransportOptions(bleUseL2CAP = false),
+                        expectedUsingL2cap = false,
+                        expectedPsmInEngagement = false,
+                        expectedHolderWarnings = listOf(
+                            TransportWarning(TransportWarningCode.BLE_IDENT_NOT_SET)
+                        ),
+                    )
+                } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
         }
     }
 }

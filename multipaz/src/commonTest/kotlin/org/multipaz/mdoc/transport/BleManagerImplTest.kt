@@ -284,6 +284,98 @@ class BleManagerImplTest {
     }
 
     /**
+     * Verifies that when a GATT-server reader omits the `Ident` characteristic (for example, a
+     * third-party Reader QR peripheral), [BleCentralManagerImpl] logs a warning, records
+     * [TransportWarningCode.BLE_IDENT_NOT_SET], and completes the connection cleanly.
+     */
+    @Test
+    fun centralManagerContinuesWithWarningWhenPeripheralOmitsIdentCharacteristic() = runTest {
+        val bridge = PairedBleHalBridge(omitIdentCharacteristic = true)
+        val centralManager = BleCentralManagerImpl(
+            hal = bridge.centralHal,
+            postScanDelay = Duration.ZERO,
+        )
+        val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
+
+        val mdoc = BleTransportCentralMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            centralManager = centralManager,
+            uuid = serviceUuid,
+            psm = null,
+        )
+        val reader = BleTransportCentralMdocReader(
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(),
+            peripheralManager = peripheralManager,
+            uuid = serviceUuid,
+        )
+
+        reader.advertise()
+        val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eReaderKey) }
+        val mdocOpenJob = async { mdoc.open(eReaderKey) }
+        readerOpenJob.await()
+        mdocOpenJob.await()
+
+        assertEquals(MdocTransport.State.CONNECTED, mdoc.state.value)
+        assertEquals(MdocTransport.State.CONNECTED, reader.state.value)
+        assertTrue(
+            mdoc.stats.warnings.any { it.code == TransportWarningCode.BLE_IDENT_NOT_SET }
+        )
+
+        val payload = byteArrayOf(10, 20, 30)
+        mdoc.sendMessage(payload)
+        assertContentEquals(payload, reader.waitForMessage())
+
+        mdoc.close()
+        reader.close()
+    }
+
+    /**
+     * Verifies that when a GATT-server reader exposes `Ident` with an empty or all-zero value,
+     * [BleCentralManagerImpl] records [TransportWarningCode.BLE_IDENT_NOT_SET] and continues cleanly.
+     */
+    @Test
+    fun centralManagerContinuesWithWarningWhenPeripheralReturnsEmptyOrZeroIdent() = runTest {
+        for (identOverride in listOf(byteArrayOf(), ByteArray(16))) {
+            val bridge = PairedBleHalBridge(overrideIdentValue = identOverride)
+            val centralManager = BleCentralManagerImpl(
+                hal = bridge.centralHal,
+                postScanDelay = Duration.ZERO,
+            )
+            val peripheralManager = BlePeripheralManagerImpl(hal = bridge.peripheralHal)
+
+            val mdoc = BleTransportCentralMdoc(
+                role = MdocRole.MDOC,
+                options = MdocTransportOptions(),
+                centralManager = centralManager,
+                uuid = serviceUuid,
+                psm = null,
+            )
+            val reader = BleTransportCentralMdocReader(
+                role = MdocRole.MDOC_READER,
+                options = MdocTransportOptions(),
+                peripheralManager = peripheralManager,
+                uuid = serviceUuid,
+            )
+
+            reader.advertise()
+            val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eReaderKey) }
+            val mdocOpenJob = async { mdoc.open(eReaderKey) }
+            readerOpenJob.await()
+            mdocOpenJob.await()
+
+            assertEquals(MdocTransport.State.CONNECTED, mdoc.state.value)
+            assertTrue(
+                mdoc.stats.warnings.any { it.code == TransportWarningCode.BLE_IDENT_NOT_SET }
+            )
+
+            mdoc.close()
+            reader.close()
+        }
+    }
+
+    /**
      * Verifies scan timeout restart, connection retry loop, service discovery retry loop, and L2CAP connect retry loop
      * in [BleCentralManagerImpl].
      */
@@ -1234,7 +1326,9 @@ class BleManagerImplTest {
      */
     private class PairedBleHalBridge(
         private val negotiatedMtu: Int = 515,
-        private val publishedL2capPsm: Int = 128
+        private val publishedL2capPsm: Int = 128,
+        private val omitIdentCharacteristic: Boolean = false,
+        private val overrideIdentValue: ByteArray? = null,
     ) {
         var advertisedServiceUuid: UUID? = null
         val registeredCharacteristics = mutableSetOf<UUID>()
@@ -1295,10 +1389,12 @@ class BleManagerImplTest {
                 l2capCharacteristicUuid: UUID?
             ) {
                 val hasL2cap = l2capCharacteristicUuid != null && registeredCharacteristics.contains(l2capCharacteristicUuid)
+                val hasIdent = identCharacteristicUuid == null || registeredCharacteristics.contains(identCharacteristicUuid)
                 halCallback.onCharacteristicsDiscovered(
                     maxWriteSize = null,
                     hasL2capCharacteristic = hasL2cap,
-                    error = null
+                    error = null,
+                    hasIdentCharacteristic = hasIdent,
                 )
             }
 
@@ -1371,7 +1467,7 @@ class BleManagerImplTest {
                 registeredCharacteristics.add(stateCharacteristicUuid)
                 registeredCharacteristics.add(client2ServerCharacteristicUuid)
                 registeredCharacteristics.add(server2ClientCharacteristicUuid)
-                if (identCharacteristicUuid != null) {
+                if (identCharacteristicUuid != null && !omitIdentCharacteristic) {
                     registeredCharacteristics.add(identCharacteristicUuid)
                 }
                 if (l2capCharacteristicUuid != null) {
@@ -1393,7 +1489,15 @@ class BleManagerImplTest {
                 lastReadResponseStatusSuccess = statusSuccess
                 val uuid = pendingReadUuidByRequestId.remove(requestId) ?: return
                 if (statusSuccess) {
-                    centralHal.halCallback.onCharacteristicRead(uuid, value.copyOf(), null)
+                    val effectiveValue = if (
+                        overrideIdentValue != null &&
+                        uuid == UUID.fromString("00000008-a123-48ce-896b-4c76973373e6")
+                    ) {
+                        overrideIdentValue.copyOf()
+                    } else {
+                        value.copyOf()
+                    }
+                    centralHal.halCallback.onCharacteristicRead(uuid, effectiveValue, null)
                 } else {
                     centralHal.halCallback.onCharacteristicRead(uuid, null, IllegalStateException("GATT read failed"))
                 }
