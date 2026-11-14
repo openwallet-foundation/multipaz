@@ -24,6 +24,28 @@ import kotlin.time.Instant
  * disclosed terms filled in. The text is English.
  */
 object DelegateMandateText {
+    /** The title of a spending permission on the consent screen. */
+    const val TITLE = "Spending permission"
+
+    /** Under [TITLE] in the consent prompt: what approving the permission lets happen. */
+    const val SUMMARY_EXPLAINER =
+        "An agent will be able to spend for you without asking again, until these limits are reached."
+
+    /** Under [TITLE] on the details page. */
+    const val DETAILS_EXPLAINER = "Everything below is part of what you sign."
+
+    /** The label for who asked for the permission. */
+    const val REQUESTED_BY = "Requested by"
+
+    /**
+     * Shown in place of the permission when its mandates cannot be read. [DelegateTransaction]
+     * refuses such a request before the consent prompt, so a screen should never need it.
+     */
+    const val CANNOT_SHOW = "This spending permission can't be shown. Don't approve it."
+
+    /** The raw mandate type, printed under a section's heading on the details page. */
+    fun mandateTypeLine(mandateType: String): String = "Type: $mandateType"
+
     /**
      * One readable line on the consent screen.
      *
@@ -31,13 +53,37 @@ object DelegateMandateText {
      * @property value what it says, formatted for a person (money, dates, lists).
      * @property shape what the value looks like, which is how a screen decides its prominence.
      * @property detail a secondary line under [value] — the domain under a merchant's name.
+     * @property kind what a summary row is about, so a screen can pick its icon without
+     *   reading [label], which is worded for a person and may change.
      */
     data class SummaryLine(
         val label: String,
         val value: String,
         val shape: Shape = Shape.TEXT,
         val detail: String? = null,
+        val kind: Kind = Kind.OTHER,
     )
+
+    /** What a row of [PermissionSummary.rows] is about. */
+    enum class Kind {
+        /** Where the agent may buy (`checkout.allowed_merchants`). */
+        MERCHANT,
+
+        /** Who may be paid, when they are not the merchants (`payment.allowed_payees`, `payee`). */
+        PAYEE,
+
+        /** What may be bought (`checkout.line_items`). */
+        ITEMS,
+
+        /** When the permission ends (`exp`). */
+        EXPIRY,
+
+        /** Who the permission is for: the agent's key (`cnf`). */
+        AGENT,
+
+        /** Anything else. */
+        OTHER,
+    }
 
     /**
      * What a value looks like. The renderer walks arbitrary JSON and cannot know which field
@@ -153,12 +199,16 @@ object DelegateMandateText {
             }
         }
         val rows = buildList {
-            partiesRow("At", merchants)?.let(::add)
+            partiesRow("At", Kind.MERCHANT, merchants)?.let(::add)
             // Who is paid is said apart from where the agent shops, unless they are the same.
-            if (payees != merchants) partiesRow("Paid to", payees)?.let(::add)
-            if (items.isNotEmpty()) add(SummaryLine("For", items.joinToString("\n")))
-            if (until.isNotEmpty()) add(SummaryLine("Until", until.joinToString(", "), Shape.INSTANT))
-            if (agents.isNotEmpty()) add(SummaryLine("Agent", agents.joinToString(", "), Shape.PARTY))
+            if (payees != merchants) partiesRow("Paid to", Kind.PAYEE, payees)?.let(::add)
+            if (items.isNotEmpty()) add(SummaryLine("For", items.joinToString("\n"), kind = Kind.ITEMS))
+            if (until.isNotEmpty()) {
+                add(SummaryLine("Until", until.joinToString(", "), Shape.INSTANT, kind = Kind.EXPIRY))
+            }
+            if (agents.isNotEmpty()) {
+                add(SummaryLine("Agent", agents.joinToString(", "), Shape.PARTY, kind = Kind.AGENT))
+            }
             addAll(other.filter { it.shape != Shape.OPAQUE })
         }
         val group = summarizeGroup(mandates)
@@ -258,10 +308,14 @@ object DelegateMandateText {
     private data class Merchant(val key: String, val name: String, val domain: String?)
 
     /** One row naming [parties]: the name with its domain underneath, or one per line. */
-    private fun partiesRow(label: String, parties: Set<Merchant>): SummaryLine? = when (parties.size) {
+    private fun partiesRow(label: String, kind: Kind, parties: Set<Merchant>): SummaryLine? = when (parties.size) {
         0 -> null
-        1 -> parties.single().let { SummaryLine(label, it.name, detail = it.domain) }
-        else -> SummaryLine(label, parties.joinToString("\n") { m -> m.domain?.let { "${m.name} ($it)" } ?: m.name })
+        1 -> parties.single().let { SummaryLine(label, it.name, detail = it.domain, kind = kind) }
+        else -> SummaryLine(
+            label = label,
+            value = parties.joinToString("\n") { m -> m.domain?.let { "${m.name} ($it)" } ?: m.name },
+            kind = kind,
+        )
     }
 
     /**
@@ -358,6 +412,36 @@ object DelegateMandateText {
             else -> renderValue(value).let { listOf(SummaryLine(prettyLabel(key), it, shapeOf(it))) }
         }
     }
+
+    /**
+     * One mandate as a details page lists it.
+     *
+     * @property heading what the mandate governs, in words ([headingFor]).
+     * @property mandateType the raw mandate type, or blank when the mandate does not say.
+     * @property lines every line of the mandate ([summarize]), in the order it arrived.
+     */
+    data class MandateSection(
+        val heading: String,
+        val mandateType: String,
+        val lines: List<SummaryLine>,
+    )
+
+    /**
+     * Each mandate on its own, in full, for a details page.
+     *
+     * [describePermission] deduplicates what the mandates share. A details page must not: AP2
+     * requires the signed Mandate Content to be shown, so every mandate is listed as it will be
+     * signed, one section each, even when several arrive in one transaction data item.
+     */
+    fun describeMandates(mandates: List<JsonObject>): List<MandateSection> =
+        mandates.map { mandate ->
+            val mandateType = mandateType(mandate)
+            MandateSection(
+                heading = headingFor(mandateType),
+                mandateType = mandateType,
+                lines = summarize(mandate),
+            )
+        }
 
     /** The mandate type, for the heading above its lines. Blank when the mandate does not say. */
     fun mandateType(mandate: JsonObject): String =

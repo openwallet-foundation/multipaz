@@ -37,6 +37,7 @@
 		7B04AE922FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE652FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift */; };
 		7B04AE932FCDDD1700DAEA40 /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5D2FCDDD1700DAEA40 /* ConsentPromptDialog.swift */; };
 		C0A5E1712FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1702FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift */; };
+		D3E1A0712FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E1A0702FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift */; };
 		7B04AE942FCDDD1700DAEA40 /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE712FCDDD1700DAEA40 /* ProvisioningView.swift */; };
 		7B04AE952FCDDD1700DAEA40 /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6F2FCDDD1700DAEA40 /* PromptDialogs.swift */; };
 		7B04AE962FCDDD1700DAEA40 /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE602FCDDD1700DAEA40 /* DocumentExtCardart.swift */; };
@@ -70,6 +71,7 @@
 		7B04AEB22FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE652FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift */; };
 		7B04AEB32FCDDD1700DAEA40 /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5D2FCDDD1700DAEA40 /* ConsentPromptDialog.swift */; };
 		C0A5E1722FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A5E1702FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift */; };
+		D3E1A0722FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E1A0702FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift */; };
 		7B04AEB42FCDDD1700DAEA40 /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE712FCDDD1700DAEA40 /* ProvisioningView.swift */; };
 		7B04AEB52FCDDD1700DAEA40 /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE6F2FCDDD1700DAEA40 /* PromptDialogs.swift */; };
 		7B04AEB62FCDDD1700DAEA40 /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE602FCDDD1700DAEA40 /* DocumentExtCardart.swift */; };
@@ -119,6 +121,7 @@
 		7B04AE5C2FCDDD1700DAEA40 /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
 		7B04AE5D2FCDDD1700DAEA40 /* ConsentPromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentPromptDialog.swift; sourceTree = "<group>"; };
 		C0A5E1702FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDataRendererSwiftUi.swift; sourceTree = "<group>"; };
+		D3E1A0702FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DelegateTransactionRendererSwiftUi.swift; sourceTree = "<group>"; };
 		7B04AE5E2FCDDD1700DAEA40 /* DefaultToHumanReadable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultToHumanReadable.swift; sourceTree = "<group>"; };
 		7B04AE5F2FCDDD1700DAEA40 /* DocumentExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExt.swift; sourceTree = "<group>"; };
 		7B04AE602FCDDD1700DAEA40 /* DocumentExtCardart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExtCardart.swift; sourceTree = "<group>"; };
@@ -243,6 +246,7 @@
 				7B04AE5C2FCDDD1700DAEA40 /* Consent.swift */,
 				7B04AE5D2FCDDD1700DAEA40 /* ConsentPromptDialog.swift */,
 				C0A5E1702FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift */,
+				D3E1A0702FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift */,
 				7B04AE5E2FCDDD1700DAEA40 /* DefaultToHumanReadable.swift */,
 				7B04AE5F2FCDDD1700DAEA40 /* DocumentExt.swift */,
 				7B04AE602FCDDD1700DAEA40 /* DocumentExtCardart.swift */,
@@ -461,6 +465,7 @@
 				7B04AEB22FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift in Sources */,
 				7B04AEB32FCDDD1700DAEA40 /* ConsentPromptDialog.swift in Sources */,
 				C0A5E1722FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift in Sources */,
+				D3E1A0722FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift in Sources */,
 				7B04AEB42FCDDD1700DAEA40 /* ProvisioningView.swift in Sources */,
 				7B04AEB52FCDDD1700DAEA40 /* PromptDialogs.swift in Sources */,
 				7B04AEB62FCDDD1700DAEA40 /* DocumentExtCardart.swift in Sources */,
@@ -504,6 +509,7 @@
 				7B04AE922FCDDD1700DAEA40 /* FloatingItemHeadingAndContent.swift in Sources */,
 				7B04AE932FCDDD1700DAEA40 /* ConsentPromptDialog.swift in Sources */,
 				C0A5E1712FCDDD1700DAEA40 /* TransactionDataRendererSwiftUi.swift in Sources */,
+				D3E1A0712FCDDD1700DAEA40 /* DelegateTransactionRendererSwiftUi.swift in Sources */,
 				7B04AE942FCDDD1700DAEA40 /* ProvisioningView.swift in Sources */,
 				7B04AE952FCDDD1700DAEA40 /* PromptDialogs.swift in Sources */,
 				7B04AE962FCDDD1700DAEA40 /* DocumentExtCardart.swift in Sources */,

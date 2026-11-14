@@ -262,7 +262,10 @@ class DelegateMandateTextTest {
     @Test
     fun theMerchantIsItsNameWithItsDomainUnderneath() {
         val at = describe(checkoutMandate, paymentMandate).rows.filter { it.label == "At" }
-        assertEquals(listOf(DelegateMandateText.SummaryLine("At", "utopia", detail = "shop.example.com")), at)
+        assertEquals(
+            listOf(DelegateMandateText.SummaryLine("At", "utopia", detail = "shop.example.com", kind = DelegateMandateText.Kind.MERCHANT)),
+            at
+        )
     }
 
     // The requester is not assumed to be the merchant.
@@ -280,7 +283,7 @@ class DelegateMandateTextTest {
             )
         ).rows
         assertEquals(
-            DelegateMandateText.SummaryLine("At", "utopia (shop.example.com)\nOther (other.example)"),
+            DelegateMandateText.SummaryLine("At", "utopia (shop.example.com)\nOther (other.example)", kind = DelegateMandateText.Kind.MERCHANT),
             rows.single()
         )
     }
@@ -297,7 +300,7 @@ class DelegateMandateTextTest {
             )
         ).rows
         assertEquals(
-            DelegateMandateText.SummaryLine("For", "2 × Latte (small) or Latte (large)\naurora-headphones"),
+            DelegateMandateText.SummaryLine("For", "2 × Latte (small) or Latte (large)\naurora-headphones", kind = DelegateMandateText.Kind.ITEMS),
             rows.single()
         )
     }
@@ -359,9 +362,12 @@ class DelegateMandateTextTest {
             mandateOf("""{"vct":"mandate.payment.open.1","constraints":[{"type":"payment.allowed_payees","allowed":[
                  {"id":"shop.example.com","name":"Someone else","website":"https://else.example"}]}]}"""),
         ).rows
-        assertEquals(DelegateMandateText.SummaryLine("At", "utopia", detail = "shop.example.com"), rows.single { it.label == "At" })
         assertEquals(
-            DelegateMandateText.SummaryLine("Paid to", "Someone else", detail = "else.example"),
+            DelegateMandateText.SummaryLine("At", "utopia", detail = "shop.example.com", kind = DelegateMandateText.Kind.MERCHANT),
+            rows.single { it.label == "At" }
+        )
+        assertEquals(
+            DelegateMandateText.SummaryLine("Paid to", "Someone else", detail = "else.example", kind = DelegateMandateText.Kind.PAYEE),
             rows.single { it.label == "Paid to" }
         )
     }
@@ -384,5 +390,75 @@ class DelegateMandateTextTest {
             DelegateMandateText.summarize(closed)
                 .contains(DelegateMandateText.SummaryLine("Payment amount", "150.00 USD", DelegateMandateText.Shape.MONEY))
         )
+    }
+
+    // A screen picks a row's icon from its kind, so nothing depends on how the label is worded.
+    @Test
+    fun eachRowSaysWhatItIsAbout() {
+        val rows = describe(
+            mandateOf(
+                """{"vct":"mandate.checkout.open.1","exp":1821496085,"cnf":$agentCnf,"constraints":[
+                     {"type":"checkout.allowed_merchants","allowed":[$merchant]},
+                     {"type":"checkout.line_items","items":[
+                       {"id":"a","acceptable_items":[{"id":"a","title":"A"}],"quantity":1}]},
+                     {"type":"checkout.shipping_region","allowed":["US"]}]}"""
+            ),
+            mandateOf(
+                """{"vct":"mandate.payment.open.1","constraints":[{"type":"payment.allowed_payees","allowed":[
+                     {"id":"else.example","name":"Someone else"}]}]}"""
+            ),
+        ).rows
+        assertEquals(
+            mapOf(
+                "At" to DelegateMandateText.Kind.MERCHANT,
+                "Paid to" to DelegateMandateText.Kind.PAYEE,
+                "For" to DelegateMandateText.Kind.ITEMS,
+                "Until" to DelegateMandateText.Kind.EXPIRY,
+                "Agent" to DelegateMandateText.Kind.AGENT,
+                "Checkout shipping region" to DelegateMandateText.Kind.OTHER,
+            ),
+            rows.associate { it.label to it.kind }
+        )
+    }
+
+    // AP2 requires the signed Mandate Content to be shown, so the details page lists each
+    // mandate in full, under a heading in words and its raw type.
+    @Test
+    fun detailsListEachMandateInFull() {
+        val sections = DelegateMandateText.describeMandates(listOf(checkoutMandate, paymentMandate))
+
+        assertEquals(
+            listOf(
+                DelegateMandateText.MandateSection(
+                    heading = "What can be bought",
+                    mandateType = "mandate.checkout.open.1",
+                    lines = DelegateMandateText.summarize(checkoutMandate),
+                ),
+                DelegateMandateText.MandateSection(
+                    heading = "How much can be spent",
+                    mandateType = "mandate.payment.open.1",
+                    lines = DelegateMandateText.summarize(paymentMandate),
+                ),
+            ),
+            sections
+        )
+    }
+
+    // The summary prints the shared merchant, expiry and agent once; the details page must not
+    // hide the second mandate's copy of them.
+    @Test
+    fun detailsKeepWhatTheSummaryDeduplicates() {
+        val mandates = listOf(checkoutMandate, paymentMandate)
+        val detailLines = DelegateMandateText.describeMandates(mandates).sumOf { it.lines.size }
+
+        assertTrue(detailLines > describe(*mandates.toTypedArray()).details.size)
+    }
+
+    @Test
+    fun aMandateWithoutATypeIsSaidToBeUnrecognised() {
+        val section = DelegateMandateText.describeMandates(listOf(mandateOf("""{"exp":1821496085,"cnf":$agentCnf}"""))).single()
+
+        assertEquals("", section.mandateType)
+        assertEquals("A condition your wallet doesn't recognise", section.heading)
     }
 }

@@ -14,10 +14,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.multipaz.compose.presentment.DelegateTransactionRendererCompose
 import org.multipaz.compose.presentment.TransactionDataRendererCompose
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.prompt.TransactionDataRendererRepository
+import org.multipaz.utopia.knowntypes.DelegateTransaction
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.round
@@ -26,7 +28,8 @@ import kotlin.math.round
  * The test app's renderers for transaction data in the consent prompt.
  *
  * A [PaymentTransaction], a [TransitFareTransaction] or a [PrescriptionPickupTransaction] is drawn by
- * the app: the essentials in the prompt, with every field on the details page. Other transaction
+ * the app: the essentials in the prompt, with every field on the details page. A
+ * [DelegateTransaction] is drawn by the SDK's [DelegateTransactionRendererCompose]. Other transaction
  * types keep the built-in rendering.
  */
 val testAppTransactionDataRenderers = TransactionDataRendererRepository().apply {
@@ -39,6 +42,7 @@ val testAppTransactionDataRenderers = TransactionDataRendererRepository().apply 
     )
     addRenderer(TransitFareTransaction.identifier, transitFareRenderer)
     addRenderer(PrescriptionPickupTransaction.identifier, prescriptionPickupRenderer)
+    addRenderer(DelegateTransaction.identifier, DelegateTransactionRendererCompose)
 }
 
 private val tipOptions = listOf(0.0 to "No tip", 10.0 to "10%", 15.0 to "15%", 20.0 to "20%")

@@ -87,6 +87,8 @@ class ViewModel {
         documentTypeRepository = DocumentTypeRepository()
         documentTypeRepository.addKnownTypes(locale: LocalizedStrings.shared.getCurrentLocale())
         documentTypeRepository.addUtopiaTypes(locale: LocalizedStrings.shared.getCurrentLocale())
+        // Not one of the utopia types: it is registered where its renderer is.
+        documentTypeRepository.addDelegateTransactionType()
         documentStore = DocumentStore.Builder(
             storage: storage,
             secureAreaRepository: secureAreaRepository
