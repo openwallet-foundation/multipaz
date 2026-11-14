@@ -542,6 +542,10 @@ class DocumentType private constructor(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
                 signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                dsKey.certChain.toCoseX5t()
             )
         )
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(

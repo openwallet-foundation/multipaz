@@ -8,13 +8,16 @@ import kotlinx.serialization.json.intOrNull
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cose.CoseSign1
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.Hpke
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
@@ -90,19 +93,21 @@ data class EncryptedDocuments internal constructor(
         if (docRequestIds.distinct().size != docRequestIds.size) {
             throw IllegalStateException("Duplicate docRequestIds $docRequestIds in EncryptedDocuments")
         }
-        val encSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(
+        val encSessionTranscript = buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
+        val encSessionTranscriptBytes = Cbor.encode(
+            Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(encryptionParameters.dataItem))
-            ))
-            add(sessionTranscript.asArray[2])
-        }
+                taggedItem = Bstr(Cbor.encode(encSessionTranscript))
+            )
+        )
         val decrypter = Hpke.getDecrypter(
             cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
             receiverPrivateKey = recipientPrivateKey,
             encapsulatedKey = enc.toByteArray(),
-            info = Cbor.encode(encSessionTranscript)
+            info = encSessionTranscriptBytes
         )
         val plaintext = decrypter.decrypt(
             ciphertext = ciphertext.toByteArray(),
@@ -334,18 +339,20 @@ data class EncryptedDocuments internal constructor(
         private val encryptionParameters: EncryptionParameters,
         private val docRequestIds: List<Int>,
     ) {
-        private val encSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(
-                tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(encryptionParameters.dataItem))
-            ))
-            add(sessionTranscript.asArray[2])
+        private val documents = mutableListOf<MdocDocument>()
+        private val zkDocuments = mutableListOf<ZkDocument>()
+        private val otherDocuments = mutableListOf<OtherDocument>()
+        private var cachedEncSessionTranscript: DataItem? = null
+
+        private suspend fun getEncSessionTranscript(): DataItem {
+            cachedEncSessionTranscript?.let { return it }
+            return buildSessionTranscript(
+                originalSessionTranscript = sessionTranscript,
+                encryptionParameters = encryptionParameters
+            ).also {
+                cachedEncSessionTranscript = it
+            }
         }
-        private val builder = DeviceResponse.Builder(
-            sessionTranscript = encSessionTranscript,
-            status = DeviceResponse.STATUS_OK,
-        )
 
         /**
          * Low-level function to add a [MdocDocument] to an encrypted documents structure.
@@ -353,7 +360,9 @@ data class EncryptedDocuments internal constructor(
          * @param document the [MdocDocument] to add to the encrypted documents structure.
          * @return the builder.
          */
-        fun addDocument(document: MdocDocument) = builder.addDocument(document = document)
+        fun addDocument(document: MdocDocument) = apply {
+            documents.add(document)
+        }
 
         /**
          * Low-level function to add a [MdocDocument] to an encrypted documents structure.
@@ -375,15 +384,21 @@ data class EncryptedDocuments internal constructor(
             deviceKey: AsymmetricKey,
             errors: Map<String, Map<String, Int>> = emptyMap(),
             docRequestIds: List<Int>? = null,
-        ) = builder.addDocument(
-            docType = docType,
-            issuerAuth = issuerAuth,
-            issuerNamespaces = issuerNamespaces,
-            deviceNamespaces = deviceNamespaces,
-            deviceKey = deviceKey,
-            errors = errors,
-            docRequestIds = docRequestIds,
-        )
+        ) = apply {
+            documents.add(
+                MdocDocument.fromNamespaces(
+                    sessionTranscript = getEncSessionTranscript(),
+                    eReaderKey = null,
+                    docType = docType,
+                    issuerAuth = issuerAuth,
+                    issuerNamespaces = issuerNamespaces,
+                    deviceNamespaces = deviceNamespaces,
+                    deviceKey = deviceKey,
+                    errors = errors,
+                    docRequestIds = docRequestIds,
+                )
+            )
+        }
 
         /**
          * Adds an [MdocCredential] to an encrypted documents structure.
@@ -401,13 +416,19 @@ data class EncryptedDocuments internal constructor(
             deviceNamespaces: DeviceNamespaces = buildDeviceNamespaces {},
             errors: Map<String, Map<String, Int>> = emptyMap(),
             docRequestIds: List<Int>? = null,
-        ) = builder.addDocument(
-            credential = credential,
-            requestedClaims = requestedClaims,
-            deviceNamespaces = deviceNamespaces,
-            errors = errors,
-            docRequestIds = docRequestIds,
-        )
+        ) = apply {
+            documents.add(
+                MdocDocument.fromPresentment(
+                    sessionTranscript = getEncSessionTranscript(),
+                    eReaderKey = null,
+                    credential = credential,
+                    requestedClaims = requestedClaims,
+                    deviceNamespaces = deviceNamespaces,
+                    errors = errors,
+                    docRequestIds = docRequestIds,
+                )
+            )
+        }
 
         /**
          * Adds a Zero-Knowledge Proof to an encrypted documents structure.
@@ -415,7 +436,9 @@ data class EncryptedDocuments internal constructor(
          * @param zkDocument the object with the Zero-Knowledge Proof and associated data.
          * @return the builder.
          */
-        fun addZkDocument(zkDocument: ZkDocument) = builder.addZkDocument(zkDocument)
+        fun addZkDocument(zkDocument: ZkDocument) = apply {
+            zkDocuments.add(zkDocument)
+        }
 
         /**
          * Adds a [OtherDocument] to an encrypted documents structure.
@@ -425,7 +448,9 @@ data class EncryptedDocuments internal constructor(
          */
         fun addOtherDocument(
             otherDocument: OtherDocument
-        ) = builder.addOtherDocument(otherDocument)
+        ) = apply {
+            otherDocuments.add(otherDocument)
+        }
 
         /**
          * Builds the [EncryptedDocuments] structure.
@@ -433,16 +458,23 @@ data class EncryptedDocuments internal constructor(
          * @return a [EncryptedDocuments] structure.
          */
         suspend fun build(): EncryptedDocuments {
+            val encSessionTranscript = getEncSessionTranscript()
+            val encSessionTranscriptBytes = Cbor.encode(
+                Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(Cbor.encode(encSessionTranscript))
+                )
+            )
             val encryptedDocumentsPlaintext = EncryptedDocumentsPlaintext(
-                documents = builder.documents,
-                zkDocuments = builder.zkDocuments,
-                otherDocuments = builder.otherDocuments,
+                documents = documents,
+                zkDocuments = zkDocuments,
+                otherDocuments = otherDocuments,
             )
 
             val encrypter = Hpke.getEncrypter(
                 cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
                 receiverPublicKey = encryptionParameters.recipientPublicKey,
-                info = Cbor.encode(encSessionTranscript),
+                info = encSessionTranscriptBytes,
             )
             val ciphertext = encrypter.encrypt(
                 plaintext = Cbor.encode(encryptedDocumentsPlaintext.toDataItem()),
@@ -457,6 +489,56 @@ data class EncryptedDocuments internal constructor(
     }
 
     companion object {
+        /**
+         * Builds the `SessionTranscript` structure used for document response encryption according
+         * to ISO/IEC 18013-5 Second Edition Clauses 12.6.4 and 12.7.1:
+         * ```
+         * SessionTranscript = [ null, null, EncryptedDocumentsHandover ]
+         * EncryptedDocumentsHandover = [
+         *     "encryptedDocuments",
+         *     OriginalSessionTranscriptHash,
+         *     EncryptionParametersBytes
+         * ]
+         * ```
+         * where `OriginalSessionTranscriptHash` is the SHA-256 digest of
+         * `OriginalSessionTranscriptBytes` (`#6.24(bstr .cbor originalSessionTranscript)`).
+         *
+         * @param originalSessionTranscript the session transcript that would have been used if
+         *   document response encryption had not been used.
+         * @param encryptionParameters the [EncryptionParameters] from the `DocRequest`.
+         * @return the `SessionTranscript` [DataItem] for the encrypted documents.
+         */
+        suspend fun buildSessionTranscript(
+            originalSessionTranscript: DataItem,
+            encryptionParameters: EncryptionParameters,
+        ): DataItem {
+            val originalSessionTranscriptBytes = Cbor.encode(
+                Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(Cbor.encode(originalSessionTranscript))
+                )
+            )
+            val originalSessionTranscriptHash = Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = originalSessionTranscriptBytes
+            )
+            val encryptionParametersBytes = Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(encryptionParameters.dataItem))
+            )
+            return buildCborArray {
+                add(Simple.NULL)
+                add(Simple.NULL)
+                add(
+                    buildCborArray {
+                        add("encryptedDocuments")
+                        add(originalSessionTranscriptHash)
+                        add(encryptionParametersBytes)
+                    }
+                )
+            }
+        }
+
         internal fun fromDataItem(dataItem: DataItem): EncryptedDocuments {
             val encItem = dataItem.getOrNull("enc")
                 ?: throw IllegalArgumentException("Missing 'enc' in EncryptedDocuments")

@@ -1219,7 +1219,8 @@ class SwiftConsentGoldenEcosystem private constructor(
             )
             val signatureAlgorithm = dsKey.algorithm.curve?.defaultSigningAlgorithm ?: dsKey.algorithm
             val protectedHeaders = mapOf<CoseLabel, DataItem>(
-                CoseNumberLabel(Cose.COSE_LABEL_ALG) to signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+                CoseNumberLabel(Cose.COSE_LABEL_ALG) to signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem(),
+                CoseNumberLabel(Cose.COSE_LABEL_X5T) to dsKey.certChain.toCoseX5t()
             )
             val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to dsKey.certChain.toCoseX5Chain()

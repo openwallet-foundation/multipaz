@@ -301,7 +301,11 @@ object VerificationUtil {
                         transactions = cborTransactionData,
                         version = deviceRequestVersion,
                     ) {
-                        if (!isVersion10) {
+                        if (isVersion10) {
+                            verifierIdentities.firstOrNull()?.let { readerIdentity ->
+                                signDocRequests(readerKey = readerIdentity.key)
+                            }
+                        } else {
                             verifierIdentities.forEach { readerIdentity ->
                                 addReaderAuthAll(readerKey = readerIdentity.key)
                             }
@@ -409,8 +413,6 @@ object VerificationUtil {
                 val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
                     sessionTranscript = sessionTranscript,
                     version = deviceRequestVersion,
-                    // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
-                    //   This has been reported to Apple so this can be removed once their bug-fix is out.
                     deviceRequestInfo = if (isVersion10) null else DeviceRequestInfo.fromValues(
                         useCases = listOf(UseCase(
                             mandatory = true,
@@ -427,9 +429,8 @@ object VerificationUtil {
                         docType = docType,
                         nameSpaces = itemsToRequest,
                         docRequestInfo = if (isVersion10) {
-                            if (cborTransactionData != null || docRequestOtherInfo.isNotEmpty()) {
+                            if (docRequestOtherInfo.isNotEmpty()) {
                                 DocRequestInfo(
-                                    transactionData = cborTransactionData,
                                     otherInfo = docRequestOtherInfo
                                 )
                             } else {
@@ -1669,6 +1670,10 @@ object VerificationUtil {
      *   transaction data that are used in the request; if no transaction data is used it can
      *   be `null`
      * @param state optional state parameter for OpenID4VP protocol
+     * @param uniqueDocSetRequired whether `uniqueDocSetRequired` is set on ISO 18013-5 requests
+     * @param multiple whether `multiple` is set on OpenID4VP DCQL requests
+     * @param deviceRequestVersion the version to use for ISO 18013-5 `DeviceRequest`, or `null` to
+     *   automatically determine which version to use
      * @return a pair of the DC request and the session that is needed to process the response
      *  to that request
      */
@@ -1687,7 +1692,8 @@ object VerificationUtil {
         eReaderKey: EcPrivateKey? = null,
         state: String? = null,
         uniqueDocSetRequired: Boolean = true,
-        multiple: Boolean = false
+        multiple: Boolean = false,
+        deviceRequestVersion: String? = null,
     ): VerificationSession {
         val encryptionPrivateKey = if (encryptResponse) {
             Crypto.createEcPrivateKey(EcCurve.P256)
@@ -1734,14 +1740,21 @@ object VerificationUtil {
             responseUri = responseUri
         ).toString()
 
+        val isVersion10 =
+            deviceRequestVersion != null && deviceRequestVersion.mdocVersionCompareTo("1.1") < 0
         suspend fun createIso18013Request(
             sessionTranscript: DataItem
         ): DataItem = buildDeviceRequestFromDcql(
             sessionTranscript = sessionTranscript,
-            dcql = iso18013DcqlJson,
-            transactions = docRequestTransactions?.value ?: emptyMap()
+            dcql = if (isVersion10) dcqlJson else iso18013DcqlJson,
+            transactions = docRequestTransactions?.value ?: emptyMap(),
+            version = deviceRequestVersion,
         ) {
-            verifierIdentities.forEach { addReaderAuthAll(it.key) }
+            if (isVersion10) {
+                verifierIdentities.firstOrNull()?.let { signDocRequests(readerKey = it.key) }
+            } else {
+                verifierIdentities.forEach { addReaderAuthAll(readerKey = it.key) }
+            }
         }.toDataItem()
 
         val requests = requestTypes.map { requestType ->

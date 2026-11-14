@@ -95,6 +95,14 @@ data class X509CertChain(
     }
 
     /**
+     * Encodes the leaf signing certificate's SHA-256 hash as a CBOR `COSE_CertHash` structure for
+     * use in the COSE `x5t` header parameter (label 34) according to RFC 9360 Section 2.
+     *
+     * @return a [DataItem] encoding `[ -16, sha256(certificates.first().encoded) ]`.
+     */
+    suspend fun toCoseX5t(): DataItem = certificates.first().toCoseX5t()
+
+    /**
      * Performs basic certificate chain validation.
      *
      * Specifically, these checks are performed:

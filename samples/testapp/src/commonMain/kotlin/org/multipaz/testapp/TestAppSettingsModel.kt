@@ -200,6 +200,7 @@ class TestAppSettingsModel private constructor(
         bind(readerLastSelectedRequestId, "readerLastSelectedRequestId", null)
         bind(readerIssuerIdentifiers, "readerIssuerIdentifiers", "")
         bind(readerUniqueDocSetRequired, "readerUniqueDocSetRequired", true)
+        bind(readerForceVersion10, "readerForceVersion10", false)
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials?.supportedProtocols ?: emptySet())
@@ -260,6 +261,7 @@ class TestAppSettingsModel private constructor(
     val readerLastSelectedRequestId = MutableStateFlow<String?>(null)
     val readerIssuerIdentifiers = MutableStateFlow<String>("")
     val readerUniqueDocSetRequired = MutableStateFlow<Boolean>(true)
+    val readerForceVersion10 = MutableStateFlow<Boolean>(false)
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())

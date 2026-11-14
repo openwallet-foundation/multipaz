@@ -145,6 +145,17 @@ class MdocDocument(
     ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain = issuerCertChain
+        val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+        if (x5tLabel in issuerAuth.protectedHeaders && x5tLabel in issuerAuth.unprotectedHeaders) {
+            throw IllegalStateException("COSE x5t cannot appear in both protected and unprotected headers of IssuerAuth")
+        }
+        (issuerAuth.protectedHeaders[x5tLabel] ?: issuerAuth.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
+            try {
+                issuerAuthorityCertChain.certificates[0].verifyCoseX5t(x5tItem)
+            } catch (e: IllegalArgumentException) {
+                throw IllegalStateException("Invalid x5t header in IssuerAuth", e)
+            }
+        }
         val signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(
             issuerAuth.protectedHeaders[
                 CoseNumberLabel(Cose.COSE_LABEL_ALG)

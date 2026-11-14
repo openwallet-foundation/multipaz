@@ -210,7 +210,42 @@ object Cose {
      * Reference: https://www.iana.org/assignments/cose/cose.xhtml
      */
     const val COSE_LABEL_X5CHAIN = 33L
+
+    /**
+     * The COSE label for conveying an X.509 certificate hash (`COSE_CertHash`).
+     *
+     * Reference: RFC 9360 Section 2, https://www.iana.org/assignments/cose/cose.xhtml
+     */
+    const val COSE_LABEL_X5T = 34L
     
+    private fun sortCoseHeadersDeterministically(
+        headers: Map<CoseLabel, DataItem>
+    ): Map<CoseLabel, DataItem> {
+        if (headers.size <= 1) return headers.toMap()
+        val sortedEntries = headers.entries.map { (label, value) ->
+            Triple(Cbor.encode(label.toDataItem()), label, value)
+        }.sortedWith { a, b ->
+            val bytesA = a.first
+            val bytesB = b.first
+            val minLen = minOf(bytesA.size, bytesB.size)
+            var cmp = 0
+            for (i in 0 until minLen) {
+                val uA = bytesA[i].toInt() and 0xff
+                val uB = bytesB[i].toInt() and 0xff
+                if (uA != uB) {
+                    cmp = uA.compareTo(uB)
+                    break
+                }
+            }
+            if (cmp != 0) cmp else bytesA.size.compareTo(bytesB.size)
+        }
+        return buildMap(sortedEntries.size) {
+            for ((_, label, value) in sortedEntries) {
+                put(label, value)
+            }
+        }
+    }
+
     private fun coseBuildToBeSigned(
         encodedProtectedHeaders: ByteArray,
         dataToBeSigned: ByteArray,
@@ -337,16 +372,17 @@ object Cose {
                 signingAlgorithmToConvey.coseAlgorithmIdentifier.toDataItem()
         }
 
+        val sortedProtectedHeaders = sortCoseHeadersDeterministically(adjustedProtectedHeaders)
         val encodedProtectedHeaders = Cbor.encode(
             buildCborMap {
-                adjustedProtectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
+                sortedProtectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
             }
         )
         val toBeSigned = coseBuildToBeSigned(encodedProtectedHeaders, message)
         val signature = signingKey.sign(toBeSigned)
 
         return CoseSign1(
-            protectedHeaders = adjustedProtectedHeaders.toMap(),
+            protectedHeaders = sortedProtectedHeaders,
             unprotectedHeaders = unprotectedHeaders,
             signature = signature.toCoseEncoded(),
             payload = if (includeMessageInPayload) message else null
@@ -406,16 +442,17 @@ object Cose {
                 signingAlgorithmToConvey.coseAlgorithmIdentifier.toDataItem()
         }
 
+        val sortedProtectedHeaders = sortCoseHeadersDeterministically(adjustedProtectedHeaders)
         val encodedProtectedHeaders = Cbor.encode(
             buildCborMap {
-                adjustedProtectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
+                sortedProtectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
             }
         )
         val toBeSigned = coseBuildToBeSigned(encodedProtectedHeaders, message)
         val signature = secureArea.sign(alias, toBeSigned, unlockReason)
 
         return CoseSign1(
-            protectedHeaders = adjustedProtectedHeaders.toMap(),
+            protectedHeaders = sortedProtectedHeaders,
             unprotectedHeaders = unprotectedHeaders,
             signature = signature.toCoseEncoded(),
             payload = if (includeMessageInPayload) message else null
@@ -452,10 +489,11 @@ object Cose {
         protectedHeaders: Map<CoseLabel, DataItem>,
         unprotectedHeaders: Map<CoseLabel, DataItem>
     ): CoseSign1 {
-        val encodedProtectedHeaders = if (protectedHeaders.size > 0) {
+        val sortedProtectedHeaders = sortCoseHeadersDeterministically(protectedHeaders)
+        val encodedProtectedHeaders = if (sortedProtectedHeaders.isNotEmpty()) {
             Cbor.encode(
                 buildCborMap {
-                    protectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
+                    sortedProtectedHeaders.forEach { (label, di) -> put(label.toDataItem(), di) }
                 }
             )
         } else {
@@ -465,7 +503,7 @@ object Cose {
         val signature = Crypto.sign(key, signatureAlgorithm, toBeSigned)
 
         return CoseSign1(
-            protectedHeaders = protectedHeaders,
+            protectedHeaders = sortedProtectedHeaders,
             unprotectedHeaders = unprotectedHeaders,
             signature = signature.toCoseEncoded(),
             payload = if (includeDataInPayload) dataToSign else null

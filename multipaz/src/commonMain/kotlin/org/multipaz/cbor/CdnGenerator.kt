@@ -531,6 +531,7 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
             5L -> "IV"
             6L -> "Partial IV"
             33L -> "x5chain"
+            34L -> "x5t"
             else -> null
         }
     }

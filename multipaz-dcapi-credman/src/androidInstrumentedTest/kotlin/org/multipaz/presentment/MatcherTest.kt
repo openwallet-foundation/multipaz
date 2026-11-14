@@ -46,9 +46,12 @@ import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.request.AlternativeDataElementSet
 import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.ElementReference
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentialsCredman
@@ -74,6 +77,16 @@ class MatcherTest {
 
         private const val CLIENT_ID = "x509_san_dns:verifier.multipaz.org"
         private const val ORIGIN = "https://verifier.multipaz.org"
+
+        private val SINGLE_DOC_REQUEST_INFO = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
     }
 
     init {
@@ -2847,7 +2860,7 @@ class MatcherTest {
             harnessInitializer = { harness -> harness.provisionStandardDocuments() },
             deviceRequestBuilder = { harness, sessionTranscript ->
                 val iacaSki = harness.iacaCert.subjectKeyIdentifier!!
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -2881,7 +2894,7 @@ class MatcherTest {
         val matcherResult = testMatcherIso18013(
             harnessInitializer = { harness -> harness.provisionStandardDocuments() },
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -2955,7 +2968,11 @@ class MatcherTest {
                 )
             },
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript, version = "1.1")
+                DeviceRequest.Builder(
+                    sessionTranscript,
+                    version = "1.1",
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                )
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3124,7 +3141,7 @@ class MatcherTest {
         val result1 = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3145,7 +3162,7 @@ class MatcherTest {
         val result2 = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3166,7 +3183,7 @@ class MatcherTest {
         val resultBoth = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3243,7 +3260,7 @@ class MatcherTest {
         val resultIntermediate = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3263,7 +3280,7 @@ class MatcherTest {
         val resultRoot = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3283,7 +3300,7 @@ class MatcherTest {
         val resultUnrelated = testMatcherIso18013(
             harnessInitializer = initializer,
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -3306,7 +3323,7 @@ class MatcherTest {
             harnessInitializer = { harness -> harness.provisionStandardDocuments() },
             deviceRequestBuilder = { harness, sessionTranscript ->
                 val iacaSki = harness.iacaCert.subjectKeyIdentifier!!
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = EUPersonalID.EUPID_VCT,
                         nameSpaces = mapOf(
@@ -3335,7 +3352,7 @@ class MatcherTest {
         val matcherResult = testMatcherIso18013(
             harnessInitializer = { harness -> harness.provisionStandardDocuments() },
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = EUPersonalID.EUPID_VCT,
                         nameSpaces = mapOf(
@@ -3364,7 +3381,7 @@ class MatcherTest {
         val matcherResult = testMatcherIso18013(
             harnessInitializer = { harness -> harness.provisionStandardDocuments() },
             deviceRequestBuilder = { harness, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript)
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = EUPersonalID.EUPID_VCT,
                         nameSpaces = mapOf(
@@ -5658,7 +5675,11 @@ class MatcherTest {
                 )
             },
             deviceRequestBuilder = { _, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript, version = "1.1")
+                DeviceRequest.Builder(
+                    sessionTranscript,
+                    version = "1.1",
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                )
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(

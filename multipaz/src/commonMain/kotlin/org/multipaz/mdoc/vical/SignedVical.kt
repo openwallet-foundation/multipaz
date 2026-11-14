@@ -1,10 +1,13 @@
 package org.multipaz.mdoc.vical
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -21,11 +24,9 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
-import kotlin.collections.component1
-import kotlin.collections.component2
 
 /**
- * A signed VICAL according to ISO/IEC 18013-5:2021.
+ * A signed VICAL according to ISO/IEC 18013-5 Annex C.
  *
  * @property vical the VICAL that is signed.
  * @property vicalProviderCertificateChain the X.509 certificate chain.
@@ -58,12 +59,24 @@ data class SignedVical(
                             put("certificate", certInfo.certificate.encoded.toByteArray())
                             put("serialNumber", Tagged(
                                 Tagged.UNSIGNED_BIGNUM,
-                                Bstr(certInfo.certificate.serialNumber.value)
+                                Bstr(certInfo.serialNumber.toByteArray())
                             ))
-                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
+                            put("ski", certInfo.ski.toByteArray())
                             putCborArray("docType") {
                                 certInfo.docTypes.forEach { add(it) }
                             }
+                            certInfo.certificateProfiles?.let { profiles ->
+                                putCborArray("certificateProfile") {
+                                    profiles.forEach { add(it) }
+                                }
+                            }
+                            certInfo.issuingAuthority?.let { put("issuingAuthority", it) }
+                            certInfo.issuingCountry?.let { put("issuingCountry", it) }
+                            certInfo.stateOrProvinceName?.let { put("stateOrProvinceName", it) }
+                            certInfo.issuer?.let { put("issuer", it.toByteArray()) }
+                            certInfo.subject?.let { put("subject", it.toByteArray()) }
+                            certInfo.notBefore?.let { put("notBefore", it.toDataItemDateTimeString()) }
+                            certInfo.notAfter?.let { put("notAfter", it.toDataItemDateTimeString()) }
                             if (certInfo.extensions.isNotEmpty()) {
                                 putCborMap("extensions") {
                                     certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
@@ -99,11 +112,40 @@ data class SignedVical(
     companion object {
         private const val TAG = "SignedVical"
 
+        internal fun parseSerialNumber(item: DataItem, logTag: String): ByteString = when (item) {
+            is Tagged -> when (item.tagNumber) {
+                Tagged.UNSIGNED_BIGNUM -> ByteString(item.taggedItem.asBstr)
+                Tagged.NEGATIVE_BIGNUM -> {
+                    Logger.w(logTag, "Non-conformant negative bignum (tag 3) for serialNumber")
+                    ByteString(item.taggedItem.asBstr)
+                }
+                else -> throw IllegalArgumentException("Unexpected CBOR tag ${item.tagNumber} for serialNumber")
+            }
+            is Uint -> {
+                if (item.value == 0UL) {
+                    ByteString(byteArrayOf(0))
+                } else {
+                    val bsb = ByteStringBuilder()
+                    var shift = 56
+                    var started = false
+                    while (shift >= 0) {
+                        val b = ((item.value shr shift) and 0xffUL).toByte()
+                        if (started || b != 0.toByte()) {
+                            bsb.append(b)
+                            started = true
+                        }
+                        shift -= 8
+                    }
+                    bsb.toByteString()
+                }
+            }
+            else -> throw IllegalArgumentException("Unexpected CBOR item for serialNumber: $item")
+        }
+
         /**
          * Parses a signed VICAL.
          *
-         * This takes a `COSE_Sign1` according to ISO/IEC 18013-5:2021 section
-         * C.1.7.1 VICAL CDDL profile.
+         * This takes a `COSE_Sign1` according to ISO/IEC 18013-5 Annex C.2.1 VICAL CDDL profile.
          *
          * This includes checking that the VICAL is signed by the key in the leaf certificate
          * of the X.509 certificate chain. It is not checked that the certificate chain is
@@ -157,6 +199,7 @@ data class SignedVical(
             for (certInfo in (vicalMap["certificateInfos"] as CborArray).items) {
                 val certBytes = certInfo["certificate"].asBstr
                 val certificate = X509Cert(ByteString(certBytes))
+                val serialNumber = parseSerialNumber(certInfo["serialNumber"], TAG)
                 val ski = certificate.subjectKeyIdentifier?.let { ByteString(it) }
                     ?: throw IllegalArgumentException("No SKI in certificate")
                 val skiInCertInfo = ByteString(certInfo["ski"].asBstr)
@@ -167,19 +210,24 @@ data class SignedVical(
                 }
                 val docTypes = (certInfo["docType"] as CborArray).items.map { it.asTstr }
                 val certProfiles = certInfo.getOrNull("certificateProfile")?.let {
-                    (it as CborArray).items.map { it.asTstr }
+                    (it as CborArray).items.map { item -> item.asTstr }
                 }
                 val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
                     it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
                 } ?: emptyMap()
                 certificateInfos.add(VicalCertificateInfo(
-                    certificate = X509Cert(ByteString(certBytes)),
+                    certificate = certificate,
                     docTypes = docTypes,
+                    serialNumber = serialNumber,
                     ski = ski,
                     certificateProfiles = certProfiles,
                     issuingAuthority = certInfo.getOrNull("issuingAuthority")?.asTstr,
                     issuingCountry = certInfo.getOrNull("issuingCountry")?.asTstr,
                     stateOrProvinceName = certInfo.getOrNull("stateOrProvinceName")?.asTstr,
+                    issuer = certInfo.getOrNull("issuer")?.let { ByteString(it.asBstr) },
+                    subject = certInfo.getOrNull("subject")?.let { ByteString(it.asBstr) },
+                    notBefore = certInfo.getOrNull("notBefore")?.asDateTimeString,
+                    notAfter = certInfo.getOrNull("notAfter")?.asDateTimeString,
                     extensions = extensionsInCertInfo
                 ))
             }

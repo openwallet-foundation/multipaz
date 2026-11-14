@@ -27,6 +27,7 @@ import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.EncryptedDocuments
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.OtherDocument
@@ -373,21 +374,17 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
 
             // The session transcript to use depends on whether the response is to be encrypted
             val sessionTranscriptToUse = docRequest.docRequestInfo?.docResponseEncryption?.let {
-                buildCborArray {
-                    add(sessionTranscript.asArray[0])
-                    add(Tagged(
-                        tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(it.dataItem))
-                    ))
-                    add(sessionTranscript.asArray[2])
-                }
+                EncryptedDocuments.buildSessionTranscript(
+                    originalSessionTranscript = sessionTranscript,
+                    encryptionParameters = it
+                )
             } ?: sessionTranscript
 
             when (match.credential) {
                 is MdocCredential -> {
                     val document = MdocDocument.fromPresentment(
                         sessionTranscript = sessionTranscriptToUse,
-                        eReaderKey = eReaderKey,
+                        eReaderKey = if (docRequest.docRequestInfo?.docResponseEncryption != null) null else eReaderKey,
                         credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
                         deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),

@@ -157,9 +157,20 @@ class Iso18013TestIssuerIdentifiers {
             )
         }
 
+        private val SINGLE_DOC_REQUEST_INFO = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+
         private fun mdlQuery(issuerIdentifiers: List<ByteString>? = null): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = if (issuerIdentifiers?.isNotEmpty() == true) SINGLE_DOC_REQUEST_INFO else null,
             ) {
                 addDocRequest(
                     docType = DrivingLicense.MDL_DOCTYPE,
@@ -179,6 +190,7 @@ class Iso18013TestIssuerIdentifiers {
         private fun pidSdJwtQuery(issuerIdentifiers: List<ByteString>? = null): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
             ) {
                 addDocRequest(
                     docType = EUPersonalID.EUPID_VCT,
@@ -292,7 +304,7 @@ class Iso18013TestIssuerIdentifiers {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals("No credentials match required UseCase", e.message)
     }
 
     @Test
@@ -388,7 +400,7 @@ class Iso18013TestIssuerIdentifiers {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals("No credentials match required UseCase", e.message)
     }
 
     @Test

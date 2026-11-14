@@ -67,9 +67,20 @@ class Iso18013TestSdJwtVc {
             )
         }
 
+        private val SINGLE_DOC_REQUEST_INFO = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+
         private fun pidQuery(): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
             ) {
                 addDocRequest(
                     docType = EUPersonalID.EUPID_VCT,
@@ -93,6 +104,7 @@ class Iso18013TestSdJwtVc {
         private fun pidQueryWithAlternativeDataElements(): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
             ) {
                 addDocRequest(
                     docType = EUPersonalID.EUPID_VCT,
@@ -207,6 +219,16 @@ class Iso18013TestSdJwtVc {
                         ]
                       ]
                     }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
+                        ]
+                      ]
+                    }
                   ]
                 }
             """.trimIndent(),
@@ -247,6 +269,16 @@ class Iso18013TestSdJwtVc {
                             "formatted"
                           ]
                         }
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
+                        ]
                       ]
                     }
                   ]

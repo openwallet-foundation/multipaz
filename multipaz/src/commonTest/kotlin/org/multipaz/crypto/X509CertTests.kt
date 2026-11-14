@@ -5,6 +5,10 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex
 import kotlin.time.Clock
@@ -345,5 +349,57 @@ class X509CertTests {
         v1Cert.verify(v1Cert.ecPublicKey)
         assertEquals("CN=sample_v1_cert", v1Cert.subject.name)
         assertTrue(v1Cert.extensions.isEmpty())
+    }
+
+    @Test
+    fun testCoseX5tEncodingAndVerification() = runTest {
+        val leafCert = androidKeyCertChain.certificates[0]
+        val intermediateCert = androidKeyCertChain.certificates[1]
+
+        // Independently computed SHA-256 over DER-encoded leafCert:
+        // 82       # array(2)
+        //    2f    # negative(15) = -16 (COSE Algorithm SHA-256, RFC 9054 Section 2.1)
+        //    58 20 # bytes(32)
+        val expectedLeafSha256Hex = "b44325023a42ff632e814a7b6b9158367955620cfcf164f477e9dee18b68d05b"
+        val expectedX5tCborHex = "822f5820$expectedLeafSha256Hex"
+
+        val leafX5t = leafCert.toCoseX5t()
+        assertEquals(expectedX5tCborHex, Cbor.encode(leafX5t).toHex())
+
+        // X509CertChain.toCoseX5t() must hash the leaf signing certificate (certificates.first()),
+        // not an intermediate or root certificate.
+        val chainX5t = androidKeyCertChain.toCoseX5t()
+        assertEquals(expectedX5tCborHex, Cbor.encode(chainX5t).toHex())
+
+        // verifyCoseX5t() accepts both COSE integer -16 and Named Information string "sha-256"
+        leafCert.verifyCoseX5t(leafX5t)
+        leafCert.verifyCoseX5t(
+            buildCborArray {
+                add("sha-256")
+                add(expectedLeafSha256Hex.fromHex())
+            }
+        )
+
+        // Reject malformed or mismatched COSE_CertHash structures
+        for (invalidX5t in listOf(
+            // Non-array
+            buildCborMap { put(-16, expectedLeafSha256Hex.fromHex()) },
+            // Wrong element count (1 and 3)
+            buildCborArray { add(-16) },
+            buildCborArray { add(-16); add(expectedLeafSha256Hex.fromHex()); add(0) },
+            // Non-SHA-256 hash algorithms (-15 = SHA-256/64, -43 = SHA-384, "sha-384", bool)
+            buildCborArray { add(-15); add(expectedLeafSha256Hex.fromHex().copyOf(8)) },
+            buildCborArray { add(-43); add(Crypto.digest(Algorithm.SHA384, leafCert.encoded.toByteArray())) },
+            buildCborArray { add("sha-384"); add(Crypto.digest(Algorithm.SHA384, leafCert.encoded.toByteArray())) },
+            buildCborArray { add(Simple.TRUE); add(expectedLeafSha256Hex.fromHex()) },
+            // Non-bstr hashValue
+            buildCborArray { add(-16); add(expectedLeafSha256Hex) },
+            // Mismatched certificate digest (intermediate cert's x5t checked against leaf cert)
+            intermediateCert.toCoseX5t(),
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                leafCert.verifyCoseX5t(invalidX5t)
+            }
+        }
     }
 }

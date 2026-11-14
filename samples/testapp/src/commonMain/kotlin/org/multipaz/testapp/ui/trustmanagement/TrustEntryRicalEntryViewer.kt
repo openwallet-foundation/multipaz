@@ -59,23 +59,46 @@ fun TrustEntryRicalEntryViewer(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        SegmentedItemList(
-            modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-            title = "RICAL entry"
-        ) {
-            SegmentedItemHeadingAndText(
-                heading = "Trust anchor",
-                text = if (ricalCertInfo.isTrustAnchor) {
-                    "Yes"
-                } else {
-                    "No"
+        val hasEntryDetails = ricalCertInfo.name != null ||
+            ricalCertInfo.type != null ||
+            ricalCertInfo.issuingCountry != null ||
+            ricalCertInfo.stateOrProvinceName != null ||
+            ricalCertInfo.extensions.isNotEmpty()
+        if (hasEntryDetails) {
+            SegmentedItemList(
+                modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+                title = "RICAL entry"
+            ) {
+                ricalCertInfo.name?.let {
+                    SegmentedItemHeadingAndText(
+                        heading = "Name",
+                        text = it
+                    )
                 }
-            )
-            if (ricalCertInfo.extensions.isNotEmpty()) {
-                ItemWithExtensions(
-                    heading = "Extensions",
-                    extensions = ricalCertInfo.extensions
-                )
+                ricalCertInfo.type?.let {
+                    SegmentedItemHeadingAndText(
+                        heading = "Type",
+                        text = it
+                    )
+                }
+                ricalCertInfo.issuingCountry?.let {
+                    SegmentedItemHeadingAndText(
+                        heading = "Issuing country",
+                        text = it
+                    )
+                }
+                ricalCertInfo.stateOrProvinceName?.let {
+                    SegmentedItemHeadingAndText(
+                        heading = "State or province",
+                        text = it
+                    )
+                }
+                if (ricalCertInfo.extensions.isNotEmpty()) {
+                    ItemWithExtensions(
+                        heading = "Extensions",
+                        extensions = ricalCertInfo.extensions
+                    )
+                }
             }
         }
 

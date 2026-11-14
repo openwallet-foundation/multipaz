@@ -1197,7 +1197,19 @@ class DigitalCredentialsPresentmentTest {
         // 1. Verifier prepares entire DeviceRequest in ISO 18013-5
         val payload = PaymentTransaction.sampleData.payload
         val requestDataItem = PaymentTransaction.serializeIso18013Request(payload)
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val singleDocRequestInfo = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = "org.multipaz.payment.sca.1",
                 nameSpaces = mapOf(
@@ -1248,7 +1260,19 @@ class DigitalCredentialsPresentmentTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [
+                        0
+                      ]
+                    ]
+                  }
+                ]
+              } >>)
             }
         """.trimIndent()
         assertEquals(expectedRequestCdn, requestCdn.trim())
@@ -1306,7 +1330,11 @@ class DigitalCredentialsPresentmentTest {
                   "issuerSigned": {
                     "issuerAuth": [ # COSE_Sign1
                       /protected/ << {
-                        /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                        /alg/ 1: -7, # ES256: ECDSA with SHA-256
+                        /x5t/ 34: [
+                          -16,
+                          h'...'
+                        ]
                       } >>,
                       /unprotected/ {
                         /x5chain/ 33:
@@ -1400,7 +1428,18 @@ class DigitalCredentialsPresentmentTest {
         // 1. Verifier prepares entire DeviceRequest in ISO 18013-5 requesting SD-JWT VC
         val payload = PaymentTransaction.sampleData.payload
         val requestDataItem = PaymentTransaction.serializeIso18013Request(payload)
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
             addDocRequest(
                 docType = "org.multipaz.payment.sca.1",
                 nameSpaces = mapOf(
@@ -1461,7 +1500,19 @@ class DigitalCredentialsPresentmentTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [
+                        0
+                      ]
+                    ]
+                  }
+                ]
+              } >>)
             }
         """.trimIndent()
         assertEquals(expectedRequestCdn, requestCdn.trim())
@@ -1923,7 +1974,11 @@ class DigitalCredentialsPresentmentTest {
                   "issuerSigned": {
                     "issuerAuth": [ # COSE_Sign1
                       /protected/ << {
-                        /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                        /alg/ 1: -7, # ES256: ECDSA with SHA-256
+                        /x5t/ 34: [
+                          -16,
+                          h'...'
+                        ]
                       } >>,
                       /unprotected/ {
                         /x5chain/ 33:
@@ -2801,6 +2856,7 @@ class DigitalCredentialsPresentmentTest {
 private fun normalizeMdocResponseCdn(cdn: String): String {
     return cdn
         .replace(Regex("""cert'''[\s\S]*?'''"""), "cert'''...'''")
+        .replace(Regex("""(-16,\s+)h'[0-9a-fA-F]+'"""), "$1h'...'")
         .replace(Regex("""0: h'[0-9a-fA-F]+'"""), "0: h'...'")
         .replace(Regex("""/x/ -2: h'[0-9a-fA-F]+'"""), "/x/ -2: h'...'")
         .replace(Regex("""/y/ -3: h'[0-9a-fA-F]+'"""), "/y/ -3: h'...'")

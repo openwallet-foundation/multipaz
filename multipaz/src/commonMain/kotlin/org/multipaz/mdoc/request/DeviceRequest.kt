@@ -96,6 +96,36 @@ data class DeviceRequest private constructor(
     val deviceRequestInfo: DeviceRequestInfo?,
     internal val readerAuthAll_: List<CoseSign1>
 ) {
+    init {
+        if (version.mdocVersionCompareTo("1.1") >= 0) {
+            if (deviceRequestInfo == null || deviceRequestInfo.useCases.isEmpty()) {
+                throw IllegalArgumentException(
+                    "DeviceRequest with version '$version' must include deviceRequestInfo with non-empty useCases"
+                )
+            }
+            val referencedDocRequestIds = mutableSetOf<Int>()
+            for (useCase in deviceRequestInfo.useCases) {
+                for (documentSet in useCase.documentSets) {
+                    for (docRequestId in documentSet.docRequestIds) {
+                        if (docRequestId !in docRequests.indices) {
+                            throw IllegalArgumentException(
+                                "DocumentSet references out-of-range docRequestId $docRequestId (docRequests.size=${docRequests.size})"
+                            )
+                        }
+                        referencedDocRequestIds.add(docRequestId)
+                    }
+                }
+            }
+            for (docRequestId in docRequests.indices) {
+                if (docRequestId !in referencedDocRequestIds) {
+                    throw IllegalArgumentException(
+                        "DocRequest at index $docRequestId is not referenced by any DocumentSet in useCases"
+                    )
+                }
+            }
+        }
+    }
+
     internal var readerAuthAllVerified: Boolean = false
 
     /**
@@ -149,6 +179,18 @@ data class DeviceRequest private constructor(
                             CoseNumberLabel(Cose.COSE_LABEL_ALG)
                         ]!!.asNumber.toInt()
                     )
+                    val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+                    if (x5tLabel in readerAuthAllSignature.protectedHeaders &&
+                        x5tLabel in readerAuthAllSignature.unprotectedHeaders
+                    ) {
+                        throw IllegalArgumentException(
+                            "COSE x5t cannot appear in both protected and unprotected headers"
+                        )
+                    }
+                    (readerAuthAllSignature.protectedHeaders[x5tLabel]
+                        ?: readerAuthAllSignature.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
+                        certChain.certificates.first().verifyCoseX5t(x5tItem)
+                    }
                     certChain.validate()
                     Cose.coseSign1Check(
                         publicKey = certChain.certificates.first().publicKey,
@@ -170,6 +212,19 @@ data class DeviceRequest private constructor(
         docRequests.forEachIndexed { docRequestIndex, docRequest ->
             if (docRequest.readerAuth_ != null) {
                 try {
+                    val certChain = docRequest.readerAuthCertChain!!
+                    val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+                    if (x5tLabel in docRequest.readerAuth_.protectedHeaders &&
+                        x5tLabel in docRequest.readerAuth_.unprotectedHeaders
+                    ) {
+                        throw IllegalArgumentException(
+                            "COSE x5t cannot appear in both protected and unprotected headers"
+                        )
+                    }
+                    (docRequest.readerAuth_.protectedHeaders[x5tLabel]
+                        ?: docRequest.readerAuth_.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
+                        certChain.certificates.first().verifyCoseX5t(x5tItem)
+                    }
                     val readerAuthentication = buildCborArray {
                         add("ReaderAuthentication")
                         add(sessionTranscript)
@@ -178,7 +233,7 @@ data class DeviceRequest private constructor(
                     val readerAuthenticationBytes =
                         Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
                     Cose.coseSign1Check(
-                        publicKey = docRequest.readerAuthCertChain!!.certificates.first().publicKey,
+                        publicKey = certChain.certificates.first().publicKey,
                         detachedData = readerAuthenticationBytes,
                         signature = docRequest.readerAuth_,
                         signatureAlgorithm = docRequest.readerAuthAlgorithm!!
@@ -404,6 +459,51 @@ data class DeviceRequest private constructor(
         private val docRequests = mutableListOf<DocRequest>()
         private val readerAuthAll = mutableListOf<CoseSign1>()
 
+        private fun shouldIncludeX5t(
+            effectiveDocRequestInfo: DocRequestInfo? = null,
+        ): Boolean {
+            if (version != null) {
+                return version.mdocVersionCompareTo("1.1") >= 0
+            }
+            return deviceRequestInfo != null ||
+                effectiveDocRequestInfo?.isUsingSecondEditionFeature() == true ||
+                docRequests.any { it.docRequestInfo?.isUsingSecondEditionFeature() == true }
+        }
+
+        private suspend fun createReaderAuthSignature(
+            itemsRequestBytes: DataItem,
+            effectiveDocRequestInfo: DocRequestInfo?,
+            readerKey: AsymmetricKey.X509Compatible,
+        ): CoseSign1 {
+            val readerAuthentication = buildCborArray {
+                add("ReaderAuthentication")
+                add(sessionTranscript)
+                add(itemsRequestBytes)
+            }
+            val readerAuthenticationBytes =
+                Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
+            val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
+            // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
+            val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
+            protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] =
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+            val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
+            val emitX5t = shouldIncludeX5t(effectiveDocRequestInfo = effectiveDocRequestInfo)
+            readerKey.certChain?.let {
+                if (emitX5t) {
+                    protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel] = it.toCoseX5t()
+                }
+                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toCoseX5Chain(excludeRoot = true))
+            }
+            return Cose.coseSign1Sign(
+                signingKey = readerKey,
+                message = readerAuthenticationBytes,
+                includeMessageInPayload = false,
+                protectedHeaders = protectedHeaders,
+                unprotectedHeaders = unprotectedHeaders,
+            )
+        }
+
         /**
          * Adds a document request to the builder.
          *
@@ -420,6 +520,8 @@ data class DeviceRequest private constructor(
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
             }
+            val docRequestInfoDataItem = docRequestInfo?.toDataItem()?.takeIf { it.asMap.isNotEmpty() }
+            val effectiveDocRequestInfo = if (docRequestInfoDataItem != null) docRequestInfo else null
             val itemsRequest = buildCborMap {
                 put("docType", docType)
                 putCborMap("nameSpaces") {
@@ -431,11 +533,8 @@ data class DeviceRequest private constructor(
                         }
                     }
                 }
-                docRequestInfo?.let {
-                    val docRequestInfoDataItem = it.toDataItem()
-                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
-                        put("requestInfo", docRequestInfoDataItem)
-                    }
+                if (docRequestInfoDataItem != null) {
+                    put("requestInfo", docRequestInfoDataItem)
                 }
             }
             val itemsRequestBytes = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(itemsRequest)))
@@ -443,7 +542,7 @@ data class DeviceRequest private constructor(
                 DocRequest(
                     docType = docType,
                     nameSpaces = nameSpaces,
-                    docRequestInfo = docRequestInfo,
+                    docRequestInfo = effectiveDocRequestInfo,
                     docRequestId = docRequests.size,
                     readerAuth_ = null,
                     itemsRequestBytes = itemsRequestBytes
@@ -475,6 +574,8 @@ data class DeviceRequest private constructor(
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
             }
+            val docRequestInfoDataItem = docRequestInfo?.toDataItem()?.takeIf { it.asMap.isNotEmpty() }
+            val effectiveDocRequestInfo = if (docRequestInfoDataItem != null) docRequestInfo else null
             val itemsRequest = buildCborMap {
                 put("docType", docType)
                 putCborMap("nameSpaces") {
@@ -486,48 +587,60 @@ data class DeviceRequest private constructor(
                         }
                     }
                 }
-                docRequestInfo?.let {
-                    val docRequestInfoDataItem = it.toDataItem()
-                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
-                        put("requestInfo", docRequestInfoDataItem)
-                    }
+                if (docRequestInfoDataItem != null) {
+                    put("requestInfo", docRequestInfoDataItem)
                 }
             }
             val itemsRequestBytes = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(itemsRequest)))
 
-            val readerAuth = readerKey?.let { readerKey ->
-                val readerAuthentication = buildCborArray {
-                    add("ReaderAuthentication")
-                    add(sessionTranscript)
-                    add(itemsRequestBytes)
-                }
-                val readerAuthenticationBytes =
-                    Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
-                // TODO: include x5chain in protected header for v1.1?
-                val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-                // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
-                val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
-                protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
-                val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-                readerKey.certChain?.let {
-                    unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toCoseX5Chain(excludeRoot = true))
-                }
-                Cose.coseSign1Sign(
-                    signingKey = readerKey,
-                    message = readerAuthenticationBytes,
-                    includeMessageInPayload = false,
-                    protectedHeaders = protectedHeaders,
-                    unprotectedHeaders = unprotectedHeaders,
+            val readerAuth = readerKey?.let {
+                createReaderAuthSignature(
+                    itemsRequestBytes = itemsRequestBytes,
+                    effectiveDocRequestInfo = effectiveDocRequestInfo,
+                    readerKey = it,
                 )
             }
             docRequests.add(DocRequest(
                 docType = docType,
                 nameSpaces = nameSpaces,
-                docRequestInfo = docRequestInfo,
+                docRequestInfo = effectiveDocRequestInfo,
                 docRequestId = docRequests.size,
                 readerAuth_ = readerAuth,
                 itemsRequestBytes = itemsRequestBytes,
             ))
+            return this
+        }
+
+        /**
+         * Signs all unsigned [DocRequest] entries added so far using per-document
+         * `ReaderAuthentication` (`readerAuth`).
+         *
+         * If the certificate chain has more than one certificate, and the last certificate is a
+         * root certificate (self-signed), it is excluded.
+         *
+         * @param readerKey the key to sign with and its certificate chain.
+         * @return the builder.
+         * @throws IllegalStateException if [addReaderAuthAll] has already been called.
+         * @throws CancellationException if the coroutine is cancelled.
+         */
+        @Throws(IllegalStateException::class, CancellationException::class)
+        suspend fun signDocRequests(
+            readerKey: AsymmetricKey.X509Compatible,
+        ): Builder {
+            check(readerAuthAll.isEmpty()) {
+                "Cannot call signDocRequests() after addReaderAuthAll()"
+            }
+            for (i in docRequests.indices) {
+                val existing = docRequests[i]
+                if (existing.readerAuth_ == null) {
+                    val sig = createReaderAuthSignature(
+                        itemsRequestBytes = existing.itemsRequestBytes,
+                        effectiveDocRequestInfo = existing.docRequestInfo,
+                        readerKey = readerKey,
+                    )
+                    docRequests[i] = existing.copy(readerAuth_ = sig)
+                }
+            }
             return this
         }
 
@@ -580,13 +693,13 @@ data class DeviceRequest private constructor(
                 taggedItem = Bstr(Cbor.encode(readerAuthenticationAll)
                 ))
             )
-            // TODO: include x5chain in protected header for v1.1?
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
             val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
             protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             readerKey.certChain?.let {
+                protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel] = it.toCoseX5t()
                 unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toCoseX5Chain(excludeRoot = true))
             }
             val signature = Cose.coseSign1Sign(
@@ -601,19 +714,16 @@ data class DeviceRequest private constructor(
         }
 
         fun build(): DeviceRequest {
-            val versionToUse = version ?: run {
-                var docRequestsUsingSecondEditionFeature = false
-                for (docRequest in docRequests) {
-                    if (docRequest.docRequestInfo?.isUsingSecondEditionFeature() ?: false) {
-                        docRequestsUsingSecondEditionFeature = true
-                        break
-                    }
-                }
-                if (readerAuthAll.isNotEmpty() || deviceRequestInfo != null || docRequestsUsingSecondEditionFeature) {
-                    "1.1"
-                } else {
-                    "1.0"
-                }
+            val docRequestsUsingSecondEditionFeature = docRequests.any {
+                it.docRequestInfo?.isUsingSecondEditionFeature() == true
+            }
+            val usesSecondEditionFeature =
+                readerAuthAll.isNotEmpty() || deviceRequestInfo != null || docRequestsUsingSecondEditionFeature
+            val versionToUse = version ?: if (usesSecondEditionFeature) "1.1" else "1.0"
+            if (versionToUse.mdocVersionCompareTo("1.1") < 0 && usesSecondEditionFeature) {
+                throw IllegalArgumentException(
+                    "DeviceRequest version '$versionToUse' cannot be used with Second Edition features"
+                )
             }
             val deviceRequest = DeviceRequest(
                 version = versionToUse,
@@ -847,7 +957,11 @@ data class DeviceRequest private constructor(
         }
 
         // Zero-Knowledge Proofs (via Longfellow) currently only support ECDSA, so key agreement (MACing) cannot be used.
-        val effectiveKeyAgreementPossible = if (docRequest.docRequestInfo?.zkRequest != null) {
+        // Similarly, EncryptedDocuments have EReaderKeyBytes = null in their SessionTranscript, so MACing cannot be used.
+        val effectiveKeyAgreementPossible = if (
+            docRequest.docRequestInfo?.zkRequest != null ||
+            docRequest.docRequestInfo?.docResponseEncryption != null
+        ) {
             emptyList()
         } else {
             keyAgreementPossible
@@ -1586,7 +1700,7 @@ inline fun buildDeviceRequestFromDcql(
         deviceRequestInfo = deviceRequestInfo,
         version = version,
     )
-    deviceRequestAddQueries(dcqlQuery, transactions, builder, defaultIntentToRetain)
+    deviceRequestAddQueries(dcqlQuery, transactions, builder, defaultIntentToRetain, isVersion10)
     builder.builderAction()
     return builder.build()
 }
@@ -1656,8 +1770,6 @@ internal fun deviceRequestCalcDeviceRequestInfo(
             otherInfo = otherInfo
         )
     } else {
-        // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
-        //   This has been reported to Apple so this can be removed once their bug-fix is out.
         DeviceRequestInfo.fromValues(
             useCases = listOf(
                 UseCase(
@@ -1680,12 +1792,18 @@ internal fun deviceRequestAddQueries(
     dcqlQuery: DcqlQuery,
     transactions: Map<String, TransactionsInfo>,
     builder: DeviceRequest.Builder,
-    defaultIntentToRetain: Boolean = false
+    defaultIntentToRetain: Boolean = false,
+    isVersion10: Boolean = false,
 ) {
     for (credQuery in dcqlQuery.credentialQueries) {
         if (!(credQuery.format == "mso_mdoc" || credQuery.format == "mso_mdoc_zk" ||
                 credQuery.format == "dc+sd-jwt")) {
             throw IllegalArgumentException("Credential format ${credQuery.format} is not supported")
+        }
+        if (isVersion10 && credQuery.format != "mso_mdoc") {
+            throw IllegalArgumentException(
+                "Credential format ${credQuery.format} requires DeviceRequest version 1.1 or later"
+            )
         }
 
         val docType = when (credQuery.format) {
@@ -1852,7 +1970,7 @@ internal fun deviceRequestAddQueries(
             null
         }
 
-        val docTransactions = transactions[credQuery.id]
+        val docTransactions = if (isVersion10) null else transactions[credQuery.id]
         if (docTransactions != null) {
             val txElements = nameSpaces.getOrPut(ISO_18013_TRANSACTION_DATA_NAMESPACE) { mutableMapOf() }
             for (typeId in docTransactions.data.keys) {
@@ -1861,7 +1979,9 @@ internal fun deviceRequestAddQueries(
                 }
             }
         }
-        val docRequestInfo = if (alternativeDataElements.isNotEmpty()
+        val docRequestInfo = if (isVersion10) {
+            null
+        } else if (alternativeDataElements.isNotEmpty()
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()
             || credQuery.issuerIdentifiers.isNotEmpty()

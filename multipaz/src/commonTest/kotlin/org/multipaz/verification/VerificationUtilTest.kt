@@ -32,6 +32,8 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.toDataItem
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
+import org.multipaz.cose.Cose
+import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -136,7 +138,8 @@ class VerificationUtilTest {
         val docRequestDataItem = dataItem["docRequests"].asArray[0]
         val itemsRequest = docRequestDataItem["itemsRequest"].asTaggedEncodedCbor
         assertNull(itemsRequest.getOrNull("requestInfo"))
-        assertNotNull(docRequestDataItem.getOrNull("readerAuth"))
+        val readerAuth = docRequestDataItem.getOrNull("readerAuth")!!.asCoseSign1
+        assertNull(readerAuth.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
     }
 
     @Test
@@ -174,6 +177,11 @@ class VerificationUtilTest {
         assertEquals("1.1", dataItem["version"].asTstr)
         assertNotNull(dataItem.getOrNull("deviceRequestInfo"))
         assertNotNull(dataItem.getOrNull("readerAuthAll"))
+        val readerAuthAll = dataItem["readerAuthAll"].asArray.single().asCoseSign1
+        assertEquals(
+            identity.key.certChain.toCoseX5t(),
+            readerAuthAll.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel]
+        )
         assertNotNull(dr.deviceRequestInfo)
         val docRequestDataItem = dataItem["docRequests"].asArray[0]
         val itemsRequest = docRequestDataItem["itemsRequest"].asTaggedEncodedCbor
@@ -258,6 +266,8 @@ class VerificationUtilTest {
         val docRequestDataItem = dataItem["docRequests"].asArray[0]
         val itemsRequest = docRequestDataItem["itemsRequest"].asTaggedEncodedCbor
         assertNull(itemsRequest.getOrNull("requestInfo"))
+        val readerAuth = docRequestDataItem.getOrNull("readerAuth")!!.asCoseSign1
+        assertNull(readerAuth.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
     }
 
     @Test
@@ -298,6 +308,10 @@ class VerificationUtilTest {
         assertEquals("1.1", dataItem["version"].asTstr)
         assertNotNull(dataItem.getOrNull("deviceRequestInfo"))
         assertNotNull(dataItem.getOrNull("readerAuthAll"))
+        assertEquals(
+            identity.key.certChain.toCoseX5t(),
+            dataItem["readerAuthAll"].asArray.single().asCoseSign1.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel]
+        )
         assertNotNull(dr.deviceRequestInfo)
     }
 
@@ -339,7 +353,60 @@ class VerificationUtilTest {
         assertEquals("1.1", dataItem["version"].asTstr)
         assertNotNull(dataItem.getOrNull("deviceRequestInfo"))
         assertNotNull(dataItem.getOrNull("readerAuthAll"))
+        assertEquals(
+            identity.key.certChain.toCoseX5t(),
+            dataItem["readerAuthAll"].asArray.single().asCoseSign1.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel]
+        )
         assertNotNull(dr.deviceRequestInfo)
+    }
+
+    @Test
+    fun generateVerificationSessionForDcql_proximityVersion10() = runTest {
+        val identity = createTestVerifierIdentity()
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = ByteString(Cbor.encode("dummyEngagement".toDataItem()))
+        val handover = Simple.NULL
+        // Include claim_sets (alternatives) and uniqueDocSetRequired = false to verify Second Edition
+        // fields are cleanly stripped when deviceRequestVersion = "1.0" is forced.
+        val dcql = """
+            {
+              "credentials": [{
+                "id": "mDL",
+                "format": "mso_mdoc",
+                "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                "claims": [
+                  { "id": "c1", "path": ["org.iso.18013.5.1", "age_over_18"] },
+                  { "id": "c2", "path": ["org.iso.18013.5.1", "birth_date"] }
+                ],
+                "claim_sets": [["c1"], ["c2"]]
+              }]
+            }
+        """.trimIndent()
+
+        val session = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
+            dcql = dcql,
+            verifierIdentities = listOf(identity),
+            deviceEngagement = deviceEngagement,
+            handover = handover,
+            eReaderKey = eReaderKey,
+            uniqueDocSetRequired = false,
+            deviceRequestVersion = "1.0",
+        )
+        val proximityRequest = session.find<VerificationSession.Iso18013ProximityRequest>()
+        val dataItem = proximityRequest.deviceRequest
+        val dr = DeviceRequest.fromDataItem(dataItem)
+        dr.verifyReaderAuthentication(proximityRequest.sessionTranscript)
+
+        assertEquals("1.0", dr.version)
+        assertNull(dataItem.getOrNull("deviceRequestInfo"))
+        assertNull(dataItem.getOrNull("readerAuthAll"))
+        assertTrue(dr.readerAuthAll.isEmpty())
+        val docReq = dr.docRequests.single()
+        assertNull(docReq.docRequestInfo)
+        assertEquals(mapOf("org.iso.18013.5.1" to mapOf("age_over_18" to false)), docReq.nameSpaces)
+        val readerAuth = docReq.readerAuth!!
+        assertNull(readerAuth.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
     }
 
     @Test
@@ -1037,7 +1104,18 @@ class VerificationUtilTest {
         }
 
         // 3. ZK DeviceRequest requesting given_name + family_name rejects partial disclosure
-        val zkRequestTwoClaims = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val zkRequestTwoClaims = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
             addDocRequest(
                 docType = "org.iso.18013.5.1.mDL",
                 nameSpaces = mapOf(

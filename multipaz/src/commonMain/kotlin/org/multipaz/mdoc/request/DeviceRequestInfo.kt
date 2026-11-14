@@ -15,29 +15,39 @@ import org.multipaz.cbor.putCborArray
 data class DeviceRequestInfo(
     val dataItem: DataItem
 ) {
+    init {
+        val useCasesItem = dataItem.getOrNull("useCases")
+            ?: throw IllegalArgumentException("DeviceRequestInfo must contain 'useCases'")
+        require(useCasesItem.asArray.isNotEmpty()) {
+            "DeviceRequestInfo 'useCases' must not be empty"
+        }
+        useCasesItem.asArray.forEach { UseCase.fromDataItem(it) }
+    }
+
     /** @property useCases list of use-cases.
      */
     val useCases: List<UseCase>
-        get() = dataItem.getOrNull("useCases")?.asArray?.map { UseCase.fromDataItem(it) } ?: emptyList()
+        get() = dataItem["useCases"].asArray.map { UseCase.fromDataItem(it) }
 
     companion object {
         /**
          * Constructs a [org.multipaz.mdoc.request.DeviceRequestInfo] from values.
          *
-         * @property useCases list of use-cases.
+         * @property useCases non-empty list of use-cases.
          * @property otherInfo other request info.
          * @return a [org.multipaz.mdoc.request.DeviceRequestInfo].
          */
         fun fromValues(
-            useCases: List<UseCase> = emptyList(),
+            useCases: List<UseCase>,
             otherInfo: Map<String, DataItem> = emptyMap()
         ): DeviceRequestInfo {
+            require(useCases.isNotEmpty()) {
+                "DeviceRequestInfo 'useCases' must not be empty"
+            }
             val dataItem = buildCborMap {
-                if (useCases.isNotEmpty()) {
-                    putCborArray("useCases") {
-                        useCases.forEach {
-                            add(it.toDataItem())
-                        }
+                putCborArray("useCases") {
+                    useCases.forEach {
+                        add(it.toDataItem())
                     }
                 }
                 otherInfo.forEach { (key, value) ->

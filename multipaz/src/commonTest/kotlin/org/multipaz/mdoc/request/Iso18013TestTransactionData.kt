@@ -26,6 +26,16 @@ import org.multipaz.presentment.mdocPresentment
 
 class Iso18013TestTransactionData {
 
+    private val singleDocRequestInfo = DeviceRequestInfo.fromValues(
+        useCases = listOf(
+            UseCase(
+                mandatory = true,
+                documentSets = listOf(DocumentSet(listOf(0))),
+                purposeHints = emptyMap()
+            )
+        )
+    )
+
     private object TxA : TransactionType<String>(
         displayName = "Transaction A",
         identifier = "com.example.txA",
@@ -108,7 +118,10 @@ class Iso18013TestTransactionData {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val txAData = TxA.serializeIso18013Request("nonceA")
         val txBData = TxB.serializeIso18013Request("nonceB")
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -203,7 +216,10 @@ class Iso18013TestTransactionData {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val txAData = TxA.serializeIso18013Request("nonceA")
         val txBData = TxB.serializeIso18013Request("nonceB")
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -298,7 +314,10 @@ class Iso18013TestTransactionData {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val txAData = TxA.serializeIso18013Request("nonceA")
         val txBData = TxB.serializeIso18013Request("nonceB")
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -391,7 +410,10 @@ class Iso18013TestTransactionData {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val txAData = TxA.serializeIso18013Request("nonceA")
         val txBData = TxB.serializeIso18013Request("nonceB")
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -429,7 +451,7 @@ class Iso18013TestTransactionData {
             deviceRequest.execute(presentmentSource = harness.presentmentSource)
         }
         assertEquals(
-            "No matching credentials for first DocRequest: transaction com.example.txA is not applicable",
+            "No credentials match required UseCase: transaction com.example.txA is not applicable",
             exception.message
         )
     }
@@ -455,7 +477,10 @@ class Iso18013TestTransactionData {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val txAData = TxA.serializeIso18013Request("nonceA")
         // Request TxA with fallback to given_name
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -546,7 +571,10 @@ class Iso18013TestTransactionData {
         val txBData = TxB.serializeIso18013Request("nonceB")
 
         // Verifier requests ONLY TxA in nameSpaces, but sends BOTH TxA and TxB in requestInfo.transactionData
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(

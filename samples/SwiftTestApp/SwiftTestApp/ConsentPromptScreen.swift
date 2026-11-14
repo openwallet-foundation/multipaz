@@ -954,6 +954,7 @@ private func calcRequestData(
                 docFormat: nil,
                 dataElementIdentifierMapping: [:],
                 transactionData: nil,
+                nonKeyBoundSupported: nil,
                 otherInfo: [:])
         )
         drBuilder.setDeviceRequestInfo(

@@ -236,8 +236,18 @@ class MdocPresentmentTest {
             privateKey = readerKeyPrivate
         )
 
+        val singleDocRequestInfo = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
@@ -292,6 +302,7 @@ class MdocPresentmentTest {
         )
         val mismatchedDeviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocRequestInfo,
         ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,

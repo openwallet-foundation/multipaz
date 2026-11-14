@@ -2536,19 +2536,25 @@ private suspend fun AnnexACalcRequest(
         }
         Json.decodeFromString<JsonObject>(dcqlString)
     }
-    val dcqlJson = VerificationUtil.injectMultipleIntoDcql(
-        VerificationUtil.injectIssuerIdentifiersIntoDcql(
-            dcql,
-            issuerIdentifiers
-        ),
-        !uniqueDocSetRequired
-    )
+    val dcqlJson = if (isVersion10) {
+        dcql
+    } else {
+        VerificationUtil.injectMultipleIntoDcql(
+            VerificationUtil.injectIssuerIdentifiersIntoDcql(
+                dcql,
+                issuerIdentifiers
+            ),
+            !uniqueDocSetRequired
+        )
+    }
     return buildDeviceRequestFromDcql(
         dcql = dcqlJson,
         sessionTranscript = sessionTranscript,
         version = deviceRequestVersion,
     ) {
-        if (!isVersion10) {
+        if (isVersion10) {
+            signDocRequests(readerKey = readerAuthKey)
+        } else {
             addReaderAuthAll(readerKey = readerAuthKey)
         }
     }

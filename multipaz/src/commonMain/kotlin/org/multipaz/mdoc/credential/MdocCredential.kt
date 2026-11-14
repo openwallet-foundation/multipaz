@@ -389,6 +389,19 @@ class MdocCredential : SecureAreaBoundCredential {
 
                 if (certChain != null && certChain.certificates.isNotEmpty()) {
                     val dsCert = certChain.certificates[0]
+                    val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+                    if (x5tLabel in coseSign1.protectedHeaders && x5tLabel in coseSign1.unprotectedHeaders) {
+                        addError("issuerAuth has x5t in both protected and unprotected headers")
+                    } else {
+                        (coseSign1.protectedHeaders[x5tLabel] ?: coseSign1.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
+                            try {
+                                dsCert.verifyCoseX5t(x5tItem)
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                addError("issuerAuth has invalid x5t header: ${e.message}")
+                            }
+                        }
+                    }
 
                     try {
                         if (dsCert.keyUsage.isEmpty()) {

@@ -24,9 +24,11 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509CertChainValidationException
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.buildX509Cert
 import org.multipaz.mdoc.rical.Rical
 import org.multipaz.mdoc.rical.RicalCertificateInfo
+import org.multipaz.mdoc.rical.RicalTrustConstraint
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.rical.SignedRical
 import org.multipaz.mdoc.vical.SignedVical
@@ -2189,47 +2191,18 @@ class TrustManagerTest {
     }
 
     @Test
-    fun testRicalIsTrustAnchorFlag() = runTest {
+    fun testRicalBottomUpTrustConstraintsAndDateValidation() = runTest {
         val now = Clock.System.now().truncateToWholeSeconds()
         val validFrom = now - 5.minutes
         val validUntil = now + 30.minutes
-
-        val standaloneCaKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val standaloneCaCert = buildX509Cert(
-            publicKey = standaloneCaKey.publicKey,
-            signingKey = AsymmetricKey.anonymous(standaloneCaKey, standaloneCaKey.curve.defaultSigningAlgorithm),
-            serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Non-Anchor CA"),
-            issuer = X500Name.fromName("CN=Non-Anchor CA"),
-            validFrom = validFrom,
-            validUntil = validUntil,
-        ) {
-            includeSubjectKeyIdentifier()
-            setBasicConstraints(ca = true, pathLenConstraint = 0)
-            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
-        }
-        val unanchoredLeafKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val unanchoredLeafCert = buildX509Cert(
-            publicKey = unanchoredLeafKey.publicKey,
-            signingKey = AsymmetricKey.anonymous(standaloneCaKey, standaloneCaKey.curve.defaultSigningAlgorithm),
-            serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Unanchored Reader"),
-            issuer = standaloneCaCert.subject,
-            validFrom = validFrom,
-            validUntil = validUntil,
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(standaloneCaCert)
-            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
-        }
 
         val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val rootCert = buildX509Cert(
             publicKey = rootKey.publicKey,
             signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Anchored Reader Root CA"),
-            issuer = X500Name.fromName("CN=Anchored Reader Root CA"),
+            subject = X500Name.fromName("CN=Reader Root CA"),
+            issuer = X500Name.fromName("CN=Reader Root CA"),
             validFrom = validFrom,
             validUntil = validUntil,
         ) {
@@ -2242,7 +2215,7 @@ class TrustManagerTest {
             publicKey = intermediateKey.publicKey,
             signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Anchored Reader Intermediate CA"),
+            subject = X500Name.fromName("CN=Reader Intermediate CA"),
             issuer = rootCert.subject,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -2252,12 +2225,12 @@ class TrustManagerTest {
             setBasicConstraints(ca = true, pathLenConstraint = 0)
             setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
         }
-        val anchoredLeafKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val anchoredLeafCert = buildX509Cert(
-            publicKey = anchoredLeafKey.publicKey,
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
             signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Anchored Reader"),
+            subject = X500Name.fromName("CN=Reader Leaf"),
             issuer = intermediateCert.subject,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -2279,6 +2252,13 @@ class TrustManagerTest {
         ) {
             includeSubjectKeyIdentifier()
         }
+
+        val subCaConstraint = RicalTrustConstraint(
+            extensions = mapOf("org.example.allowedSector" to "retail".toDataItem())
+        )
+        val rootCaConstraint = RicalTrustConstraint(
+            extensions = mapOf("org.example.allowedSector" to "government".toDataItem())
+        )
         val rical = Rical(
             type = Rical.RICAL_TYPE_READER_AUTHENTICATION,
             version = "1.0",
@@ -2287,9 +2267,14 @@ class TrustManagerTest {
             nextUpdate = null,
             notAfter = validUntil,
             certificateInfos = listOf(
-                RicalCertificateInfo(certificate = standaloneCaCert, isTrustAnchor = false),
-                RicalCertificateInfo(certificate = intermediateCert, isTrustAnchor = false),
-                RicalCertificateInfo(certificate = rootCert, isTrustAnchor = true),
+                RicalCertificateInfo(
+                    certificate = intermediateCert,
+                    trustConstraints = listOf(subCaConstraint)
+                ),
+                RicalCertificateInfo(
+                    certificate = rootCert,
+                    trustConstraints = listOf(rootCaConstraint)
+                ),
             ),
             id = 2L,
             latestRicalUrl = null,
@@ -2299,19 +2284,61 @@ class TrustManagerTest {
         val encodedSignedRical = signedRical.generate(
             AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm)
         )
-        val ricalTrustManager = RicalTrustManager(SignedRical.parse(encodedSignedRical))
+        val parsedRical = SignedRical.parse(encodedSignedRical)
 
-        // Only rootCert (isTrustAnchor=true) may appear in getTrustPoints()
-        assertEquals(1, ricalTrustManager.getTrustPoints().size)
-        assertEquals(rootCert, ricalTrustManager.getTrustPoints().single().certificate)
+        // Default evaluator fails closed on unrecognized non-empty trustConstraints.
+        val defaultTm = RicalTrustManager(parsedRical)
+        assertEquals(2, defaultTm.getTrustPoints().size)
+        assertFalse(defaultTm.verify(listOf(leafCert), atTime = now).isTrusted)
 
-        // Certificate signed by a non-trust-anchor CA without a trust-anchor root is rejected
-        assertFalse(ricalTrustManager.verify(listOf(unanchoredLeafCert), atTime = now).isTrusted)
-        assertFalse(ricalTrustManager.verify(listOf(standaloneCaCert), atTime = now).isTrusted)
+        // Annex F.3.2.7: Only the first (bottom-up) matching CertificateInfo's trustConstraints
+        // (intermediateCert -> "retail") apply; rootCert's ("government") must not be combined/used.
+        val evaluatedConstraints = mutableListOf<RicalTrustConstraint>()
+        val retailTm = RicalTrustManager(parsedRical) { constraint, _ ->
+            evaluatedConstraints.add(constraint)
+            constraint.extensions["org.example.allowedSector"]?.asTstr == "retail"
+        }
+        val trustedResult = retailTm.verify(listOf(leafCert), atTime = now)
+        assertTrue(trustedResult.isTrusted)
+        assertEquals(listOf(subCaConstraint), evaluatedConstraints)
 
-        // Certificate signed by a non-trust-anchor intermediate CA chained to rootCert is accepted
-        val anchoredResult = ricalTrustManager.verify(listOf(anchoredLeafCert), atTime = now)
-        assertTrue(anchoredResult.isTrusted)
-        assertEquals(rootCert, anchoredResult.trustPoints.single().certificate)
+        val govOnlyTm = RicalTrustManager(parsedRical) { constraint, _ ->
+            constraint.extensions["org.example.allowedSector"]?.asTstr == "government"
+        }
+        assertFalse(govOnlyTm.verify(listOf(leafCert), atTime = now).isTrusted)
+
+        // Annex F.3.2.6: RICAL date shall not be in the future.
+        val futureCheckResult = retailTm.verify(listOf(leafCert), atTime = now - 1.minutes)
+        assertFalse(futureCheckResult.isTrusted)
+        assertNotNull(futureCheckResult.error)
+
+        // Empty RicalTrustConstraint() is satisfied by default evaluator; unknown otherInfo fails closed.
+        val emptyConstraintRical = SignedRical(
+            rical.copy(
+                certificateInfos = listOf(
+                    RicalCertificateInfo(
+                        certificate = intermediateCert,
+                        trustConstraints = listOf(RicalTrustConstraint())
+                    )
+                )
+            ),
+            X509CertChain(listOf(ricalCert))
+        )
+        assertTrue(RicalTrustManager(emptyConstraintRical).verify(listOf(leafCert), atTime = now).isTrusted)
+
+        val otherInfoConstraintRical = SignedRical(
+            rical.copy(
+                certificateInfos = listOf(
+                    RicalCertificateInfo(
+                        certificate = intermediateCert,
+                        trustConstraints = listOf(
+                            RicalTrustConstraint(otherInfo = mapOf("futureKey" to true.toDataItem()))
+                        )
+                    )
+                )
+            ),
+            X509CertChain(listOf(ricalCert))
+        )
+        assertFalse(RicalTrustManager(otherInfoConstraintRical).verify(listOf(leafCert), atTime = now).isTrusted)
     }
 }

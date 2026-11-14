@@ -12,6 +12,8 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Nint
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
@@ -30,6 +32,7 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlinx.datetime.Instant
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
@@ -65,6 +68,16 @@ import kotlin.test.assertTrue
 import kotlin.test.assertFalse
 
 class DeviceRequestTest {
+    private fun singleDocUseCaseInfo() = DeviceRequestInfo.fromValues(
+        useCases = listOf(
+            UseCase(
+                mandatory = true,
+                documentSets = listOf(DocumentSet(listOf(0))),
+                purposeHints = emptyMap()
+            )
+        )
+    )
+
     // Test against the test vector in Annex D of 18013-5:2021
     @Test
     fun testAgainstVector2021() = runTest {
@@ -329,7 +342,8 @@ class DeviceRequestTest {
         val ra = ReaderAuth.generateSoftware()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -381,7 +395,8 @@ class DeviceRequestTest {
         val ra = ReaderAuth.generateSecureArea()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -431,7 +446,8 @@ class DeviceRequestTest {
     fun docRequestInfoAlternativeDataElements() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -490,7 +506,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -505,7 +531,8 @@ class DeviceRequestTest {
     fun docRequestInfoIssuerIdentifiers() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -543,7 +570,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -558,7 +595,8 @@ class DeviceRequestTest {
     fun docRequestInfoUniqueDocSetRequiredSetToTrue() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -593,7 +631,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -608,7 +656,8 @@ class DeviceRequestTest {
     fun docRequestInfoUniqueDocSetRequiredSetToFalse() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -643,7 +692,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -658,7 +717,8 @@ class DeviceRequestTest {
     fun docRequestInfoMaximumResponseSizeSet() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -693,7 +753,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -709,7 +779,8 @@ class DeviceRequestTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -753,7 +824,17 @@ class DeviceRequestTest {
                         }
                       } >>)
                     }
-                  ]
+                  ],
+                  "deviceRequestInfo": 24(<< {
+                    "useCases": [
+                      {
+                        "mandatory": true,
+                        "documentSets": [
+                          [0]
+                        ]
+                      }
+                    ]
+                  } >>)
                 }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -768,7 +849,8 @@ class DeviceRequestTest {
     fun docRequestInfoZkRequest() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -846,7 +928,17 @@ class DeviceRequestTest {
                     }
                   } >>)
                 }
-              ]
+              ],
+              "deviceRequestInfo": 24(<< {
+                "useCases": [
+                  {
+                    "mandatory": true,
+                    "documentSets": [
+                      [0]
+                    ]
+                  }
+                ]
+              } >>)
             }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -861,7 +953,8 @@ class DeviceRequestTest {
     fun deviceRequestInfoDocFormatAndDataElementIdentifierMapping() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
@@ -916,7 +1009,17 @@ class DeviceRequestTest {
                         }
                       } >>)
                     }
-                  ]
+                  ],
+                  "deviceRequestInfo": 24(<< {
+                    "useCases": [
+                      {
+                        "mandatory": true,
+                        "documentSets": [
+                          [0]
+                        ]
+                      }
+                    ]
+                  } >>)
                 }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
@@ -1183,18 +1286,18 @@ class DeviceRequestTest {
                     )
                 ),
                 docRequestInfo = DocRequestInfo(
-                    maximumResponseSize = 16384,
                     otherInfo = mapOf(
                         "com.example.foo" to Tstr("bar")
                     )
                 ),
             )
         }
-        assertEquals("1.1", deviceRequest.version)
+        // Only proprietary otherInfo in DocRequestInfo does not trigger version "1.1"
+        assertEquals("1.0", deviceRequest.version)
         assertEquals(
             """
                 {
-                  "version": "1.1",
+                  "version": "1.0",
                   "docRequests": [
                     {
                       "itemsRequest": 24(<< {
@@ -1206,7 +1309,6 @@ class DeviceRequestTest {
                           }
                         },
                         "requestInfo": {
-                          "maximumResponseSize": 16384,
                           "com.example.foo": "bar"
                         }
                       } >>)
@@ -1228,6 +1330,13 @@ class DeviceRequestTest {
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
             deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    )
+                ),
                 otherInfo = mapOf(
                     "com.example.foobar" to buildCborArray { add(42); add(43) }
                 )
@@ -1263,6 +1372,14 @@ class DeviceRequestTest {
                     }
                   ],
                   "deviceRequestInfo": 24(<< {
+                    "useCases": [
+                      {
+                        "mandatory": true,
+                        "documentSets": [
+                          [0]
+                        ]
+                      }
+                    ],
                     "com.example.foobar": [42, 43]
                   } >>)
                 }
@@ -1725,7 +1842,8 @@ class DeviceRequestTest {
 
         val sessionTranscript = buildCborArray { add("SessionTranscript") }
         val deviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = singleDocUseCaseInfo()
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -2043,5 +2161,323 @@ class DeviceRequestTest {
         }
         assertTrue(multiDocReq2Valid.isSameAuthenticatedReader(multiDocReq1, trustedSource))
         assertFalse(multiDocReq2Spoofed.isSameAuthenticatedReader(multiDocReq1, trustedSource))
+    }
+
+    @Test
+    fun testSecondEditionUseCasesMandatoryAndVersionValidation() = runTest {
+        val transcript = buildCborArray { add("SessionTranscript") }
+
+        // 1. "1.1" DeviceRequest without deviceRequestInfo throws in Builder and fromDataItem
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(sessionTranscript = transcript, version = "1.1") {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+                )
+            }
+        }
+        val validV11 = buildDeviceRequest(
+            sessionTranscript = transcript,
+            version = "1.1",
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+        }
+        val rawWithoutInfo = buildCborMap {
+            put("version", "1.1")
+            put("docRequests", validV11.toDataItem()["docRequests"])
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DeviceRequest.fromDataItem(rawWithoutInfo)
+        }
+
+        // 2. DeviceRequestInfo without "useCases" or with empty useCases throws; UseCase with empty documentSets throws
+        assertFailsWith<IllegalArgumentException> {
+            DeviceRequestInfo.fromValues(useCases = emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DeviceRequestInfo(buildCborMap { put("other", "value") })
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DeviceRequestInfo(buildCborMap { putCborArray("useCases") {} })
+        }
+        assertFailsWith<IllegalArgumentException> {
+            UseCase(mandatory = true, documentSets = emptyList(), purposeHints = emptyMap())
+        }
+
+        // 3. "1.1" DeviceRequest with out-of-range docRequestId or unreferenced DocRequest in useCases throws
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(
+                sessionTranscript = transcript,
+                deviceRequestInfo = DeviceRequestInfo.fromValues(
+                    useCases = listOf(
+                        UseCase(
+                            mandatory = true,
+                            documentSets = listOf(DocumentSet(listOf(0, 5))),
+                            purposeHints = emptyMap()
+                        )
+                    )
+                )
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+                )
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(
+                sessionTranscript = transcript,
+                deviceRequestInfo = singleDocUseCaseInfo() // only covers DocRequest 0, leaves DocRequest 1 unreferenced
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+                )
+                addDocRequest(
+                    docType = PhotoID.PHOTO_ID_DOCTYPE,
+                    nameSpaces = mapOf(PhotoID.PHOTO_ID_NAMESPACE to mapOf("given_name" to false))
+                )
+            }
+        }
+
+        // 4. DocRequestInfo(nonKeyBoundSupported = ...) round-trips and automatically selects version "1.1"
+        for (flag in listOf(true, false)) {
+            val req = buildDeviceRequest(
+                sessionTranscript = transcript,
+                deviceRequestInfo = singleDocUseCaseInfo()
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    docRequestInfo = DocRequestInfo(nonKeyBoundSupported = flag)
+                )
+            }
+            assertEquals("1.1", req.version)
+            val parsed = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(req.toDataItem())))
+            assertEquals(flag, parsed.docRequests.single().docRequestInfo?.nonKeyBoundSupported)
+        }
+
+        // 5. Empty DocRequestInfo() normalizes to null in Builder (keeps "1.0"), while raw empty "requestInfo": {} throws
+        val normalizedV10 = buildDeviceRequest(sessionTranscript = transcript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo()
+            )
+        }
+        assertEquals("1.0", normalizedV10.version)
+        assertNull(normalizedV10.docRequests.single().docRequestInfo)
+
+        val emptyItemsRequestBytes = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(
+                Cbor.encode(
+                    buildCborMap {
+                        put("docType", DrivingLicense.MDL_DOCTYPE)
+                        putCborMap("nameSpaces") {
+                            putCborMap(DrivingLicense.MDL_NAMESPACE) {
+                                put("given_name", false)
+                            }
+                        }
+                        putCborMap("requestInfo") {}
+                    }
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            DeviceRequest.fromDataItem(
+                buildCborMap {
+                    put("version", "1.0")
+                    putCborArray("docRequests") {
+                        addCborMap {
+                            put("itemsRequest", emptyItemsRequestBytes)
+                        }
+                    }
+                }
+            )
+        }
+
+        // 6. Explicit version = "1.0" combined with Second Edition features throws
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(
+                sessionTranscript = transcript,
+                version = "1.0",
+                deviceRequestInfo = singleDocUseCaseInfo()
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+                )
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(
+                sessionTranscript = transcript,
+                version = "1.0"
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun testReaderSignatureX5tHeaderAndVerification() = runTest {
+        val transcript = buildCborArray { add("SessionTranscript") }
+        val now = Clock.System.now()
+        val rootPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(rootPriv, Algorithm.ES256),
+            subject = X500Name.fromName("CN=Reader Root"),
+            serial = ASN1Integer(1L),
+            validFrom = now,
+            validUntil = now + 1.days,
+            crlUrl = "https://example.com/crl",
+        )
+        val leafPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootPriv),
+            readerKey = leafPriv.publicKey,
+            subject = X500Name.fromName("CN=Reader Leaf"),
+            dnsName = null,
+            serial = ASN1Integer(2L),
+            validFrom = now,
+            validUntil = now + 1.days,
+        )
+        val readerKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(leafCert, rootCert)),
+            privateKey = leafPriv
+        )
+        val expectedX5t = buildCborArray {
+            add(Algorithm.SHA256.coseAlgorithmIdentifier!!)
+            add(Crypto.digest(Algorithm.SHA256, leafCert.encoded.toByteArray()))
+        }
+
+        // 1a. Version 1.0 ReaderAuth omits x5t (ISO/IEC 18013-5:2021 Clause 9.1.2.4)
+        val perDocReq10 = buildDeviceRequest(sessionTranscript = transcript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerKey
+            )
+        }
+        assertEquals("1.0", perDocReq10.version)
+        val readerAuth10 = perDocReq10.docRequests.single().readerAuth!!
+        assertNull(readerAuth10.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
+        val parsedPerDoc10 = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(perDocReq10.toDataItem())))
+        parsedPerDoc10.verifyReaderAuthentication(transcript)
+
+        // 1b. Version 1.1 ReaderAuth includes x5t in protected header and verifies
+        val perDocReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerKey
+            )
+        }
+        assertEquals("1.1", perDocReq.version)
+        val readerAuth = perDocReq.docRequests.single().readerAuth!!
+        assertEquals(expectedX5t, readerAuth.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
+        val parsedPerDoc = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(perDocReq.toDataItem())))
+        parsedPerDoc.verifyReaderAuthentication(transcript)
+
+        // 1c. Legacy DeviceRequestGenerator (version 1.0) omits x5t from protected header
+        @Suppress("DEPRECATION")
+        val legacyEncoded = DeviceRequestGenerator(Cbor.encode(transcript))
+            .addDocumentRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                itemsToRequest = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                requestInfo = null,
+                readerKey = leafPriv,
+                signatureAlgorithm = Algorithm.ES256,
+                readerKeyCertificateChain = X509CertChain(listOf(leafCert)),
+            )
+            .generate()
+        val legacyParsed = DeviceRequest.fromDataItem(Cbor.decode(legacyEncoded))
+        legacyParsed.verifyReaderAuthentication(transcript)
+        assertNull(legacyParsed.docRequests.single().readerAuth!!.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
+
+        // 2. ReaderAuthAll includes x5t in protected header and verifies
+        val allReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addReaderAuthAll(readerKey)
+        }
+        val readerAuthAll = allReq.readerAuthAll.single()
+        assertEquals(expectedX5t, readerAuthAll.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
+        assertTrue(
+            Cbor.encode(readerAuthAll.toDataItem()).toHex().startsWith(
+                "845829a201261822822f5820" + Crypto.digest(Algorithm.SHA256, leafCert.encoded.toByteArray()).toHex()
+            )
+        )
+        val parsedAll = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(allReq.toDataItem())))
+        parsedAll.verifyReaderAuthentication(transcript)
+
+        // 3. Wrong x5t digest, unsupported x5t hash alg (-43 = SHA-384), and duplicate protected+unprotected x5t fail
+        val itemsRequestBytes = perDocReq.docRequests.single().toDataItem()["itemsRequest"]
+        val readerAuthenticationBytes = Cbor.encode(
+            Tagged(
+                Tagged.ENCODED_CBOR,
+                Bstr(
+                    Cbor.encode(
+                        buildCborArray {
+                            add("ReaderAuthentication")
+                            add(transcript)
+                            add(itemsRequestBytes)
+                        }
+                    )
+                )
+            )
+        )
+        for ((badProtectedX5t, badUnprotectedX5t) in listOf(
+            buildCborArray { add(-16); add(ByteArray(32) { 0x42 }) } to null,
+            buildCborArray { add(-43); add(Crypto.digest(Algorithm.SHA384, leafCert.encoded.toByteArray())) } to null,
+            expectedX5t to expectedX5t,
+        )) {
+            val badSig = Cose.coseSign1Sign(
+                signingKey = readerKey,
+                message = readerAuthenticationBytes,
+                includeMessageInPayload = false,
+                protectedHeaders = mapOf(
+                    Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.let { Nint((-1 - it).toULong()) },
+                    Cose.COSE_LABEL_X5T.toCoseLabel to badProtectedX5t,
+                ),
+                unprotectedHeaders = buildMap {
+                    put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, X509CertChain(listOf(leafCert)).toDataItem())
+                    if (badUnprotectedX5t != null) {
+                        put(Cose.COSE_LABEL_X5T.toCoseLabel, badUnprotectedX5t)
+                    }
+                }
+            )
+            val badReq = DeviceRequest.fromDataItem(
+                buildCborMap {
+                    put("version", "1.0")
+                    putCborArray("docRequests") {
+                        addCborMap {
+                            put("itemsRequest", itemsRequestBytes)
+                            put("readerAuth", badSig.toDataItem())
+                        }
+                    }
+                }
+            )
+            assertFailsWith<SignatureVerificationException> {
+                badReq.verifyReaderAuthentication(transcript)
+            }
+        }
     }
 }

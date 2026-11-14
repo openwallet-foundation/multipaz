@@ -554,6 +554,10 @@ class DocumentStoreTestHarness {
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                dsKey.certChain.toCoseX5t()
             )
         )
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(

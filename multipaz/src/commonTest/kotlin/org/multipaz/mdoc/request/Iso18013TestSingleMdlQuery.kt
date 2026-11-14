@@ -71,10 +71,21 @@ class Iso18013TestSingleMdlQuery {
             )
         }
 
+        private val SINGLE_DOC_REQUEST_INFO = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+
         private fun singleMdlQuery(version: String? = null): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
                 version = version,
+                deviceRequestInfo = if (version != null && version >= "1.1") SINGLE_DOC_REQUEST_INFO else null,
             ) {
                 addDocRequest(
                     docType = DrivingLicense.MDL_DOCTYPE,
@@ -419,7 +430,7 @@ class Iso18013TestSingleMdlQuery {
             )
         }
         assertEquals(
-            "No matching credentials for first DocRequest: missing data element 'resident_address' in namespace 'org.iso.18013.5.1'",
+            "No credentials match required UseCase: missing data element 'resident_address' in namespace 'org.iso.18013.5.1'",
             e.message
         )
     }
@@ -432,6 +443,7 @@ class Iso18013TestSingleMdlQuery {
         val query = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
             version = "1.1",
+            deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -450,7 +462,7 @@ class Iso18013TestSingleMdlQuery {
             )
         }
         assertEquals(
-            "No matching credentials for first DocRequest: missing data elements: 'resident_address' in namespace 'org.iso.18013.5.1', 'driving_privileges' in namespace 'org.iso.18013.5.1'",
+            "No credentials match required UseCase: missing data elements: 'resident_address' in namespace 'org.iso.18013.5.1', 'driving_privileges' in namespace 'org.iso.18013.5.1'",
             e.message
         )
     }
@@ -463,6 +475,7 @@ class Iso18013TestSingleMdlQuery {
         val query = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
             version = "1.1",
+            deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -479,7 +492,7 @@ class Iso18013TestSingleMdlQuery {
             )
         }
         assertEquals(
-            "No matching credentials for first DocRequest: missing data element 'custom_field' in namespace 'com.example.custom'",
+            "No credentials match required UseCase: missing data element 'custom_field' in namespace 'com.example.custom'",
             e.message
         )
     }

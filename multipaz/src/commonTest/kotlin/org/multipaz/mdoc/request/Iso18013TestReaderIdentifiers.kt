@@ -184,11 +184,22 @@ class Iso18013TestReaderIdentifiers {
             }
         }
 
+        private val SINGLE_DOC_REQUEST_INFO = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+
         private suspend fun mdlQueryReaderAuthAll(
             readerKey: AsymmetricKey.X509Compatible,
         ): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
             ) {
                 addDocRequest(
                     docType = DrivingLicense.MDL_DOCTYPE,
@@ -208,6 +219,7 @@ class Iso18013TestReaderIdentifiers {
         ): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
             ) {
                 addDocRequest(
                     docType = EUPersonalID.EUPID_VCT,
@@ -404,7 +416,7 @@ class Iso18013TestReaderIdentifiers {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals("No credentials match required UseCase", e.message)
     }
 
     @Test
@@ -457,7 +469,7 @@ class Iso18013TestReaderIdentifiers {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals("No credentials match required UseCase", e.message)
     }
 
     @Test
@@ -472,7 +484,7 @@ class Iso18013TestReaderIdentifiers {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals("No credentials match required UseCase", e.message)
     }
 
     @Test

@@ -28,12 +28,14 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborArray
+import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
@@ -41,6 +43,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
+import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -60,9 +63,12 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
@@ -104,6 +110,28 @@ import kotlin.time.Instant
 class DeviceResponseTest {
     companion object {
         private const val TAG = "DeviceResponseTest"
+
+        private fun deviceRequestInfoForIds(vararg ids: Int): DeviceRequestInfo =
+            DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(ids.toList())),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+
+        private fun findSubarrayOffset(haystack: ByteArray, needle: ByteArray): Int {
+            require(needle.isNotEmpty() && needle.size <= haystack.size)
+            outer@ for (i in 0..(haystack.size - needle.size)) {
+                for (j in needle.indices) {
+                    if (haystack[i + j] != needle[j]) continue@outer
+                }
+                return i
+            }
+            error("Target byte sequence not found in encoded DeviceResponse")
+        }
     }
 
     private lateinit var storage: Storage
@@ -492,9 +520,13 @@ class DeviceResponseTest {
         )
 
         // Bunch of negative tests to ensure we check signatures and other things correctly.
-        checkPoisonIssueSignature(encodedDeviceResponse, sessionTranscript)
-        checkPoisonDeviceSignature(encodedDeviceResponse, sessionTranscript)
-        checkPoisonIssuerSignedItem(encodedDeviceResponse, sessionTranscript)
+        checkPoisonIssueSignature(encodedDeviceResponse, drParsed.documents[0].issuerAuth.signature, sessionTranscript)
+        checkPoisonDeviceSignature(encodedDeviceResponse, ecdsaSignature.signature.signature, sessionTranscript)
+        checkPoisonIssuerSignedItem(
+            encodedDeviceResponse,
+            drParsed.documents[0].issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["given_name"]!!.random.toByteArray(),
+            sessionTranscript
+        )
         checkChangedDoctype(encodedDeviceResponse, sessionTranscript)
         checkDeviceSignatureByOtherKey(encodedDeviceResponse, sessionTranscript)
         checkDeviceAuthenticationWithOtherDoctype(encodedDeviceResponse, sessionTranscript)
@@ -507,11 +539,12 @@ class DeviceResponseTest {
 
     private suspend fun checkPoisonIssueSignature(
         encodedDeviceResponse: ByteArray,
+        sigBytes: ByteArray,
         sessionTranscript: DataItem
     ) {
         val dr = encodedDeviceResponse.copyOf()
-        // By inspection we know offset 2916 always contain the issuer signature.
-        dr[2916 + 16] = dr[2916 + 16].xor(0xff.toByte())
+        val offset = findSubarrayOffset(dr, sigBytes)
+        dr[offset + 16] = dr[offset + 16].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
             "Signature verification failed",
@@ -526,11 +559,12 @@ class DeviceResponseTest {
 
     private suspend fun checkPoisonDeviceSignature(
         encodedDeviceResponse: ByteArray,
+        sigBytes: ByteArray,
         sessionTranscript: DataItem
     ) {
         val dr = encodedDeviceResponse.copyOf()
-        // By inspection we know the offset which contain the device auth EC signature. Poison it.
-        dr[3612 + 16] = dr[3612 + 16].xor(0xff.toByte())
+        val offset = findSubarrayOffset(dr, sigBytes)
+        dr[offset + 16] = dr[offset + 16].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
             "Signature verification failed",
@@ -545,12 +579,12 @@ class DeviceResponseTest {
 
     private suspend fun checkPoisonIssuerSignedItem(
         encodedDeviceResponse: ByteArray,
+        randomBytes: ByteArray,
         sessionTranscript: DataItem
     ) {
         val dr = encodedDeviceResponse.copyOf()
-        // By inspection we know the offset for the random for IssuerSignedItem
-        // for the disclosed value for given_name. Poison it.
-        dr[3497 + 8] = dr[3497 + 8].xor(0xff.toByte())
+        val offset = findSubarrayOffset(dr, randomBytes)
+        dr[offset + 8] = dr[offset + 8].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
             "Digest mismatch for data element given_name in org.iso.18013.5.1",
@@ -981,18 +1015,24 @@ class DeviceResponseTest {
         )
         assertEquals(drParsed, deviceResponse)
 
-        checkPoisonDeviceMac(encodedDeviceResponse, sessionTranscript, eReaderKey)
+        checkPoisonDeviceMac(
+            encodedDeviceResponse,
+            (drParsed.documents[0].deviceAuth as DeviceAuth.Mac).mac.tag,
+            sessionTranscript,
+            eReaderKey
+        )
     }
 
     private suspend fun checkPoisonDeviceMac(
         encodedDeviceResponse: ByteArray,
+        macBytes: ByteArray,
         sessionTranscript: DataItem,
         eReaderKey: EcPrivateKey
     ) {
         val dr = encodedDeviceResponse.copyOf()
         Logger.iCbor(TAG, "dr", dr)
-        // By inspection we know the offset which always contain the device auth EC MAC. Poison it.
-        dr[3517 + 16] = dr[3517 + 16].xor(0xff.toByte())
+        val offset = findSubarrayOffset(dr, macBytes)
+        dr[offset + 16] = dr[offset + 16].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
             "Device authentication MAC failed to verify",
@@ -1440,14 +1480,10 @@ class DeviceResponseTest {
         )
 
         val sdJwtVc = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
-        val encSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(
-                tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(encryptionParameters.dataItem))
-            ))
-            add(sessionTranscript.asArray[2])
-        }
+        val encSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
         val encSessionTranscriptBytes = Tagged(
             tagNumber = Tagged.ENCODED_CBOR,
             taggedItem = Bstr(Cbor.encode(encSessionTranscript))
@@ -1497,7 +1533,10 @@ class DeviceResponseTest {
         assertEquals(0, drParsed.zkDocuments.size)
         assertEquals(1, drParsed.encryptedDocuments.size)
 
-        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
@@ -1658,7 +1697,10 @@ class DeviceResponseTest {
     }
 
     private fun unsignedOtherDocumentRequest(sessionTranscript: DataItem) =
-        buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0),
+        ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
@@ -1763,11 +1805,10 @@ class DeviceResponseTest {
         }
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
-        val encryptedSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
-            add(sessionTranscript.asArray[2])
-        }
+        val encryptedSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
         val otherDocument = arbitraryAudienceOtherDocument(encryptedSessionTranscript)
         val encryptedBuilder = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
@@ -1919,7 +1960,10 @@ class DeviceResponseTest {
         ) {
             addOtherDocument(otherDocument)
         }
-        val requestWithTx = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val requestWithTx = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0),
+        ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf(
@@ -1988,7 +2032,10 @@ class DeviceResponseTest {
             certChain = X509CertChain(listOf(readerCert, readerRootCert)),
             privateKey = readerKeyPrivate
         )
-        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val request = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
@@ -2135,7 +2182,10 @@ class DeviceResponseTest {
             certChain = X509CertChain(listOf(readerCert, readerRootCert)),
             privateKey = readerKeyPrivate
         )
-        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val request = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
@@ -2207,7 +2257,10 @@ class DeviceResponseTest {
         ) {
             addOtherDocument(otherDocument)
         }
-        val requestWithDefaultDocFormat = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val requestWithDefaultDocFormat = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
@@ -2243,11 +2296,10 @@ class DeviceResponseTest {
         }
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
-        val encryptedSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
-            add(sessionTranscript.asArray[2])
-        }
+        val encryptedSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
         val otherDocument = arbitraryAudienceOtherDocument(encryptedSessionTranscript, audience = "none")
         val outOfRangeEncrypted = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
@@ -2255,7 +2307,10 @@ class DeviceResponseTest {
             docRequestIds = listOf(5)
         ).apply { addOtherDocument(otherDocument) }.build()
 
-        val request = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val request = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
@@ -2303,7 +2358,10 @@ class DeviceResponseTest {
         // and rejected if EncryptionParameters do not match docResponseEncryption.
         val otherRecipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val otherEncryptionParameters = EncryptionParameters.fromValues(otherRecipientKey.publicKey)
-        val requestWithOtherVctAndEncryption = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val requestWithOtherVctAndEncryption = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = "urn:eudi:pid:base:1",
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
@@ -2811,7 +2869,10 @@ class DeviceResponseTest {
         val requestedBaseVct = "urn:example:pid:base:1"
 
         // 1. Non-transaction path: request for requestedBaseVct, presented EUPID_VCT
-        val nonTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val nonTxRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0),
+        ) {
             addDocRequest(
                 docType = requestedBaseVct,
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
@@ -2894,7 +2955,10 @@ class DeviceResponseTest {
         assertEquals(1, verifiedPresentations.size)
 
         // 2. Transaction path: request index 0 asks for requestedBaseVct with TestTxType
-        val txRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val txRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0),
+        ) {
             addDocRequest(
                 docType = requestedBaseVct,
                 nameSpaces = mapOf(
@@ -2971,7 +3035,10 @@ class DeviceResponseTest {
         assertEquals("none", txResponse.otherDocuments.single().expectedAudience)
 
         // Still rejected even with alias when another dc+sd-jwt DocRequest explicitly requests EUPID_VCT
-        val txRequestWithExplicitSubtype = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val txRequestWithExplicitSubtype = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = requestedBaseVct,
                 nameSpaces = mapOf(
@@ -3158,7 +3225,10 @@ class DeviceResponseTest {
         val readerKey0 = createReaderKey("Reader 0")
         val readerKey1 = createReaderKey("Reader 1")
 
-        val twoPidRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val twoPidRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
@@ -3218,7 +3288,10 @@ class DeviceResponseTest {
         // 2. Two mso_mdoc DocRequests with the same docType: disambiguating AKI and satisfying [0, 1] with one document
         val mdlAki = ByteString(mdlDsCert.authorityKeyIdentifier!!)
         val wrongAki = ByteString(ByteArray(mdlAki.size) { 0x55 })
-        val twoMdlDiffAkiRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val twoMdlDiffAkiRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
@@ -3275,7 +3348,10 @@ class DeviceResponseTest {
         }
 
         // When both DocRequest 0 and DocRequest 1 match, a single MdocDocument with docRequestIds = [0, 1] succeeds
-        val twoMdlCompatibleRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val twoMdlCompatibleRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
@@ -3315,7 +3391,10 @@ class DeviceResponseTest {
         val mdlWithTxAuth = createMdlCredentialWithAuthorizations(
             authorizedNamespaces = listOf(ISO_18013_TRANSACTION_DATA_NAMESPACE)
         )
-        val twoMdlTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val twoMdlTxRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(
@@ -3391,7 +3470,10 @@ class DeviceResponseTest {
         )
 
         // 2. SD-JWT: signed KB-JWT binds to doc_request_id = 0, outer docRequestIds claims [1] -> rejected
-        val twoPidTxRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val twoPidTxRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
             for (i in 0..1) {
                 addDocRequest(
                     docType = EUPersonalID.EUPID_VCT,
@@ -3466,11 +3548,10 @@ class DeviceResponseTest {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
-        val encSessionTranscript = buildCborArray {
-            add(sessionTranscript.asArray[0])
-            add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encryptionParameters.dataItem))))
-            add(sessionTranscript.asArray[2])
-        }
+        val encSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
         val otherDoc1 = arbitraryAudienceOtherDocument(encSessionTranscript, audience = "none")
             .copy(docRequestIds = listOf(1))
         val zkSpec = ZkSystemSpec(id = "zk_spec_1", system = "mock_zk")
@@ -3487,7 +3568,10 @@ class DeviceResponseTest {
             docRequestIds = listOf(2),
         )
 
-        val multiEncryptedRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+        val multiEncryptedRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1, 2),
+        ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
                 nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
@@ -3586,6 +3670,182 @@ class DeviceResponseTest {
                 atTime = mdlTimeValidityBegin,
                 deviceRequest = multiEncryptedRequest
             )
+        }
+    }
+
+    @Test
+    fun encryptedDocumentsHandoverAndHpkeInfoMatchesSecondEdition() = runTest {
+        provisionDocuments()
+        val originalSessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(0xaa.toByte(), 0xbb.toByte(), 0xcc.toByte()))
+        }
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionParameters = EncryptionParameters.fromValues(recipientKey.publicKey)
+
+        // Verify Clause 12.6.4 handover structure:
+        // OriginalSessionTranscriptHash = SHA-256(#6.24(bstr .cbor originalSessionTranscript))
+        // EncryptedDocumentsHandover = ["encryptedDocuments", OriginalSessionTranscriptHash, EncryptionParametersBytes]
+        // encSessionTranscript = [null, null, EncryptedDocumentsHandover]
+        val expectedOriginalTranscriptHash = Crypto.digest(
+            Algorithm.SHA256,
+            Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(originalSessionTranscript))))
+        )
+        val expectedEncryptionParametersBytes = Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(encryptionParameters.dataItem))
+        )
+        val encSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = originalSessionTranscript,
+            encryptionParameters = encryptionParameters
+        )
+        assertEquals(Simple.NULL, encSessionTranscript.asArray[0])
+        assertEquals(Simple.NULL, encSessionTranscript.asArray[1])
+        val handover = encSessionTranscript.asArray[2].asArray
+        assertEquals(3, handover.size)
+        assertEquals("encryptedDocuments", handover[0].asTstr)
+        assertContentEquals(expectedOriginalTranscriptHash, handover[1].asBstr)
+        assertEquals(expectedEncryptionParametersBytes, handover[2])
+
+        // Verify Clause 12.7.1 HPKE info parameter = SessionTranscriptBytes = #6.24(bstr .cbor encSessionTranscript)
+        val response = buildDeviceResponse(originalSessionTranscript, DeviceResponse.STATUS_OK) {
+            addEncryptedDocuments(
+                encryptionParameters = encryptionParameters,
+                docRequestIds = listOf(0)
+            ) {
+                addDocument(
+                    credential = mdlCredentialSignature,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
+                            namespaceName = DrivingLicense.MDL_NAMESPACE,
+                            dataElementName = "given_name",
+                            intentToRetain = false
+                        )
+                    ),
+                    docRequestIds = listOf(0)
+                )
+            }
+        }
+        val encryptedDoc = response.encryptedDocuments.single()
+        val expectedHpkeInfo = Cbor.encode(
+            Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(encSessionTranscript)))
+        )
+        val manualPlaintext = Hpke.getDecrypter(
+            cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
+            receiverPrivateKey = AsymmetricKey.anonymous(recipientKey),
+            encapsulatedKey = encryptedDoc.enc.toByteArray(),
+            info = expectedHpkeInfo
+        ).decrypt(
+            ciphertext = encryptedDoc.ciphertext.toByteArray(),
+            aad = byteArrayOf()
+        )
+        val plaintextDocs = EncryptedDocumentsPlaintext.fromDataItem(Cbor.decode(manualPlaintext))
+        assertEquals(1, plaintextDocs.documents.size)
+        // Inner mdoc deviceAuth must verify against encSessionTranscript (not originalSessionTranscript)
+        plaintextDocs.documents.single().verify(
+            sessionTranscript = encSessionTranscript,
+            eReaderKey = null,
+            transactionData = emptyList(),
+            atTime = mdlTimeValidityBegin
+        )
+        assertFailsWith<IllegalStateException> {
+            plaintextDocs.documents.single().verify(
+                sessionTranscript = originalSessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = mdlTimeValidityBegin
+            )
+        }
+    }
+
+    @Test
+    fun issuerAuthX5tHeaderAndVerification() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                )
+            )
+        }
+        response.verify(sessionTranscript = sessionTranscript, atTime = mdlTimeValidityBegin)
+        val validDoc = response.documents.single()
+        val expectedX5t = buildCborArray {
+            add(Algorithm.SHA256.coseAlgorithmIdentifier!!)
+            add(Crypto.digest(Algorithm.SHA256, mdlDsCert.encoded.toByteArray()))
+        }
+        assertEquals(expectedX5t, validDoc.issuerAuth.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel])
+        assertFalse(mdlCredentialSignature.validate(now = mdlTimeValidityBegin).hasErrors)
+
+        // Re-sign MSO with wrong x5t digest, unsupported x5t hash alg (-43 = SHA-384), and duplicate x5t
+        val dsCertifiedKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey)
+        val msoPayload = validDoc.issuerAuth.payload!!
+        for ((badProtectedX5t, badUnprotectedX5t) in listOf(
+            buildCborArray { add(-16); add(ByteArray(32) { 0x11 }) } to null,
+            buildCborArray { add(-43); add(Crypto.digest(Algorithm.SHA384, mdlDsCert.encoded.toByteArray())) } to null,
+            expectedX5t to expectedX5t,
+        )) {
+            val badIssuerAuth = Cose.coseSign1Sign(
+                signingKey = dsCertifiedKey,
+                message = msoPayload,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem(),
+                    Cose.COSE_LABEL_X5T.toCoseLabel to badProtectedX5t,
+                ),
+                unprotectedHeaders = buildMap {
+                    put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, X509CertChain(listOf(mdlDsCert)).toDataItem())
+                    if (badUnprotectedX5t != null) {
+                        put(Cose.COSE_LABEL_X5T.toCoseLabel, badUnprotectedX5t)
+                    }
+                }
+            )
+            val tamperedResponseItem = buildCborMap {
+                put("version", "1.0")
+                put("status", 0)
+                putCborArray("documents") {
+                    addCborMap {
+                        put("docType", validDoc.docType)
+                        putCborMap("issuerSigned") {
+                            put("nameSpaces", validDoc.issuerNamespaces.toDataItem())
+                            put("issuerAuth", badIssuerAuth.toDataItem())
+                        }
+                        putCborMap("deviceSigned") {
+                            putCborMap("deviceAuth") {
+                                put("deviceSignature", (validDoc.deviceAuth as DeviceAuth.Ecdsa).signature.toDataItem())
+                            }
+                            put("nameSpaces", Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(validDoc.deviceNamespaces.toDataItem()))))
+                        }
+                    }
+                }
+            }
+            val tamperedParsed = DeviceResponse.fromDataItem(tamperedResponseItem)
+            assertFailsWith<IllegalStateException> {
+                tamperedParsed.verify(sessionTranscript = sessionTranscript, atTime = mdlTimeValidityBegin)
+            }
+
+            // Also verify MdocCredential.validate() fails with an x5t error when issuerProvidedData carries bad x5t
+            val badIssuerProvidedData = Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", validDoc.issuerNamespaces.toDataItem())
+                    put("issuerAuth", badIssuerAuth.toDataItem())
+                }
+            )
+            val validationResult = mdlCredentialSignature.validate(
+                issuerProvidedAuthenticationData = ByteString(badIssuerProvidedData),
+                now = mdlTimeValidityBegin
+            )
+            assertTrue(validationResult.hasErrors)
+            assertTrue(validationResult.errors.any { it.message.contains("x5t") })
         }
     }
 }

@@ -19,6 +19,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 
@@ -48,19 +49,12 @@ data class SignedRical(
                     for (certInfo in rical.certificateInfos) {
                         addCborMap {
                             put("certificate", certInfo.certificate.encoded.toByteArray())
-                            put("isTrustAnchor", certInfo.isTrustAnchor)
                             put("serialNumber", Tagged(
                                 Tagged.UNSIGNED_BIGNUM,
-                                Bstr(certInfo.certificate.serialNumber.value)
+                                Bstr(certInfo.serialNumber.toByteArray())
                             ))
-                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
+                            put("ski", certInfo.ski.toByteArray())
                             certInfo.type?.let { put("type", it) }
-                            certInfo.name?.let { put("name", it) }
-                            if (certInfo.extensions.isNotEmpty()) {
-                                putCborMap("extensions") {
-                                    certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
-                                }
-                            }
                             if (certInfo.trustConstraints.isNotEmpty()) {
                                 putCborArray("trustConstraints") {
                                     certInfo.trustConstraints.forEach { trustConstraint ->
@@ -72,8 +66,23 @@ data class SignedRical(
                                                     }
                                                 }
                                             }
+                                            trustConstraint.otherInfo.forEach { (key, value) ->
+                                                put(key, value)
+                                            }
                                         }
                                     }
+                                }
+                            }
+                            certInfo.name?.let { put("name", it) }
+                            certInfo.issuingCountry?.let { put("issuingCountry", it) }
+                            certInfo.stateOrProvinceName?.let { put("stateOrProvinceName", it) }
+                            certInfo.issuer?.let { put("issuer", it.toByteArray()) }
+                            certInfo.subject?.let { put("subject", it.toByteArray()) }
+                            certInfo.notBefore?.let { put("notBefore", it.toDataItemDateTimeString()) }
+                            certInfo.notAfter?.let { put("notAfter", it.toDataItemDateTimeString()) }
+                            if (certInfo.extensions.isNotEmpty()) {
+                                putCborMap("extensions") {
+                                    certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
                                 }
                             }
                         }
@@ -81,9 +90,9 @@ data class SignedRical(
                 }
                 rical.id?.let { put("id", it.toDataItem()) }
                 rical.latestRicalUrl?.let { put("latestRicalUrl", it.toDataItem()) }
-                rical.extensions?.let {
+                if (rical.extensions.isNotEmpty()) {
                     putCborMap("extensions") {
-                        it.forEach { (extName, extValue) -> put(extName, extValue) }
+                        rical.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
                     }
                 }
             }
@@ -92,12 +101,12 @@ data class SignedRical(
             signingKey = signingKey,
             message = encodedRical,
             includeMessageInPayload = true,
-            // Note: Unlike the VICAL, the x5chain appears in the protected header, not unprotected.
+            // Note: Unlike the VICAL, the x5chain appears in the protected header (excluding a self-signed root).
             protectedHeaders = mapOf(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG) to
                         signingKey.algorithm.coseAlgorithmIdentifier!!.toDataItem(),
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to
-                        ricalProviderCertificateChain.toDataItem()
+                        ricalProviderCertificateChain.toCoseX5Chain(excludeRoot = true)
             ),
             unprotectedHeaders = emptyMap()
         )
@@ -129,7 +138,7 @@ data class SignedRical(
             val signature = CoseSign1.fromDataItem(Cbor.decode(encodedSignedRical))
 
             val ricalPayload = signature?.payload
-                ?: throw IllegalArgumentException("Unexpected null payload for signed VICAL")
+                ?: throw IllegalArgumentException("Unexpected null payload for signed RICAL")
 
             val certChain = signature.protectedHeaders[CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)]?.asX509CertChain
                 ?: throw IllegalArgumentException("x5chain not set in protected header")
@@ -161,13 +170,10 @@ data class SignedRical(
             } ?: emptyMap()
 
             val certificateInfos = mutableListOf<RicalCertificateInfo>()
-            (ricalMap["certificateInfos"] as CborArray).items.forEachIndexed { certInfoIndex, certInfo ->
-                // Be lenient about missing isTrustAnchor for now
-                val isTrustAnchor = certInfo.getOrNull("isTrustAnchor")?.asBoolean ?: true.also {
-                    Logger.w(TAG, "isTrustAnchor not present in RICAL entry $certInfoIndex")
-                }
+            for (certInfo in (ricalMap["certificateInfos"] as CborArray).items) {
                 val certBytes = certInfo["certificate"].asBstr
                 val certificate = X509Cert(ByteString(certBytes))
+                val serialNumber = SignedVical.parseSerialNumber(certInfo["serialNumber"], TAG)
                 val ski = certificate.subjectKeyIdentifier?.let { ByteString(it) }
                     ?: throw IllegalArgumentException("No SKI in certificate")
                 val skiInCertInfo = ByteString(certInfo["ski"].asBstr)
@@ -182,27 +188,35 @@ data class SignedRical(
                 val trustConstraints = mutableListOf<RicalTrustConstraint>()
                 if (certInfo.hasKey("trustConstraints")) {
                     for (trustConstraint in (certInfo["trustConstraints"] as CborArray).items) {
-                        val extensionsInTrustConstraint = trustConstraint.getOrNull("extensions")?.let { trustConstraint ->
-                            trustConstraint.asMap.entries.associate { (extName, extValue) ->
+                        val extensionsInTrustConstraint = trustConstraint.getOrNull("extensions")?.let { extMap ->
+                            extMap.asMap.entries.associate { (extName, extValue) ->
                                 Pair(extName.asTstr, extValue)
                             }
                         } ?: emptyMap()
+                        val otherInfoInTrustConstraint = trustConstraint.asMap.entries
+                            .filter { it.key.asTstr != "extensions" }
+                            .associate { (key, value) -> Pair(key.asTstr, value) }
                         trustConstraints.add(
                             RicalTrustConstraint(
-                                extensions = extensionsInTrustConstraint
+                                extensions = extensionsInTrustConstraint,
+                                otherInfo = otherInfoInTrustConstraint
                             )
                         )
                     }
                 }
                 certificateInfos.add(RicalCertificateInfo(
                     certificate = certificate,
-                    isTrustAnchor = isTrustAnchor,
+                    serialNumber = serialNumber,
                     ski = ski,
                     type = certInfo.getOrNull("type")?.asTstr,
                     trustConstraints = trustConstraints,
                     name = certInfo.getOrNull("name")?.asTstr,
                     issuingCountry = certInfo.getOrNull("issuingCountry")?.asTstr,
                     stateOrProvinceName = certInfo.getOrNull("stateOrProvinceName")?.asTstr,
+                    issuer = certInfo.getOrNull("issuer")?.let { ByteString(it.asBstr) },
+                    subject = certInfo.getOrNull("subject")?.let { ByteString(it.asBstr) },
+                    notBefore = certInfo.getOrNull("notBefore")?.asDateTimeString,
+                    notAfter = certInfo.getOrNull("notAfter")?.asDateTimeString,
                     extensions = extensionsInCertInfo
                 ))
             }
