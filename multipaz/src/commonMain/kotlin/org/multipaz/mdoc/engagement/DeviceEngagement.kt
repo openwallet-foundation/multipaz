@@ -14,6 +14,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.origininfo.OriginInfo
 import org.multipaz.util.Logger
 
@@ -50,35 +51,66 @@ data class DeviceEngagement private constructor(
     }
 
     /**
-     * Generates CBOR compliant with the CDDL for `DeviceEngagement` according to ISO 18013-5.
+     * Generates CBOR compliant with the CDDL for `DeviceEngagement` according to ISO 18013-5
+     * using [MdocEngagementType.DEVICE_QR].
      *
      * @return a [DataItem].
      */
-    fun toDataItem() = buildCborMap {
-        put(0, version)
-        putCborArray(1) {
-            add(1) // cipher suite
-            addTaggedEncodedCbor(Cbor.encode(this@DeviceEngagement.eDeviceKey.toCoseKey().toDataItem()))
+    fun toDataItem(): DataItem = toDataItem(MdocEngagementType.DEVICE_QR)
+
+    /**
+     * Generates CBOR compliant with the CDDL for `DeviceEngagement` according to ISO 18013-5.
+     *
+     * @param engagementType the engagement context ([MdocEngagementType.DEVICE_QR],
+     *   [MdocEngagementType.READER_QR], or [MdocEngagementType.CCE_SELECT]).
+     * @return a [DataItem].
+     */
+    fun toDataItem(
+        engagementType: MdocEngagementType,
+    ): DataItem {
+        require(
+            engagementType == MdocEngagementType.DEVICE_QR ||
+                engagementType == MdocEngagementType.READER_QR ||
+                engagementType == MdocEngagementType.CCE_SELECT
+        ) {
+            "Invalid engagementType $engagementType for DeviceEngagement"
         }
-        if (connectionMethods.isNotEmpty()) {
-            putCborArray(2) {
-                connectionMethods.forEach { connectionMethod ->
-                    add(RawCbor(connectionMethod.toDeviceEngagement()))
-                }
+        val methodsToEncode = MdocConnectionMethod.combine(connectionMethods)
+        if (engagementType == MdocEngagementType.CCE_SELECT) {
+            require(methodsToEncode.size <= 1) {
+                "At most one connection method may be selected in CCE_SELECT, got ${methodsToEncode.size}"
+            }
+        } else if (engagementType == MdocEngagementType.READER_QR) {
+            require(methodsToEncode.isEmpty()) {
+                "DeviceRetrievalMethods must not be present in DeviceEngagement for READER_QR"
             }
         }
-        if (version >= "1.1") {
-            // OriginInfos MUST be present even if empty, for compatibility with ISO/IEC 18013-7:2024
-            putCborArray(5) {
-                originInfos.forEach { originInfo ->
-                    add(originInfo.toDataItem())
+        return buildCborMap {
+            put(0, version)
+            putCborArray(1) {
+                add(1) // cipher suite
+                addTaggedEncodedCbor(Cbor.encode(this@DeviceEngagement.eDeviceKey.toCoseKey().toDataItem()))
+            }
+            if (methodsToEncode.isNotEmpty()) {
+                putCborArray(2) {
+                    methodsToEncode.forEach { connectionMethod ->
+                        add(RawCbor(connectionMethod.toDeviceEngagement(engagementType)))
+                    }
                 }
             }
-        }
-        if (capabilities.isNotEmpty()) {
-            putCborMap(6) {
-                capabilities.forEach { (capability, value) ->
-                    put(capability.identifier.toDataItem(), value)
+            if (version >= "1.1") {
+                // OriginInfos MUST be present even if empty, for compatibility with ISO/IEC 18013-7:2024
+                putCborArray(5) {
+                    originInfos.forEach { originInfo ->
+                        add(originInfo.toDataItem())
+                    }
+                }
+            }
+            if (capabilities.isNotEmpty()) {
+                putCborMap(6) {
+                    capabilities.forEach { (capability, value) ->
+                        put(capability.identifier.toDataItem(), value)
+                    }
                 }
             }
         }
@@ -228,7 +260,7 @@ data class DeviceEngagement private constructor(
                         Bstr(Cbor.encode(eDeviceKey.toCoseKey().toDataItem()))
                     ))
                 ),
-                connectionMethods = connectionMethods,
+                connectionMethods = MdocConnectionMethod.combine(connectionMethods),
                 originInfos = originInfos,
                 capabilities = capabilities
             )

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.connectionmethod
+package com.android.identity.mdoc.connectionmethod
 
 import android.nfc.FormatException
 import android.nfc.NdefMessage
@@ -22,9 +22,9 @@ import android.util.Pair
 import androidx.test.filters.SmallTest
 import com.android.identity.android.mdoc.transport.DataTransportBle.Companion.fromNdefRecord
 import com.android.identity.android.util.NfcUtil
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod.Companion.fromDeviceEngagement
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod.Companion.fromDeviceEngagement
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex

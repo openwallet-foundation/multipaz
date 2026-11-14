@@ -13,23 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.engagement
+package com.android.identity.mdoc.engagement
 
-import org.multipaz.mdoc.TestVectors
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class EngagementParserTest {
     @Test
     fun testDeviceRequestEngagementWithVectors() {
-        val deviceEngagement = TestVectors.ISO_18013_5_ANNEX_D_DEVICE_ENGAGEMENT.fromHex()
-        val parser = EngagementParser(deviceEngagement)
+        val deviceEngagementHex =
+            "a30063312e30018201d818584ba4010220012158205a88d182bce5f42efa59943f33359d2" +
+                "e8a968ff289d93e5fa444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a" +
+                "8cfcf3de6aa672fc60a557aa32fc670281830201a300f401f50b5045efef742b2c4837a9a" +
+                "3b0e1d05a6917"
+        val expectedEDeviceKeyBytesHex =
+            "d818584ba4010220012158205a88d182bce5f42efa59943f33359d2e8a968ff289d93e5fa" +
+                "444b624343167fe225820b16e8cf858ddc7690407ba61d4c338237a8cfcf3de6aa672fc60" +
+                "a557aa32fc67"
+        val parser = EngagementParser(deviceEngagementHex.fromHex())
         val engagement = parser.parse()
         assertEquals("1.0", engagement.version)
         val connectionMethods = engagement.connectionMethods
@@ -43,10 +50,6 @@ class EngagementParserTest {
             "45efef74-2b2c-4837-a9a3-b0e1d05a6917",
             cmBle.centralClientModeUuid.toString()
         )
-        val eDeviceKeyBytes = engagement.eSenderKeyBytes
-        assertEquals(
-            TestVectors.ISO_18013_5_ANNEX_D_E_DEVICE_KEY_BYTES,
-            eDeviceKeyBytes.toHex()
-        )
+        assertEquals(expectedEDeviceKeyBytesHex, engagement.eSenderKeyBytes.toHex())
     }
 }

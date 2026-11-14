@@ -19,8 +19,8 @@ import android.content.Context
 import android.nfc.NdefRecord
 import android.util.Pair
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import java.io.ByteArrayOutputStream

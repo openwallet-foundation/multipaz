@@ -7,7 +7,10 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.nfc.CommandApdu
+import org.multipaz.nfc.HandoverRequestRecord
+import org.multipaz.nfc.NdefMessage
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcCommandFailedException
 import org.multipaz.nfc.NfcIsoTag
@@ -16,12 +19,14 @@ import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
@@ -89,16 +94,16 @@ class MdocNfcEngagementHelperTest {
         val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
         return listOf(
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = false,
-                supportsCentralClientMode = true,
-                peripheralServerModeUuid = null,
-                centralClientModeUuid = bleUuid
+                gattPeripheral = false,
+                gattCentral = true,
+                peripheralModeUuid = null,
+                centralModeUuid = bleUuid
             ),
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = true,
-                supportsCentralClientMode = false,
-                peripheralServerModeUuid = bleUuid,
-                centralClientModeUuid = null
+                gattPeripheral = true,
+                gattCentral = false,
+                peripheralModeUuid = bleUuid,
+                centralModeUuid = null
             ),
             MdocConnectionMethodNfc(
                 commandDataFieldMaxLength = 0xffff,
@@ -218,12 +223,12 @@ class MdocNfcEngagementHelperTest {
                 ResponseApdu(status=36864, payload=ByteString(size=2 hex=0006))
                 CommandApdu(cla=0, ins=176, p1=0, p2=2, payload=ByteString(size=0), le=6)
                 ResponseApdu(status=36864, payload=ByteString(size=6 hex=d10201546500))
-                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=170 hex=00a8910215487215910204616301013000510206616301036e6663001c1e060a69736f2e6f72673a31383031333a726561646572656e676167656d656e746d646f63726561646572a10063312e301a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c031107b66eef55ee782ea2514bb6a1c42ad5b35c110a0369736f2e6f72673a31383031333a6e66636e6663010301ffff0402010000), le=0)
+                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=120 hex=0076910215487215910204616301013000510206616301036e6663001a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107b66eef55ee782ea2514bb6a1c42ad5b35c110a0369736f2e6f72673a31383031333a6e66636e6663010301ffff0402010000), le=0)
                 ResponseApdu(status=36864, payload=ByteString(size=0))
                 CommandApdu(cla=0, ins=176, p1=0, p2=0, payload=ByteString(size=0), le=2)
-                ResponseApdu(status=36864, payload=ByteString(size=2 hex=00ba))
-                CommandApdu(cla=0, ins=176, p1=0, p2=2, payload=ByteString(size=0), le=186)
-                ResponseApdu(status=36864, payload=ByteString(size=186 hex=91020f487315d10209616301013001046d646f631c1e580469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a20063312e30018201d818584ba4010220012158207104f7e2c2e95ca76482c0c963d454b7e5d053c5b59ce89d00ff7c7d7ab6ff7d225820f442821292c2453ec67c75233ea56e1734c211ae26b259fdf232b5b3d82b1ba25a2003016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c01))
+                ResponseApdu(status=36864, payload=ByteString(size=2 hex=00c2))
+                CommandApdu(cla=0, ins=176, p1=0, p2=2, payload=ByteString(size=0), le=194)
+                ResponseApdu(status=36864, payload=ByteString(size=194 hex=91020f487315d10209616301013001046d646f631c1e600469736f2e6f72673a31383031333a646576696365656e676167656d656e746d646f63a40063312e31018201d818584ba4010220012158207104f7e2c2e95ca76482c0c963d454b7e5d053c5b59ce89d00ff7c7d7ab6ff7d225820f442821292c2453ec67c75233ea56e1734c211ae26b259fdf232b5b3d82b1ba2058006a203f504f55a2003016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c01))
             """.trimIndent().trim(),
             tag.transcript.toString().trim()
         )
@@ -241,16 +246,16 @@ class MdocNfcEngagementHelperTest {
         val bleUuid2 = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb7")
         val staticHandoverConnectionMethods = listOf(
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = false,
-                supportsCentralClientMode = true,
-                peripheralServerModeUuid = null,
-                centralClientModeUuid = bleUuid1
+                gattPeripheral = false,
+                gattCentral = true,
+                peripheralModeUuid = null,
+                centralModeUuid = bleUuid1
             ),
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = true,
-                supportsCentralClientMode = false,
-                peripheralServerModeUuid = bleUuid2,
-                centralClientModeUuid = null
+                gattPeripheral = true,
+                gattCentral = false,
+                peripheralModeUuid = bleUuid2,
+                centralModeUuid = null
             ),
         )
 
@@ -281,9 +286,9 @@ class MdocNfcEngagementHelperTest {
     }
 
     /**
-     * Verifies that [mdocReaderNfcHandover] throws [IllegalArgumentException] when asked to combine
-     * Negotiated Handover BLE connection methods whose Central Client Mode and Peripheral Server Mode
-     * UUIDs do not match.
+     * Verifies that [mdocReaderNfcHandover] throws [IllegalArgumentException] when asked to encode
+     * Negotiated Handover BLE connection methods whose Central Mode and Peripheral Mode UUIDs are both
+     * non-null and do not match.
      */
     @Test
     fun testNegotiatedBleDifferentUUIDs() = runTest {
@@ -291,16 +296,16 @@ class MdocNfcEngagementHelperTest {
         val bleUuid2 = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb7")
         val connectionMethods = listOf(
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = false,
-                supportsCentralClientMode = true,
-                peripheralServerModeUuid = null,
-                centralClientModeUuid = bleUuid1
+                gattPeripheral = false,
+                gattCentral = true,
+                peripheralModeUuid = null,
+                centralModeUuid = bleUuid1
             ),
             MdocConnectionMethodBle(
-                supportsPeripheralServerMode = true,
-                supportsCentralClientMode = false,
-                peripheralServerModeUuid = bleUuid2,
-                centralClientModeUuid = null
+                gattPeripheral = true,
+                gattCentral = false,
+                peripheralModeUuid = bleUuid2,
+                centralModeUuid = null
             ),
         )
 
@@ -328,37 +333,45 @@ class MdocNfcEngagementHelperTest {
     }
 
     /**
-     * Verifies that an L2CAP PSM (`peripheralServerModePsm`) advertised by the mdoc in BLE Peripheral
-     * Server Mode is preserved across NFC Static Handover.
+     * Verifies that an L2CAP PSM (`directL2capPsm`) advertised by the mdoc in BLE Direct L2CAP
+     * Peripheral Mode (`ChBleOptions`) is preserved across NFC Static Handover.
      */
     @Test
     fun testStaticHandoverBlePsm() = runTest {
         val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
 
-        val bleCc =  MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = bleUuid
+        val bleL2capPs = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = false,
+            directL2capPeripheral = true,
+            directL2capCentral = false,
+            peripheralModeUuid = bleUuid,
+            directL2capPsm = 192,
+        )
+        val bleCc = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = true,
+            peripheralModeUuid = null,
+            centralModeUuid = bleUuid
         )
         val blePs = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = bleUuid,
-            centralClientModeUuid = null,
-            peripheralServerModePsm = 192,
+            gattPeripheral = true,
+            gattCentral = false,
+            peripheralModeUuid = bleUuid,
+            centralModeUuid = null,
         )
+        val methods = listOf(bleL2capPs, bleCc, blePs)
 
         val eDeviceKeyPub = getEDeviceKeyPub()
         val engagementHelper = MdocNfcEngagementHelper(
             eDeviceKey = eDeviceKeyPub,
             onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
-                assertEquals(listOf(bleCc, blePs), connectionMethods)
+                assertEquals(methods, connectionMethods)
             },
             onError = { error ->
                 fail("onError should not be called with $error")
             },
-            staticHandoverMethods = listOf(bleCc, blePs),
+            staticHandoverMethods = methods,
         )
 
         val tag = LoopbackIsoTag(engagementHelper)
@@ -367,113 +380,135 @@ class MdocNfcEngagementHelperTest {
             negotiatedHandoverConnectionMethods = getConnectionMethods(),
         )
         assertNotNull(handoverResult)
-        assertEquals(listOf(bleCc, blePs), handoverResult.connectionMethods)
+        assertEquals(methods, handoverResult.connectionMethods)
     }
 
     /**
-     * Verifies that an L2CAP PSM (`peripheralServerModePsm`) offered by the reader in BLE Central
-     * Client Mode during NFC Negotiated Handover is conveyed to the mdoc and preserved on the selected
-     * connection method (and omitted when BLE Peripheral Server Mode is selected instead).
+     * Verifies ISO/IEC 18013-5 Second Edition `ChBleOptions` (`iso.org:18013:chbleoptions`) during
+     * NFC Negotiated Handover:
+     * 1. Reader offers `directL2capCentral` (`psm = 192`), `gattCentral`, `directL2capPeripheral`, and `gattPeripheral`.
+     * 2. When mdoc selects `directL2capCentral`, `Hs` carries `ChBleOptions {1: false, 2: true}` and the
+     *    reader supplements `centralModeUuid` and `directL2capPsm = 192`.
+     * 3. When mdoc selects `gattCentral`, `Hs` carries `ChBleOptions {1: true, 2: false}` (since `Hr`
+     *    included `ChBleOptions`) and the reader returns `gattCentral` without a PSM.
+     * 4. When mdoc selects `directL2capPeripheral` and provides its own `peripheralModeUuid` and
+     *    `directL2capPsm = 129`, `Hs` carries `0x07` UUID + `ChBleOptions {0: 129, 1: false, 2: true}`
+     *    and the reader receives `directL2capPeripheral` with `mdocUuid` and `psm = 129`.
+     * 5. Also verifies optional `ReaderEngagement` (`"mdocreader"`) inclusion in `Hr` when configured on
+     *    [MdocReaderNfcHandoverOptions].
      */
     @Test
     fun testNegotiatedHandoverBlePsm() = runTest {
         val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
+        val mdocUuid = UUID.fromString("00000002-a123-48ce-896b-4c76973373e6")
 
-        val bleCc =  MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = bleUuid,
-            peripheralServerModePsm = 192,
+        val bleL2capCc = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = false,
+            directL2capPeripheral = false,
+            directL2capCentral = true,
+            centralModeUuid = bleUuid,
+            directL2capPsm = 192,
+        )
+        val bleCc = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = true,
+            centralModeUuid = bleUuid,
+        )
+        val bleL2capPs = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = false,
+            directL2capPeripheral = true,
+            directL2capCentral = false,
         )
         val blePs = MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = bleUuid,
-            centralClientModeUuid = null
+            gattPeripheral = true,
+            gattCentral = false,
         )
+        val readerOffered = listOf(bleL2capCc, bleCc, bleL2capPs, blePs)
 
         val eDeviceKeyPub = getEDeviceKeyPub()
-        val engagementHelper = MdocNfcEngagementHelper(
+        // 1. Mdoc selects directL2capCentral (first disambiguated choice)
+        val engagementHelper1 = MdocNfcEngagementHelper(
             eDeviceKey = eDeviceKeyPub,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethods, _, _ ->
                 assertEquals(1, connectionMethods.size)
             },
-            onError = { error ->
-                fail("onError should not be called with $error")
-            },
-            negotiatedHandoverPicker = { methods -> methods.first() }
+            onError = { error -> fail("onError should not be called with $error") },
+            negotiatedHandoverPicker = { methods ->
+                assertEquals(4, methods.size)
+                methods.first()
+            }
         )
+        val tag1 = LoopbackIsoTag(engagementHelper1)
+        val handoverResult1 = mdocReaderNfcHandover(
+            tag = tag1,
+            negotiatedHandoverConnectionMethods = readerOffered,
+        )
+        assertNotNull(handoverResult1)
+        assertEquals(listOf(bleL2capCc), handoverResult1.connectionMethods)
 
-        val tag = LoopbackIsoTag(engagementHelper)
-        val handoverResult = mdocReaderNfcHandover(
-            tag = tag,
-            negotiatedHandoverConnectionMethods = listOf(bleCc, blePs),
-        )
-        assertNotNull(handoverResult)
-        assertEquals(1, handoverResult.connectionMethods.size)
-        assertEquals(
-            bleCc,
-            handoverResult.connectionMethods.first()
-        )
-
-        // Check that there's no PSM if we select the second method
+        // 2. Mdoc selects gattCentral -> no PSM on returned method!
         val engagementHelper2 = MdocNfcEngagementHelper(
             eDeviceKey = eDeviceKeyPub,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethods, _, _ ->
                 assertEquals(1, connectionMethods.size)
             },
-            onError = { error ->
-                fail("onError should not be called with $error")
-            },
-            negotiatedHandoverPicker = { methods -> methods[1] }
+            onError = { error -> fail("onError should not be called with $error") },
+            negotiatedHandoverPicker = { methods ->
+                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattCentral }
+            }
         )
-
         val tag2 = LoopbackIsoTag(engagementHelper2)
         val handoverResult2 = mdocReaderNfcHandover(
             tag = tag2,
-            negotiatedHandoverConnectionMethods = listOf(bleCc, blePs),
+            negotiatedHandoverConnectionMethods = readerOffered,
         )
         assertNotNull(handoverResult2)
-        assertEquals(1, handoverResult2.connectionMethods.size)
-        assertEquals(
-            blePs,
-            handoverResult2.connectionMethods.first()
-        )
+        assertEquals(listOf(bleCc), handoverResult2.connectionMethods)
 
-        // Also check that if the holder (e.g., multipaz-android-legacy or any standard ISO 18013-5
-        // holder that does not support L2CAP in engagement) returns a BLE Central Client Mode
-        // Handover Select record with peripheralServerModePsm = null, mdocReaderNfcHandover still
-        // supplements the reader's peripheralServerModePsm so the pre-warmed reader transport matches.
+        // 3. Mdoc selects directL2capPeripheral and supplies mdocUuid + psm 129, AND reader includes ReaderEngagement ("mdocreader")
+        val readerEngagement = buildReaderEngagement(eReaderKey = eDeviceKeyPub) {}
         val engagementHelper3 = MdocNfcEngagementHelper(
             eDeviceKey = eDeviceKeyPub,
-            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+            onHandoverComplete = { connectionMethods, _, handover ->
                 assertEquals(1, connectionMethods.size)
-            },
-            onError = { error ->
-                fail("onError should not be called with $error")
-            },
-            negotiatedHandoverPicker = { _ ->
-                MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = false,
-                    supportsCentralClientMode = true,
-                    peripheralServerModeUuid = null,
-                    centralClientModeUuid = bleUuid,
-                    peripheralServerModePsm = null,
+                val hrBytes = handover.asArray[1].asBstr
+                val hrMessage = NdefMessage.fromEncoded(hrBytes)
+                assertTrue(
+                    hrMessage.records.any {
+                        it.type.decodeToString() == Nfc.EXTERNAL_TYPE_ISO_18013_5_READER_ENGAGEMENT &&
+                            it.id.decodeToString() == "mdocreader"
+                    }
                 )
+                val hrRecord = HandoverRequestRecord.fromNdefRecord(hrMessage.records.first())
+                assertNotNull(hrRecord)
+            },
+            onError = { error -> fail("onError should not be called with $error") },
+            negotiatedHandoverPicker = { methods ->
+                val picked = methods.filterIsInstance<MdocConnectionMethodBle>().first { it.directL2capPeripheral }
+                picked.copy(peripheralModeUuid = mdocUuid, directL2capPsm = 129)
             }
         )
-
         val tag3 = LoopbackIsoTag(engagementHelper3)
         val handoverResult3 = mdocReaderNfcHandover(
             tag = tag3,
-            negotiatedHandoverConnectionMethods = listOf(bleCc, blePs),
+            negotiatedHandoverConnectionMethods = readerOffered,
+            options = MdocReaderNfcHandoverOptions(readerEngagement = readerEngagement),
         )
         assertNotNull(handoverResult3)
-        assertEquals(1, handoverResult3.connectionMethods.size)
         assertEquals(
-            bleCc,
-            handoverResult3.connectionMethods.first()
+            listOf(
+                MdocConnectionMethodBle(
+                    gattPeripheral = false,
+                    gattCentral = false,
+                    directL2capPeripheral = true,
+                    directL2capCentral = false,
+                    peripheralModeUuid = mdocUuid,
+                    directL2capPsm = 129,
+                )
+            ),
+            handoverResult3.connectionMethods
         )
     }
 

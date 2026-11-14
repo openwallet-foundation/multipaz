@@ -96,10 +96,9 @@ class MultiDeviceTestsServer(
             Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_READER_TERMINATION_MSG,
             Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT -> {
                 MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = false,
-                    supportsCentralClientMode = true,
-                    peripheralServerModeUuid = null,
-                    centralClientModeUuid = UUID.randomUUID(),
+                    gattPeripheral = false,
+                    gattCentral = true,
+                    centralModeUuid = UUID.randomUUID(),
                 )
             }
             Test.MDOC_PERIPHERAL_SERVER_MODE,
@@ -112,10 +111,9 @@ class MultiDeviceTestsServer(
             Test.MDOC_PERIPHERAL_SERVER_MODE_L2CAP_READER_TERMINATION_MSG,
             Test.MDOC_PERIPHERAL_SERVER_MODE_L2CAP_PSM_IN_DEVICE_ENGAGEMENT -> {
                 MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = true,
-                    supportsCentralClientMode = false,
-                    peripheralServerModeUuid = UUID.randomUUID(),
-                    centralClientModeUuid = null,
+                    gattPeripheral = true,
+                    gattCentral = false,
+                    peripheralModeUuid = UUID.randomUUID(),
                 )
             }
         }
@@ -144,9 +142,13 @@ class MultiDeviceTestsServer(
                 true
             }
         }
+        val bleUseL2CAPInEngagement = (
+            test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT ||
+                test == Test.MDOC_PERIPHERAL_SERVER_MODE_L2CAP_PSM_IN_DEVICE_ENGAGEMENT
+        )
         val options = MdocTransportOptions(
             bleUseL2CAP = bleUseL2CAP,
-            bleUseL2CAPInEngagement = bleUseL2CAP
+            bleUseL2CAPInEngagement = bleUseL2CAPInEngagement
         )
 
         var holderSuccess = false
@@ -183,12 +185,14 @@ class MultiDeviceTestsServer(
                 val psmFromReader = receiveChannel.readUTF8Line(LINE_LIMIT)!!.toInt()
                 Logger.i(TAG, "psmFromReader: $psmFromReader")
                 val connectionMethodWithPsm = MdocConnectionMethodBle(
-                    supportsPeripheralServerMode = connectionMethod.supportsPeripheralServerMode,
-                    supportsCentralClientMode = connectionMethod.supportsCentralClientMode,
-                    peripheralServerModeUuid = connectionMethod.peripheralServerModeUuid,
-                    centralClientModeUuid = connectionMethod.centralClientModeUuid,
-                    peripheralServerModePsm = psmFromReader,
-                    peripheralServerModeMacAddress = null
+                    gattPeripheral = false,
+                    gattCentral = false,
+                    directL2capPeripheral = false,
+                    directL2capCentral = true,
+                    peripheralModeUuid = null,
+                    centralModeUuid = connectionMethod.centralModeUuid,
+                    directL2capPsm = psmFromReader,
+                    peripheralAddress = null,
                 )
                 transport = TestAppConfiguration.mdocTransportFactory.createTransport(
                     connectionMethod = connectionMethodWithPsm,

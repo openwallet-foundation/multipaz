@@ -28,7 +28,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.util.Logger
 import org.multipaz.util.toJavaUuid
 import java.util.UUID

@@ -45,7 +45,10 @@ data class MdocConnectionMethodWifiAware(
         return builder.toString()
     }
 
-    override fun toDeviceEngagement(): ByteArray {
+    override fun toDeviceEngagement(engagementType: MdocEngagementType): ByteArray {
+        require(engagementType == MdocEngagementType.DEVICE_QR) {
+            "Wi-Fi Aware connection method is not supported in $engagementType"
+        }
         return Cbor.encode(
             buildCborArray {
                 add(METHOD_TYPE)
@@ -71,8 +74,9 @@ data class MdocConnectionMethodWifiAware(
     override fun toNdefRecord(
         auxiliaryReferences: List<String>,
         role: MdocRole,
-        skipUuids: Boolean
-    ): Pair<NdefRecord, NdefRecord>? {
+        skipUuids: Boolean,
+        includeChBleOptions: Boolean,
+    ): NdefRecords? {
         Logger.w(TAG, "toNdefRecord() not yet implemented")
         return null
     }

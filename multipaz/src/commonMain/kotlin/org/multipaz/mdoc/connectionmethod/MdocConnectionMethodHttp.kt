@@ -18,7 +18,10 @@ data class MdocConnectionMethodHttp(
 ): MdocConnectionMethod() {
     override fun toString(): String = "http:uri=$uri"
 
-    override fun toDeviceEngagement(): ByteArray {
+    override fun toDeviceEngagement(engagementType: MdocEngagementType): ByteArray {
+        require(engagementType == MdocEngagementType.DEVICE_QR || engagementType == MdocEngagementType.READER_QR) {
+            "HTTP connection method is not supported in $engagementType"
+        }
         return Cbor.encode(
             buildCborArray {
                 add(METHOD_TYPE)
@@ -33,8 +36,9 @@ data class MdocConnectionMethodHttp(
     override fun toNdefRecord(
         auxiliaryReferences: List<String>,
         role: MdocRole,
-        skipUuids: Boolean
-    ): Pair<NdefRecord, NdefRecord>? {
+        skipUuids: Boolean,
+        includeChBleOptions: Boolean,
+    ): NdefRecords? {
         Logger.w(TAG, "toNdefRecord() not yet implemented")
         return null
     }

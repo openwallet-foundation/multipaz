@@ -27,12 +27,14 @@ struct Iso18013ProximityPresentmentScreen: View {
                             let bleUuid = UUID.companion.randomUUID(random: KotlinRandom.companion)
                             let connectionMethods = [
                                 MdocConnectionMethodBle(
-                                    supportsPeripheralServerMode: true,
-                                    supportsCentralClientMode: false,
-                                    peripheralServerModeUuid: bleUuid,
-                                    centralClientModeUuid: nil,
-                                    peripheralServerModePsm: nil,
-                                    peripheralServerModeMacAddress: nil
+                                    gattPeripheral: true,
+                                    gattCentral: false,
+                                    directL2capPeripheral: false,
+                                    directL2capCentral: false,
+                                    peripheralModeUuid: bleUuid,
+                                    centralModeUuid: nil,
+                                    directL2capPsm: nil,
+                                    peripheralAddress: nil
                                 )
                             ]
                             let settings = MdocProximityQrSettings(

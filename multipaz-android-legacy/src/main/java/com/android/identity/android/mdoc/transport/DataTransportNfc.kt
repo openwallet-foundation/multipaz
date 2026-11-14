@@ -21,8 +21,8 @@ import android.nfc.cardemulation.HostApduService
 import android.nfc.tech.IsoDep
 import android.util.Pair
 import com.android.identity.android.util.NfcUtil
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
 import java.io.IOException

@@ -27,8 +27,8 @@ import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.engagement.EngagementGenerator
-import org.multipaz.mdoc.engagement.EngagementParser
+import com.android.identity.mdoc.engagement.EngagementGenerator
+import com.android.identity.mdoc.engagement.EngagementParser
 import org.multipaz.mdoc.origininfo.OriginInfo
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger

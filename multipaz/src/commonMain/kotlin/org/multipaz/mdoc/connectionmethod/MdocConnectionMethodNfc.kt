@@ -28,7 +28,10 @@ data class MdocConnectionMethodNfc(
     override fun toString(): String =
         "nfc:cmd_max_length=$commandDataFieldMaxLength:resp_max_length=$responseDataFieldMaxLength"
 
-    override fun toDeviceEngagement(): ByteArray {
+    override fun toDeviceEngagement(engagementType: MdocEngagementType): ByteArray {
+        require(engagementType == MdocEngagementType.DEVICE_QR) {
+            "NFC data retrieval is not supported in $engagementType"
+        }
         return Cbor.encode(
             buildCborArray {
                 add(METHOD_TYPE)
@@ -61,8 +64,9 @@ data class MdocConnectionMethodNfc(
     override fun toNdefRecord(
         auxiliaryReferences: List<String>,
         role: MdocRole,
-        skipUuids: Boolean
-    ): Pair<NdefRecord, NdefRecord>? {
+        skipUuids: Boolean,
+        includeChBleOptions: Boolean,
+    ): NdefRecords? {
         val carrierDataReference = "nfc".encodeToByteString()
 
         // This is defined by ISO 18013-5 8.2.2.2 Alternative Carrier Record for device
@@ -100,7 +104,7 @@ data class MdocConnectionMethodNfc(
                 }
             }
         )
-        return Pair(record, acRecord)
+        return NdefRecords(carrierRecord = record, acRecord = acRecord)
     }
 
     companion object {

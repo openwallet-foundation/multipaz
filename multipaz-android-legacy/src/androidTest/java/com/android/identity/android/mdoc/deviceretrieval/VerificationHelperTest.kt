@@ -7,7 +7,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.multipaz.cbor.Simple
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
 import java.util.concurrent.Executor
 
 @RunWith(AndroidJUnit4::class)

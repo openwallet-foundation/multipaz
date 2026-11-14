@@ -662,20 +662,19 @@ fun IsoMdocProximityReadingScreen(
                                 if (app.settingsModel.readerBleCentralClientModeEnabled.value) {
                                     negotiatedHandoverConnectionMethods.add(
                                         MdocConnectionMethodBle(
-                                            supportsPeripheralServerMode = false,
-                                            supportsCentralClientMode = true,
-                                            peripheralServerModeUuid = null,
-                                            centralClientModeUuid = bleUuid,
+                                            gattPeripheral = false,
+                                            gattCentral = true,
+                                            centralModeUuid = bleUuid,
                                         )
                                     )
                                 }
                                 if (app.settingsModel.readerBlePeripheralServerModeEnabled.value) {
                                     negotiatedHandoverConnectionMethods.add(
                                         MdocConnectionMethodBle(
-                                            supportsPeripheralServerMode = true,
-                                            supportsCentralClientMode = false,
-                                            peripheralServerModeUuid = bleUuid,
-                                            centralClientModeUuid = null,
+                                            gattPeripheral = true,
+                                            gattCentral = false,
+                                            directL2capPeripheral = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
+                                            peripheralModeUuid = null,
                                         )
                                     )
                                 }

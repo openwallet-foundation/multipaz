@@ -268,18 +268,18 @@ class ScanMdocReaderTest {
 
     private fun createBleCentralClientMethod(uuid: UUID = UUID(1UL, 2UL)): MdocConnectionMethodBle =
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = false,
-            supportsCentralClientMode = true,
-            peripheralServerModeUuid = null,
-            centralClientModeUuid = uuid,
+            gattPeripheral = false,
+            gattCentral = true,
+            peripheralModeUuid = null,
+            centralModeUuid = uuid,
         )
 
-    private fun createBlePeripheralServerMethod(uuid: UUID = UUID(1UL, 2UL)): MdocConnectionMethodBle =
+    private fun createBlePeripheralServerMethod(uuid: UUID? = UUID(1UL, 2UL)): MdocConnectionMethodBle =
         MdocConnectionMethodBle(
-            supportsPeripheralServerMode = true,
-            supportsCentralClientMode = false,
-            peripheralServerModeUuid = uuid,
-            centralClientModeUuid = null,
+            gattPeripheral = true,
+            gattCentral = false,
+            peripheralModeUuid = uuid,
+            centralModeUuid = null,
         )
 
     private fun createNfcMethod(): MdocConnectionMethodNfc =
@@ -653,5 +653,106 @@ class ScanMdocReaderTest {
         assertEquals(2, factory.createdFakeTransports.size)
         assertTrue(factory.createdFakeTransports.all { it.advertised })
         assertTrue(factory.createdFakeTransports.all { it.closed })
+    }
+
+    @Test
+    fun negotiatedHandoverPeripheralOfferWithoutUuidCreatesTransportAfterMdocSuppliesUuid() = runTest {
+        val readerCentralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
+        val bleCc = createBleCentralClientMethod(readerCentralUuid)
+        val blePsWithoutUuid = createBlePeripheralServerMethod(uuid = null)
+
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val engagementHelper = MdocNfcEngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _ -> },
+            onError = { error -> fail("Unexpected engagement error: $error") },
+            negotiatedHandoverPicker = { methods ->
+                // Pick gattPeripheral (which has peripheralModeUuid == null from Hr; helper auto-generates UUID)
+                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.gattPeripheral }
+            }
+        )
+        val tag = NdefLoopbackIsoTag(engagementHelper)
+
+        lateinit var factory: FakeMdocTransportFactory
+        val reader = FakeNfcTagReader(
+            tags = listOf(tag),
+            onScanStarted = {
+                // Only bleCc was pre-created before scan(); blePsWithoutUuid waits for mdoc's UUID in Hs!
+                assertEquals(1, factory.createdFakeTransports.size)
+                assertTrue(factory.createdFakeTransports[0].advertised)
+            }
+        )
+        factory = FakeMdocTransportFactory()
+
+        val result = reader.scanMdocReader(
+            message = "Hold near mdoc",
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(),
+            transportFactory = factory,
+            selectConnectionMethod = { fail("selectConnectionMethod should not be called") },
+            negotiatedHandoverConnectionMethods = listOf(bleCc, blePsWithoutUuid),
+            context = coroutineContext,
+        )
+
+        assertNotNull(result)
+        assertEquals(MdocHandoverType.NEGOTIATED_HANDOVER, result.type)
+        assertEquals(2, factory.createdFakeTransports.size)
+        val warmedUpCc = factory.createdFakeTransports[0]
+        val createdPs = factory.createdFakeTransports[1]
+        assertTrue(warmedUpCc.closed)
+        assertSame(createdPs, result.transport)
+        assertFalse(createdPs.closed)
+        val selectedBle = assertIs<MdocConnectionMethodBle>(createdPs.connectionMethod)
+        assertTrue(selectedBle.gattPeripheral)
+        assertNotNull(selectedBle.peripheralModeUuid)
+    }
+
+    @Test
+    fun cceHandoverReusesDualModeWarmedUpCentralReaderTransportWhenSingleModeSelected() = runTest {
+        val readerCentralUuid = UUID.fromString("00000001-a123-48ce-896b-4c76973373e6")
+        val dualCentralReaderOffer = MdocConnectionMethodBle(
+            gattPeripheral = false,
+            gattCentral = true,
+            directL2capPeripheral = false,
+            directL2capCentral = true,
+            centralModeUuid = readerCentralUuid,
+            directL2capPsm = 128,
+        )
+
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val engagementHelper = MdocNfcCceEngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _, _ -> },
+            onMessageReceived = {},
+            onError = { error -> fail("Unexpected engagement error: $error") },
+            handoverPicker = { methods ->
+                // Mdoc sees 2 disambiguated choices (directL2capCentral and gattCentral) and selects directL2capCentral
+                assertEquals(2, methods.size)
+                methods.filterIsInstance<MdocConnectionMethodBle>().first { it.directL2capCentral }
+            }
+        )
+        val tag = NfcCceLoopbackIsoTag(engagementHelper)
+        val factory = FakeMdocTransportFactory()
+        val reader = FakeNfcTagReader(tags = listOf(tag))
+
+        val customResult = reader.scanMdocReader(
+            message = "Hold near mdoc",
+            options = MdocTransportOptions(bleUseL2CAP = true, bleUseL2CAPInEngagement = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
+            transportFactory = factory,
+            selectConnectionMethod = { fail("Single method should not invoke selectConnectionMethod") },
+            negotiatedHandoverConnectionMethods = listOf(dualCentralReaderOffer),
+            context = coroutineContext,
+            onHandover = { scanResult ->
+                assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
+                assertIs<NfcCceTransportMdocReader>(scanResult.transport)
+                "reused-dual-central"
+            }
+        )
+
+        assertEquals("reused-dual-central", customResult)
+        // Verify the single warmed-up dual-mode central transport was reused rather than closed & recreated!
+        assertEquals(1, factory.createdFakeTransports.size)
+        assertFalse(factory.createdFakeTransports.single().closed)
     }
 }

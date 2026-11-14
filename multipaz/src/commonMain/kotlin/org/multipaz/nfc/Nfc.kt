@@ -222,4 +222,25 @@ object Nfc {
      * Reference: ISO/IEC 18013-5:2021 clause 8.2.2.2.
      */
     const val EXTERNAL_TYPE_ISO_18013_5_NFC = "iso.org:18013:nfc"
+
+    /**
+     * The external type for Connection Handover BLE Options (`ChBleOptions`).
+     *
+     * Reference: ISO/IEC 18013-5 Second Edition clause 11.1.3.
+     */
+    const val EXTERNAL_TYPE_ISO_18013_5_CH_BLE_OPTIONS = "iso.org:18013:chbleoptions"
+
+    /**
+     * The external type for `DeviceEngagement` in NFC Connection Handover.
+     *
+     * Reference: ISO/IEC 18013-5 Second Edition clause 9.4.
+     */
+    const val EXTERNAL_TYPE_ISO_18013_5_DEVICE_ENGAGEMENT = "iso.org:18013:deviceengagement"
+
+    /**
+     * The external type for `ReaderEngagement` in NFC Connection Handover.
+     *
+     * Reference: ISO/IEC 18013-5 Second Edition clause 9.4.
+     */
+    const val EXTERNAL_TYPE_ISO_18013_5_READER_ENGAGEMENT = "iso.org:18013:readerengagement"
 }
