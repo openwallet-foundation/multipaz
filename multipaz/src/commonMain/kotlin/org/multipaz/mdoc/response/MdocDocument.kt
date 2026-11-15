@@ -111,7 +111,7 @@ class MdocDocument(
             putCborMap("deviceSigned") {
                 putCborMap("deviceAuth") {
                     when (deviceAuth) {
-                        is DeviceAuth.Ecdsa -> {
+                        is DeviceAuth.Signature -> {
                             put("deviceSignature", deviceAuth.signature.toDataItem())
                         }
                         is DeviceAuth.Mac -> {
@@ -234,7 +234,7 @@ class MdocDocument(
                 Bstr(Cbor.encode(deviceAuthentication))
             ))
             when (deviceAuth) {
-                is DeviceAuth.Ecdsa -> {
+                is DeviceAuth.Signature -> {
                     try {
                         Cose.coseSign1Check(
                             publicKey = msoDeviceKey!!,
@@ -252,13 +252,15 @@ class MdocDocument(
                     if (eReaderKey == null) {
                         throw IllegalArgumentException("Device authentication is MAC but eReaderKey was not set")
                     }
+                    val ecMsoDeviceKey = msoDeviceKey as? EcPublicKey
+                        ?: throw IllegalStateException("Device authentication MAC requires an EC deviceKey")
                     val sessionTranscriptBytes = Cbor.encode(Tagged(
                         Tagged.ENCODED_CBOR,
                         Bstr(Cbor.encode(sessionTranscript)))
                     )
                     val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                     val info = "EMacKey".encodeToByteArray()
-                    val expectedTag = eReaderKey.keyAgreement(msoDeviceKey!!).use { sharedSecretKey ->
+                    val expectedTag = eReaderKey.keyAgreement(ecMsoDeviceKey).use { sharedSecretKey ->
                         Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
                             Cose.coseMac0(
                                 algorithm = Algorithm.HMAC_SHA256,
@@ -407,7 +409,7 @@ class MdocDocument(
             if (deviceSigned != null) {
                 val deviceAuthDataItem = deviceSigned["deviceAuth"]
                 deviceAuth = if (deviceAuthDataItem.hasKey("deviceSignature")) {
-                    DeviceAuth.Ecdsa(deviceAuthDataItem["deviceSignature"].asCoseSign1)
+                    DeviceAuth.Signature(deviceAuthDataItem["deviceSignature"].asCoseSign1)
                 } else {
                     DeviceAuth.Mac(deviceAuthDataItem["deviceMac"].asCoseMac0)
                 }
@@ -497,8 +499,8 @@ class MdocDocument(
                 }
                 DeviceAuth.Mac(deviceMac)
             } else {
-                // Make sure we're not using fully-specified algorithms
-                val coseAlg = deviceKey.algorithm.curve!!.defaultSigningAlgorithm
+                // Make sure we're not using fully-specified algorithms for EC curves (e.g. -7 instead of -9)
+                val coseAlg = deviceKey.algorithm.curve?.defaultSigningAlgorithm ?: deviceKey.algorithm
                 val deviceSignature = Cose.coseSign1Sign(
                     signingKey = deviceKey,
                     message = deviceAuthenticationBytes,
@@ -508,7 +510,7 @@ class MdocDocument(
                     ),
                     unprotectedHeaders = mapOf(),
                 )
-                DeviceAuth.Ecdsa(deviceSignature)
+                DeviceAuth.Signature(deviceSignature)
             }
             return MdocDocument(
                 docType = docType,

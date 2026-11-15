@@ -24,7 +24,6 @@ import org.multipaz.claim.MdocClaim
 import org.multipaz.cose.CoseSign1
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -233,7 +232,7 @@ class KeyBoundMdocCredential : SecureAreaBoundCredential, MdocCredential {
             isoMdoc = listOf(
                 MpzPassIsoMdoc(
                     docType = docType,
-                    deviceKeyPrivate = deviceKeyPrivate as EcPrivateKey,
+                    deviceKeyPrivate = deviceKeyPrivate,
                     issuerNamespaces = issuerNamespaces,
                     issuerAuth = issuerAuth
                 )

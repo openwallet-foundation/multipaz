@@ -1,7 +1,7 @@
 package org.multipaz.openid4vci.credential
 
 import kotlinx.serialization.json.JsonObject
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import kotlin.time.Clock
 import kotlinx.serialization.json.buildJsonObject
@@ -43,7 +43,7 @@ class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId
     ): MintedCredential {
         check(authenticationKey == null)

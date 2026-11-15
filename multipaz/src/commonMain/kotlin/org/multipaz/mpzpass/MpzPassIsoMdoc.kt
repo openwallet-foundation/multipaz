@@ -5,6 +5,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 
 /**
@@ -18,10 +19,16 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
  */
 data class MpzPassIsoMdoc(
     val docType: String,
-    val deviceKeyPrivate: EcPrivateKey?,
+    val deviceKeyPrivate: PrivateKey?,
     val issuerNamespaces: IssuerNamespaces,
     val issuerAuth: CoseSign1
 ) {
+    /**
+     * The EC private key corresponding to the DeviceKey, or `null` if the key is not an EC key or not key-bound.
+     */
+    val ecDeviceKeyPrivate: EcPrivateKey?
+        get() = deviceKeyPrivate as? EcPrivateKey
+
     /**
      * Serializes this [MpzPassIsoMdoc] instance into a CBOR map [DataItem].
      *
@@ -49,7 +56,7 @@ data class MpzPassIsoMdoc(
         @Throws(IllegalArgumentException::class)
         fun fromDataItem(dataItem: DataItem): MpzPassIsoMdoc {
             val docType = dataItem["docType"].asTstr
-            val deviceKeyPrivate = dataItem.getOrNull("deviceKeyPrivate")?.asCoseKey?.ecPrivateKey
+            val deviceKeyPrivate = dataItem.getOrNull("deviceKeyPrivate")?.asCoseKey?.privateKey
             val issuerSigned = dataItem["issuerSigned"]
             val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1

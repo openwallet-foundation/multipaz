@@ -7,18 +7,19 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
+import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.sign
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
@@ -400,7 +401,7 @@ object Cose {
      * can be included in either the unprotected or protected header.
      *
      * This function signs with a key in a Secure Area, for signing with a software-based
-     * [EcPrivateKey], see the other function with the same name but taking a [EcPrivateKey]
+     * [PrivateKey], see the other function with the same name but taking a [PrivateKey]
      * instead.
      *
      * This method remains for compatibility. New code should used
@@ -434,7 +435,7 @@ object Cose {
         //
         if (!protectedHeaders.containsKey(CoseNumberLabel(COSE_LABEL_ALG))) {
             val keyInfo = secureArea.getKeyInfo(alias)
-            val signingAlgorithmToConvey = keyInfo.algorithm.curve!!.defaultSigningAlgorithm
+            val signingAlgorithmToConvey = keyInfo.algorithm.curve?.defaultSigningAlgorithm ?: keyInfo.algorithm
             check(signingAlgorithmToConvey.coseAlgorithmIdentifier != null) {
                 "Key algorithm doesn't have a COSE identifier"
             }
@@ -466,7 +467,7 @@ object Cose {
      * in the protected header and if certification is needed, [Cose.COSE_LABEL_X5CHAIN] in
      * either the unprotected or protected header.
      *
-     * This function signs with a software-based [EcPrivateKey], for using a key in a
+     * This function signs with a software-based [PrivateKey], for using a key in a
      * Secure Area see the other function with the same name but taking a [SecureArea]
      * and alias.
      *
@@ -482,7 +483,7 @@ object Cose {
      */
     @Deprecated(message = "Use SigningKey-based method instead")
     suspend fun coseSign1Sign(
-        key: EcPrivateKey,
+        key: PrivateKey,
         dataToSign: ByteArray,
         includeDataInPayload: Boolean,
         signatureAlgorithm: Algorithm,

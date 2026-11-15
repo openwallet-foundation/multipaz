@@ -2,9 +2,10 @@ package org.multipaz.multipazctl
 
 import kotlinx.coroutines.runBlocking
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.mdoc.util.MdocUtil
@@ -47,6 +48,30 @@ object MultipazCtl {
         return defaultValue
     }
 
+    private suspend fun createSigningKey(
+        args: Array<String>,
+        defaultCurve: String
+    ): Pair<PrivateKey, Algorithm> {
+        val algorithmName = getArg(args, "algorithm", "")
+        if (algorithmName.isNotEmpty()) {
+            val algorithm = Algorithm.fromName(algorithmName)
+            require(algorithm.isSigning) { "Algorithm $algorithm is not a signing algorithm" }
+            val privateKey = when {
+                algorithm.keySizeBits != null -> Crypto.createRsaPrivateKey(algorithm.keySizeBits!!)
+                algorithm in listOf(
+                    Algorithm.RS256, Algorithm.RS384, Algorithm.RS512,
+                    Algorithm.PS256, Algorithm.PS384, Algorithm.PS512
+                ) -> Crypto.createRsaPrivateKey(2048)
+                algorithm.isMlDsa -> Crypto.createMlDsaPrivateKey(algorithm)
+                else -> Crypto.createEcPrivateKey(algorithm.curve!!)
+            }
+            return Pair(privateKey, algorithm)
+        }
+        val curveName = getArg(args, "curve", defaultCurve)
+        val curve = EcCurve.fromJwkName(curveName)
+        return Pair(Crypto.createEcPrivateKey(curve), curve.defaultSigningAlgorithmFullySpecified)
+    }
+
     suspend fun generateIaca(args: Array<String>) {
         val certificateOutputFilename =
             getArg(args,"out_certificate", "iaca_certificate.pem")
@@ -74,10 +99,10 @@ object MultipazCtl {
         val validFrom = now
         val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
 
-        val curveName = getArg(args, "curve", "P-384")
-        val curve = EcCurve.fromJwkName(curveName)
+        val (createdIacaKey, iacaAlgorithm) = createSigningKey(args, "P-384")
 
-        Crypto.createEcPrivateKey(curve).use { iacaKey ->
+        createdIacaKey.use { iacaKey ->
+            val signingKey = AsymmetricKey.AnonymousExplicit(iacaKey, iacaAlgorithm)
             val issuerAltNameUrl = getArg(args,
                 "issuer_alt_name_url",
                 "https://issuer.example.com/website"
@@ -93,7 +118,7 @@ object MultipazCtl {
 
             val iacaCertificate = runBlocking {
                 MdocUtil.generateIacaCertificate(
-                    AsymmetricKey.anonymous(iacaKey),
+                    signingKey,
                     subjectAndIssuer,
                     serial,
                     validFrom,
@@ -105,7 +130,7 @@ object MultipazCtl {
 
             val iacaCrl = runBlocking {
                 buildX509Crl(
-                    signingKey = AsymmetricKey.anonymous(iacaKey),
+                    signingKey = signingKey,
                     issuer = subjectAndIssuer,
                     thisUpdate = validFrom,
                     nextUpdate = null
@@ -114,7 +139,7 @@ object MultipazCtl {
                 }
             }
 
-            println("- Generated self-signed IACA cert and private key with curve $curve")
+            println("- Generated self-signed IACA cert and private key with algorithm $iacaAlgorithm")
 
             File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
                 it.write(iacaKey.toPem())
@@ -145,9 +170,9 @@ object MultipazCtl {
         val iacaCert = X509Cert.fromPem(
             String(File(iacaCertificateFilename).readBytes(), StandardCharsets.US_ASCII))
 
-        val iacaPrivateKey = EcPrivateKey.fromPem(
+        val iacaPrivateKey = PrivateKey.fromPem(
             String(File(iacaPrivateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
-            iacaCert.ecPublicKey)
+            iacaCert.publicKey)
 
         iacaPrivateKey.use {
             val certificateOutputFilename =
@@ -168,10 +193,9 @@ object MultipazCtl {
             val validFrom = now
             val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
 
-            val curveName = getArg(args, "curve", "P-256")
-            val curve = EcCurve.fromJwkName(curveName)
+            val (createdDsKey, dsAlgorithm) = createSigningKey(args, "P-256")
 
-            Crypto.createEcPrivateKey(curve).use { dsKey ->
+            createdDsKey.use { dsKey ->
                 val serial = ASN1Integer.fromRandom(128)
 
                 val dsCertificate = runBlocking {
@@ -185,7 +209,7 @@ object MultipazCtl {
                     )
                 }
 
-                println("- Generated DS cert and private key with curve $curve")
+                println("- Generated DS cert and private key with algorithm $dsAlgorithm")
 
                 println("- Loaded IACA cert from $iacaCertificateFilename")
                 println("- Loaded IACA private key from $iacaPrivateKeyFilename")
@@ -233,8 +257,7 @@ object MultipazCtl {
         val validFrom = now
         val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
 
-        val curveName = getArg(args, "curve", "P-384")
-        val curve = EcCurve.fromJwkName(curveName)
+        val (createdReaderRootKey, readerRootAlgorithm) = createSigningKey(args, "P-384")
 
         val serial = ASN1Integer.fromRandom(128)
 
@@ -244,10 +267,11 @@ object MultipazCtl {
             "https://reader-ca.example.com/crl.crl"
         )
 
-        Crypto.createEcPrivateKey(curve).use { readerRootKey ->
+        createdReaderRootKey.use { readerRootKey ->
+            val signingKey = AsymmetricKey.AnonymousExplicit(readerRootKey, readerRootAlgorithm)
             val readerRootCertificate = runBlocking {
                 MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = AsymmetricKey.anonymous(readerRootKey),
+                    readerRootKey = signingKey,
                     subject = subjectAndIssuer,
                     serial = serial,
                     validFrom = validFrom,
@@ -258,7 +282,7 @@ object MultipazCtl {
 
             val readerRootCrl = runBlocking {
                 buildX509Crl(
-                    signingKey = AsymmetricKey.anonymous(readerRootKey),
+                    signingKey = signingKey,
                     issuer = subjectAndIssuer,
                     thisUpdate = validFrom,
                     nextUpdate = null,
@@ -267,7 +291,7 @@ object MultipazCtl {
                 }
             }
 
-            println("- Generated self-signed reader root cert and private key with curve $curve")
+            println("- Generated self-signed reader root cert and private key with algorithm $readerRootAlgorithm")
 
             val certificateOutputFilename = getArg(args, "out_certificate", "reader_root_certificate.pem")
             val privateKeyOutputFilename = getArg(args, "out_private_key", "reader_root_private_key.pem")
@@ -301,9 +325,9 @@ object MultipazCtl {
         val readerRootCert = X509Cert.fromPem(
             String(File(readerRootCertificateFilename).readBytes(), StandardCharsets.US_ASCII))
 
-        val readerRootPrivateKey = EcPrivateKey.fromPem(
+        val readerRootPrivateKey = PrivateKey.fromPem(
             String(File(readerRootPrivateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
-            readerRootCert.ecPublicKey)
+            readerRootCert.publicKey)
 
         readerRootPrivateKey.use {
             val certificateOutputFilename =
@@ -325,10 +349,9 @@ object MultipazCtl {
             val validFrom = now
             val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
 
-            val curveName = getArg(args, "curve", "P-256")
-            val curve = EcCurve.fromJwkName(curveName)
+            val (createdReaderKey, readerAlgorithm) = createSigningKey(args, "P-256")
 
-            Crypto.createEcPrivateKey(curve).use { readerKey ->
+            createdReaderKey.use { readerKey ->
                 val serial = ASN1Integer.fromRandom(128)
 
                 val readerCertificate = runBlocking {
@@ -346,7 +369,7 @@ object MultipazCtl {
                     )
                 }
 
-                println("- Generated Reader cert and private key with curve $curve")
+                println("- Generated Reader cert and private key with algorithm $readerAlgorithm")
 
                 println("- Loaded reader root cert from $readerRootCertificateFilename")
                 println("- Loaded reader root private key from $readerRootPrivateKeyFilename")
@@ -392,9 +415,9 @@ object MultipazCtl {
         val certificate = X509Cert.fromPem(
             String(File(certificateFilename).readBytes(), StandardCharsets.US_ASCII))
 
-        val privateKey = EcPrivateKey.fromPem(
+        val privateKey = PrivateKey.fromPem(
             String(File(privateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
-            certificate.ecPublicKey)
+            certificate.publicKey)
 
         privateKey.use {
             println("- Loaded cert from $certificateFilename")

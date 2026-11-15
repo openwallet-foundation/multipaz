@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.ktor.server.logging)
     implementation(libs.ktor.server.double.receive)
     implementation(libs.logback.classic)
+    implementation(libs.bouncy.castle.bcprov)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

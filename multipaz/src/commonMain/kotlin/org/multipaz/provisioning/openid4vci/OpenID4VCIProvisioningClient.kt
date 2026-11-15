@@ -490,6 +490,7 @@ internal class OpenID4VCIProvisioningClient(
         val keyInfo = secureArea.createKey(
             alias = null,
             createKeySettings = CreateKeySettings(
+                algorithm = authorizationConfiguration.clientAttestationSigningAlgorithm,
                 nonce = endpoint.authority.encodeToByteString()
             )
         )
@@ -795,7 +796,9 @@ internal class OpenID4VCIProvisioningClient(
         } else {
             val keyInfo = secureArea.createKey(
                 alias = null,
-                createKeySettings = CreateKeySettings()
+                createKeySettings = CreateKeySettings(
+                    algorithm = authorizationConfiguration.dpopSigningAlgorithm
+                )
             )
             authorizationData.dpopKeyAlias = keyInfo.alias
             AsymmetricKey.AnonymousSecureAreaBased(

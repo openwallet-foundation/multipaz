@@ -54,6 +54,8 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibDeflate
 import org.multipaz.utopia.knowntypes.PingTransaction
@@ -1580,6 +1582,210 @@ class VerificationSessionTest {
                 ),
                 mdocSessionTranscript = sessionTranscript,
             ).verify(atTime = now)
+        }
+    }
+
+    @Test
+    fun testNonEcKeysAcrossProtocols() = runTest {
+        setup()
+
+        for (alg in listOf(Algorithm.ML_DSA_44, Algorithm.RS256_2048)) {
+            val iacaRoot = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val iacaCert = MdocUtil.generateIacaCertificate(
+                iacaKey = iacaRoot,
+                subject = X500Name.fromName("CN=Non-EC IACA ($alg),C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                issuerAltNameUrl = "https://issuer.example.com",
+                crlUrl = "https://issuer.example.com/crl"
+            )
+            val dsKeyRaw = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val dsCert = MdocUtil.generateDsCertificate(
+                iacaKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(iacaCert)),
+                    privateKey = iacaRoot.privateKey,
+                    algorithm = alg
+                ),
+                dsKey = dsKeyRaw.publicKey,
+                subject = X500Name.fromName("CN=Non-EC DS ($alg),C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil
+            )
+            val nonEcDsKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(dsCert, iacaCert)),
+                privateKey = dsKeyRaw.privateKey,
+                algorithm = alg
+            )
+
+            val readerRootRaw = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val readerRootCert = MdocUtil.generateReaderRootCertificate(
+                readerRootKey = readerRootRaw,
+                subject = X500Name.fromName("CN=Non-EC Reader Root ($alg),C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                crlUrl = "https://verifier.multipaz.org/crl"
+            )
+            harness.readerTrustManager.addX509Cert(readerRootCert, TrustMetadata())
+            val readerLeafRaw = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val readerLeafCert = MdocUtil.generateReaderCertificate(
+                readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(readerRootCert)),
+                    privateKey = readerRootRaw.privateKey,
+                    algorithm = alg
+                ),
+                readerKey = readerLeafRaw.publicKey,
+                subject = X500Name.fromName("CN=Non-EC Reader ($alg),C=US"),
+                dnsName = DNS_NAME,
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil
+            )
+            val nonEcReaderIdentity = VerifierIdentity(
+                key = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(readerLeafCert, readerRootCert)),
+                    privateKey = readerLeafRaw.privateKey,
+                    algorithm = alg
+                ),
+                clientId = CLIENT_ID
+            )
+
+            val nonEcMdlDoc = harness.documentStore.createDocument(displayName = "Non-EC mDL ($alg)")
+            DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+                document = nonEcMdlDoc,
+                secureArea = harness.softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = alg),
+                dsKey = nonEcDsKey,
+                signedAt = harness.signedAt,
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                expectedUpdate = null,
+                domain = "mdoc",
+                deviceKeyAuthorizedNamespaces = listOf(
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                    PingTransaction.openId4VpMdocResponseNamespace,
+                )
+            )
+            nonEcMdlDoc.edit { provisioned = true }
+
+            val nonEcPidDoc = harness.documentStore.createDocument(displayName = "Non-EC PID ($alg)")
+            EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+                document = nonEcPidDoc,
+                secureArea = harness.softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = alg),
+                dsKey = nonEcDsKey,
+                signedAt = harness.signedAt,
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                domain = "sdjwt"
+            )
+            nonEcPidDoc.edit { provisioned = true }
+
+            // 1. DC API OpenID4VP (mso_mdoc + dc+sd-jwt) with non-EC reader JWS, issuerAuth, and deviceAuth
+            for ((dcql, preselected, expectedFormatMdoc) in listOf(
+                Triple(MDL_DCQL, nonEcMdlDoc, true),
+                Triple(EU_PID_SDJWT_DCQL, nonEcPidDoc, false),
+            )) {
+                val nonce = ByteString(Random.nextBytes(18))
+                val session = VerificationUtil.generateVerificationSessionForDcql(
+                    requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
+                    dcql = dcql,
+                    verifierIdentities = listOf(nonEcReaderIdentity),
+                    origin = ORIGIN,
+                    nonce = nonce,
+                    encryptResponse = true,
+                    documentTypeRepository = harness.documentTypeRepository,
+                )
+                val dcResponse = walletDcApiResponse(
+                    session = session,
+                    protocolName = "openid4vp-v1-signed",
+                    preselectedDocuments = listOf(preselected)
+                )
+                val record = session.processDcResponse(dcResponse)
+                record.verifyNonce(nonce)
+                val verified = record.verify(documentTypeRepository = harness.documentTypeRepository)
+                assertEquals(1, verified.size)
+                assertTrue(verified.single().holderBound)
+                assertEquals(nonEcDsKey.publicKey, verified.single().documentSignerCertChain!!.certificates.first().publicKey)
+                if (expectedFormatMdoc) {
+                    assertIs<MdocVerifiedPresentation>(verified.single())
+                } else {
+                    assertIs<JsonVerifiedPresentation>(verified.single())
+                }
+            }
+
+            // 2. DC API ISO 18013-7 Annex C (mso_mdoc + dc+sd-jwt) with non-EC COSE readerAuth, issuerAuth, and deviceAuth
+            for ((dcql, preselected, expectedFormatMdoc) in listOf(
+                Triple(MDL_DCQL, nonEcMdlDoc, true),
+                Triple(EU_PID_SDJWT_DCQL, nonEcPidDoc, false),
+            )) {
+                val nonce = ByteString(Random.nextBytes(18))
+                val session = VerificationUtil.generateVerificationSessionForDcql(
+                    requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
+                    dcql = dcql,
+                    verifierIdentities = listOf(nonEcReaderIdentity),
+                    origin = ORIGIN,
+                    nonce = nonce,
+                    encryptResponse = true,
+                    documentTypeRepository = harness.documentTypeRepository,
+                )
+                val dcResponse = walletDcApiResponse(
+                    session = session,
+                    protocolName = "org-iso-mdoc",
+                    preselectedDocuments = listOf(preselected)
+                )
+                val record = session.processDcResponse(dcResponse)
+                record.verifyNonce(nonce)
+                val verified = record.verify(documentTypeRepository = harness.documentTypeRepository)
+                assertEquals(1, verified.size)
+                assertTrue(verified.single().holderBound)
+                assertEquals(nonEcDsKey.publicKey, verified.single().documentSignerCertChain!!.certificates.first().publicKey)
+                if (expectedFormatMdoc) {
+                    assertIs<MdocVerifiedPresentation>(verified.single())
+                } else {
+                    assertIs<JsonVerifiedPresentation>(verified.single())
+                }
+            }
+
+            // 3. ISO 18013-5 Proximity with EC eDeviceKey/eReaderKey + non-EC readerAuth, issuerAuth, and deviceAuth
+            val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val deviceEngagement = ByteString(
+                Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem())
+            )
+            val proximitySession = VerificationUtil.generateVerificationSessionForDcql(
+                requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
+                dcql = MDL_DCQL,
+                verifierIdentities = listOf(nonEcReaderIdentity),
+                documentTypeRepository = harness.documentTypeRepository,
+                deviceEngagement = deviceEngagement,
+                handover = Simple.NULL,
+                eReaderKey = eReaderKey,
+            )
+            val proximityRequest = proximitySession.find<VerificationSession.Iso18013ProximityRequest>()
+            val parsedRequest = DeviceRequest.fromDataItem(proximityRequest.deviceRequest)
+            parsedRequest.verifyReaderAuthentication(proximityRequest.sessionTranscript)
+            val mdocResponse = mdocPresentment(
+                deviceRequest = parsedRequest,
+                eReaderKey = eReaderKey.publicKey,
+                sessionTranscript = proximityRequest.sessionTranscript,
+                source = harness.presentmentSource,
+                keyAgreementPossible = listOf(EcCurve.P256),
+                requesterAppId = null,
+                requesterOrigin = null,
+                preselectedDocuments = listOf(nonEcMdlDoc),
+                onWaitingForUserInput = {},
+                onDocumentsInFocus = {},
+            )
+            val proximityRecord = proximitySession.processIso18013ProximityResponse(
+                deviceResponse = mdocResponse.deviceResponse.toDataItem()
+            )
+            val proximityVerified = proximityRecord.verify(documentTypeRepository = harness.documentTypeRepository)
+            val mdocVerified = assertIs<MdocVerifiedPresentation>(proximityVerified.single())
+            assertTrue(mdocVerified.holderBound)
+            assertEquals(nonEcDsKey.publicKey, mdocVerified.documentSignerCertChain.certificates.first().publicKey)
         }
     }
 

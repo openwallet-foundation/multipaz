@@ -1,6 +1,6 @@
 package org.multipaz.openid4vci.credential
 
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.utopia.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.BackendEnvironment
 import kotlin.time.Clock
@@ -42,7 +42,7 @@ class CredentialFactoryUtopiaNaturalization : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId
     ): MintedCredential {
         check(authenticationKey != null)

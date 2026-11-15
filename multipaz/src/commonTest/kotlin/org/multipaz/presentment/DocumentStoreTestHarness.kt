@@ -611,7 +611,7 @@ class DocumentStoreTestHarness {
             expectedUpdate = null,
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-            deviceKey = mdocCredential.getAttestation().ecPublicKey,
+            deviceKey = mdocCredential.getAttestation().publicKey,
             deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces,
             deviceKeyAuthorizedDataElements = keyAuthorizedDataElements,
         )
@@ -624,10 +624,11 @@ class DocumentStoreTestHarness {
         //
         // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
         //
+        val signatureAlgorithm = dsKey.algorithm.curve?.defaultSigningAlgorithm ?: dsKey.algorithm
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             ),
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5T),

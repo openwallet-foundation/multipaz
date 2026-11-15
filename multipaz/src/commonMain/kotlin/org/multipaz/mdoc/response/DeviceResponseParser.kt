@@ -28,8 +28,8 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -294,7 +294,9 @@ class DeviceResponseParser(
                 val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
-                val expectedTag = eReaderKey!!.keyAgreement(deviceKey).use { sharedSecret ->
+                val ecDeviceKey = deviceKey as? EcPublicKey
+                    ?: throw IllegalArgumentException("Device authentication MAC requires an EC deviceKey")
+                val expectedTag = eReaderKey!!.keyAgreement(ecDeviceKey).use { sharedSecret ->
                     Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32).use { eMacKey ->
                         Cose.coseMac0(
                             Algorithm.HMAC_SHA256,
@@ -485,7 +487,7 @@ class DeviceResponseParser(
         /**
          * Returns the `DeviceKey` from the MSO.
          */
-        lateinit var deviceKey: EcPublicKey
+        lateinit var deviceKey: PublicKey
 
         /**
          * Returns whether `DeviceSigned` was authenticated using ECDSA signature or
@@ -801,7 +803,7 @@ class DeviceResponseParser(
                 result.validityInfoExpectedUpdate = value
             }
 
-            fun setDeviceKey(deviceKey: EcPublicKey) = apply {
+            fun setDeviceKey(deviceKey: PublicKey) = apply {
                 result.deviceKey = deviceKey
             }
 

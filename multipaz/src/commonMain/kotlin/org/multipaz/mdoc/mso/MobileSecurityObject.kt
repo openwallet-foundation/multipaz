@@ -12,7 +12,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.util.Logger
 import org.multipaz.validation.ValidationResult
@@ -46,7 +46,7 @@ data class MobileSecurityObject(
     val expectedUpdate: Instant?,
     val digestAlgorithm: Algorithm,
     val valueDigests: Map<String, Map<Long, ByteString>>,
-    val deviceKey: EcPublicKey?,
+    val deviceKey: PublicKey?,
     val deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
     val deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     val deviceKeyInfo: Map<Long, DataItem> = emptyMap(),
@@ -342,7 +342,7 @@ data class MobileSecurityObject(
             }
 
             val dkInfo = dataItem.getOrNull("deviceKeyInfo")
-            val deviceKey = dkInfo?.get("deviceKey")?.asCoseKey?.ecPublicKey
+            val deviceKey = dkInfo?.get("deviceKey")?.asCoseKey?.publicKey
 
             val deviceKeyAuthorizedNamespaces = mutableListOf<String>()
             val deviceKeyAuthorizedDataElements = mutableMapOf<String, List<String>>()

@@ -21,6 +21,7 @@ import io.ktor.util.encodeBase64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -41,6 +42,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
@@ -81,10 +84,14 @@ import org.multipaz.revocation.getRevocationInfo
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyAttestation
+import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
+import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.prompt.Reason
 import org.multipaz.server.common.ServerConfiguration
 import org.multipaz.server.common.ServerEnvironment
 import org.multipaz.server.common.installServerEnvironment
@@ -96,11 +103,14 @@ import org.multipaz.trustmanagement.ConfigurableTrustManager
 import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.toBase64Url
+import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.utopia.knowntypes.UtopiaNaturalization
+import org.multipaz.webtoken.buildJwt
 import kotlin.IllegalStateException
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
@@ -357,12 +367,84 @@ class ProvisioningClientTest {
         }
     }
 
+    @Test
+    fun authorizationCodeWithMlDsaKeys() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            signingAlgorithm = Algorithm.ML_DSA_44,
+            extraTests = { _, credential ->
+                val mdoc = assertIs<MdocCredential>(credential)
+                val deviceKey = assertIs<MlDsaPublicKey>(mdoc.mso.deviceKey)
+                Assert.assertEquals(Algorithm.ML_DSA_44, deviceKey.algorithm)
+            }
+        )
+        runWithAuthorizationCode(
+            offer = OFFER_NATURALIZATION,
+            credentialFormat = CredentialFormat.SdJwt(UtopiaNaturalization.VCT),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            signingAlgorithm = Algorithm.ML_DSA_44,
+            useJwtProof = true,
+            extraTests = { _, credential ->
+                val sdJwtCred = assertIs<KeyBoundSdJwtVcCredential>(credential)
+                val sdJwt = SdJwt.fromCompactSerialization(sdJwtCred.issuerProvidedData.decodeToString())
+                val kbKey = assertIs<MlDsaPublicKey>(sdJwt.kbKey)
+                Assert.assertEquals(Algorithm.ML_DSA_44, kbKey.algorithm)
+            }
+        )
+    }
+
+    @Test
+    fun authorizationCodeWithRsaKeys() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            signingAlgorithm = Algorithm.RS256_2048,
+            extraTests = { _, credential ->
+                val mdoc = assertIs<MdocCredential>(credential)
+                assertIs<RsaPublicKey>(mdoc.mso.deviceKey)
+            }
+        )
+        runWithAuthorizationCode(
+            offer = OFFER_NATURALIZATION,
+            credentialFormat = CredentialFormat.SdJwt(UtopiaNaturalization.VCT),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            signingAlgorithm = Algorithm.RS256_2048,
+            useJwtProof = true,
+            extraTests = { _, credential ->
+                val sdJwtCred = assertIs<KeyBoundSdJwtVcCredential>(credential)
+                val sdJwt = SdJwt.fromCompactSerialization(sdJwtCred.issuerProvidedData.decodeToString())
+                assertIs<RsaPublicKey>(sdJwt.kbKey)
+            }
+        )
+    }
+
     fun runWithAuthorizationCode(
         offer: String,
         credentialFormat: CredentialFormat,
         serverArgs: Array<String>,
         overrideCredentialConfigurationId: String? = null,
         keyless: Boolean = false,
+        signingAlgorithm: Algorithm = Algorithm.ESP256,
+        useJwtProof: Boolean = false,
         extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
         val configuration = ServerConfiguration(serverArgs)
@@ -397,11 +479,12 @@ class ProvisioningClientTest {
                 })
             }
         }
-        val env = TestBackendEnvironment(httpClient)
+        val clientPrefs = testClientPreferences.copy(signingAlgorithms = listOf(signingAlgorithm))
+        val env = TestBackendEnvironment(httpClient, clientPrefs)
         withContext(env) {
             val provisioningClient = OpenID4VCI.createClientFromOffer(
                 offerUri = offer,
-                clientPreferences = testClientPreferences
+                clientPreferences = clientPrefs
             )
             val challenges = provisioningClient.getAuthorizationChallenges()
             val oauthChallenge = (challenges.first() as AuthorizationChallenge.OAuth)
@@ -467,6 +550,56 @@ class ProvisioningClientTest {
                     issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf())
                 ).first()
                 provisioningClient.obtainCredentials(KeyBindingInfo.Keyless)
+            } else if (useJwtProof) {
+                val challenge = provisioningClient.getKeyBindingChallenge()
+                val keyBoundCredential = documentProvisioningHandler.getPendingKeyBoundCredentials(
+                    document = document,
+                    credentialMetadata = CredentialMetadata(
+                        display = display,
+                        format = credentialFormat,
+                        keyBindingType = KeyBindingType.OpenidProofOfPossession(
+                            algorithm = signingAlgorithm,
+                            clientId = clientPrefs.clientId,
+                            aud = "http://localhost"
+                        ),
+                        maxBatchSize = 1
+                    ),
+                    issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf()),
+                    createKeySettings = CreateKeySettings(algorithm = signingAlgorithm)
+                ).last()
+                credential = keyBoundCredential
+                val signingKey = AsymmetricKey.anonymous(
+                    secureArea = keyBoundCredential.secureArea,
+                    alias = keyBoundCredential.alias
+                )
+                val unlockProvider = object : KeyUnlockDataProvider {
+                    override suspend fun getKeyUnlockData(
+                        secureArea: SecureArea,
+                        alias: String,
+                        algorithm: Algorithm,
+                        unlockReason: Reason
+                    ): KeyUnlockData = SoftwareKeyUnlockData(
+                        secureArea = secureArea as SoftwareSecureArea,
+                        alias = alias,
+                        userAuthenticated = true
+                    )
+                }
+                val proofJwt = withContext(unlockProvider) {
+                    buildJwt(
+                        type = "openid4vci-proof+jwt",
+                        key = signingKey,
+                        header = {
+                            put("jwk", signingKey.publicKey.toJwk(buildJsonObject {
+                                put("kid", keyBoundCredential.identifier)
+                            }))
+                        }
+                    ) {
+                        put("iss", clientPrefs.clientId)
+                        put("aud", "http://localhost")
+                        put("nonce", challenge)
+                    }
+                }
+                provisioningClient.obtainCredentials(KeyBindingInfo.OpenidProofOfPossession(listOf(proofJwt)))
             } else {
                 // Our test backend does not verify key attestation, so the result can be ignored
                 provisioningClient.getKeyBindingChallenge()
@@ -475,12 +608,14 @@ class ProvisioningClientTest {
                     credentialMetadata = CredentialMetadata(
                         display = display,
                         format = credentialFormat,
-                        keyBindingType = KeyBindingType.Attestation(Algorithm.ES256),
+                        keyBindingType = KeyBindingType.Attestation(
+                            signingAlgorithm.curve?.defaultSigningAlgorithm ?: signingAlgorithm
+                        ),
                         maxBatchSize = 1
                     ),
                     issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf()),
-                    createKeySettings = CreateKeySettings()
-                ).first()
+                    createKeySettings = CreateKeySettings(algorithm = signingAlgorithm)
+                ).last()
                 credential = keyBoundCredential
                 provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
                     listOf(CredentialKeyAttestation(
@@ -941,12 +1076,15 @@ class ProvisioningClientTest {
                 ?: throw IllegalStateException("No common name (CN) in certificate's subject")
     }
 
-    inner class TestBackendEnvironment(val httpClient: HttpClient): BackendEnvironment {
+    inner class TestBackendEnvironment(
+        val httpClient: HttpClient,
+        val clientPreferences: OpenID4VCIClientPreferences = testClientPreferences
+    ): BackendEnvironment {
         override fun <T : Any> getInterface(clazz: KClass<T>): T {
             return clazz.cast(when (clazz) {
                 HttpClient::class -> httpClient
                 OpenID4VCIBackend::class -> TestBackend
-                OpenID4VCIClientPreferences::class -> testClientPreferences
+                OpenID4VCIClientPreferences::class -> clientPreferences
                 SecureAreaProvider::class -> secureAreaProvider
                 else -> throw IllegalArgumentException("no such class available: ${clazz.simpleName}")
             })

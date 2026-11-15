@@ -7,6 +7,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.common.baseUrl
@@ -51,13 +52,13 @@ suspend fun wellKnownOauthAuthorization(call: ApplicationCall) {
             add("S256")
         }
         putJsonArray("dpop_signing_alg_values_supported") {
-            add("ES256")
+            CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS.forEach { add(it) }
         }
         putJsonArray("client_attestation_signing_alg_values_supported") {
-            add("ES256")
+            CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS.forEach { add(it) }
         }
         putJsonArray("client_attestation_pop_signing_alg_values_supported") {
-            add("ES256")
+            CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS.forEach { add(it) }
         }
     }
     Logger.dJson(TAG, "Sending well-known oauth-authorization-server response", responseJson)

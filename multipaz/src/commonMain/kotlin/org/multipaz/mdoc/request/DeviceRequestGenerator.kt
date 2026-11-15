@@ -33,7 +33,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.prompt.Reason
@@ -112,11 +112,12 @@ class DeviceRequestGenerator(
         )
         val readerAuthenticationBytes =
             Cbor.encode(Tagged(24, Bstr(encodedReaderAuthentication)))
+        val signatureAlgorithm = keyInfo.algorithm.curve?.defaultSigningAlgorithm ?: keyInfo.algorithm
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
-            // Make sure we use non-fully-specified algorithm since 18013-5 requires that.
+            // Make sure we use non-fully-specified algorithm for EC curves since 18013-5 requires that.
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                keyInfo.algorithm.curve!!.defaultSigningAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
@@ -151,7 +152,7 @@ class DeviceRequestGenerator(
      * element names into the intent-to-retain for each data element.
      * @param requestInfo null or additional information provided. This is
      * a map from keys and the values must be valid CBOR
-     * @param readerKey `null` if not signing the request, otherwise a [EcPrivateKey].
+     * @param readerKey `null` if not signing the request, otherwise a [PrivateKey].
      * @param signatureAlgorithm [Algorithm.UNSET] if readerKey is null, otherwise algorithm to use.
      * @param readerKeyCertificateChain null if readerKey is null, otherwise the certificate chain
      * for readerKey.
@@ -161,7 +162,7 @@ class DeviceRequestGenerator(
         docType: String,
         itemsToRequest: Map<String, Map<String, Boolean>>,
         requestInfo: Map<String, ByteArray>?,
-        readerKey: EcPrivateKey?,
+        readerKey: PrivateKey?,
         signatureAlgorithm: Algorithm,
         readerKeyCertificateChain: X509CertChain?,
         zkSystemSpecs: List<ZkSystemSpec> = emptyList()

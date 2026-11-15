@@ -19,7 +19,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.util.Logger
 import kotlin.time.Instant
@@ -43,7 +43,7 @@ import org.multipaz.cbor.putCborMap
 class MobileSecurityObjectGenerator(
     digestAlgorithm: Algorithm,
     docType: String,
-    deviceKey: EcPublicKey
+    deviceKey: PublicKey
 ) {
     companion object {
         private const val TAG = "MobileSecurityObjectGenerator"
@@ -51,7 +51,7 @@ class MobileSecurityObjectGenerator(
 
     private val mDigestAlgorithm: Algorithm
     private val mDocType: String
-    private val mDeviceKey: EcPublicKey
+    private val mDeviceKey: PublicKey
     private var mDigestSize = 0
     private val mValueDigestsOuter = CborMap.builder()
     private var digestEmpty = true

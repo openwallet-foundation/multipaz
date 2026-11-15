@@ -142,7 +142,7 @@ class SimplePresentmentSource(
         val kaCred = document.findCredentialOfType<KeyBoundMdocCredential>(domains = domainsMdocKeyAgreement, now = now)
         if (!preferSignatureToKeyAgreement && kaCred != null) {
             val keyInfo = kaCred.secureArea.getKeyInfo(kaCred.alias)
-            if (keyAgreementPossible.contains(keyInfo.algorithm.curve!!)) {
+            if (keyInfo.algorithm.curve?.let { keyAgreementPossible.contains(it) } == true) {
                 return kaCred
             }
         }

@@ -23,7 +23,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Uint
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.openid4vci.customization.NonceManager
@@ -125,7 +125,7 @@ suspend fun codeToId(type: OpaqueIdType, code: String): String {
  */
 suspend fun authorizeWithDpop(
     request: ApplicationRequest,
-    publicKey: EcPublicKey,
+    publicKey: PublicKey,
     clientId: String,
     accessToken: String?,
     isResourceServer: Boolean,
@@ -175,7 +175,7 @@ suspend fun respondWithNewDPoPNonce(call: ApplicationCall, nonces: NonceManager.
 suspend fun validateClientAttestation(
     request: ApplicationRequest,
     clientId: String
-): EcPublicKey? {
+): PublicKey? {
     val clientAttestationJwt = request.headers["OAuth-Client-Attestation"]
         ?: return null
     Logger.dJwt(TAG, "Received OAuth-Client-Attestation JWT", clientAttestationJwt)
@@ -210,7 +210,7 @@ suspend fun validateClientAttestation(
         throw err
     }
 
-    return EcPublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
+    return PublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
 }
 /**
  * Ensures Oauth client attestation proof-of-possession attached to the given HTTP request is
@@ -219,7 +219,7 @@ suspend fun validateClientAttestation(
 suspend fun validateClientAttestationPoP(
     request: ApplicationRequest,
     clientId: String,
-    attestationKey: EcPublicKey
+    attestationKey: PublicKey
 ) {
     val popJwt = request.headers["OAuth-Client-Attestation-PoP"]
         ?: throw InvalidRequestException("OAuth-Client-Attestation-PoP header required")
@@ -368,7 +368,7 @@ suspend fun getScopeAndCredentialId(parameters: Parameters): Pair<String, String
 /**
  * Process the initial DPoP header (that establishes the key for the rest of the session).
  */
-fun processInitialDPoP(request: ApplicationRequest): EcPublicKey? {
+fun processInitialDPoP(request: ApplicationRequest): PublicKey? {
     val dpopJwt = request.headers["DPoP"] ?: return null
     val dpopParts = dpopJwt.split('.')
     if (dpopParts.size != 3) {
@@ -377,7 +377,7 @@ fun processInitialDPoP(request: ApplicationRequest): EcPublicKey? {
     val dpopHeader = Json.parseToJsonElement(
         dpopParts[0].fromBase64Url().decodeToString()
     ).jsonObject
-    return EcPublicKey.fromJwk(
+    return PublicKey.fromJwk(
         jwk = (dpopHeader["jwk"] as? JsonObject)
             ?: throw InvalidRequestException("no jwk in DPoP header")
     )
@@ -398,7 +398,7 @@ suspend fun validateClientAssertion(parameters: Parameters, clientId: String): B
 
 private suspend fun validateDPoPJwt(
     request: ApplicationRequest,
-    publicKey: EcPublicKey,
+    publicKey: PublicKey,
     clientId: String,
     accessToken: String?,
     isResourceServer: Boolean,

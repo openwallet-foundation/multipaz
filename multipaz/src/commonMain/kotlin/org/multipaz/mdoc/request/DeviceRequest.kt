@@ -487,8 +487,8 @@ data class DeviceRequest private constructor(
             val readerAuthenticationBytes =
                 Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-            // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
-            val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
+            // ISO 18013-5 requires use of non-fully-specified algorithms for EC curves, e.g. -7 instead of -9
+            val signatureAlgorithm = readerKey.algorithm.curve?.defaultSigningAlgorithm ?: readerKey.algorithm
             protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] =
                 signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
@@ -704,8 +704,8 @@ data class DeviceRequest private constructor(
                 ))
             )
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-            // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
-            val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
+            // ISO 18013-5 requires use of non-fully-specified algorithms for EC curves, e.g. -7 instead of -9
+            val signatureAlgorithm = readerKey.algorithm.curve?.defaultSigningAlgorithm ?: readerKey.algorithm
             protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             readerKey.certChain?.let {

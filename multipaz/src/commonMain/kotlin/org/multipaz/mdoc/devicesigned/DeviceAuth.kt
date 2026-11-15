@@ -4,7 +4,7 @@ import org.multipaz.cose.CoseMac0
 import org.multipaz.cose.CoseSign1
 
 /**
- * A structure containing either an ECDSA signature or a MAC, for use in ISO 18013-5 device authentication.
+ * A structure containing either a digital signature or a MAC, for use in ISO 18013-5 device authentication.
  */
 sealed class DeviceAuth {
     /**
@@ -21,7 +21,7 @@ sealed class DeviceAuth {
      *
      * @property signature the signature.
      */
-    data class Ecdsa(
+    data class Signature(
         val signature: CoseSign1
     ): DeviceAuth()
 }
