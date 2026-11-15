@@ -1,7 +1,7 @@
 package org.multipaz.openid4vci.util
 
 import org.multipaz.cbor.annotation.CborSerializable
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.storage.StorageTableSpec
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.verifier.Openid4VpVerifierModel
@@ -22,8 +22,8 @@ import kotlin.time.Instant
 data class IssuanceState(
     var clientId: String?,
     val scope: String,
-    var clientAttestationKey: EcPublicKey?,
-    var dpopKey: EcPublicKey?,
+    var clientAttestationKey: PublicKey?,
+    var dpopKey: PublicKey?,
     var redirectUri: String?,
     var codeChallenge: ByteString?,
     val configurationId: String?,

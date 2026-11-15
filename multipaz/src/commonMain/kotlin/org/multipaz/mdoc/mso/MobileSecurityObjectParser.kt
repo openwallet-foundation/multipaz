@@ -18,7 +18,7 @@ package org.multipaz.mdoc.mso
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import kotlin.time.Instant
 import org.multipaz.crypto.Algorithm
 
@@ -75,7 +75,7 @@ class MobileSecurityObjectParser(
         /**
          * The mdoc authentication public key set in the `MobileSecurityObject` CBOR.
          */
-        lateinit var deviceKey: EcPublicKey
+        lateinit var deviceKey: PublicKey
 
         /**
          * The timestamp at which the MSO signature was created, as set in the
@@ -156,7 +156,7 @@ class MobileSecurityObjectParser(
         }
 
         private fun parseDeviceKeyInfo(deviceKeyInfo: DataItem) {
-            deviceKey = deviceKeyInfo["deviceKey"].asCoseKey.ecPublicKey
+            deviceKey = deviceKeyInfo["deviceKey"].asCoseKey.publicKey
             _authorizedNameSpaces = null
             _authorizedDataElements = null
             deviceKeyInfo.getOrNull("keyAuthorizations")?.let { keyAuth ->

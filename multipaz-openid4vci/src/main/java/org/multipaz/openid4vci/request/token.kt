@@ -23,7 +23,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.util.IssuanceState
@@ -194,7 +194,7 @@ private suspend fun establishDPopKey(
     request: ApplicationRequest,
     parameters: Parameters,
     state: IssuanceState
-): EcPublicKey {
+): PublicKey {
     check(state.dpopKey == null)
     if (state.clientAttestationKey == null && !validateClientAssertion(parameters, state.clientId!!)) {
         throw InvalidRequestException("clientId must be authenticated")

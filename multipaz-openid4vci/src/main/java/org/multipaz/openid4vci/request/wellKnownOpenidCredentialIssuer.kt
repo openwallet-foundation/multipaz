@@ -116,7 +116,8 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                     }
                     putJsonArray("credential_signing_alg_values_supported") {
                         if (credentialFactory.format is CredentialFormat.Mdoc) {
-                            add(signingKey.algorithm.coseAlgorithmIdentifier)
+                            val coseAlg = signingKey.algorithm.curve?.defaultSigningAlgorithm ?: signingKey.algorithm
+                            add(coseAlg.coseAlgorithmIdentifier)
                         } else {
                             add(signingKey.algorithm.joseAlgorithmIdentifier)
                         }

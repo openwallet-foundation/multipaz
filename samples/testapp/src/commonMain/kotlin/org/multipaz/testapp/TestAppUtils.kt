@@ -973,7 +973,7 @@ object TestAppUtils {
                     expectedUpdate = null,
                     digestAlgorithm = Algorithm.SHA256,
                     valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-                    deviceKey = mdocCredential.getAttestation().ecPublicKey,
+                    deviceKey = mdocCredential.getAttestation().publicKey,
                     deviceKeyAuthorizedNamespaces = effectiveAuthorizedNamespaces,
                     deviceKeyAuthorizedDataElements = effectiveAuthorizedDataElements,
                 )
@@ -989,7 +989,7 @@ object TestAppUtils {
                 val protectedHeaders = mapOf<CoseLabel, DataItem>(
                     Pair(
                         CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                        Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                        signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
                     ),
                     Pair(
                         CoseNumberLabel(Cose.COSE_LABEL_X5T),
@@ -1111,6 +1111,7 @@ object TestAppUtils {
             deviceKeyAuthorizedDataElements
         )
 
+        val signatureAlgorithm = dsKey.algorithm.curve?.defaultSigningAlgorithm ?: dsKey.algorithm
         for (mdocCredential in credentials) {
             // Generate an MSO and issuer-signed data for this authentication key.
             val mso = MobileSecurityObject(
@@ -1122,7 +1123,7 @@ object TestAppUtils {
                 expectedUpdate = null,
                 digestAlgorithm = Algorithm.SHA256,
                 valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-                deviceKey = mdocCredential.getAttestation().ecPublicKey,
+                deviceKey = mdocCredential.getAttestation().publicKey,
                 deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
                 deviceKeyAuthorizedDataElements = effectiveAuthorizedDataElements,
             )
@@ -1138,7 +1139,7 @@ object TestAppUtils {
             val protectedHeaders = mapOf<CoseLabel, DataItem>(
                 Pair(
                     CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                    Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                    signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
                 ),
                 Pair(
                     CoseNumberLabel(Cose.COSE_LABEL_X5T),

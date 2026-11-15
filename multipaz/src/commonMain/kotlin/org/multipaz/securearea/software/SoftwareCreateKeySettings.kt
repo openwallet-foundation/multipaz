@@ -1,12 +1,16 @@
 package org.multipaz.securearea.software
 
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.MlDsaPrivateKey
+import org.multipaz.crypto.MlKemPrivateKey
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.config.SecureAreaConfigurationSoftware
-import kotlin.time.Instant;
+import kotlin.time.Instant
 import kotlinx.io.bytestring.buildByteString
-import org.multipaz.crypto.PrivateKey
 
 /**
  * Class used to indicate key creation settings for software-backed keys.
@@ -36,7 +40,7 @@ class SoftwareCreateKeySettings internal constructor(
      * A builder for [SoftwareCreateKeySettings].
      */
     class Builder {
-        private var algorithm: Algorithm = Algorithm.ESP256
+        private var algorithm: Algorithm? = null
         private var passphraseRequired: Boolean = false
         private var passphrase: String? = null
         private var passphraseConstraints: PassphraseConstraints? = null
@@ -166,8 +170,20 @@ class SoftwareCreateKeySettings internal constructor(
          * @return a new [SoftwareCreateKeySettings].
          */
         fun build(): SoftwareCreateKeySettings {
+            val resolvedAlgorithm = algorithm ?: when (val pk = privateKey) {
+                null -> Algorithm.ESP256
+                is EcPrivateKey -> pk.curve.defaultSigningAlgorithmFullySpecified
+                is MlDsaPrivateKey -> pk.algorithm
+                is MlKemPrivateKey -> pk.algorithm
+                is RsaPrivateKey -> when (pk.publicKey.modulus.size * 8) {
+                    2048 -> Algorithm.RS256_2048
+                    3072 -> Algorithm.RS256_3072
+                    4096 -> Algorithm.RS256_4096
+                    else -> Algorithm.RS256
+                }
+            }
             return SoftwareCreateKeySettings(
-                passphraseRequired, passphrase, passphraseConstraints, algorithm, subject, validFrom, validUntil, privateKey,
+                passphraseRequired, passphrase, passphraseConstraints, resolvedAlgorithm, subject, validFrom, validUntil, privateKey,
                 userAuthenticationRequired, userAuthenticationTypes
             )
         }

@@ -1,7 +1,7 @@
 package org.multipaz.openid4vci.credential
 
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.cbor.DataItem
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
@@ -79,7 +79,7 @@ interface CredentialFactory {
      */
     suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId,
     ): MintedCredential
 
@@ -92,6 +92,16 @@ interface CredentialFactory {
         /**
          * Default value to use for [proofSigningAlgorithms].
          */
-        val DEFAULT_PROOF_SIGNING_ALGORITHMS = listOf("ES256")
+        val DEFAULT_PROOF_SIGNING_ALGORITHMS = listOf(
+            "ES256",
+            "ES384",
+            "ES512",
+            "EdDSA",
+            "RS256",
+            "PS256",
+            "ML-DSA-44",
+            "ML-DSA-65",
+            "ML-DSA-87",
+        )
     }
 }

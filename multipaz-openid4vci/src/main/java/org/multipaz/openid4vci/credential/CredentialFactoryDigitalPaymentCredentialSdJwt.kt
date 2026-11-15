@@ -8,7 +8,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.revocation.RevocationStatus
@@ -48,7 +48,7 @@ class CredentialFactoryDigitalPaymentCredentialSdJwt : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId
     ): MintedCredential {
         check(authenticationKey != null)

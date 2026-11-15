@@ -35,6 +35,7 @@ import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseMac0
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
@@ -44,6 +45,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.Hpke
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -65,6 +67,8 @@ import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
+import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
@@ -105,6 +109,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -518,15 +523,15 @@ class DeviceResponseTest {
         assertEquals(drParsed, deviceResponse)
 
         // Check that we're putting -7 (ES256) in as the COSE algorithm, not -9 (ESP256)
-        val ecdsaSignature = drParsed.documents[0].deviceAuth as DeviceAuth.Ecdsa
+        val deviceSignature = drParsed.documents[0].deviceAuth as DeviceAuth.Signature
         assertEquals(
             Algorithm.ES256.coseAlgorithmIdentifier,
-            ecdsaSignature.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+            deviceSignature.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
         )
 
         // Bunch of negative tests to ensure we check signatures and other things correctly.
         checkPoisonIssueSignature(encodedDeviceResponse, drParsed.documents[0].issuerAuth.signature, sessionTranscript)
-        checkPoisonDeviceSignature(encodedDeviceResponse, ecdsaSignature.signature.signature, sessionTranscript)
+        checkPoisonDeviceSignature(encodedDeviceResponse, deviceSignature.signature.signature, sessionTranscript)
         checkPoisonIssuerSignedItem(
             encodedDeviceResponse,
             drParsed.documents[0].issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["given_name"]!!.random.toByteArray(),
@@ -3826,7 +3831,7 @@ class DeviceResponseTest {
                         }
                         putCborMap("deviceSigned") {
                             putCborMap("deviceAuth") {
-                                put("deviceSignature", (validDoc.deviceAuth as DeviceAuth.Ecdsa).signature.toDataItem())
+                                put("deviceSignature", (validDoc.deviceAuth as DeviceAuth.Signature).signature.toDataItem())
                             }
                             put("nameSpaces", Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(validDoc.deviceNamespaces.toDataItem()))))
                         }
@@ -4205,6 +4210,416 @@ class DeviceResponseTest {
                 atTime = euPidTimeValidityBegin,
                 deviceRequest = euPidReqNonKeyBound
             )
+        }
+    }
+
+    @Test
+    fun nonEcKeysIssuerReaderAndDeviceAuthMdoc() = runTest {
+        provisionDocuments()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val validFrom = now - 1.days
+        val validUntil = now + 30.days
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(7, 8, 9)) }
+        val eReaderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = eReaderPrivateKey.publicKey
+        val eReaderAsymmetricKey = AsymmetricKey.anonymous(eReaderPrivateKey)
+
+        for ((rootAlg, leafAlg, deviceAlg) in listOf(
+            Triple(Algorithm.ML_DSA_65, Algorithm.ML_DSA_44, Algorithm.ML_DSA_44),
+            Triple(Algorithm.ML_DSA_87, Algorithm.ML_DSA_65, Algorithm.ML_DSA_65),
+            Triple(Algorithm.RS256_2048, Algorithm.RS256_2048, Algorithm.RS256_2048),
+            Triple(Algorithm.RS256_2048, Algorithm.PS256_2048, Algorithm.PS256_2048),
+        )) {
+            val iacaEphemeral = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+            val iacaCert = MdocUtil.generateIacaCertificate(
+                iacaKey = iacaEphemeral,
+                subject = X500Name.fromName("CN=Non-EC TEST IACA,C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                issuerAltNameUrl = "https://issuer.example.com",
+                crlUrl = "https://issuer.example.com/crl"
+            )
+            val iacaCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(iacaCert)),
+                privateKey = iacaEphemeral.privateKey,
+                algorithm = rootAlg
+            )
+
+            val dsEphemeral = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+            val dsCert = MdocUtil.generateDsCertificate(
+                iacaKey = iacaCertified,
+                dsKey = dsEphemeral.publicKey,
+                subject = X500Name.fromName("CN=Non-EC TEST DS,C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val dsCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(dsCert, iacaCert)),
+                privateKey = dsEphemeral.privateKey,
+                algorithm = leafAlg
+            )
+
+            val readerRootEphemeral = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+            val readerRootCert = MdocUtil.generateReaderRootCertificate(
+                readerRootKey = readerRootEphemeral,
+                subject = X500Name.fromName("CN=Non-EC TEST Reader Root,C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                crlUrl = "https://reader.example.com/crl"
+            )
+            val readerRootCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerRootCert)),
+                privateKey = readerRootEphemeral.privateKey,
+                algorithm = rootAlg
+            )
+            val readerKeyInfo = softwareSecureArea.createKey(
+                alias = null,
+                createKeySettings = CreateKeySettings(algorithm = leafAlg)
+            )
+            val readerCert = MdocUtil.generateReaderCertificate(
+                readerRootKey = readerRootCertified,
+                readerKey = readerKeyInfo.publicKey,
+                subject = X500Name.fromName("CN=Non-EC TEST Reader,C=US"),
+                dnsName = "reader.example.com",
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val readerCertified = AsymmetricKey.X509CertifiedSecureAreaBased(
+                secureArea = softwareSecureArea,
+                certChain = X509CertChain(listOf(readerCert, readerRootCert)),
+                keyInfo = readerKeyInfo
+            )
+
+            // Provision mDL with non-EC issuer DS key and non-EC deviceKey
+            val doc = documentStore.createDocument()
+            val cred = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+                document = doc,
+                secureArea = softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = deviceAlg),
+                dsKey = dsCertified,
+                signedAt = validFrom,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = null,
+                domain = "mdoc_non_ec"
+            )
+            val validation = cred.validate(now = now)
+            assertFalse(validation.hasErrors, "Unexpected validation errors for $deviceAlg: ${validation.errors}")
+            assertEquals(cred.getAttestation().publicKey, cred.mso.deviceKey)
+            assertEquals(cred.mso, MobileSecurityObject.fromDataItem(cred.mso.toDataItem()))
+
+            // Reader authentication (both per-doc readerAuth and multi-doc readerAuthAll)
+            val request = buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+                deviceRequestInfo = deviceRequestInfoForIds(0)
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false, "age_over_21" to false)),
+                    docRequestInfo = DocRequestInfo(),
+                    readerKey = readerCertified
+                )
+                addReaderAuthAll(readerKey = readerCertified)
+            }
+            val parsedRequest = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(request.toDataItem())))
+            parsedRequest.verifyReaderAuthentication(sessionTranscript)
+            assertEquals(
+                leafAlg.coseAlgorithmIdentifier!!.toLong(),
+                parsedRequest.docRequests.single().readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+            )
+            assertEquals(
+                leafAlg.coseAlgorithmIdentifier!!.toLong(),
+                parsedRequest.readerAuthAll.single().protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+            )
+
+            // Holder presentation: even with eReaderKey supplied and forceSignature = false,
+            // non-EC deviceKey automatically uses DeviceAuth.Signature (not ECDH MAC).
+            val response = buildDeviceResponse(
+                sessionTranscript = sessionTranscript,
+                status = DeviceResponse.STATUS_OK,
+                eReaderKey = eReaderKey
+            ) {
+                addDocument(
+                    credential = cred,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
+                            namespaceName = DrivingLicense.MDL_NAMESPACE,
+                            dataElementName = "given_name",
+                            intentToRetain = false
+                        ),
+                        MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
+                            namespaceName = DrivingLicense.MDL_NAMESPACE,
+                            dataElementName = "age_over_21",
+                            intentToRetain = false
+                        ),
+                    ),
+                    docRequestIds = listOf(0)
+                )
+            }
+            val encodedResponse = Cbor.encode(response.toDataItem())
+            val parsedResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedResponse))
+            parsedResponse.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = eReaderAsymmetricKey,
+                atTime = now,
+                deviceRequest = parsedRequest
+            )
+            val verifiedDoc = parsedResponse.documents.single()
+            val deviceSig = assertIs<DeviceAuth.Signature>(verifiedDoc.deviceAuth)
+            assertEquals(
+                deviceAlg.coseAlgorithmIdentifier!!.toLong(),
+                deviceSig.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+            )
+            assertEquals(
+                leafAlg.coseAlgorithmIdentifier!!.toLong(),
+                verifiedDoc.issuerAuth.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+            )
+            verifiedDoc.issuerCertChain.validate(now)
+
+            // Also verify MdocDocument.fromNamespaces with explicit non-EC signing key
+            val directSigningKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = cred.alias,
+                secureArea = softwareSecureArea,
+                keyInfo = softwareSecureArea.getKeyInfo(cred.alias)
+            )
+            val fromNamespacesDoc = MdocDocument.fromNamespaces(
+                issuerNamespaces = verifiedDoc.issuerNamespaces,
+                issuerAuth = verifiedDoc.issuerAuth,
+                docType = DrivingLicense.MDL_DOCTYPE,
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                deviceNamespaces = buildDeviceNamespaces {},
+                deviceKey = directSigningKey
+            )
+            fromNamespacesDoc.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+
+            // Negative 1: tampered deviceSignature must fail verification
+            val rawSigBytes = deviceSig.signature.signature.copyOf()
+            rawSigBytes[0] = rawSigBytes[0] xor 0x01
+            val tamperedSig = CoseSign1(
+                protectedHeaders = deviceSig.signature.protectedHeaders,
+                unprotectedHeaders = deviceSig.signature.unprotectedHeaders,
+                signature = rawSigBytes,
+                payload = deviceSig.signature.payload
+            )
+            val tamperedSigItem = buildCborMap {
+                put("version", "1.1")
+                put("status", 0)
+                putCborArray("documents") {
+                    addCborMap {
+                        put("docType", verifiedDoc.docType)
+                        putCborMap("issuerSigned") {
+                            put("nameSpaces", verifiedDoc.issuerNamespaces.toDataItem())
+                            put("issuerAuth", verifiedDoc.issuerAuth.toDataItem())
+                        }
+                        putCborMap("deviceSigned") {
+                            putCborMap("deviceAuth") {
+                                put("deviceSignature", tamperedSig.toDataItem())
+                            }
+                            put("nameSpaces", Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(verifiedDoc.deviceNamespaces.toDataItem()))))
+                        }
+                    }
+                }
+            }
+            val tamperedErr = assertFailsWith<IllegalStateException> {
+                DeviceResponse.fromDataItem(tamperedSigItem).verify(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = eReaderAsymmetricKey,
+                    atTime = now
+                )
+            }
+            assertIs<SignatureVerificationException>(tamperedErr.cause)
+
+            // Negative 2: deviceMac with non-EC MSO deviceKey must fail cleanly with IllegalStateException
+            val forgedMac = CoseMac0(
+                protectedHeaders = mapOf(Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()),
+                unprotectedHeaders = emptyMap(),
+                tag = ByteArray(32),
+                payload = null
+            )
+            val forgedMacItem = buildCborMap {
+                put("version", "1.1")
+                put("status", 0)
+                putCborArray("documents") {
+                    addCborMap {
+                        put("docType", verifiedDoc.docType)
+                        putCborMap("issuerSigned") {
+                            put("nameSpaces", verifiedDoc.issuerNamespaces.toDataItem())
+                            put("issuerAuth", verifiedDoc.issuerAuth.toDataItem())
+                        }
+                        putCborMap("deviceSigned") {
+                            putCborMap("deviceAuth") {
+                                put("deviceMac", forgedMac.toDataItem())
+                            }
+                            put("nameSpaces", Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(verifiedDoc.deviceNamespaces.toDataItem()))))
+                        }
+                    }
+                }
+            }
+            assertFailsWith<IllegalStateException> {
+                DeviceResponse.fromDataItem(forgedMacItem).verify(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = eReaderAsymmetricKey,
+                    atTime = now
+                )
+            }
+        }
+    }
+
+    @Test
+    fun nonEcKeysSdJwtVcInDeviceResponse() = runTest {
+        provisionDocuments()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val validFrom = now - 1.days
+        val validUntil = now + 30.days
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(4, 5, 6)) }
+
+        for ((certAlg, signingAlg) in listOf(
+            Pair(Algorithm.ML_DSA_44, Algorithm.ML_DSA_44),
+            Pair(Algorithm.RS256_2048, Algorithm.RS256_2048),
+            Pair(Algorithm.RS256_2048, Algorithm.PS256_2048),
+        )) {
+            val issuerRoot = AsymmetricKey.ephemeral(certAlg) as AsymmetricKey.AnonymousExplicit
+            val issuerRootCert = MdocUtil.generateIacaCertificate(
+                iacaKey = issuerRoot,
+                subject = X500Name.fromName("CN=Non-EC PID Root,C=UT"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                issuerAltNameUrl = "https://pid-issuer.example.com",
+                crlUrl = "https://pid-issuer.example.com/crl"
+            )
+            val issuerDs = AsymmetricKey.ephemeral(signingAlg) as AsymmetricKey.AnonymousExplicit
+            val issuerDsCert = MdocUtil.generateDsCertificate(
+                iacaKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(issuerRootCert)),
+                    privateKey = issuerRoot.privateKey,
+                    algorithm = certAlg
+                ),
+                dsKey = issuerDs.publicKey,
+                subject = X500Name.fromName("CN=Non-EC PID DS,C=UT"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val dsCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(issuerDsCert, issuerRootCert)),
+                privateKey = issuerDs.privateKey,
+                algorithm = signingAlg
+            )
+
+            val doc = documentStore.createDocument()
+            val pidCred = EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+                document = doc,
+                secureArea = softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = signingAlg),
+                dsKey = dsCertified,
+                signedAt = validFrom,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                domain = "sdjwt_non_ec"
+            )
+
+            val readerRoot = AsymmetricKey.ephemeral(certAlg) as AsymmetricKey.AnonymousExplicit
+            val readerRootCert = MdocUtil.generateReaderRootCertificate(
+                readerRootKey = readerRoot,
+                subject = X500Name.fromName("CN=Non-EC SD-JWT Reader Root,C=UT"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                crlUrl = "https://reader.example.com/crl"
+            )
+            val readerLeaf = AsymmetricKey.ephemeral(signingAlg) as AsymmetricKey.AnonymousExplicit
+            val readerCert = MdocUtil.generateReaderCertificate(
+                readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(readerRootCert)),
+                    privateKey = readerRoot.privateKey,
+                    algorithm = certAlg
+                ),
+                readerKey = readerLeaf.publicKey,
+                subject = X500Name.fromName("CN=Non-EC SD-JWT Reader,C=UT"),
+                dnsName = "reader.example.com",
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val readerCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerCert, readerRootCert)),
+                privateKey = readerLeaf.privateKey,
+                algorithm = signingAlg
+            )
+
+            val req = buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+                deviceRequestInfo = deviceRequestInfoForIds(0)
+            ) {
+                addDocRequest(
+                    docType = EUPersonalID.EUPID_VCT,
+                    nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                    docRequestInfo = DocRequestInfo(
+                        docFormat = "dc+sd-jwt",
+                        dataElementIdentifierMapping = mapOf("c0" to buildJsonArray { add(JsonPrimitive("given_name")) })
+                    ),
+                    readerKey = readerCertified
+                )
+            }
+            req.verifyReaderAuthentication(sessionTranscript)
+
+            val expectedAudience = Crypto.digest(
+                algorithm = Algorithm.SHA256,
+                message = Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(req.docRequests.single().readerAuth!!.toDataItem()))
+                    )
+                )
+            ).toBase64Url()
+            val sessionTranscriptBytes = Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(sessionTranscript))
+            )
+            val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
+            val filteredSdJwt = SdJwt.fromCompactSerialization(pidCred.issuerProvidedData.decodeToString())
+                .filter { path, _ -> path.first().jsonPrimitive.content == "given_name" }
+            val kbSigningKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = pidCred.alias,
+                secureArea = softwareSecureArea,
+                keyInfo = softwareSecureArea.getKeyInfo(pidCred.alias)
+            )
+            val sdJwtKb = filteredSdJwt.present(
+                signingKey = kbSigningKey,
+                nonce = expectedNonce,
+                audience = expectedAudience,
+                creationTime = now
+            )
+
+            val response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addOtherDocument(
+                    OtherDocument(
+                        docFormat = "dc+sd-jwt",
+                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate()),
+                        docRequestIds = listOf(0)
+                    )
+                )
+            }
+            val parsed = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(response.toDataItem())))
+            parsed.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = now,
+                deviceRequest = req
+            )
+            assertEquals(1, parsed.otherDocuments.size)
         }
     }
 }

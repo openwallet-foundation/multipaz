@@ -13,7 +13,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
@@ -61,7 +61,7 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId
     ): MintedCredential {
         val now = Clock.System.now()
@@ -120,10 +120,11 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         )
 
         val signingKey = getSigningKey()
+        val signatureAlgorithm = signingKey.algorithm.curve?.defaultSigningAlgorithm ?: signingKey.algorithm
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             ),
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5T),

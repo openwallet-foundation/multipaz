@@ -583,7 +583,11 @@ private suspend fun generateDsKeyAndCert(
     //
     val dsCertValidFrom = Clock.System.now().truncateToWholeSeconds() - 1.days
     val dsCertsValidUntil = dsCertValidFrom + 455.days
-    val dsKey = Crypto.createEcPrivateKey(algorithm.curve!!)
+    val dsKey = when {
+        algorithm.keySizeBits != null -> Crypto.createRsaPrivateKey(algorithm.keySizeBits!!)
+        algorithm.isMlDsa -> Crypto.createMlDsaPrivateKey(algorithm)
+        else -> Crypto.createEcPrivateKey(algorithm.curve!!)
+    }
     val dsCert = MdocUtil.generateDsCertificate(
         iacaKey = iacaKey,
         dsKey = dsKey.publicKey,
@@ -593,7 +597,7 @@ private suspend fun generateDsKeyAndCert(
         validUntil = dsCertsValidUntil,
     )
     // TODO: should we keep the whole chain here (from iacaKey?)
-    return AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsKey)
+    return AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsKey, algorithm)
 }
 
 @OptIn(ExperimentalSerializationApi::class)

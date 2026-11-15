@@ -7,7 +7,7 @@ import kotlinx.io.bytestring.buildByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -88,7 +88,7 @@ class CredentialState(
     }
 
     @CborSerializable
-    data class BucketInfo(val formatId: String, val key: EcPublicKey) {
+    data class BucketInfo(val formatId: String, val key: PublicKey) {
         companion object Companion
     }
 
@@ -135,7 +135,7 @@ class CredentialState(
             cert: X509Cert,
             random: Random = Crypto.secureRandom
         ): CredentialId {
-            val bucketInfo = BucketInfo(format.formatId, cert.ecPublicKey).toCbor().toBase64Url()
+            val bucketInfo = BucketInfo(format.formatId, cert.publicKey).toCbor().toBase64Url()
             val bucketTable = BackendEnvironment.getTable(bucketTableSpec)
             val dataTable = BackendEnvironment.getTable(dataTableSpec)
             val bucketId = bucketTable.get(key = bucketInfo)?.decodeToString()

@@ -12,7 +12,7 @@ import org.multipaz.cbor.IndefLengthTstr
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.openid4vci.util.CredentialId
@@ -60,7 +60,7 @@ class CredentialFactorySdjwtPid : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId,
     ): MintedCredential {
         check(authenticationKey != null)

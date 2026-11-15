@@ -2,11 +2,13 @@ package org.multipaz.mpzpass
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
@@ -16,6 +18,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -37,7 +40,12 @@ import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.util.inflate
@@ -1288,6 +1296,116 @@ class MpzPassTest {
                         displayName = mapOf("en" to "Invalid Path")
                     )
                 )
+            )
+        }
+    }
+
+    @Test
+    fun testNonEcKeyBoundExportImport() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(9, 9, 9)) }
+
+        for (alg in listOf(Algorithm.ML_DSA_44, Algorithm.RS256_2048)) {
+            // 1. Key-bound ISO mdoc export + CBOR round-trip + import + presentation
+            val mdocDoc = harness.documentStore.createDocument(
+                displayName = "Driving license ($alg)",
+                typeDisplayName = "Utopia driving license",
+            )
+            val mdocCred = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+                document = mdocDoc,
+                secureArea = harness.softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = alg),
+                dsKey = harness.dsKey,
+                signedAt = harness.signedAt,
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                expectedUpdate = null,
+                domain = "mdoc",
+            )
+            mdocDoc.edit { provisioned = true }
+
+            val mdocPass = mdocCred.exportToMpzPass()
+            val roundTrippedMdocPass = MpzPass.fromDataItem(Cbor.decode(Cbor.encode(mdocPass.toDataItem())))
+            assertEquals(mdocPass, roundTrippedMdocPass)
+
+            val importedMdocDoc = harness.documentStore.importMpzPass(
+                mpzPass = roundTrippedMdocPass,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt-keyless"
+            )
+            val importedMdocCred = importedMdocDoc.getCredentials().single() as KeyBoundMdocCredential
+            val importedMdocKeyInfo = harness.softwareSecureArea.getKeyInfo(importedMdocCred.alias)
+            assertEquals(alg, importedMdocKeyInfo.algorithm)
+
+            val response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+                addDocument(
+                    credential = importedMdocCred,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
+                            namespaceName = DrivingLicense.MDL_NAMESPACE,
+                            dataElementName = "given_name",
+                            intentToRetain = false
+                        )
+                    ),
+                    docRequestIds = listOf(0)
+                )
+            }
+            DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(response.toDataItem()))).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = harness.validFrom
+            )
+
+            // 2. Key-bound SD-JWT VC export + CBOR round-trip + import + KB-JWT presentation
+            val pidDoc = harness.documentStore.createDocument(
+                displayName = "EU PID ($alg)",
+                typeDisplayName = "EU PID",
+            )
+            val pidCred = EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+                document = pidDoc,
+                secureArea = harness.softwareSecureArea,
+                createKeySettings = CreateKeySettings(algorithm = alg),
+                dsKey = harness.dsKey,
+                signedAt = harness.signedAt,
+                validFrom = harness.validFrom,
+                validUntil = harness.validUntil,
+                domain = "sdjwt",
+            )
+            pidDoc.edit { provisioned = true }
+
+            val pidPass = pidCred.exportToMpzPass()
+            val roundTrippedPidPass = MpzPass.fromDataItem(Cbor.decode(Cbor.encode(pidPass.toDataItem())))
+            assertEquals(pidPass, roundTrippedPidPass)
+
+            val importedPidDoc = harness.documentStore.importMpzPass(
+                mpzPass = roundTrippedPidPass,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt-keyless"
+            )
+            val importedPidCred = importedPidDoc.getCredentials().single() as KeyBoundSdJwtVcCredential
+            val importedPidKeyInfo = harness.softwareSecureArea.getKeyInfo(importedPidCred.alias)
+            assertEquals(alg, importedPidKeyInfo.algorithm)
+
+            val sdJwt = SdJwt.fromCompactSerialization(importedPidCred.issuerProvidedData.decodeToString())
+            val kbSigningKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = importedPidCred.alias,
+                secureArea = harness.softwareSecureArea,
+                keyInfo = importedPidKeyInfo
+            )
+            val sdJwtKb = sdJwt.present(
+                signingKey = kbSigningKey,
+                nonce = "test-nonce",
+                audience = "https://verifier.example.com",
+                creationTime = harness.validFrom
+            )
+            sdJwtKb.verify(
+                issuerKey = harness.dsKey.publicKey,
+                checkNonce = { it == "test-nonce" },
+                checkAudience = { it == "https://verifier.example.com" },
+                checkCreationTime = { true }
             )
         }
     }

@@ -13,7 +13,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -56,7 +56,7 @@ class CredentialFactoryAgeVerification : CredentialFactory {
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
-        authenticationKey: EcPublicKey?,
+        authenticationKey: PublicKey?,
         credentialId: CredentialId
     ): MintedCredential {
         val now = Clock.System.now()
@@ -117,10 +117,11 @@ class CredentialFactoryAgeVerification : CredentialFactory {
         // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
         //
         val signingKey = getSigningKey()
+        val signatureAlgorithm = signingKey.algorithm.curve?.defaultSigningAlgorithm ?: signingKey.algorithm
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             ),
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5T),

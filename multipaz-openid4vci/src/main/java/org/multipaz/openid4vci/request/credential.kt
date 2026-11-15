@@ -38,7 +38,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.openid4vci.credential.CredentialDisplay
@@ -253,7 +253,7 @@ suspend fun credential(call: ApplicationCall) {
                 }
                 nonceManager.checkAndConsumeCredentialNonce(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
-                    val publicKey = EcPublicKey.fromJwk(key.jsonObject)
+                    val publicKey = PublicKey.fromJwk(key.jsonObject)
                     KeyAndId(
                         key = publicKey,
                         id = key.jsonObject["kid"]?.jsonPrimitive?.content ?: keyHash(publicKey)
@@ -290,7 +290,7 @@ suspend fun credential(call: ApplicationCall) {
                 } else if (nonce != expectedNonce) {
                     throw InvalidRequestException("nonce mismatch")
                 }
-                val publicKey = chain.certificates.first().ecPublicKey
+                val publicKey = chain.certificates.first().publicKey
                 KeyAndId(
                     publicKey,
                     keyHash(publicKey)
@@ -312,7 +312,7 @@ suspend fun credential(call: ApplicationCall) {
                 }
                 val head = Json.parseToJsonElement(String(parts[0].fromBase64Url())) as JsonObject
                 val jwk = head["jwk"]!!.jsonObject
-                val authenticationKey = EcPublicKey.fromJwk(jwk)
+                val authenticationKey = PublicKey.fromJwk(jwk)
                 val body = try {
                     validateJwt(
                         jwt = proof.jsonPrimitive.content,
@@ -511,7 +511,7 @@ private suspend fun refreshSystemOfRecordToken(
     )
 }
 
-private suspend fun keyHash(key: EcPublicKey): String =
+private suspend fun keyHash(key: PublicKey): String =
     key.toJwkThumbprint(Algorithm.SHA256).toByteArray().toBase64Url()
 
-private data class KeyAndId(val key: EcPublicKey, val id: String)
+private data class KeyAndId(val key: PublicKey, val id: String)
