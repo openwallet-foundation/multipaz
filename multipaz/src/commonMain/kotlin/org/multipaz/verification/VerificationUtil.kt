@@ -53,6 +53,11 @@ import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.allowsKeyless
+import org.multipaz.mdoc.util.MAX_MDL_AGE_OVER_ELEMENTS
+import org.multipaz.mdoc.util.MDL_NAMESPACE
+import org.multipaz.mdoc.util.asBooleanOrNull
+import org.multipaz.mdoc.util.isMdlAgeOverElement
+import org.multipaz.mdoc.util.isValidMdlAgeOverSubstitution
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -1491,6 +1496,13 @@ object VerificationUtil {
                     if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
                         return presentation.transactionData.any { it.type.identifier == elementName }
                     }
+                    if (isMdlAgeOverElement(presentation.docType, namespace, elementName)) {
+                        return presentation.issuerSignedClaims.any { claim ->
+                            if (claim.namespaceName != MDL_NAMESPACE) return@any false
+                            val boolValue = claim.value.asBooleanOrNull() ?: return@any false
+                            isValidMdlAgeOverSubstitution(elementName, claim.dataElementName, boolValue)
+                        }
+                    }
                     val requestedClaim = MdocRequestedClaim(
                         docType = presentation.docType,
                         namespaceName = namespace,
@@ -1499,11 +1511,18 @@ object VerificationUtil {
                     )
                     return candidateClaims.findMatchingClaim(requestedClaim) != null
                 }
+                var mdlAgeOverChecked = 0
                 for ((namespace, dataElements) in req.nameSpaces) {
                     if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
                         continue
                     }
                     for ((elementName, _) in dataElements) {
+                        if (isMdlAgeOverElement(presentation.docType, namespace, elementName)) {
+                            if (mdlAgeOverChecked >= MAX_MDL_AGE_OVER_ELEMENTS) {
+                                continue
+                            }
+                            mdlAgeOverChecked++
+                        }
                         if (hasElement(namespace, elementName)) {
                             continue
                         }

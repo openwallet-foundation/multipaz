@@ -11,13 +11,48 @@ extern "C" {
 #include "cJSON.h"
 }
 
+inline int parseMdlAgeOverThreshold(const std::string& elem) {
+    if (elem.size() != 11 || elem.compare(0, 9, "age_over_") != 0) {
+        return -1;
+    }
+    char tens = elem[9];
+    char ones = elem[10];
+    if (tens < '0' || tens > '9' || ones < '0' || ones > '9') {
+        return -1;
+    }
+    return (tens - '0') * 10 + (ones - '0');
+}
+
+inline bool isMdlAgeOverDataElement(
+        const std::string& docType,
+        const std::string& ns,
+        const std::string& elem
+) {
+    return docType == "org.iso.18013.5.1.mDL" &&
+           ns == "org.iso.18013.5.1" &&
+           parseMdlAgeOverThreshold(elem) >= 0;
+}
+
 struct DcqlRequestedClaim {
     std::string id;
     std::vector<std::string> values;
     std::vector<std::string> path;
 
     // Only relevant for ISO mdoc
-    bool intentToRetain;
+    bool intentToRetain = false;
+    bool iso18013MdlAgeOverSubstitution = false;
+
+    DcqlRequestedClaim(
+            std::string id_,
+            std::vector<std::string> values_,
+            std::vector<std::string> path_,
+            bool intentToRetain_,
+            bool iso18013MdlAgeOverSubstitution_ = false
+    ) : id(std::move(id_)),
+        values(std::move(values_)),
+        path(std::move(path_)),
+        intentToRetain(intentToRetain_),
+        iso18013MdlAgeOverSubstitution(iso18013MdlAgeOverSubstitution_) {}
 
     std::string joinPath() const {
         std::string ret;

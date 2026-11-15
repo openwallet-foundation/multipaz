@@ -47,6 +47,55 @@ object DrivingLicense {
     const val MDL_NAMESPACE = "org.iso.18013.5.1"
     const val AAMVA_NAMESPACE = "org.iso.18013.5.1.aamva"
 
+    internal val MDL_FULL_SAMPLE_REQUEST_ELEMENTS: Map<String, Boolean> = listOf(
+        "family_name",
+        "given_name",
+        "birth_date",
+        "issue_date",
+        "expiry_date",
+        "issuing_country",
+        "issuing_authority",
+        "document_number",
+        "portrait",
+        "driving_privileges",
+        "un_distinguishing_sign",
+        "administrative_number",
+        "sex",
+        "height",
+        "weight",
+        "eye_colour",
+        "hair_colour",
+        "birth_place",
+        "resident_address",
+        "portrait_capture_date",
+        "age_in_years",
+        "age_birth_year",
+        "age_over_13",
+        "age_over_16",
+        "age_over_18",
+        "age_over_21",
+        "age_over_25",
+        "age_over_60",
+        "age_over_62",
+        "age_over_65",
+        "age_over_68",
+        "issuing_jurisdiction",
+        "nationality",
+        "resident_street",
+        "resident_city",
+        "resident_state",
+        "resident_postal_code",
+        "resident_country",
+        "family_name_national_character",
+        "given_name_national_character",
+        "signature_usual_mark",
+        "expiry_date_after_validuntil",
+        "biometric_template_face",
+        "biometric_template_finger",
+        "biometric_template_signature_sign",
+        "biometric_template_iris",
+    ).associateWith { false }
+
     /**
      * Build the Driving License Document Type. This is ISO mdoc only.
      */
@@ -345,105 +394,81 @@ object DrivingLicense {
                 icon = Icon.TODAY,
                 sampleValue = SampleData.AGE_BIRTH_YEAR.toDataItem()
             )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_13",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_13),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_13),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_13.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_16",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_16),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_16),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_16.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_18",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_18),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_18),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_18.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_21",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_21),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_21),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_21.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_25",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_25),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_25),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_25.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_60",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_60),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_60),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_60.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_62",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_62),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_62),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_62.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_65",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_65),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_65),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_65.toDataItem()
-            )
-            .addMdocAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "age_over_68",
-                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_68),
-                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_68),
-                mandatory = false,
-                mdocNamespace = MDL_NAMESPACE,
-                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
-                icon = Icon.TODAY,
-                sampleValue = SampleData.AGE_OVER_68.toDataItem()
-            )
+            .apply {
+                val sampleAgeOverAttributes = mapOf(
+                    13 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_13,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_13,
+                        SampleData.AGE_OVER_13,
+                    ),
+                    16 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_16,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_16,
+                        SampleData.AGE_OVER_16,
+                    ),
+                    18 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_18,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_18,
+                        SampleData.AGE_OVER_18,
+                    ),
+                    21 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_21,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_21,
+                        SampleData.AGE_OVER_21,
+                    ),
+                    25 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_25,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_25,
+                        SampleData.AGE_OVER_25,
+                    ),
+                    60 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_60,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_60,
+                        SampleData.AGE_OVER_60,
+                    ),
+                    62 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_62,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_62,
+                        SampleData.AGE_OVER_62,
+                    ),
+                    65 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_65,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_65,
+                        SampleData.AGE_OVER_65,
+                    ),
+                    68 to Triple(
+                        GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_OLDER_THAN_68,
+                        GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_OLDER_THAN_68,
+                        SampleData.AGE_OVER_68,
+                    ),
+                )
+                for (age in 0..99) {
+                    val sampleEntry = sampleAgeOverAttributes[age]
+                    val displayName = if (sampleEntry != null) {
+                        getLocalizedString(sampleEntry.first)
+                    } else {
+                        getLocalizedString(GeneratedStringKeys.AGE_VERIFICATION_ATTRIBUTE_OLDER_THAN_YEARS)
+                            .replace("{age}", age.toString())
+                    }
+                    val description = if (sampleEntry != null) {
+                        getLocalizedString(sampleEntry.second)
+                    } else {
+                        getLocalizedString(GeneratedStringKeys.AGE_VERIFICATION_DESCRIPTION_OLDER_THAN_YEARS)
+                            .replace("{age}", age.toString())
+                    }
+                    addMdocAttribute(
+                        type = DocumentAttributeType.Boolean,
+                        identifier = "age_over_${age.toString().padStart(2, '0')}",
+                        displayName = displayName,
+                        description = description,
+                        mandatory = false,
+                        mdocNamespace = MDL_NAMESPACE,
+                        sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                        icon = Icon.TODAY,
+                        sampleValue = sampleEntry?.third?.toDataItem(),
+                    )
+                }
+            }
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "issuing_jurisdiction",
@@ -997,7 +1022,7 @@ object DrivingLicense {
                 id = "full",
                 displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_REQUEST_ALL_DATA_ELEMENTS),
                 mdocDataElements = mapOf(
-                    MDL_NAMESPACE to mapOf(),
+                    MDL_NAMESPACE to MDL_FULL_SAMPLE_REQUEST_ELEMENTS,
                     AAMVA_NAMESPACE to mapOf()
                 )
             )

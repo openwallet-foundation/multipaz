@@ -1,4 +1,6 @@
 
+#include <algorithm>
+
 #include "dcql.h"
 #include "logger.h"
 #include "paths.h"
@@ -338,7 +340,9 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                     for (auto& claim : query.requestedClaims) {
                         Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
                         if (matchingCredentialClaim != nullptr) {
-                            matchingClaimValues.push_back(matchingCredentialClaim);
+                            if (std::find(matchingClaimValues.begin(), matchingClaimValues.end(), matchingCredentialClaim) == matchingClaimValues.end()) {
+                                matchingClaimValues.push_back(matchingCredentialClaim);
+                            }
                         } else if (claim.path.size() >= 1 && claim.path[0] == "org.iso.transactiondata") {
                             // Transaction data claims cannot be omitted even under lenient matching
                             failedRequiredClaim = true;
@@ -358,7 +362,9 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                     for (auto& claim : query.requestedClaims) {
                         Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
                         if (matchingCredentialClaim != nullptr) {
-                            matchingClaimValues.push_back(matchingCredentialClaim);
+                            if (std::find(matchingClaimValues.begin(), matchingClaimValues.end(), matchingCredentialClaim) == matchingClaimValues.end()) {
+                                matchingClaimValues.push_back(matchingCredentialClaim);
+                            }
                         } else {
                             LOG("Error resolving requested claim with path %s", claim.joinPath().c_str());
                             didNotMatch = true;
@@ -378,15 +384,24 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                 for (auto& claimSet : query.claimSets) {
                     bool didNotMatch = false;
                     auto matchingClaimValues = std::vector<Claim*>();
+                    int mdlAgeOverInClaimSet = 0;
                     for (auto& claimId : claimSet.claimIdentifiers) {
                         DcqlRequestedClaim* requestedClaim = query.findRequestedClaim(claimId);
                         if (requestedClaim == nullptr) {
                             didNotMatch = true;
                             break;
                         }
+                        if (requestedClaim->iso18013MdlAgeOverSubstitution) {
+                            if (mdlAgeOverInClaimSet >= 2) {
+                                continue;
+                            }
+                            mdlAgeOverInClaimSet++;
+                        }
                         Claim* matchingCredentialClaim = cred->findMatchingClaim(*requestedClaim);
                         if (matchingCredentialClaim != nullptr) {
-                            matchingClaimValues.push_back(matchingCredentialClaim);
+                            if (std::find(matchingClaimValues.begin(), matchingClaimValues.end(), matchingCredentialClaim) == matchingClaimValues.end()) {
+                                matchingClaimValues.push_back(matchingCredentialClaim);
+                            }
                         } else {
                             didNotMatch = true;
                             break;

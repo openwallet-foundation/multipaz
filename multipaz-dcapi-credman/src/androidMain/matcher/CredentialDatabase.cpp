@@ -348,6 +348,51 @@ Claim* Credential::findMatchingClaim(const DcqlRequestedClaim& requestedClaim) {
         return &(dynIt->second);
     }
 
+    if (requestedClaim.iso18013MdlAgeOverSubstitution &&
+        requestedClaim.values.empty() &&
+        mdocDocType == "org.iso.18013.5.1.mDL" &&
+        requestedClaim.path.size() == 2 &&
+        requestedClaim.path[0] == "org.iso.18013.5.1") {
+        int requestedAge = parseMdlAgeOverThreshold(requestedClaim.path[1]);
+        if (requestedAge >= 0) {
+            const std::string mdlPrefix = "org.iso.18013.5.1.";
+            Claim* bestTrueClaim = nullptr;
+            int bestTrueDiff = 1000;
+            Claim* bestFalseClaim = nullptr;
+            int bestFalseDiff = 1000;
+            for (auto& kv : claims) {
+                if (kv.second.isDeviceSigned) {
+                    continue;
+                }
+                if (kv.first.compare(0, mdlPrefix.size(), mdlPrefix) != 0) {
+                    continue;
+                }
+                int candidateAge = parseMdlAgeOverThreshold(kv.first.substr(mdlPrefix.size()));
+                if (candidateAge < 0) {
+                    continue;
+                }
+                if (kv.second.matchValue == "true") {
+                    if (candidateAge >= requestedAge) {
+                        int diff = candidateAge - requestedAge;
+                        if (diff < bestTrueDiff) {
+                            bestTrueDiff = diff;
+                            bestTrueClaim = &(kv.second);
+                        }
+                    }
+                } else if (kv.second.matchValue == "false") {
+                    if (candidateAge <= requestedAge) {
+                        int diff = requestedAge - candidateAge;
+                        if (diff < bestFalseDiff) {
+                            bestFalseDiff = diff;
+                            bestFalseClaim = &(kv.second);
+                        }
+                    }
+                }
+            }
+            return bestTrueClaim != nullptr ? bestTrueClaim : bestFalseClaim;
+        }
+    }
+
     auto ret = claims.find(joinedPath);
     if (ret != claims.end()) {
         // Perform value matching, if requested

@@ -34,6 +34,8 @@ import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.OtherDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.transport.MdocTransportClosedException
+import org.multipaz.mdoc.util.MAX_MDL_AGE_OVER_ELEMENTS
+import org.multipaz.mdoc.util.isMdlAgeOverElement
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
@@ -338,11 +340,26 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
             status = DeviceResponse.STATUS_OK,
             eReaderKey = eReaderKey,
         ) {
+        var totalMdlAgeOverReturned = 0
         for (match in selection.matches) {
             match.source as PresentmentCredentialMatchSourceIso18013
             val docRequest = deviceRequest.docRequests.getOrNull(match.source.docRequest.docRequestId)
                 ?: match.source.docRequest
             val docRequestIds = if (includeDocRequestIds) listOf(docRequest.docRequestId) else null
+            val effectiveRequestedClaims = match.claims.keys.filter { reqClaim ->
+                if (reqClaim is MdocRequestedClaim &&
+                    isMdlAgeOverElement(reqClaim.docType, reqClaim.namespaceName, reqClaim.dataElementName)
+                ) {
+                    if (totalMdlAgeOverReturned >= MAX_MDL_AGE_OVER_ELEMENTS) {
+                        false
+                    } else {
+                        totalMdlAgeOverReturned++
+                        true
+                    }
+                } else {
+                    true
+                }
+            }
             val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
             var zkSystemMatch: ZkSystem? = null
@@ -359,7 +376,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         }
                         val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
                             zkSystemSpecs = listOf(zkSpec),
-                            requestedClaims = match.claims.keys.toList()
+                            requestedClaims = effectiveRequestedClaims
                         )
                         if (matchingZkSystemSpec != null) {
                             zkSystemMatch = zkSystem
@@ -401,7 +418,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         sessionTranscript = sessionTranscriptToUse,
                         eReaderKey = if (docRequest.docRequestInfo?.docResponseEncryption != null) null else eReaderKey,
                         credential = match.credential,
-                        requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
+                        requestedClaims = effectiveRequestedClaims.filterIsInstance<MdocRequestedClaim>(),
                         deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),
                         errors = mapOf(),
                         docRequestIds = docRequestIds,

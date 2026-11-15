@@ -118,7 +118,7 @@ fun defaultClassifySimpleConsent(
     var simpleClaim: SimpleConsentClaim? = null
     var hasPortrait = false
 
-    for (claim in match.claims.values) {
+    for (claim in match.claims.values.distinct()) {
         val attribute = claim.attribute ?: return null
         val id = claim.canonicalIdentifier()
         val sensitivity = attribute.sensitivity

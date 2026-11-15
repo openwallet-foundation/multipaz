@@ -1,6 +1,7 @@
 package org.multipaz.documenttype.knowntypes
 
 import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.knowntypes.DrivingLicense.MDL_FULL_SAMPLE_REQUEST_ELEMENTS
 import org.multipaz.documenttype.knowntypes.DrivingLicense.MDL_NAMESPACE
 import org.multipaz.documenttype.PortraitEquivalenceRequest
 import org.multipaz.doctypes.localization.LocalizedStrings
@@ -131,7 +132,7 @@ object IDPass {
                 id = "full",
                 displayName = getLocalizedString(GeneratedStringKeys.ID_PASS_REQUEST_ALL_DATA_ELEMENTS),
                 mdocDataElements = mapOf(
-                    MDL_NAMESPACE to mapOf(),
+                    MDL_NAMESPACE to MDL_FULL_SAMPLE_REQUEST_ELEMENTS,
                 )
             )
             .build()

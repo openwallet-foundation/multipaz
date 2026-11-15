@@ -51,6 +51,12 @@ import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.response.allowsKeyless
+import org.multipaz.mdoc.util.MAX_MDL_AGE_OVER_ELEMENTS
+import org.multipaz.mdoc.util.MDL_DOCTYPE
+import org.multipaz.mdoc.util.MDL_NAMESPACE
+import org.multipaz.mdoc.util.asBooleanOrNull
+import org.multipaz.mdoc.util.findNearestAgeOver
+import org.multipaz.mdoc.util.isMdlAgeOverElement
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
@@ -713,6 +719,23 @@ data class DeviceRequest private constructor(
         }
 
         fun build(): DeviceRequest {
+            val totalMdlAgeOverRequested = docRequests.sumOf { docRequest ->
+                val docFormat = docRequest.docRequestInfo?.docFormat ?: "mso_mdoc"
+                if (docRequest.docType == MDL_DOCTYPE && docFormat != "dc+sd-jwt") {
+                    docRequest.nameSpaces[MDL_NAMESPACE]?.keys?.count { elementName ->
+                        isMdlAgeOverElement(MDL_DOCTYPE, MDL_NAMESPACE, elementName)
+                    } ?: 0
+                } else {
+                    0
+                }
+            }
+            if (totalMdlAgeOverRequested > MAX_MDL_AGE_OVER_ELEMENTS) {
+                Logger.w(
+                    TAG,
+                    "DeviceRequest requests $totalMdlAgeOverRequested age_over_NN data elements " +
+                        "for $MDL_DOCTYPE; ISO/IEC 18013-5 Clause 13.4.6 allows at most $MAX_MDL_AGE_OVER_ELEMENTS"
+                )
+            }
             val docRequestsUsingSecondEditionFeature = docRequests.any {
                 it.docRequestInfo?.isUsingSecondEditionFeature() == true
             }
@@ -1128,10 +1151,23 @@ data class DeviceRequest private constructor(
         // Each requested element in 'nameSpaces' creates a requirement.
         // A requirement has a list of Options. Option 0 is the base request.
         // If 'alternativeDataElements' covers this element, it provides additional Options.
+        // Per ISO/IEC 18013-5 Clause 13.4.6, an mDL reader shall not request more than two
+        // age_over_NN data elements and an mDL should not return more than two age_over_NN
+        // data elements; cap mDL age_over_NN requirements to MAX_MDL_AGE_OVER_ELEMENTS (2).
         val logicalRequirements = mutableListOf<List<List<MdocRequestedClaim>>>()
+        var mdlAgeOverRequirementsAdded = 0
 
         docRequest.nameSpaces.forEach { (namespace, dataElements) ->
             dataElements.forEach { (elementName, intentToRetain) ->
+                if (cred is MdocCredential &&
+                    cred.docType == MDL_DOCTYPE &&
+                    isMdlAgeOverElement(docRequest.docType, namespace, elementName)
+                ) {
+                    if (mdlAgeOverRequirementsAdded >= MAX_MDL_AGE_OVER_ELEMENTS) {
+                        return@forEach
+                    }
+                    mdlAgeOverRequirementsAdded++
+                }
                 // Base Option (Index 0)
                 val baseClaim = MdocRequestedClaim(
                     id = null, // ID not strictly needed for internal logic
@@ -1205,10 +1241,13 @@ data class DeviceRequest private constructor(
                     }
                 } else {
                     val remapped = remapClaim(cred, baseClaim, docRequest)
-                    val foundClaim = remapped?.let { claimsInCredential.findMatchingClaim(it) }
+                    val foundClaim = remapped?.let { findMatchingIso18013Claim(cred, it, claimsInCredential) }
                     if (remapped != null && foundClaim != null) {
-                        matchingClaimValues[baseClaim] = foundClaim
-                        requestedClaimsRemapped.add(remapped)
+                        val resolvedKey = recordMatchedClaim(matchingClaimValues, baseClaim, foundClaim)
+                        val selectClaim = if (remapped is MdocRequestedClaim) resolvedKey else remapped
+                        if (selectClaim !in requestedClaimsRemapped) {
+                            requestedClaimsRemapped.add(selectClaim)
+                        }
                     } else {
                         missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
                     }
@@ -1346,6 +1385,7 @@ data class DeviceRequest private constructor(
             val selectedTransactions = mutableListOf<TransactionData<*>>()
             var didNotMatch = false
             var chv1Matched = false
+            var mdlAgeOverInPermutation = 0
 
             for (reqClaim in requestedClaims) {
                 if (reqClaim.namespaceName == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
@@ -1370,16 +1410,32 @@ data class DeviceRequest private constructor(
                         break
                     }
                 } else {
+                    if (cred is MdocCredential &&
+                        cred.docType == MDL_DOCTYPE &&
+                        isMdlAgeOverElement(reqClaim.docType, reqClaim.namespaceName, reqClaim.dataElementName)
+                    ) {
+                        if (mdlAgeOverInPermutation >= MAX_MDL_AGE_OVER_ELEMENTS) {
+                            continue
+                        }
+                        mdlAgeOverInPermutation++
+                    }
                     val reqClaimRemapped = remapClaim(cred, reqClaim, docRequest)
                     if (reqClaimRemapped == null) {
                         didNotMatch = true
                         break
                     }
-                    requestedClaimsRemapped.add(reqClaimRemapped)
 
-                    val foundClaim = claimsInCredential.findMatchingClaim(reqClaimRemapped)
+                    val foundClaim = findMatchingIso18013Claim(cred, reqClaimRemapped, claimsInCredential)
                     if (foundClaim != null) {
-                        matchingClaimValues[reqClaim] = foundClaim
+                        val resolvedKey = recordMatchedClaim(
+                            matchingClaimValues = matchingClaimValues,
+                            reqClaim = reqClaim,
+                            foundClaim = foundClaim,
+                        )
+                        val selectClaim = if (reqClaimRemapped is MdocRequestedClaim) resolvedKey else reqClaimRemapped
+                        if (selectClaim !in requestedClaimsRemapped) {
+                            requestedClaimsRemapped.add(selectClaim)
+                        }
                     } else {
                         didNotMatch = true
                         break
@@ -1450,6 +1506,69 @@ data class DeviceRequest private constructor(
         return if (parsed.isApplicable(cred)) parsed else null
     }
 
+    private fun findMatchingIso18013Claim(
+        cred: Credential,
+        requestedClaim: RequestedClaim,
+        claimsInCredential: List<Claim>,
+    ): Claim? {
+        if (cred is MdocCredential &&
+            cred.docType == MDL_DOCTYPE &&
+            requestedClaim is MdocRequestedClaim &&
+            isMdlAgeOverElement(requestedClaim.docType, requestedClaim.namespaceName, requestedClaim.dataElementName)
+        ) {
+            val mdlClaims = claimsInCredential.asSequence()
+                .filterIsInstance<MdocClaim>()
+                .filter { it.namespaceName == MDL_NAMESPACE }
+                .asIterable()
+            return findNearestAgeOver(
+                requestedDataElementName = requestedClaim.dataElementName,
+                candidates = mdlClaims,
+                getName = { it.dataElementName },
+                getBooleanValue = { it.value.asBooleanOrNull() },
+            )
+        }
+        return claimsInCredential.findMatchingClaim(requestedClaim)
+    }
+
+    private fun recordMatchedClaim(
+        matchingClaimValues: MutableMap<RequestedClaim, Claim>,
+        reqClaim: MdocRequestedClaim,
+        foundClaim: Claim,
+    ): MdocRequestedClaim {
+        val resolvedKey = if (foundClaim is MdocClaim &&
+            (foundClaim.namespaceName != reqClaim.namespaceName ||
+                foundClaim.dataElementName != reqClaim.dataElementName)
+        ) {
+            reqClaim.copy(
+                namespaceName = foundClaim.namespaceName,
+                dataElementName = foundClaim.dataElementName,
+            )
+        } else {
+            reqClaim
+        }
+
+        val existingEntry = matchingClaimValues.entries.find { (k, _) ->
+            k is MdocRequestedClaim &&
+                k.namespaceName == resolvedKey.namespaceName &&
+                k.dataElementName == resolvedKey.dataElementName
+        }
+        if (existingEntry != null) {
+            val existingKey = existingEntry.key as MdocRequestedClaim
+            if (!existingKey.intentToRetain && resolvedKey.intentToRetain) {
+                val upgradedKey = existingKey.copy(intentToRetain = true)
+                val updatedEntries = matchingClaimValues.entries.map { (k, v) ->
+                    if (k == existingKey) upgradedKey to v else k to v
+                }
+                matchingClaimValues.clear()
+                matchingClaimValues.putAll(updatedEntries)
+                return upgradedKey
+            }
+            return existingKey
+        }
+        matchingClaimValues[resolvedKey] = foundClaim
+        return resolvedKey
+    }
+
     private suspend fun isClaimSatisfied(
         cred: Credential,
         reqClaim: MdocRequestedClaim,
@@ -1465,7 +1584,7 @@ data class DeviceRequest private constructor(
             canSatisfyChv1(cred, presentmentSource, faceMatchingMode)
         } else {
             val remapped = remapClaim(cred, reqClaim, docRequest)
-            remapped != null && claimsInCredential.findMatchingClaim(remapped) != null
+            remapped != null && findMatchingIso18013Claim(cred, remapped, claimsInCredential) != null
         }
     }
 

@@ -323,11 +323,14 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 path = {ns, elem};
             }
 
-            dcqlClaims.push_back(DcqlRequestedClaim{id, {}, path, intent});
+            bool useMdlAgeOverSubstitution =
+                    docFormat != "dc+sd-jwt" && isMdlAgeOverDataElement(docType, ns, elem);
+            dcqlClaims.push_back(DcqlRequestedClaim(id, {}, path, intent, useMdlAgeOverSubstitution));
             claimIdRegistry[key] = id;
             return id;
         };
 
+        int mdlAgeOverRequirementsAdded = 0;
         for (auto nsIt = nameSpacesMap->begin(); nsIt != nameSpacesMap->end(); ++nsIt) {
             std::string nsName = nsIt->first->asTstr()->value();
             auto elemsMap = nsIt->second->asMap();
@@ -335,6 +338,12 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
 
             for (auto elemIt = elemsMap->begin(); elemIt != elemsMap->end(); ++elemIt) {
                 std::string elemName = elemIt->first->asTstr()->value();
+                if (docFormat != "dc+sd-jwt" && isMdlAgeOverDataElement(docType, nsName, elemName)) {
+                    if (mdlAgeOverRequirementsAdded >= 2) {
+                        continue;
+                    }
+                    mdlAgeOverRequirementsAdded++;
+                }
                 bool intentToRetain = false;
                 if (elemIt->second->asBool()) {
                     intentToRetain = elemIt->second->asBool()->value();

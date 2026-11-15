@@ -13,6 +13,10 @@ import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.mdoc.util.MAX_MDL_AGE_OVER_ELEMENTS
+import org.multipaz.mdoc.util.asBooleanOrNull
+import org.multipaz.mdoc.util.findNearestAgeOver
+import org.multipaz.mdoc.util.isMdlAgeOverElement
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.validation.ValidationResult
 import org.multipaz.validation.buildValidationResult
@@ -57,15 +61,42 @@ data class IssuerNamespaces(
      * Returns a new object filtering the [IssuerSignedItem] so they match a request.
      *
      * @param requestedClaims the list of data elements to request.
-     * @return a new object containing the [IssuerSignedItem] present that are also requested in [requestedClaims].
+     * @param iso18013AgeOverSubstitution `true` to apply ISO/IEC 18013-5 Clause 13.4.6 nearest
+     *   `age_over_NN` substitution and max-2 capping for mDL (`org.iso.18013.5.1.mDL`), `false`
+     *   for exact claim path lookups.
+     * @return a new object containing the matching [IssuerSignedItem] entries.
      */
-    fun filter(requestedClaims: List<MdocRequestedClaim>): IssuerNamespaces {
+    fun filter(
+        requestedClaims: List<MdocRequestedClaim>,
+        iso18013AgeOverSubstitution: Boolean = true,
+    ): IssuerNamespaces {
         val ret = mutableMapOf<String, MutableMap<String, IssuerSignedItem>>()
+        var mdlAgeOverHandled = 0
         for (claim in requestedClaims) {
-            val issuerSignedItem = data[claim.namespaceName]?.get(claim.dataElementName)
-            if (issuerSignedItem != null) {
-                val innerMap = ret.getOrPut(claim.namespaceName, { mutableMapOf<String, IssuerSignedItem>() })
-                innerMap.put(claim.dataElementName, issuerSignedItem)
+            if (iso18013AgeOverSubstitution &&
+                isMdlAgeOverElement(claim.docType, claim.namespaceName, claim.dataElementName)
+            ) {
+                if (mdlAgeOverHandled >= MAX_MDL_AGE_OVER_ELEMENTS) {
+                    continue
+                }
+                mdlAgeOverHandled++
+                val mdlNamespaceItems = data[claim.namespaceName] ?: continue
+                val matchedEntry = findNearestAgeOver(
+                    requestedDataElementName = claim.dataElementName,
+                    candidates = mdlNamespaceItems.entries,
+                    getName = { it.key },
+                    getBooleanValue = { it.value.dataElementValue.asBooleanOrNull() }
+                )
+                if (matchedEntry != null) {
+                    val innerMap = ret.getOrPut(claim.namespaceName) { mutableMapOf() }
+                    innerMap[matchedEntry.key] = matchedEntry.value
+                }
+            } else {
+                val issuerSignedItem = data[claim.namespaceName]?.get(claim.dataElementName)
+                if (issuerSignedItem != null) {
+                    val innerMap = ret.getOrPut(claim.namespaceName) { mutableMapOf() }
+                    innerMap[claim.dataElementName] = issuerSignedItem
+                }
             }
         }
         return IssuerNamespaces(ret)
