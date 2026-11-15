@@ -241,7 +241,7 @@ internal class OpenID4VCIProvisioningClient(
         } else {
             null
         }
-        val ids = extractCredentialIds(keyInfo)
+        val ids = extractCredentialIds(keyInfo, serializedCredentials.size)
         val idAndData = serializedCredentials.zip(ids).map { (data, id) ->
             CredentialCertification(id, data)
         }
@@ -287,9 +287,9 @@ internal class OpenID4VCIProvisioningClient(
             }
         }
 
-    private fun extractCredentialIds(keyInfo: KeyBindingInfo): List<String> =
+    private fun extractCredentialIds(keyInfo: KeyBindingInfo, count: Int): List<String> =
         when (keyInfo) {
-            KeyBindingInfo.Keyless -> listOf("")
+            KeyBindingInfo.Keyless -> List(count) { "" }
             is KeyBindingInfo.OpenidProofOfPossession -> keyInfo.jwtList.map { jwt ->
                 val headerB64 = jwt.substringBefore('.')
                 val header = Json.parseToJsonElement(

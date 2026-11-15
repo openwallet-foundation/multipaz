@@ -51,6 +51,8 @@ struct DcqlCredentialQuery {
 
     bool lenientClaimMatching = false;
     bool multiple = false;
+    bool requireCryptographicHolderBinding = true;
+    bool hasTransactionData = false;
 
     DcqlCredentialQuery(
             std::string id_,
@@ -62,11 +64,15 @@ struct DcqlCredentialQuery {
             std::vector<DcqlRequestedClaim> requestedClaims_,
             std::vector<DcqlClaimSet> claimSets_,
             bool lenientClaimMatching_ = false,
-            bool multiple_ = false
+            bool multiple_ = false,
+            bool requireCryptographicHolderBinding_ = true,
+            bool hasTransactionData_ = false
     ) : id(id_), format(format_), mdocDocType(mdocDocType_), vctValues(vctValues_),
         issuerIdentifiers(issuerIdentifiers_), readerAuthAkis(readerAuthAkis_),
         requestedClaims(requestedClaims_), claimSets(claimSets_),
-        lenientClaimMatching(lenientClaimMatching_), multiple(multiple_) {}
+        lenientClaimMatching(lenientClaimMatching_), multiple(multiple_),
+        requireCryptographicHolderBinding(requireCryptographicHolderBinding_),
+        hasTransactionData(hasTransactionData_) {}
 
     DcqlRequestedClaim* findRequestedClaim(const std::string& claimId);
 };

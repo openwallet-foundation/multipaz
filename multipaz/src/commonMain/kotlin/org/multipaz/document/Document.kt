@@ -34,6 +34,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.MdocPortraitEquivalenceData
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mpzpass.MpzPassMetadata
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
@@ -267,7 +268,10 @@ class Document internal constructor(
         }
 
         if (mdocCred != null && (twoElementStringPaths.isNotEmpty() || peData != null)) {
-            builder.addMdocDocumentType(mdocCred.docType)
+            builder.addMdocDocumentType(
+                mdocDocType = mdocCred.docType,
+                keyBound = mdocCred is KeyBoundMdocCredential
+            )
             builder.setSupportsPortraitImageEquivalence(peData)
             for (desc in twoElementStringPaths) {
                 val namespace = (desc.path[0] as JsonPrimitive).content

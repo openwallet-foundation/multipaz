@@ -311,6 +311,7 @@ class App private constructor (val promptModel: PromptModel) {
             } else {
                 listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
             },
+            domainsKeylessMdoc = listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_KEYLESS),
             domainsKeylessSdJwt = listOf(TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS),
             domainsKeyBoundSdJwt = if (useAuth) {
                 listOf(TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE)
@@ -1173,7 +1174,8 @@ class App private constructor (val promptModel: PromptModel) {
                         mpzPass = mpzPass,
                         isoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE,
                         sdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE,
-                        keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS
+                        keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS,
+                        keylessIsoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_KEYLESS
                     )
                     navController.navigate(DocumentViewerDestination(document.identifier))
                     showToast("MpzPass file successfully imported")

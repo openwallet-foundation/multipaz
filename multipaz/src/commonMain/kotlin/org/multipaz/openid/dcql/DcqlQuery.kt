@@ -19,6 +19,8 @@ import org.multipaz.claim.findMatchingClaim
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.FaceMatchingMode
 import org.multipaz.presentment.PresentmentCredentialMatch
@@ -34,6 +36,8 @@ import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.RequesterIdentity
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -141,15 +145,29 @@ data class DcqlQuery(
 
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
+            val txForQuery = transactionDataMap[credentialQuery.id] ?: emptyList()
+            val allowKeyless = !credentialQuery.requireCryptographicHolderBinding &&
+                credentialQuery.format != "mso_mdoc_zk" &&
+                txForQuery.isEmpty()
             val credsSatisfyingMeta = when (credentialQuery.format) {
                 "mso_mdoc", "mso_mdoc_zk" -> {
                     val ret = mutableListOf<Credential>()
                     for (documentId in presentmentSource.documentStore.listDocumentIds()) {
                         val document =
                             presentmentSource.documentStore.lookupDocument(documentId) ?: continue
-                        document.getCertifiedCredentials().find {
-                            it is MdocCredential && it.docType == credentialQuery.mdocDocType
-                        }?.let { ret.add(it) }
+                        val certifiedCreds = document.getCertifiedCredentials()
+                        val matched = certifiedCreds.find {
+                            it is KeyBoundMdocCredential && it.docType == credentialQuery.mdocDocType
+                        } ?: if (allowKeyless && credentialQuery.mdocDocType != "org.iso.18013.5.1.mDL") {
+                            certifiedCreds.find {
+                                it is KeylessMdocCredential && it.docType == credentialQuery.mdocDocType
+                            }
+                        } else {
+                            null
+                        }
+                        if (matched != null) {
+                            ret.add(matched)
+                        }
                     }
                     ret
                 }
@@ -159,12 +177,25 @@ data class DcqlQuery(
                     for (documentId in presentmentSource.documentStore.listDocumentIds()) {
                         val document =
                             presentmentSource.documentStore.lookupDocument(documentId) ?: continue
-                        document.getCertifiedCredentials().find {
-                            it is SdJwtVcCredential && (
+                        val certifiedCreds = document.getCertifiedCredentials()
+                        val matched = certifiedCreds.find {
+                            it is KeyBoundSdJwtVcCredential && (
                                 credentialQuery.vctValues!!.contains(it.vct) ||
                                     it.otherVcts.any { otherVct -> credentialQuery.vctValues.contains(otherVct) }
                             )
-                        }?.let { ret.add(it) }
+                        } ?: if (allowKeyless) {
+                            certifiedCreds.find {
+                                it is KeylessSdJwtVcCredential && (
+                                    credentialQuery.vctValues!!.contains(it.vct) ||
+                                        it.otherVcts.any { otherVct -> credentialQuery.vctValues.contains(otherVct) }
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                        if (matched != null) {
+                            ret.add(matched)
+                        }
                     }
                     ret
                 }
@@ -271,6 +302,7 @@ data class DcqlQuery(
                             requestedClaims = matchingClaimValues.keys.toList(),
                             keyAgreementPossible = effectiveKeyAgreementPossible,
                             credential = cred,
+                            requireHolderBinding = !allowKeyless,
                         )
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -334,6 +366,7 @@ data class DcqlQuery(
                                 requestedClaims = matchingClaimValues.keys.toList(),
                                 keyAgreementPossible = effectiveKeyAgreementPossible,
                                 credential = cred,
+                                requireHolderBinding = !allowKeyless,
                             )
                             if (credential == null) {
                                 throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -686,6 +719,9 @@ private fun DcqlCredentialQuery.toJson(): JsonObject = buildJsonObject {
     put("meta", meta)
     if (multiple) {
         put("multiple", true)
+    }
+    if (!requireCryptographicHolderBinding) {
+        put("require_cryptographic_holder_binding", false)
     }
     if (issuerIdentifiers.isNotEmpty()) {
         putJsonArray("trusted_authorities") {

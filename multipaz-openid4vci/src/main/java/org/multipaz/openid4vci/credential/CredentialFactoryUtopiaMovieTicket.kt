@@ -16,10 +16,10 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Duration.Companion.days
 
-/** [CredentialFactory] for [UtopiaMovieTicket] credentials in in IETF SD-JWT format. */
+/** [CredentialFactory] for [UtopiaMovieTicket] credentials in IETF SD-JWT format. */
 class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
     override val configurationId: String
-        get() = "utopia_movie_ticket"
+        get() = "utopia_movie_ticket_sd_jwt"
 
     override val scope: String
         get() = "movie"
@@ -68,10 +68,22 @@ class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
             certificate = null
         )
 
+        val ticketJson = ticket.toJson() as JsonObject
+        val claims = buildJsonObject {
+            for ((k, v) in ticketJson) {
+                if (k != "instance_title") {
+                    put(k, v)
+                }
+            }
+            if (!ticketJson.containsKey("movie") && ticketJson.containsKey("movie_title")) {
+                put("movie", ticketJson["movie_title"]!!)
+            }
+        }
+
         val sdJwt = SdJwt.create(
             issuerKey = getSigningKey(),
             kbKey = null,
-            claims = ticket.toJson() as JsonObject,
+            claims = claims,
             nonSdClaims = buildJsonObject {
                 put("iss", issuer)
                 put("vct", UtopiaMovieTicket.MOVIE_TICKET_VCT)

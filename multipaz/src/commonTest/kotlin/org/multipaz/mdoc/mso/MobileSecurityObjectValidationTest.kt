@@ -6,7 +6,9 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
@@ -197,5 +199,57 @@ class MobileSecurityObjectValidationTest {
         val invalidResult = MobileSecurityObject.validate(missingKeysCbor, now = validDate + 5.days)
         assertTrue(invalidResult.hasErrors)
         assertTrue(invalidResult.errors.any { it.message.contains("missing required key") })
+    }
+
+    @Test
+    fun testKeylessMsoValidation() {
+        val keylessMovieTicketMso = MobileSecurityObject(
+            version = "1.0",
+            docType = "org.multipaz.movieticket.1",
+            signedAt = validDate,
+            validFrom = validDate,
+            validUntil = validDate + 30.days,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = mapOf(
+                "org.multipaz.movieticket.1" to mapOf(
+                    0L to ByteString(ByteArray(32) { 1.toByte() })
+                )
+            ),
+            deviceKey = null
+        )
+        val instanceResult = keylessMovieTicketMso.validate(now = validDate + 5.days)
+        assertFalse(instanceResult.hasErrors)
+        assertFalse(instanceResult.hasWarnings)
+
+        val cborResult = MobileSecurityObject.validate(
+            keylessMovieTicketMso.toDataItem(),
+            now = validDate + 5.days
+        )
+        assertFalse(cborResult.hasErrors)
+        assertFalse(cborResult.hasWarnings)
+
+        // ISO/IEC 18013-5 Clause 13.3: mDL must always include deviceKeyInfo
+        val mdlMissingDeviceKeyCbor = buildCborMap {
+            put("version", "1.0")
+            put("digestAlgorithm", "SHA-256")
+            put("docType", "org.iso.18013.5.1.mDL")
+            putCborMap("valueDigests") {
+                putCborMap("org.iso.18013.5.1") {
+                    put(0L, ByteArray(32) { 1.toByte() })
+                }
+            }
+            putCborMap("validityInfo") {
+                put("signed", validDate.toDataItemDateTimeString())
+                put("validFrom", validDate.toDataItemDateTimeString())
+                put("validUntil", (validDate + 30.days).toDataItemDateTimeString())
+            }
+        }
+        val mdlKeylessResult = MobileSecurityObject.validate(
+            mdlMissingDeviceKeyCbor,
+            now = validDate + 5.days
+        )
+        assertTrue(mdlKeylessResult.hasErrors)
+        assertTrue(mdlKeylessResult.errors.any { it.message.contains("deviceKeyInfo") })
     }
 }

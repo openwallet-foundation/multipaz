@@ -289,7 +289,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika-sex
                               claims:
                                 claim:
@@ -333,7 +333,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max-sex
                               claims:
                                 claim:
@@ -377,7 +377,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika-sex
                               claims:
                                 claim:
@@ -402,7 +402,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max-sex
                               claims:
                                 claim:
@@ -448,7 +448,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -473,7 +473,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-OG
                               claims:
                                 claim:
@@ -519,7 +519,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -549,7 +549,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max
                               claims:
                                 claim:
@@ -600,7 +600,7 @@ class TestValueMatching {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:

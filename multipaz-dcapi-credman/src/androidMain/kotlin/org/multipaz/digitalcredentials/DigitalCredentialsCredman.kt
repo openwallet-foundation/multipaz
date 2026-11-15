@@ -49,7 +49,11 @@ import org.multipaz.document.androidCredmanTitle
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
@@ -188,7 +192,9 @@ internal suspend fun calculateCredentialDatabase(
         putCborArray("credentials") {
             val documents = documentStore.listDocuments(sort = true)
             for (document in documents) {
-                val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential }
+                val certifiedCreds = document.getCertifiedCredentials()
+                val mdocCredential = certifiedCreds.find { it is KeyBoundMdocCredential }
+                    ?: certifiedCreds.find { it is KeylessMdocCredential }
                 if (mdocCredential != null) {
                     add(exportMdocCredential(
                         appName = appName,
@@ -197,7 +203,8 @@ internal suspend fun calculateCredentialDatabase(
                         documentTypeRepository = documentTypeRepository
                     ))
                 }
-                val sdJwtVcCredential = document.getCertifiedCredentials().find { it is SdJwtVcCredential }
+                val sdJwtVcCredential = certifiedCreds.find { it is KeyBoundSdJwtVcCredential }
+                    ?: certifiedCreds.find { it is KeylessSdJwtVcCredential }
                 if (sdJwtVcCredential != null) {
                     add(exportSdJwtVcCredential(
                         appName = appName,
@@ -245,6 +252,7 @@ private suspend fun exportMdocCredential(
         putCborMap("mdoc") {
             put("documentId", document.identifier)
             put("docType", credential.docType)
+            put("keyBound", credential is KeyBoundMdocCredential)
             if (issuerIdentifiers.isNotEmpty()) {
                 putCborArray("issuerIdentifiers") {
                     issuerIdentifiers.forEach { add(it) }
@@ -266,13 +274,14 @@ private suspend fun exportMdocCredential(
                 }
             } else {
                 val claims = try {
-                    credential.getClaims(documentTypeRepository)
+                    credential.getClaimsImpl(documentTypeRepository)
                 } catch (err: IllegalStateException) {
+                    val cred = credential as Credential
                     Logger.e(TAG,
-                        "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
+                        "Error reading claims: '${cred.document.identifier}.${cred.identifier}'", err)
                     emptyList()
                 }
-                val peData = credential.document.portraitEquivalenceData ?: credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
+                val peData = document.portraitEquivalenceData ?: credentialType?.mdocDocumentType?.supportsPortraitImageEquivalence
                 val hasPortrait = peData != null && claims.any {
                     it.namespaceName == peData.namespace && it.dataElementName == peData.dataElementName
                 }
@@ -368,6 +377,7 @@ private suspend fun exportSdJwtVcCredential(
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)
+            put("keyBound", credential is KeyBoundSdJwtVcCredential)
             if (credential.otherVcts.isNotEmpty()) {
                 putCborArray("otherVcts") {
                     credential.otherVcts.forEach { add(it) }

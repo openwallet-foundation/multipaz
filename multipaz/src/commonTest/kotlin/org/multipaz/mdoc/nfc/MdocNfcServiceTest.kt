@@ -46,6 +46,7 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -1262,7 +1263,7 @@ class MdocNfcServiceTest {
         val dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
 
         val document = documentStore.createDocument(displayName = "Test mDL")
-        val mdocCredential = MdocCredential.create(
+        val mdocCredential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",

@@ -64,6 +64,8 @@ struct Credential {
 
     bool omitClaims = false;
 
+    bool keyBound = true;
+
     // Maps from claimName to displayName when omitClaims is true.
     std::map<std::string, std::string> claimDisplayNames;
 
@@ -94,7 +96,8 @@ struct Credential {
         bool supportsPortraitImageEquivalence_ = false,
         bool omitClaims_ = false,
         std::map<std::string, std::string> claimDisplayNames_ = {},
-        std::string noClaimsRequestedText_ = ""
+        std::string noClaimsRequestedText_ = "",
+        bool keyBound_ = true
     ) : title(std::move(title_)),
         subtitle(std::move(subtitle_)),
         bitmap(std::move(bitmap_)),
@@ -110,6 +113,7 @@ struct Credential {
         claims(std::move(claims_)),
         supportsPortraitImageEquivalence(supportsPortraitImageEquivalence_),
         omitClaims(omitClaims_),
+        keyBound(keyBound_),
         claimDisplayNames(std::move(claimDisplayNames_)),
         noClaimsRequestedText(std::move(noClaimsRequestedText_)) {}
 

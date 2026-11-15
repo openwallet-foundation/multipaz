@@ -1,7 +1,8 @@
 package org.multipaz.credential
 
 import org.multipaz.document.Document
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 
@@ -9,9 +10,9 @@ import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
  * Builder for [CredentialLoader].
  *
  * The [CredentialLoaderBuilder] is initially empty. In most cases, well-known [Credential]
- * implementations should be added using [addMdocCredential], [addKeyBoundSdJwtVcCredential] and
- * [addKeylessSdJwtVcCredential] methods. Additionally, applications may add their own
- * [Credential] implementations.
+ * implementations should be added using [addKeyBoundMdocCredential], [addKeylessMdocCredential],
+ * [addKeyBoundSdJwtVcCredential], and [addKeylessSdJwtVcCredential] methods. Additionally,
+ * applications may add their own [Credential] implementations.
  */
 internal class CredentialLoaderBuilder {
     private val createCredentialFunctions:
@@ -34,12 +35,26 @@ internal class CredentialLoaderBuilder {
     }
 
     /**
-     * Adds [MdocCredential] implementation to the loader.
+     * Adds [KeyBoundMdocCredential] implementation (and its legacy `"MdocCredential"` type alias) to the loader.
      */
-    fun addMdocCredential() {
+    fun addKeyBoundMdocCredential() {
         addCredentialImplementation(
-            credentialType = MdocCredential.CREDENTIAL_TYPE,
-            createCredentialFunction = { document -> MdocCredential(document) }
+            credentialType = KeyBoundMdocCredential.CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> KeyBoundMdocCredential(document) }
+        )
+        addCredentialImplementation(
+            credentialType = KeyBoundMdocCredential.LEGACY_CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> KeyBoundMdocCredential(document) }
+        )
+    }
+
+    /**
+     * Adds [KeylessMdocCredential] implementation to the loader.
+     */
+    fun addKeylessMdocCredential() {
+        addCredentialImplementation(
+            credentialType = KeylessMdocCredential.CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> KeylessMdocCredential(document) }
         )
     }
 

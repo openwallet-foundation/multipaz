@@ -17,7 +17,9 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -31,6 +33,8 @@ import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
@@ -38,6 +42,7 @@ import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.OtherDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
@@ -45,18 +50,24 @@ import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.presentment.mdocPresentment
+import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibDeflate
 import org.multipaz.utopia.knowntypes.PingTransaction
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
@@ -87,10 +98,31 @@ class VerificationSessionTest {
 
     private suspend fun setup() {
         harness.initialize()
+        harness.documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
         harness.provisionStandardDocuments(
             keyAuthorizedNamespaces = listOf(
                 ISO_18013_TRANSACTION_DATA_NAMESPACE,
                 PingTransaction.openId4VpMdocResponseNamespace,
+            )
+        )
+        harness.provisionKeylessMdoc(
+            displayName = "Movie Ticket Mdoc",
+            docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+            data = mapOf(
+                UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to listOf(
+                    "ticket_id" to Tstr("987654321"),
+                    "movie" to Tstr("The Last Utopian"),
+                    "cinema" to Tstr("Utopia Cinema"),
+                )
+            )
+        )
+        harness.provisionKeylessSdJwtVc(
+            displayName = "Movie Ticket SD-JWT",
+            vct = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+            data = listOf(
+                "ticket_id" to JsonPrimitive("987654321"),
+                "movie" to JsonPrimitive("The Last Utopian"),
+                "cinema" to JsonPrimitive("Utopia Cinema"),
             )
         )
 
@@ -1147,6 +1179,410 @@ class VerificationSessionTest {
         }
     }
 
+    private suspend fun assertVerifiedKeylessMovieTicketMdoc(record: PresentmentRecord) {
+        val presentations = record.verify(
+            documentTypeRepository = harness.documentTypeRepository
+        )
+        assertEquals(1, presentations.size)
+        val mdoc = assertIs<MdocVerifiedPresentation>(presentations[0])
+        assertFalse(mdoc.holderBound)
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, mdoc.docType)
+        assertTrue(mdoc.deviceSignedClaims.isEmpty())
+
+        val claims = mdoc.issuerSignedClaims.associate { it.dataElementName to it.value }
+        assertEquals("987654321", claims["ticket_id"]!!.asTstr)
+        assertEquals("The Last Utopian", claims["movie"]!!.asTstr)
+
+        assertEquals(
+            harness.dsKey.publicKey,
+            mdoc.documentSignerCertChain.certificates.first().ecPublicKey
+        )
+
+        val processed = DcqlProcessedResponse(MOVIE_TICKET_MDOC_KEYLESS_DCQL, presentations)
+        val ticketCred = assertNotNull(processed.credentials["ticket"])
+        assertEquals("987654321", ticketCred.issuerSignedClaims["ticket_id"]!!.render())
+        assertEquals("The Last Utopian", ticketCred.issuerSignedClaims["movie"]!!.render())
+    }
+
+    private suspend fun assertVerifiedKeylessMovieTicketSdJwt(record: PresentmentRecord) {
+        val presentations = record.verify(
+            documentTypeRepository = harness.documentTypeRepository
+        )
+        assertEquals(1, presentations.size)
+        val ticket = assertIs<JsonVerifiedPresentation>(presentations[0])
+        assertFalse(ticket.holderBound)
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_VCT, ticket.vct)
+        assertTrue(ticket.deviceSignedClaims.isEmpty())
+
+        val claims = ticket.issuerSignedClaims.associate {
+            it.claimPath.last().jsonPrimitive.content to it.value
+        }
+        assertEquals("987654321", claims["ticket_id"]!!.jsonPrimitive.content)
+        assertEquals("The Last Utopian", claims["movie"]!!.jsonPrimitive.content)
+
+        assertEquals(
+            harness.dsKey.publicKey,
+            ticket.documentSignerCertChain.certificates.first().ecPublicKey
+        )
+
+        val processed = DcqlProcessedResponse(MOVIE_TICKET_SDJWT_KEYLESS_DCQL, presentations)
+        val ticketCred = assertNotNull(processed.credentials["ticket"])
+        assertEquals("987654321", ticketCred.issuerSignedClaims["ticket_id"]!!.render())
+        assertEquals("The Last Utopian", ticketCred.issuerSignedClaims["movie"]!!.render())
+    }
+
+    @Test
+    fun testKeylessMdocAcrossAllTransports() = runTest {
+        setup()
+
+        // 1. OpenID4VP URI scheme
+        val uriNonce = ByteString(Random.nextBytes(18))
+        val uriRecord = openID4VPUriSchemeRoundTrip(
+            dcql = MOVIE_TICKET_MDOC_KEYLESS_DCQL,
+            transactionData = emptyList(),
+            nonce = uriNonce,
+        )
+        assertVerifiedKeylessMovieTicketMdoc(uriRecord)
+
+        // 2. DC API OpenID4VP (openid4vp-v1-signed)
+        val dcOpenIdNonce = ByteString(Random.nextBytes(18))
+        val dcOpenIdSession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
+            dcql = MOVIE_TICKET_MDOC_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            origin = ORIGIN,
+            nonce = dcOpenIdNonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+        val dcOpenIdResponse = walletDcApiResponse(dcOpenIdSession, protocolName = "openid4vp-v1-signed")
+        val dcOpenIdRecord = dcOpenIdSession.processDcResponse(dcOpenIdResponse)
+        dcOpenIdRecord.verifyNonce(dcOpenIdNonce)
+        assertVerifiedKeylessMovieTicketMdoc(dcOpenIdRecord)
+
+        // 3. DC API ISO 18013-7 Annex C (org-iso-mdoc)
+        val dcIsoNonce = ByteString(Random.nextBytes(18))
+        val dcIsoSession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
+            dcql = MOVIE_TICKET_MDOC_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            origin = ORIGIN,
+            nonce = dcIsoNonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+        val dcIsoResponse = walletDcApiResponse(dcIsoSession, protocolName = "org-iso-mdoc")
+        val dcIsoRecord = dcIsoSession.processDcResponse(dcIsoResponse)
+        dcIsoRecord.verifyNonce(dcIsoNonce)
+        assertVerifiedKeylessMovieTicketMdoc(dcIsoRecord)
+
+        // 4. ISO 18013-5 Proximity
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = ByteString(
+            Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem())
+        )
+        val proximitySession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
+            dcql = MOVIE_TICKET_MDOC_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            documentTypeRepository = harness.documentTypeRepository,
+            deviceEngagement = deviceEngagement,
+            handover = Simple.NULL,
+            eReaderKey = eReaderKey,
+        )
+        val proximityRequest = proximitySession.find<VerificationSession.Iso18013ProximityRequest>()
+        val parsedRequest = DeviceRequest.fromDataItem(proximityRequest.deviceRequest)
+        parsedRequest.verifyReaderAuthentication(proximityRequest.sessionTranscript)
+        val mdocResponse = mdocPresentment(
+            deviceRequest = parsedRequest,
+            eReaderKey = eReaderKey.publicKey,
+            sessionTranscript = proximityRequest.sessionTranscript,
+            source = harness.presentmentSource,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = null,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {},
+        )
+        val proximityRecord = proximitySession.processIso18013ProximityResponse(
+            deviceResponse = mdocResponse.deviceResponse.toDataItem()
+        )
+        assertVerifiedKeylessMovieTicketMdoc(proximityRecord)
+    }
+
+    @Test
+    fun testKeylessSdJwtAcrossAllTransports() = runTest {
+        setup()
+
+        // 1. OpenID4VP URI scheme
+        val uriNonce = ByteString(Random.nextBytes(18))
+        val uriRecord = openID4VPUriSchemeRoundTrip(
+            dcql = MOVIE_TICKET_SDJWT_KEYLESS_DCQL,
+            transactionData = emptyList(),
+            nonce = uriNonce,
+        )
+        assertVerifiedKeylessMovieTicketSdJwt(uriRecord)
+
+        // 2. DC API OpenID4VP (openid4vp-v1-signed)
+        val dcOpenIdNonce = ByteString(Random.nextBytes(18))
+        val dcOpenIdSession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
+            dcql = MOVIE_TICKET_SDJWT_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            origin = ORIGIN,
+            nonce = dcOpenIdNonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+        val dcOpenIdResponse = walletDcApiResponse(dcOpenIdSession, protocolName = "openid4vp-v1-signed")
+        val dcOpenIdRecord = dcOpenIdSession.processDcResponse(dcOpenIdResponse)
+        dcOpenIdRecord.verifyNonce(dcOpenIdNonce)
+        assertVerifiedKeylessMovieTicketSdJwt(dcOpenIdRecord)
+
+        // 3. DC API ISO 18013-7 Annex C (org-iso-mdoc)
+        val dcIsoNonce = ByteString(Random.nextBytes(18))
+        val dcIsoSession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
+            dcql = MOVIE_TICKET_SDJWT_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            origin = ORIGIN,
+            nonce = dcIsoNonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+        val dcIsoResponse = walletDcApiResponse(dcIsoSession, protocolName = "org-iso-mdoc")
+        val dcIsoRecord = dcIsoSession.processDcResponse(dcIsoResponse)
+        dcIsoRecord.verifyNonce(dcIsoNonce)
+        assertVerifiedKeylessMovieTicketSdJwt(dcIsoRecord)
+
+        // 4. ISO 18013-5 Proximity
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceEngagement = ByteString(
+            Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {}.toDataItem())
+        )
+        val proximitySession = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
+            dcql = MOVIE_TICKET_SDJWT_KEYLESS_DCQL,
+            verifierIdentities = listOf(readerIdentity),
+            documentTypeRepository = harness.documentTypeRepository,
+            deviceEngagement = deviceEngagement,
+            handover = Simple.NULL,
+            eReaderKey = eReaderKey,
+        )
+        val proximityRequest = proximitySession.find<VerificationSession.Iso18013ProximityRequest>()
+        val parsedRequest = DeviceRequest.fromDataItem(proximityRequest.deviceRequest)
+        parsedRequest.verifyReaderAuthentication(proximityRequest.sessionTranscript)
+        val mdocResponse = mdocPresentment(
+            deviceRequest = parsedRequest,
+            eReaderKey = eReaderKey.publicKey,
+            sessionTranscript = proximityRequest.sessionTranscript,
+            source = harness.presentmentSource,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = null,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {},
+        )
+        val proximityRecord = proximitySession.processIso18013ProximityResponse(
+            deviceResponse = mdocResponse.deviceResponse.toDataItem()
+        )
+        assertVerifiedKeylessMovieTicketSdJwt(proximityRecord)
+    }
+
+    @Test
+    fun testKeylessHolderBindingEnforcementAndMdocAntiStripping() = runTest {
+        setup()
+        val now = Clock.System.now()
+        val nonce = "test-nonce-keyless-enforcement"
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(7, 8, 9))
+        }
+
+        // 1. Keyless SD-JWT must be rejected when require_cryptographic_holder_binding is omitted or true
+        val keylessSdJwt = SdJwt.create(
+            issuerKey = harness.dsKey,
+            kbKey = null,
+            claims = buildJsonObject { put("ticket_id", "987654321") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example")
+                put("vct", UtopiaMovieTicket.MOVIE_TICKET_VCT)
+                put("nbf", (now - 1.days).epochSeconds)
+            },
+            creationTime = now - 1.days,
+            expiresIn = 11.days,
+        ).compactSerialization
+
+        fun buildSdJwtRequest(extraFields: String = ""): String = """
+            {
+              "client_id": "$CLIENT_ID",
+              "nonce": "$nonce",
+              "response_uri": "https://$DNS_NAME/post",
+              "dcql_query": {
+                "credentials": [{
+                  "id": "ticket",
+                  "format": "dc+sd-jwt",
+                  "meta": { "vct_values": ["${UtopiaMovieTicket.MOVIE_TICKET_VCT}"] },
+                  "claims": [{ "path": ["ticket_id"] }]
+                  $extraFields
+                }]
+              }
+            }
+        """.trimIndent()
+
+        // Default (omitted -> true) and explicit true reject keyless SD-JWT
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("ticket") { add(keylessSdJwt) } }.toString(),
+                vpRequest = buildSdJwtRequest(),
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("ticket") { add(keylessSdJwt) } }.toString(),
+                vpRequest = buildSdJwtRequest(""", "require_cryptographic_holder_binding": true"""),
+                mdocSessionTranscript = null,
+            ).verify(atTime = now)
+        }
+        // Explicit false accepts keyless SD-JWT
+        val verifiedKeylessSdJwt = OpenID4VPPresentmentRecord(
+            vpToken = buildJsonObject { putJsonArray("ticket") { add(keylessSdJwt) } }.toString(),
+            vpRequest = buildSdJwtRequest(""", "require_cryptographic_holder_binding": false"""),
+            mdocSessionTranscript = null,
+        ).verify(atTime = now)
+        assertFalse(verifiedKeylessSdJwt.single().holderBound)
+
+        // 2. Keyless mdoc must be rejected when require_cryptographic_holder_binding is omitted or true
+        val keylessMdocDoc = harness.documentStore.listDocumentIds()
+            .map { harness.documentStore.lookupDocument(it)!! }
+            .first { it.displayName == "Movie Ticket Mdoc" }
+        val keylessMdocCred = keylessMdocDoc.getCertifiedCredentials().single() as KeylessMdocCredential
+        val keylessMdocResponseB64 = Cbor.encode(
+            buildDeviceResponse(
+                sessionTranscript = sessionTranscript,
+                status = DeviceResponse.STATUS_OK,
+            ) {
+                addDocument(
+                    credential = keylessMdocCred,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                            namespaceName = UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                            dataElementName = "ticket_id",
+                            intentToRetain = false
+                        )
+                    )
+                )
+            }.toDataItem()
+        ).toBase64Url()
+
+        fun buildMdocRequest(docType: String, namespace: String, claim: String, extraFields: String = ""): String = """
+            {
+              "client_id": "$CLIENT_ID",
+              "nonce": "$nonce",
+              "response_uri": "https://$DNS_NAME/post",
+              "dcql_query": {
+                "credentials": [{
+                  "id": "doc",
+                  "format": "mso_mdoc",
+                  "meta": { "doctype_value": "$docType" },
+                  "claims": [{ "path": ["$namespace", "$claim"] }]
+                  $extraFields
+                }]
+              }
+            }
+        """.trimIndent()
+
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("doc") { add(keylessMdocResponseB64) } }.toString(),
+                vpRequest = buildMdocRequest(
+                    UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                    UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                    "ticket_id"
+                ),
+                mdocSessionTranscript = sessionTranscript,
+            ).verify(atTime = now)
+        }
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("doc") { add(keylessMdocResponseB64) } }.toString(),
+                vpRequest = buildMdocRequest(
+                    UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                    UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                    "ticket_id",
+                    """, "require_cryptographic_holder_binding": true"""
+                ),
+                mdocSessionTranscript = sessionTranscript,
+            ).verify(atTime = now)
+        }
+        val verifiedKeylessMdoc = OpenID4VPPresentmentRecord(
+            vpToken = buildJsonObject { putJsonArray("doc") { add(keylessMdocResponseB64) } }.toString(),
+            vpRequest = buildMdocRequest(
+                UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                "ticket_id",
+                """, "require_cryptographic_holder_binding": false"""
+            ),
+            mdocSessionTranscript = sessionTranscript,
+        ).verify(atTime = now)
+        assertFalse(verifiedKeylessMdoc.single().holderBound)
+
+        // 3. Anti-stripping: a key-bound mdoc (MSO contains deviceKeyInfo) with deviceSigned stripped
+        //    must be rejected EVEN when require_cryptographic_holder_binding is false!
+        val keyBoundPhotoIdCred = harness.docPhotoId.getCertifiedCredentials()
+            .filterIsInstance<KeyBoundMdocCredential>()
+            .first()
+        val strippedDocumentItem = buildCborMap {
+            put("docType", PhotoID.PHOTO_ID_DOCTYPE)
+            put("issuerSigned", buildCborMap {
+                put(
+                    "nameSpaces",
+                    keyBoundPhotoIdCred.issuerNamespaces
+                        .filter(
+                            listOf(
+                                MdocRequestedClaim(
+                                    docType = PhotoID.PHOTO_ID_DOCTYPE,
+                                    namespaceName = PhotoID.PHOTO_ID_NAMESPACE,
+                                    dataElementName = "given_name",
+                                    intentToRetain = false
+                                )
+                            )
+                        )
+                        .toDataItem()
+                )
+                put("issuerAuth", keyBoundPhotoIdCred.issuerAuth.toDataItem())
+            })
+            // Intentionally omit "deviceSigned" on a key-bound MSO
+        }
+        val strippedDeviceResponseB64 = Cbor.encode(
+            buildCborMap {
+                put("version", "1.0")
+                put("documents", buildCborArray { add(strippedDocumentItem) })
+                put("status", 0L)
+            }
+        ).toBase64Url()
+
+        assertFailsWith<IllegalStateException> {
+            OpenID4VPPresentmentRecord(
+                vpToken = buildJsonObject { putJsonArray("doc") { add(strippedDeviceResponseB64) } }.toString(),
+                vpRequest = buildMdocRequest(
+                    PhotoID.PHOTO_ID_DOCTYPE,
+                    PhotoID.PHOTO_ID_NAMESPACE,
+                    "given_name",
+                    """, "require_cryptographic_holder_binding": false"""
+                ),
+                mdocSessionTranscript = sessionTranscript,
+            ).verify(atTime = now)
+        }
+    }
+
     private companion object {
         const val ORIGIN = "https://verifier.multipaz.org"
         const val DNS_NAME = "verifier.multipaz.org"
@@ -1178,6 +1614,36 @@ class VerificationSessionTest {
                     { "path": ["given_name"] },
                     { "path": ["family_name"] },
                     { "path": ["place_of_birth", "country"] }
+                  ]
+              }]
+            }
+        """.trimIndent()
+
+        val MOVIE_TICKET_MDOC_KEYLESS_DCQL = """
+            {
+              "credentials": [{
+                  "id": "ticket",
+                  "format": "mso_mdoc",
+                  "require_cryptographic_holder_binding": false,
+                  "meta": { "doctype_value": "${UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE}" },
+                  "claims": [
+                    { "path": ["${UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE}", "ticket_id"] },
+                    { "path": ["${UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE}", "movie"] }
+                  ]
+              }]
+            }
+        """.trimIndent()
+
+        val MOVIE_TICKET_SDJWT_KEYLESS_DCQL = """
+            {
+              "credentials": [{
+                  "id": "ticket",
+                  "format": "dc+sd-jwt",
+                  "require_cryptographic_holder_binding": false,
+                  "meta": { "vct_values": [ "${UtopiaMovieTicket.MOVIE_TICKET_VCT}" ] },
+                  "claims": [
+                    { "path": ["ticket_id"] },
+                    { "path": ["movie"] }
                   ]
               }]
             }

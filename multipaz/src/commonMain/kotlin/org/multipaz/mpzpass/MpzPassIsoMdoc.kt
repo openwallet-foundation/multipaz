@@ -11,13 +11,14 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
  * Represents the ISO mDoc specific data within an MpzPass container.
  *
  * @property docType The ISO document type string (e.g., "org.iso.18013.5.1.mDL").
- * @property deviceKeyPrivate The private key corresponding to the DeviceKey mapped in `issuerSigned`.
+ * @property deviceKeyPrivate The private key corresponding to the DeviceKey mapped in `issuerSigned`, or `null` for a
+ *   non-key-bound (keyless) mdoc.
  * @property issuerNamespaces The namespaces containing issuer-signed data items.
  * @property issuerAuth The `CoseSign1` structure authenticating the issuer namespaces.
  */
 data class MpzPassIsoMdoc(
     val docType: String,
-    val deviceKeyPrivate: EcPrivateKey,
+    val deviceKeyPrivate: EcPrivateKey?,
     val issuerNamespaces: IssuerNamespaces,
     val issuerAuth: CoseSign1
 ) {
@@ -28,7 +29,9 @@ data class MpzPassIsoMdoc(
      */
     fun toDataItem() = buildCborMap {
         put("docType", docType)
-        put("deviceKeyPrivate", deviceKeyPrivate.toDataItem())
+        deviceKeyPrivate?.let {
+            put("deviceKeyPrivate", it.toDataItem())
+        }
         putCborMap("issuerSigned") {
             put("nameSpaces", issuerNamespaces.toDataItem())
             put("issuerAuth", issuerAuth.toDataItem())
@@ -46,7 +49,7 @@ data class MpzPassIsoMdoc(
         @Throws(IllegalArgumentException::class)
         fun fromDataItem(dataItem: DataItem): MpzPassIsoMdoc {
             val docType = dataItem["docType"].asTstr
-            val deviceKeyPrivate = dataItem["deviceKeyPrivate"].asCoseKey.ecPrivateKey
+            val deviceKeyPrivate = dataItem.getOrNull("deviceKeyPrivate")?.asCoseKey?.ecPrivateKey
             val issuerSigned = dataItem["issuerSigned"]
             val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1

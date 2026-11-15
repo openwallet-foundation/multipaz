@@ -11,7 +11,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.SecureArea
@@ -152,7 +152,7 @@ class DocumentModelTest {
             .build()
         val store = buildDocumentStore(storage, secureAreaRepository) {}
         val doc = store.createDocument(displayName = "Doc 1")
-        val cred = MdocCredential.create(
+        val cred = KeyBoundMdocCredential.create(
             document = doc,
             asReplacementForIdentifier = null,
             domain = "mdoc",

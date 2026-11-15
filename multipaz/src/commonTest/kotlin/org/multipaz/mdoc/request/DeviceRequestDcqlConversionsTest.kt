@@ -1172,4 +1172,83 @@ class DeviceRequestDcqlConversionsTest {
             DocumentSet.fromDataItem(DocumentSet(listOf(0, 2)).toDataItem())
         )
     }
+
+    @Test
+    fun nonKeyBoundSupportedDcqlRoundTrip() {
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = """
+                {
+                  "credentials": [
+                    {
+                      "id": "movie_mdoc",
+                      "format": "mso_mdoc",
+                      "require_cryptographic_holder_binding": false,
+                      "meta": {
+                        "doctype_value": "org.multipaz.movieticket.1"
+                      },
+                      "claims": [
+                        {"path": ["org.multipaz.movieticket.1", "ticket_id"]}
+                      ]
+                    },
+                    {
+                      "id": "movie_sdjwt",
+                      "format": "dc+sd-jwt",
+                      "require_cryptographic_holder_binding": false,
+                      "meta": {
+                        "vct_values": ["https://utopia.example.com/vct/movieticket"]
+                      },
+                      "claims": [
+                        {"path": ["ticket_id"]}
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        ["movie_mdoc"],
+                        ["movie_sdjwt"]
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent()
+        )
+        assertEquals("1.1", deviceRequest.version)
+        assertEquals(true, deviceRequest.docRequests[0].docRequestInfo?.nonKeyBoundSupported)
+        assertEquals(true, deviceRequest.docRequests[1].docRequestInfo?.nonKeyBoundSupported)
+
+        val roundTrippedDcql = deviceRequest.toDcql()
+        val reParsed = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = roundTrippedDcql.toString()
+        )
+        assertEquals(true, reParsed.docRequests[0].docRequestInfo?.nonKeyBoundSupported)
+        assertEquals(true, reParsed.docRequests[1].docRequestInfo?.nonKeyBoundSupported)
+
+        // ISO/IEC 18013-5 Clause 13.3: mDL must never allow require_cryptographic_holder_binding = false
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequestFromDcql(
+                sessionTranscript = buildCborArray { add("test") },
+                dcqlString = """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "require_cryptographic_holder_binding": false,
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {"path": ["org.iso.18013.5.1", "given_name"]}
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent()
+            )
+        }
+    }
 }

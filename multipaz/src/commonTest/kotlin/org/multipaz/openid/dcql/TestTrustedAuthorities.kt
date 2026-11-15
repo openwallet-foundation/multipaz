@@ -116,7 +116,7 @@ class TestTrustedAuthorities {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: mDL
                               claims:
                                 claim:

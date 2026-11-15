@@ -53,6 +53,7 @@ import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.mdoc.transport.TransportWarning
 import org.multipaz.mdoc.transport.TransportWarningCode
 import org.multipaz.mdoc.transport.createMdocTransports
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.EngagementType
@@ -1712,7 +1713,8 @@ class BleHciTransportTest {
             document: Document,
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
-            credential: Credential?
+            credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? {
             return document.getCertifiedCredentials().firstOrNull()
         }
@@ -1764,7 +1766,7 @@ class BleHciTransportTest {
             displayName = "Annex D mDL",
             typeDisplayName = "Driving License"
         )
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc_key_agreement",

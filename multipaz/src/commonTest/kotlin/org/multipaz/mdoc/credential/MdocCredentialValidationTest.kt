@@ -63,7 +63,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testUncertifiedCredential() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -79,7 +79,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testValidateCandidateDataBeforeCertify() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -145,7 +145,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testDocTypeMismatch() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -198,7 +198,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testDeviceKeyMismatch() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -252,7 +252,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testCorruptedMsoSignature() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -318,7 +318,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testDsCertMissingDigitalSignatureKeyUsage() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -388,7 +388,7 @@ class MdocCredentialValidationTest {
     @Test
     fun testMsoSignedTimestampOutsideDsCertValidity() = runTest {
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -499,7 +499,7 @@ class MdocCredentialValidationTest {
 
         val pidDocType = "eu.europa.ec.eudi.pid.1"
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -574,7 +574,7 @@ class MdocCredentialValidationTest {
         )
 
         val document = documentStore.createDocument()
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -624,5 +624,161 @@ class MdocCredentialValidationTest {
         val result = credential.validate(issuerProvidedData, now = harness.validFrom + 1.days)
         assertTrue(result.hasErrors)
         assertTrue(result.errors.any { it.message.contains("Failed to parse DS certificate") })
+    }
+
+    @Test
+    fun testValidKeylessMdocCredential() = runTest {
+        val document = documentStore.createDocument()
+        val credential = KeylessMdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "mdoc_keyless",
+            docType = "org.multipaz.movieticket.1"
+        )
+        val namespaces = buildIssuerNamespaces {
+            addNamespace("org.multipaz.movieticket.1") {
+                addDataElement("ticket_id", "12345".toDataItem())
+            }
+        }
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = "org.multipaz.movieticket.1",
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = namespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = null
+        )
+        val taggedMso = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(mso.toDataItem()))))
+        val issuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                signingKey = harness.dsKey,
+                message = taggedMso,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to harness.dsKey.certChain.toDataItem()
+                )
+            ).toDataItem()
+        )
+        val candidateData = ByteString(
+            Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", namespaces.toDataItem())
+                    put("issuerAuth", RawCbor(issuerAuth))
+                }
+            )
+        )
+
+        val preCertifyResult = credential.validate(candidateData, now = harness.validFrom + 1.days)
+        assertFalse(preCertifyResult.hasErrors)
+        assertFalse(preCertifyResult.hasWarnings)
+
+        credential.certify(candidateData)
+        val postCertifyResult = credential.validate(now = harness.validFrom + 1.days)
+        assertFalse(postCertifyResult.hasErrors)
+        assertFalse(postCertifyResult.hasWarnings)
+    }
+
+    @Test
+    fun testKeylessAndKeyBoundMsoBindingMismatch() = runTest {
+        val document = documentStore.createDocument()
+        val keylessCredential = KeylessMdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "mdoc_keyless",
+            docType = "org.multipaz.movieticket.1"
+        )
+        val keyBoundCredential = KeyBoundMdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "mdoc",
+            secureArea = secureArea,
+            docType = "org.multipaz.movieticket.1",
+            createKeySettings = SoftwareCreateKeySettings.Builder().build()
+        )
+        val namespaces = buildIssuerNamespaces {
+            addNamespace("org.multipaz.movieticket.1") {
+                addDataElement("ticket_id", "12345".toDataItem())
+            }
+        }
+
+        // Key-bound MSO validated against KeylessMdocCredential -> must error
+        val keyBoundMso = MobileSecurityObject(
+            version = "1.0",
+            docType = "org.multipaz.movieticket.1",
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = namespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = keyBoundCredential.getAttestation().ecPublicKey
+        )
+        val keyBoundIssuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                signingKey = harness.dsKey,
+                message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(keyBoundMso.toDataItem())))),
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to harness.dsKey.certChain.toDataItem()
+                )
+            ).toDataItem()
+        )
+        val keyBoundData = ByteString(
+            Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", namespaces.toDataItem())
+                    put("issuerAuth", RawCbor(keyBoundIssuerAuth))
+                }
+            )
+        )
+        val keylessMismatchResult = keylessCredential.validate(keyBoundData, now = harness.validFrom + 1.days)
+        assertTrue(keylessMismatchResult.hasErrors)
+        assertTrue(keylessMismatchResult.errors.any { it.message.contains("unexpected 'deviceKeyInfo' in MSO") })
+
+        // Keyless MSO validated against KeyBoundMdocCredential -> must error
+        val keylessMso = MobileSecurityObject(
+            version = "1.0",
+            docType = "org.multipaz.movieticket.1",
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = namespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = null
+        )
+        val keylessIssuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                signingKey = harness.dsKey,
+                message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(keylessMso.toDataItem())))),
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to harness.dsKey.certChain.toDataItem()
+                )
+            ).toDataItem()
+        )
+        val keylessData = ByteString(
+            Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", namespaces.toDataItem())
+                    put("issuerAuth", RawCbor(keylessIssuerAuth))
+                }
+            )
+        )
+        val keyBoundMismatchResult = keyBoundCredential.validate(keylessData, now = harness.validFrom + 1.days)
+        assertTrue(keyBoundMismatchResult.hasErrors)
+        assertTrue(keyBoundMismatchResult.errors.any { it.message.contains("missing 'deviceKeyInfo' in MSO") })
     }
 }

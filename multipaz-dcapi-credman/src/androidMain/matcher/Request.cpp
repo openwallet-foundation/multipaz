@@ -224,6 +224,10 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         std::map<std::string, std::vector<std::string>> dataElementIdentifierMapping;
         std::vector<std::vector<uint8_t>> issuerIdentifiers;
         bool multiple = false;
+        bool hasZkRequest = false;
+        bool zkRequired = false;
+        bool nonKeyBoundSupported = false;
+        bool hasTransactionData = nameSpacesMap->get("org.iso.transactiondata") != nullptr;
 
         const auto& requestInfoItem = itemsRequestMap->get("requestInfo");
         if (requestInfoItem) {
@@ -241,6 +245,25 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                     const auto& uniqueDocSetRequiredItem = riMap->get("uniqueDocSetRequired");
                     if (uniqueDocSetRequiredItem && uniqueDocSetRequiredItem->asBool()) {
                         multiple = !uniqueDocSetRequiredItem->asBool()->value();
+                    }
+
+                    const auto& nkbsItem = riMap->get("nonKeyBoundSupported");
+                    if (nkbsItem && nkbsItem->asBool() && nkbsItem->asBool()->value()) {
+                        nonKeyBoundSupported = true;
+                    }
+
+                    const auto& zkReqItem = riMap->get("zkRequest");
+                    if (zkReqItem && zkReqItem->asMap()) {
+                        hasZkRequest = true;
+                        const auto& zkReqFlag = zkReqItem->asMap()->get("zkRequired");
+                        if (zkReqFlag && zkReqFlag->asBool() && zkReqFlag->asBool()->value()) {
+                            zkRequired = true;
+                        }
+                    }
+
+                    const auto& txDataItem = riMap->get("transactionData");
+                    if (txDataItem && txDataItem->asMap() && txDataItem->asMap()->size() > 0) {
+                        hasTransactionData = true;
                     }
                 }
 
@@ -442,8 +465,13 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
             format = "dc+sd-jwt";
             vctValues.push_back(docType);
         } else {
+            if (zkRequired) {
+                format = "mso_mdoc_zk";
+            }
             mdocDocType = docType;
         }
+
+        bool requireCryptographicHolderBinding = isVersion10 || !nonKeyBoundSupported || hasZkRequest;
 
         credentialQueries.push_back(DcqlCredentialQuery(
                 credId,
@@ -455,7 +483,9 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 dcqlClaims,
                 claimSets,
                 isVersion10,
-                multiple
+                multiple,
+                requireCryptographicHolderBinding,
+                hasTransactionData
         ));
     }
 
@@ -646,6 +676,33 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
     if (!readerAuthAkis.empty()) {
         for (auto& cq : dcqlQuery.dcqlCredentialQueries) {
             cq.readerAuthAkis = readerAuthAkis;
+        }
+    }
+    cJSON* txDataArr = cJSON_GetObjectItem(dataJson, "transaction_data");
+    if (txDataArr && cJSON_IsArray(txDataArr)) {
+        cJSON* txEntry;
+        cJSON_ArrayForEach(txEntry, txDataArr) {
+            if (cJSON_IsString(txEntry)) {
+                std::string txJsonStr = base64UrlDecode(cJSON_GetStringValue(txEntry));
+                cJSON* txJson = cJSON_Parse(txJsonStr.c_str());
+                if (txJson) {
+                    cJSON* credIds = cJSON_GetObjectItem(txJson, "credential_ids");
+                    if (credIds && cJSON_IsArray(credIds)) {
+                        cJSON* cid;
+                        cJSON_ArrayForEach(cid, credIds) {
+                            if (cJSON_IsString(cid)) {
+                                std::string cidStr = cJSON_GetStringValue(cid);
+                                for (auto& cq : dcqlQuery.dcqlCredentialQueries) {
+                                    if (cq.id == cidStr) {
+                                        cq.hasTransactionData = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    cJSON_Delete(txJson);
+                }
+            }
         }
     }
     // dcqlQuery.log();

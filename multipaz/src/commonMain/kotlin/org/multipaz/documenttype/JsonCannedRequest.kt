@@ -17,10 +17,12 @@ import kotlin.collections.iterator
  *
  * @param vct the verifiable credential type.
  * @param claimsToRequest the claims to request.
+ * @param keyBound `true` if the document type uses cryptographic holder binding, `false` if keyless.
  */
 data class JsonCannedRequest(
     val vct: String,
-    val claimsToRequest: List<DocumentAttribute>
+    val claimsToRequest: List<DocumentAttribute>,
+    val keyBound: Boolean = true,
 ) {
     /**
      * Generates DCQL for the request.
@@ -32,6 +34,9 @@ data class JsonCannedRequest(
             addJsonObject {
                 put("id", JsonPrimitive("cred1"))
                 put("format", JsonPrimitive("dc+sd-jwt"))
+                if (!keyBound) {
+                    put("require_cryptographic_holder_binding", JsonPrimitive(false))
+                }
                 putJsonObject("meta") {
                     put(
                         "vct_values",

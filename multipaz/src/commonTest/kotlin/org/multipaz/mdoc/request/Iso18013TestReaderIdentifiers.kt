@@ -264,7 +264,7 @@ class Iso18013TestReaderIdentifiers {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Restricted
                               claims:
                                 claim:

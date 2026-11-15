@@ -131,7 +131,9 @@ data class DeviceResponse internal constructor(
             )
         }
         documents_.forEach { document ->
+            val requireHolderBinding: Boolean
             val transactionData = if (deviceRequest == null) {
+                requireHolderBinding = true
                 emptyList()
             } else {
                 val explicitIds = document.docRequestIds
@@ -142,8 +144,10 @@ data class DeviceResponse internal constructor(
                     for (id in explicitIds) {
                         val req = deviceRequest.docRequests.getOrNull(id)
                             ?: throw IllegalStateException("Invalid docRequestId $id in MdocDocument")
-                        validateMdocAgainstDocRequest(document, id, req)
+                        validateMdocAgainstDocRequest(document, id, req, deviceRequest)
                     }
+                    requireHolderBinding = explicitIds.isEmpty() ||
+                        explicitIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                     if (documentTypeRepository == null) {
                         emptyList()
                     } else {
@@ -172,6 +176,7 @@ data class DeviceResponse internal constructor(
                             "Document certificate chain does not match requested issuerIdentifiers for docType '${document.docType}'"
                         )
                     }
+                    requireHolderBinding = !deviceRequest.docRequests[docRequestId].allowsKeyless(deviceRequest)
                     if (documentTypeRepository == null) {
                         emptyList()
                     } else {
@@ -190,6 +195,7 @@ data class DeviceResponse internal constructor(
                 transactionData = transactionData,
                 atTime = atTime,
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+                requireHolderBinding = requireHolderBinding,
             )
         }
         if (deviceRequest != null) {
@@ -261,15 +267,16 @@ data class DeviceResponse internal constructor(
                 }
                 val expectedAudience: String?
                 val transactionData: List<TransactionData<*>>
+                val requireHolderBinding = explicitIds.isEmpty() ||
+                    explicitIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 if (otherDocument.docFormat == "dc+sd-jwt") {
-                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                        otherDocument.data.toByteArray().zlibInflate().decodeToString()
-                    )
-                    val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
+                    val (sdJwt, sdJwtKb) = otherDocument.parseSdJwtPresentation()
+                    val vct = (sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
                         ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
                     for (id in explicitIds) {
                         validateSdJwtAgainstDocRequest(
-                            sdJwtKb = sdJwtKb,
+                            sdJwt = sdJwt,
+                            isKeyless = sdJwtKb == null,
                             vct = vct,
                             reqId = id,
                             docRequest = deviceRequest.docRequests[id],
@@ -277,22 +284,28 @@ data class DeviceResponse internal constructor(
                             documentTypeRepository = documentTypeRepository
                         )
                     }
-                    val audiences = explicitIds.map { id ->
-                        deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[id])
-                    }.distinct()
-                    if (audiences.size != 1) {
-                        throw IllegalStateException("Inconsistent expected audiences across docRequestIds $explicitIds")
+                    if (sdJwtKb != null) {
+                        val audiences = explicitIds.map { id ->
+                            deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[id])
+                        }.distinct()
+                        if (audiences.size != 1) {
+                            throw IllegalStateException("Inconsistent expected audiences across docRequestIds $explicitIds")
+                        }
+                        expectedAudience = audiences.single()
+                    } else {
+                        expectedAudience = null
                     }
-                    expectedAudience = audiences.single()
                     transactionData = if (documentTypeRepository == null) {
                         emptyList()
                     } else {
-                        validateSignedSdJwtTransactionDocRequestIds(
-                            sdJwtKb = sdJwtKb,
-                            allowedIds = explicitIds,
-                            deviceRequest = deviceRequest,
-                            documentTypeRepository = documentTypeRepository
-                        )
+                        if (sdJwtKb != null) {
+                            validateSignedSdJwtTransactionDocRequestIds(
+                                sdJwtKb = sdJwtKb,
+                                allowedIds = explicitIds,
+                                deviceRequest = deviceRequest,
+                                documentTypeRepository = documentTypeRepository
+                            )
+                        }
                         resolveEncryptedSdJwtTransactions(
                             otherDocument = otherDocument,
                             reqIds = explicitIds,
@@ -309,7 +322,8 @@ data class DeviceResponse internal constructor(
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    expectedAudience = expectedAudience
+                    expectedAudience = expectedAudience,
+                    requireHolderBinding = requireHolderBinding,
                 )
             } else {
                 val docRequestId = if (deviceRequest == null) {
@@ -325,6 +339,9 @@ data class DeviceResponse internal constructor(
                 if (deviceRequest != null && docRequest == null && deviceRequest.docRequests.any { it.hasTransactionData() }) {
                     throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
                 }
+                val requireHolderBinding = deviceRequest == null ||
+                    docRequest == null ||
+                    !docRequest.allowsKeyless(deviceRequest)
                 val transactionData = if (docRequest == null || documentTypeRepository == null) {
                     emptyList()
                 } else {
@@ -341,13 +358,12 @@ data class DeviceResponse internal constructor(
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    expectedAudience = expectedAudience
+                    expectedAudience = expectedAudience,
+                    requireHolderBinding = requireHolderBinding,
                 )
                 if (docRequest != null && otherDocument.docFormat == "dc+sd-jwt") {
-                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                        otherDocument.data.toByteArray().zlibInflate().decodeToString()
-                    )
-                    if (!matchesSdJwtIssuerIdentifiers(sdJwtKb, docRequest)) {
+                    val (sdJwt, _) = otherDocument.parseSdJwtPresentation()
+                    if (!matchesSdJwtIssuerIdentifiers(sdJwt, docRequest)) {
                         throw IllegalStateException(
                             "OtherDocument certificate chain does not match requested issuerIdentifiers"
                         )
@@ -370,6 +386,7 @@ data class DeviceResponse internal constructor(
      *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
      *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
      *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
+     * @param requireHolderBinding if true (the default), rejects non-key-bound documents that omit `deviceSigned`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verifySingleDoc(
@@ -377,6 +394,7 @@ data class DeviceResponse internal constructor(
         transactionData: List<TransactionData<*>>,
         atTime: Instant = Clock.System.now(),
         rejectIfValidUntilAfterNotAfter: Boolean = false,
+        requireHolderBinding: Boolean = true,
     ) {
         if (otherDocuments.isNotEmpty() || encryptedDocuments.isNotEmpty()) {
             throw IllegalStateException("Not a single-document DeviceResponse")
@@ -389,6 +407,7 @@ data class DeviceResponse internal constructor(
                 transactionData = transactionData,
                 atTime = atTime,
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+                requireHolderBinding = requireHolderBinding,
             )
         } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
             if (transactionData.isNotEmpty()) {
@@ -487,7 +506,9 @@ data class DeviceResponse internal constructor(
         }
         val matchingIndices = deviceRequest.docRequests.indices.filter { index ->
             val req = deviceRequest.docRequests[index]
-            req.docType == doc.docType && (req.docRequestInfo?.docFormat ?: "mso_mdoc") == "mso_mdoc"
+            req.docType == doc.docType &&
+                (req.docRequestInfo?.docFormat ?: "mso_mdoc") == "mso_mdoc" &&
+                (doc.deviceAuth != null || req.allowsKeyless(deviceRequest))
         }
         if (matchingIndices.size == 1) {
             return matchingIndices.single()
@@ -506,11 +527,9 @@ data class DeviceResponse internal constructor(
         if (doc.docFormat != "dc+sd-jwt") {
             return -1
         }
-        val sdJwtKb = SdJwtKb.fromCompactSerialization(
-            compactSerialization = doc.data.toByteArray().zlibInflate().decodeToString()
-        )
-        val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content ?: return -1
-        if (documentTypeRepository != null) {
+        val (sdJwt, sdJwtKb) = doc.parseSdJwtPresentation()
+        val vct = (sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content ?: return -1
+        if (documentTypeRepository != null && sdJwtKb != null) {
             var docRequestId: Int? = null
             val presentTransactionIds = mutableListOf<String>()
             val sdJwtBody = sdJwtKb.jwtBody
@@ -557,7 +576,9 @@ data class DeviceResponse internal constructor(
             }
         }
         val sdJwtIndices = deviceRequest.docRequests.indices.filter { index ->
-            deviceRequest.docRequests[index].docRequestInfo?.docFormat == "dc+sd-jwt"
+            val req = deviceRequest.docRequests[index]
+            req.docRequestInfo?.docFormat == "dc+sd-jwt" &&
+                (sdJwtKb != null || req.allowsKeyless(deviceRequest))
         }
         if (sdJwtIndices.isEmpty()) {
             return -1
@@ -581,6 +602,9 @@ data class DeviceResponse internal constructor(
             return candidates.single()
         }
         if (candidates.none { deviceRequest.docRequests[it].hasTransactionData() }) {
+            if (sdJwtKb == null) {
+                return candidates.first()
+            }
             val audiences = candidates.map { index ->
                 deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[index])
             }.distinct()
@@ -745,6 +769,32 @@ data class DeviceResponse internal constructor(
                 issuerNamespaces = issuerNamespaces,
                 deviceNamespaces = deviceNamespaces,
                 deviceKey = deviceKey,
+                errors = errors,
+                docRequestIds = docRequestIds,
+            ))
+        }
+
+        /**
+         * Low-level function to add a non-key-bound [MdocDocument] (without `deviceSigned`) to the response.
+         *
+         * @param docType the type of the document, e.g. `"org.multipaz.movieticket.1"`.
+         * @param issuerAuth the issuer-signed MSO.
+         * @param issuerNamespaces the issuer-signed data elements to return.
+         * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
+         * @return the builder.
+         */
+        fun addKeylessDocument(
+            docType: String,
+            issuerAuth: CoseSign1,
+            issuerNamespaces: IssuerNamespaces,
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
+        ) = apply {
+            documents.add(MdocDocument.fromKeylessNamespaces(
+                docType = docType,
+                issuerAuth = issuerAuth,
+                issuerNamespaces = issuerNamespaces,
                 errors = errors,
                 docRequestIds = docRequestIds,
             ))

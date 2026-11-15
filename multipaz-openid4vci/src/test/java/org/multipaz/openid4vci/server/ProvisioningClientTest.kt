@@ -45,11 +45,14 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredential
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredentialSdJwt
 import org.multipaz.openid4vci.credential.CredentialFactoryMdl
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
+import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaMovieTicket
+import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaMovieTicketMdoc
 import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaNaturalization
 import org.multipaz.openid4vci.request.invalidateIdentifierList
 import org.multipaz.openid4vci.request.invalidateStatusList
@@ -93,8 +96,10 @@ import org.multipaz.trustmanagement.ConfigurableTrustManager
 import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.toBase64Url
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.utopia.knowntypes.UtopiaNaturalization
 import kotlin.IllegalStateException
 import kotlin.reflect.KClass
@@ -159,7 +164,9 @@ class ProvisioningClientTest {
                 CredentialFactoryMdl(),
                 CredentialFactoryUtopiaNaturalization(),
                 CredentialFactoryDigitalPaymentCredential(),
-                CredentialFactoryDigitalPaymentCredentialSdJwt()
+                CredentialFactoryDigitalPaymentCredentialSdJwt(),
+                CredentialFactoryUtopiaMovieTicket(),
+                CredentialFactoryUtopiaMovieTicketMdoc()
             )
         )
         credentalFactoryRegistry.initialize()
@@ -275,6 +282,50 @@ class ProvisioningClientTest {
     }
 
     @Test
+    fun authorizationCodeWithKeylessMovieTicketMdocAndRevocation() {
+        runWithAuthorizationCode(
+            offer = OFFER_MOVIE_TICKET_MDOC,
+            credentialFormat = CredentialFormat.Mdoc(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            keyless = true,
+            extraTests = ::runRevocationTests
+        )
+    }
+
+    @Test
+    fun authorizationCodeWithKeylessMovieTicketSdJwtAndRevocation() {
+        runWithAuthorizationCode(
+            offer = OFFER_MOVIE_TICKET_SD_JWT,
+            credentialFormat = CredentialFormat.SdJwt(UtopiaMovieTicket.MOVIE_TICKET_VCT),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            keyless = true,
+            extraTests = ::runRevocationTests
+        )
+    }
+
+    @Test
+    fun authorizationCodeWithAuthorizationDetailsKeylessMovieTicketMdoc() {
+        runWithAuthorizationCode(
+            offer = OFFER_MOVIE_TICKET_MDOC,
+            credentialFormat = CredentialFormat.Mdoc(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=false"
+            ),
+            keyless = true
+        )
+    }
+
+    @Test
     fun credentialEndpointRejectsMismatchedScopeConfigurationId() {
         Assert.assertThrows(IllegalStateException::class.java) {
             runWithAuthorizationCode(
@@ -311,6 +362,7 @@ class ProvisioningClientTest {
         credentialFormat: CredentialFormat,
         serverArgs: Array<String>,
         overrideCredentialConfigurationId: String? = null,
+        keyless: Boolean = false,
         extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
         val configuration = ServerConfiguration(serverArgs)
@@ -400,36 +452,61 @@ class ProvisioningClientTest {
                 parameterizedRedirectUrl = location
             ))
 
-            // Our test backend does not verify key attestation, so the result can be ignored
-            provisioningClient.getKeyBindingChallenge()
-
             val document = documentStore.createDocument()
             val display = Display("test")
-            val credential = documentProvisioningHandler.getPendingKeyBoundCredentials(
-                document = document,
-                credentialMetadata = CredentialMetadata(
-                    display = display,
-                    format = credentialFormat,
-                    keyBindingType = KeyBindingType.Attestation(Algorithm.ES256),
-                    maxBatchSize = 1
-                ),
-                issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf()),
-                createKeySettings = CreateKeySettings()
-            ).first()
-
-            val credentialData = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
-                listOf(CredentialKeyAttestation(
-                    credentialId = credential.identifier,
-                    keyAttestation = credential.getAttestation()
-                ))))
+            val credential: Credential
+            val credentialData = if (keyless) {
+                credential = documentProvisioningHandler.getPendingKeylessCredentials(
+                    document = document,
+                    credentialMetadata = CredentialMetadata(
+                        display = display,
+                        format = credentialFormat,
+                        keyBindingType = KeyBindingType.Keyless,
+                        maxBatchSize = 1
+                    ),
+                    issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf())
+                ).first()
+                provisioningClient.obtainCredentials(KeyBindingInfo.Keyless)
+            } else {
+                // Our test backend does not verify key attestation, so the result can be ignored
+                provisioningClient.getKeyBindingChallenge()
+                val keyBoundCredential = documentProvisioningHandler.getPendingKeyBoundCredentials(
+                    document = document,
+                    credentialMetadata = CredentialMetadata(
+                        display = display,
+                        format = credentialFormat,
+                        keyBindingType = KeyBindingType.Attestation(Algorithm.ES256),
+                        maxBatchSize = 1
+                    ),
+                    issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf()),
+                    createKeySettings = CreateKeySettings()
+                ).first()
+                credential = keyBoundCredential
+                provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
+                    listOf(CredentialKeyAttestation(
+                        credentialId = keyBoundCredential.identifier,
+                        keyAttestation = keyBoundCredential.getAttestation()
+                    ))))
+            }
 
             Assert.assertEquals(1, credentialData.certifications.size)
-            assertCredentialRequestsCompliant()
+            assertCredentialRequestsCompliant(expectProofs = !keyless)
 
             credential.certify(credentialData.certifications.first().issuerData)
             if (credential is MdocCredential) {
                 // Assert that the IACA root certificate is excluded from x5chain
                 Assert.assertEquals(1, credential.issuerCertChain.certificates.size)
+            }
+            if (keyless) {
+                when (credentialFormat) {
+                    is CredentialFormat.Mdoc -> {
+                        val keylessMdoc = assertIs<KeylessMdocCredential>(credential)
+                        Assert.assertNull(keylessMdoc.mso.deviceKey)
+                    }
+                    is CredentialFormat.SdJwt -> {
+                        assertIs<KeylessSdJwtVcCredential>(credential)
+                    }
+                }
             }
 
             withContext(serverEnvironment.await()) {
@@ -560,7 +637,7 @@ class ProvisioningClientTest {
      * @throws AssertionError if no new credential request was sent, or if a request is not
      *   compliant.
      */
-    private fun assertCredentialRequestsCompliant() {
+    private fun assertCredentialRequestsCompliant(expectProofs: Boolean? = null) {
         val newBodies = credentialRequestBodies.drop(checkedCredentialRequests)
         checkedCredentialRequests = credentialRequestBodies.size
         Assert.assertTrue("No new credential request was recorded", newBodies.isNotEmpty())
@@ -582,6 +659,13 @@ class ProvisioningClientTest {
                 "credential_identifier must not be sent with credential_configuration_id",
                 request.containsKey("credential_identifier")
             )
+            if (expectProofs != null) {
+                Assert.assertEquals(
+                    "Unexpected presence of proofs in credential request",
+                    expectProofs,
+                    request.containsKey("proofs")
+                )
+            }
         }
     }
 
@@ -874,6 +958,8 @@ class ProvisioningClientTest {
         const val OFFER_NATURALIZATION = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22utopia_naturalization%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
         const val OFFER_PAYMENT = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22payment_sca_mdoc%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
         const val OFFER_PAYMENT_SD_JWT = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22payment_sca_sd_jwt%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
+        const val OFFER_MOVIE_TICKET_MDOC = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22utopia_movie_ticket_mdoc%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
+        const val OFFER_MOVIE_TICKET_SD_JWT = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22utopia_movie_ticket_sd_jwt%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
 
         // Credential Request parameters defined in OpenID4VCI 1.0 section 8.2.
         val CREDENTIAL_REQUEST_PARAMETERS = setOf(

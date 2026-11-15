@@ -51,6 +51,8 @@ import org.multipaz.documenttype.Icon
 import org.multipaz.documenttype.MdocPortraitEquivalenceData
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mpzpass.MpzPassClaimMetadata
 import org.multipaz.mpzpass.MpzPassGroupMetadata
@@ -1375,7 +1377,7 @@ class DocumentStoreTest {
         // Verify MdocCredential.getClaims() and SdJwtVcCredential.getClaims() fall back to Document.getDocumentType()
         val emptyRepo = DocumentTypeRepository()
         val mdocClaims = doc.getCredentials().filterIsInstance<MdocCredential>().single()
-            .getClaims(emptyRepo)
+            .getClaimsImpl(emptyRepo)
         val familyNameMdocClaim = mdocClaims.first { it.dataElementName == "family_name" }
         assertEquals("Family Name (OID4VCI)", familyNameMdocClaim.displayName)
         assertEquals("Family Name (OID4VCI)", familyNameMdocClaim.attribute?.displayName)
@@ -1487,7 +1489,7 @@ class DocumentStoreTest {
         harness.initialize()
         harness.provisionStandardDocuments()
 
-        val mdocCred = harness.docMdl.getCertifiedCredentials().filterIsInstance<MdocCredential>().first()
+        val mdocCred = harness.docMdl.getCertifiedCredentials().filterIsInstance<KeyBoundMdocCredential>().first()
         val mdocClaimsWithRepo1 = mdocCred.getClaims(harness.documentTypeRepository)
         val mdocClaimsWithRepo2 = mdocCred.getClaims(harness.documentTypeRepository)
         assertSame(mdocClaimsWithRepo1, mdocClaimsWithRepo2)
@@ -1504,6 +1506,110 @@ class DocumentStoreTest {
         val sdJwtClaimsWithoutRepo = sdJwtCred.getClaims(null)
         assertNotSame(sdJwtClaimsWithRepo1, sdJwtClaimsWithoutRepo)
         assertSame(sdJwtClaimsWithoutRepo, sdJwtCred.getClaims(null))
+    }
+
+    @Test
+    fun testKeylessMdocCredentialPersistenceAndDocumentType() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val storage = EphemeralStorage()
+        val softwareSecureArea = SoftwareSecureArea.create(storage)
+        val secureAreaRepository = SecureAreaRepository.Builder().add(softwareSecureArea).build()
+        val store = buildDocumentStore(storage, secureAreaRepository) {}
+
+        val doc = store.createDocument(
+            displayName = "The Last Utopian",
+            typeDisplayName = "Movie Ticket",
+            openID4VCIClaimDescriptions = listOf(
+                OpenID4VCIClaimDescription(
+                    path = buildJsonArray {
+                        add(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE)
+                        add("ticket_id")
+                    },
+                    display = listOf(OpenID4VCIClaimDisplay("Ticket Number", "en"))
+                )
+            )
+        )
+        val keylessMdoc = UtopiaMovieTicket.getDocumentType().createKeylessMdocCredentialWithSampleData(
+            document = doc,
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "mdoc_keyless"
+        )
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, keylessMdoc.docType)
+        assertEquals(null, keylessMdoc.mso.deviceKey)
+
+        // Document.getDocumentType() synthesizes mdocDocumentType with keyBound = false
+        val synthesizedDocType = doc.getDocumentType()
+        assertNotNull(synthesizedDocType?.mdocDocumentType)
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, synthesizedDocType.mdocDocumentType.docType)
+        assertEquals(false, synthesizedDocType.mdocDocumentType.keyBound)
+
+        // Reopen DocumentStore on the same storage and verify persistence + claim caching
+        val reopenedStore = buildDocumentStore(storage, secureAreaRepository) {}
+        val reloadedDoc = reopenedStore.lookupDocument(doc.identifier)!!
+        val reloadedCred = reloadedDoc.getCertifiedCredentials().single()
+        assertTrue(reloadedCred is KeylessMdocCredential)
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, reloadedCred.docType)
+        assertEquals(null, reloadedCred.mso.deviceKey)
+
+        val claims1 = reloadedCred.getClaims(harness.documentTypeRepository)
+        val claims2 = reloadedCred.getClaims(harness.documentTypeRepository)
+        assertSame(claims1, claims2)
+        assertTrue(claims1.any { it.dataElementName == "ticket_id" })
+    }
+
+    @Test
+    fun testLegacyMdocCredentialTypeLoadsAsKeyBound() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val storage = EphemeralStorage()
+        val softwareSecureArea = SoftwareSecureArea.create(storage)
+        val secureAreaRepository = SecureAreaRepository.Builder().add(softwareSecureArea).build()
+        val store = buildDocumentStore(storage, secureAreaRepository) {}
+
+        val doc = store.createDocument(displayName = "Legacy mDL")
+         val keyBoundCred = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+             document = doc,
+             secureArea = softwareSecureArea,
+             createKeySettings = CreateKeySettings(),
+             dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "mdoc"
+        )
+
+        // Rewrite stored credentialType from "KeyBoundMdocCredential" to legacy "MdocCredential"
+        val credTable = storage.getTable(Credential.credentialTableSpec)
+        val storedBytes = credTable.get(partitionId = doc.identifier, key = keyBoundCred.identifier)!!
+        val decodedMap = Cbor.decode(storedBytes.toByteArray()).asMap
+        val legacyEncoded = Cbor.encode(
+            buildCborMap {
+                for ((k, v) in decodedMap) {
+                    if (k.asTstr == "credentialType") {
+                        put("credentialType", "MdocCredential")
+                    } else {
+                        put(k.asTstr, v)
+                    }
+                }
+            }
+        )
+        credTable.update(
+            partitionId = doc.identifier,
+            key = keyBoundCred.identifier,
+            data = ByteString(legacyEncoded)
+        )
+
+        val reopenedStore = buildDocumentStore(storage, secureAreaRepository) {}
+        val reloadedDoc = reopenedStore.lookupDocument(doc.identifier)!!
+        val reloadedCred = reloadedDoc.getCertifiedCredentials().single()
+        assertTrue(reloadedCred is KeyBoundMdocCredential)
+        assertEquals(DrivingLicense.MDL_DOCTYPE, reloadedCred.docType)
     }
 
     data class TestIssuerData(

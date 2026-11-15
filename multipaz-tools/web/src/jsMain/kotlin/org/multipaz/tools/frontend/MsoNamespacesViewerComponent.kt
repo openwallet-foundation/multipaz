@@ -556,24 +556,29 @@ fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject, rawMsoByte
         }
         div {
             span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; display = Display.block; marginBottom = 6.px }; +"Device Key:" }
-            pre {
-                css {
-                    background = Color("#1e293b")
-                    padding = 12.px
-                    borderRadius = 6.px
-                    overflowX = "auto".unsafeCast<Overflow>()
-                    fontFamily = FontFamily.monospace
-                    fontSize = 13.px
-                    color = Color("#34d399")
-                    margin = 0.px
-                }
-                code {
-                    +try {
-                        Cdn.encode(mso.deviceKey.toCoseKey().toDataItem())
-                    } catch (e: Throwable) {
-                        "Error formatting device key"
+            val deviceKey = mso.deviceKey
+            if (deviceKey != null) {
+                pre {
+                    css {
+                        background = Color("#1e293b")
+                        padding = 12.px
+                        borderRadius = 6.px
+                        overflowX = "auto".unsafeCast<Overflow>()
+                        fontFamily = FontFamily.monospace
+                        fontSize = 13.px
+                        color = Color("#34d399")
+                        margin = 0.px
+                    }
+                    code {
+                        +try {
+                            Cdn.encode(deviceKey.toCoseKey().toDataItem())
+                        } catch (e: Throwable) {
+                            "Error formatting device key"
+                        }
                     }
                 }
+            } else {
+                span { css { color = Color("#cbd5e1") }; +"None (Keyless mdoc)" }
             }
         }
         div {

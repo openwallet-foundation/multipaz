@@ -1477,16 +1477,32 @@ private fun ChildrenBuilder.renderIsoMdocSection(
                 css { fontSize = 1.2.rem; color = Color("#38bdf8"); margin = Margin(0.px, 0.px, 0.px, 0.px) }
                 +"ISO mDoc #${index + 1}: ${mDoc.docType}"
             }
-            span {
-                css { background = Color("#1e293b"); padding = Padding(4.px, 12.px); borderRadius = 6.px; color = Color("#94a3b8"); fontSize = 12.px }
-                +"docType: ${mDoc.docType}"
+            div {
+                css { display = Display.flex; gap = 8.px; alignItems = AlignItems.center }
+                span {
+                    css {
+                        background = if (mDoc.deviceKeyPrivate != null) Color("#1e3a8a") else Color("#334155")
+                        color = if (mDoc.deviceKeyPrivate != null) Color("#93c5fd") else Color("#cbd5e1")
+                        padding = Padding(4.px, 10.px)
+                        borderRadius = 6.px
+                        fontSize = 12.px
+                        fontWeight = FontWeight.bold
+                    }
+                    +if (mDoc.deviceKeyPrivate != null) "🔒 Key-Bound" else "🔓 Keyless"
+                }
+                span {
+                    css { background = Color("#1e293b"); padding = Padding(4.px, 12.px); borderRadius = 6.px; color = Color("#94a3b8"); fontSize = 12.px }
+                    +"docType: ${mDoc.docType}"
+                }
             }
         }
 
-        // Private Key Card with PEM / JWK tabs
-        KeyViewComponent {
-            title = "🔑 Device Private Key"
-            privateKey = mDoc.deviceKeyPrivate
+        // Private Key Card with PEM / JWK tabs if key-bound
+        mDoc.deviceKeyPrivate?.let { privKey ->
+            KeyViewComponent {
+                title = "🔑 Device Private Key"
+                privateKey = privKey
+            }
         }
 
         // Shared IssuerSigned Details (IssuerAuth cert chain + IssuerNamespaces table + MSO details)

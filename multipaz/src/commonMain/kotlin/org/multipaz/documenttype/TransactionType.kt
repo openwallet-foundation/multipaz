@@ -10,6 +10,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
+import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
@@ -189,6 +190,9 @@ abstract class TransactionType<PayloadT: Any>(
         transactionData: TransactionData<PayloadT>,
         credential: Credential
     ): Boolean {
+        if (credential !is SecureAreaBoundCredential) {
+            return false
+        }
         return if (credential is MdocCredential) {
             // For mdoc there is a per-credential KeyAuthorizations section. We need to check
             // it to determine if this transaction can be applied to this credential

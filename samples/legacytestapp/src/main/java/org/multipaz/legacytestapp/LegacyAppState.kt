@@ -47,7 +47,8 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.addKnownTypes
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.util.MdocUtil
@@ -370,6 +371,55 @@ class LegacyAppState private constructor(
             }
         }
 
+        if (!mdocDocType.keyBound) {
+            val mdocCredential = KeylessMdocCredential.create(
+                document = document,
+                asReplacementForIdentifier = null,
+                domain = CREDENTIAL_DOMAIN_MDOC_KEYLESS,
+                docType = mdocDocType.docType
+            )
+            val mso = MobileSecurityObject(
+                version = "1.0",
+                docType = mdocDocType.docType,
+                signedAt = signedAt,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = null,
+                digestAlgorithm = Algorithm.SHA256,
+                valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+                deviceKey = null,
+            )
+            val taggedEncodedMso = Cbor.encode(
+                Tagged(
+                    Tagged.ENCODED_CBOR,
+                    Bstr(Cbor.encode(mso.toDataItem()))
+                )
+            )
+            val protectedHeaders = mapOf<CoseLabel, DataItem>(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+            )
+            val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to dsKey.certChain.toCoseX5Chain()
+            )
+            val encodedIssuerAuth = Cbor.encode(
+                Cose.coseSign1Sign(
+                    dsKey,
+                    taggedEncodedMso,
+                    true,
+                    protectedHeaders,
+                    unprotectedHeaders
+                ).toDataItem()
+            )
+            val issuerProvidedAuthenticationData = Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", issuerNamespaces.toDataItem())
+                    put("issuerAuth", RawCbor(encodedIssuerAuth))
+                }
+            )
+            mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+            return
+        }
+
         val domains = listOf(
             CREDENTIAL_DOMAIN_MDOC_USER_AUTH,
             CREDENTIAL_DOMAIN_MDOC_NO_USER_AUTH,
@@ -390,7 +440,7 @@ class LegacyAppState private constructor(
             }
 
             val mdocCredential = try {
-                MdocCredential.create(
+                KeyBoundMdocCredential.create(
                     document = document,
                     asReplacementForIdentifier = null,
                     domain = domain,
@@ -409,7 +459,7 @@ class LegacyAppState private constructor(
                 if (e is CancellationException) throw e
                 // Fall back to software secure area if device does not have a screen lock / biometric enrolled
                 Logger.w(TAG, "Falling back to SoftwareSecureArea for domain $domain: ${e.message}")
-                MdocCredential.create(
+                KeyBoundMdocCredential.create(
                     document = document,
                     asReplacementForIdentifier = null,
                     domain = domain,
@@ -501,7 +551,8 @@ class LegacyAppState private constructor(
                 listOf(CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH, CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH)
             } else {
                 listOf(CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH, CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH)
-            }
+            },
+            domainsKeylessMdoc = listOf(CREDENTIAL_DOMAIN_MDOC_KEYLESS)
         )
     }
 
@@ -593,6 +644,7 @@ class LegacyAppState private constructor(
         const val CREDENTIAL_DOMAIN_MDOC_NO_USER_AUTH = "mdoc_no_user_auth"
         const val CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH = "mdoc_mac_user_auth"
         const val CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH = "mdoc_mac_no_user_auth"
+        const val CREDENTIAL_DOMAIN_MDOC_KEYLESS = "mdoc_keyless"
 
         private val certsValidFrom: Instant = LocalDate.parse("2024-12-01").atStartOfDayIn(TimeZone.UTC)
         private val certsValidUntil: Instant = LocalDate.parse("2034-12-01").atStartOfDayIn(TimeZone.UTC)

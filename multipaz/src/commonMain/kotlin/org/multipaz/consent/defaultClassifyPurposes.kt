@@ -47,7 +47,7 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
  *        `issue_date`, `expiry_date`) or have `VALIDITY`, `ISSUER`, or `PORTRAIT_IMAGE`
  *        sensitivity; otherwise returns an empty set.
  *      - **Ticket / boarding pass credentials** (`org.multipaz.example.boarding-pass.1`,
- *        `https://utopia.example.com/vct/movieticket`): Classified as
+ *        `org.multipaz.movieticket.1`, `https://utopia.example.com/vct/movieticket`): Classified as
  *        [PresentmentPurpose.TICKET_VERIFICATION] if all requested claims are recognized ticket
  *        claims (`passenger_name`, `flight_number`, `seat_number`, `departure_time`, `ticket_id`,
  *        `cinema`, `movie`, `show_date_time`, `movie_rating`, `theater_id`, `seat_id`,
@@ -160,6 +160,7 @@ private val LOYALTY_CLAIM_IDENTIFIERS = setOf(
 
 private val TICKET_DOCTYPES_AND_VCTS = setOf(
     "org.multipaz.example.boarding-pass.1",
+    "org.multipaz.movieticket.1",
     "https://utopia.example.com/vct/movieticket",
 )
 

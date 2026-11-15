@@ -384,8 +384,15 @@ class DigitalCredentialsPresentmentTest {
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
             credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? =
-            delegate.selectCredential(document, requestedClaims, keyAgreementPossible, credential)
+            delegate.selectCredential(
+                document,
+                requestedClaims,
+                keyAgreementPossible,
+                credential,
+                requireHolderBinding,
+            )
     }
 
     private data class ShownConsentPrompt(

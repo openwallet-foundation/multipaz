@@ -134,7 +134,8 @@ struct ContentView: View {
                     mpzPass: mpzPass,
                     isoMdocDomain: "mdoc",
                     sdJwtVcDomain: "sdjwt",
-                    keylessSdJwtVcDomain: "sdjwt"
+                    keylessSdJwtVcDomain: "sdjwt",
+                    keylessIsoMdocDomain: "mdoc_keyless"
                 )
                 // TODO: use returned document and navigate to that screen
                 viewModel.path.append(Destination.documentStoreScreen)

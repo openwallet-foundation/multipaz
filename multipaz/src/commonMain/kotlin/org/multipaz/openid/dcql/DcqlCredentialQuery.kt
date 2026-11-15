@@ -59,6 +59,11 @@ data class DcqlCredentialQuery(
         presentation: VerifiedPresentation,
         documentTypeRepository: DocumentTypeRepository? = null,
     ) {
+        if (requireCryptographicHolderBinding && !presentation.holderBound) {
+            throw IllegalStateException(
+                "Cryptographic holder binding is required for query '$id', but presentation is not holder-bound"
+            )
+        }
         val candidateClaims = when (format) {
             "dc+sd-jwt" -> {
                 val jsonPresentation = presentation as? JsonVerifiedPresentation
@@ -85,6 +90,9 @@ data class DcqlCredentialQuery(
                     throw IllegalStateException(
                         "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '$mdocDocType' for query '$id'"
                     )
+                }
+                if (mdocPresentation.docType == "org.iso.18013.5.1.mDL" && !mdocPresentation.holderBound) {
+                    throw IllegalStateException("mDL presentation must always be holder-bound")
                 }
                 presentation.issuerSignedClaims + presentation.deviceSignedClaims
             }

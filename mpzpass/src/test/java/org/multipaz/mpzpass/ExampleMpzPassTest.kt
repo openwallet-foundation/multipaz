@@ -17,7 +17,7 @@ import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
@@ -59,7 +59,7 @@ class ExampleMpzPassTest {
             keylessSdJwtVcDomain = "sdjwt-keyless"
         )
 
-        val cred = doc.getCredentials().single() as MdocCredential
+        val cred = doc.getCredentials().single() as KeyBoundMdocCredential
         assertEquals("org.example.loyalty.1", cred.docType)
         val keyInfo = softwareSecureArea.getKeyInfo(cred.alias)
         assertFalse(keyInfo.isUserAuthenticationRequired)

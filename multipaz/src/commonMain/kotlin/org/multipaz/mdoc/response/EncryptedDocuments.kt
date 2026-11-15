@@ -33,6 +33,7 @@ import org.multipaz.mdoc.util.validateDocRequestIds
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
@@ -137,18 +138,19 @@ data class EncryptedDocuments internal constructor(
                     if (innerIds != null) {
                         validateInnerDocRequestIds(innerIds)
                         for (reqId in innerIds) {
-                            validateMdocAgainstDocRequest(document, reqId, deviceRequest.docRequests[reqId])
+                            validateMdocAgainstDocRequest(document, reqId, deviceRequest.docRequests[reqId], deviceRequest)
                         }
                         innerIds
                     } else if (docRequestIds.size == 1) {
                         val reqId = docRequestIds.single()
-                        validateMdocAgainstDocRequest(document, reqId, deviceRequest.docRequests[reqId])
+                        validateMdocAgainstDocRequest(document, reqId, deviceRequest.docRequests[reqId], deviceRequest)
                         docRequestIds
                     } else {
                         val candidates = docRequestIds.filter { reqId ->
                             val req = deviceRequest.docRequests[reqId]
                             (req.docRequestInfo?.docFormat ?: "mso_mdoc") == "mso_mdoc" &&
                                 req.docType == document.docType &&
+                                (document.deviceAuth != null || req.allowsKeyless(deviceRequest)) &&
                                 matchesMdocIssuerIdentifiers(document, req)
                         }
                         if (candidates.isEmpty()) {
@@ -161,6 +163,9 @@ data class EncryptedDocuments internal constructor(
                 } else {
                     emptyList()
                 }
+                val requireHolderBinding = deviceRequest == null ||
+                    matchedReqIds.isEmpty() ||
+                    matchedReqIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 val transactionData = if (index < transactionDataList.size) {
                     transactionDataList[index]
                 } else if (deviceRequest != null && documentTypeRepository != null && matchedReqIds.isNotEmpty()) {
@@ -176,7 +181,13 @@ data class EncryptedDocuments internal constructor(
                         documentTypeRepository = documentTypeRepository
                     )
                 }
-                document.verify(encSessionTranscript, null, transactionData, atTime)
+                document.verify(
+                    sessionTranscript = encSessionTranscript,
+                    eReaderKey = null,
+                    transactionData = transactionData,
+                    atTime = atTime,
+                    requireHolderBinding = requireHolderBinding,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying document $index in decrypted DeviceResponse", e)
@@ -234,17 +245,16 @@ data class EncryptedDocuments internal constructor(
             try {
                 var matchedReqIds: List<Int> = emptyList()
                 val expectedAudience = if (deviceRequest != null && document.docFormat == "dc+sd-jwt") {
-                    val sdJwtKb = SdJwtKb.fromCompactSerialization(
-                        document.data.toByteArray().zlibInflate().decodeToString()
-                    )
-                    val vct = (sdJwtKb.sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
+                    val (sdJwt, sdJwtKb) = document.parseSdJwtPresentation()
+                    val vct = (sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
                         ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
                     val innerIds = document.docRequestIds
                     val targetIds = if (innerIds != null) {
                         validateInnerDocRequestIds(innerIds)
                         for (reqId in innerIds) {
                             validateSdJwtAgainstDocRequest(
-                                sdJwtKb = sdJwtKb,
+                                sdJwt = sdJwt,
+                                isKeyless = sdJwtKb == null,
                                 vct = vct,
                                 reqId = reqId,
                                 docRequest = deviceRequest.docRequests[reqId],
@@ -256,7 +266,8 @@ data class EncryptedDocuments internal constructor(
                     } else if (docRequestIds.size == 1) {
                         val reqId = docRequestIds.single()
                         validateSdJwtAgainstDocRequest(
-                            sdJwtKb = sdJwtKb,
+                            sdJwt = sdJwt,
+                            isKeyless = sdJwtKb == null,
                             vct = vct,
                             reqId = reqId,
                             docRequest = deviceRequest.docRequests[reqId],
@@ -268,8 +279,9 @@ data class EncryptedDocuments internal constructor(
                         val candidates = docRequestIds.filter { reqId ->
                             val req = deviceRequest.docRequests[reqId]
                             req.docRequestInfo?.docFormat == "dc+sd-jwt" &&
+                                (sdJwtKb != null || req.allowsKeyless(deviceRequest)) &&
                                 sdJwtVctMatchesDocRequest(vct, req, deviceRequest, documentTypeRepository) &&
-                                matchesSdJwtIssuerIdentifiers(sdJwtKb, req)
+                                matchesSdJwtIssuerIdentifiers(sdJwt, req)
                         }
                         if (candidates.isEmpty()) {
                             throw IllegalStateException(
@@ -279,26 +291,33 @@ data class EncryptedDocuments internal constructor(
                         candidates
                     }
                     matchedReqIds = targetIds
-                    val audiences = targetIds.map { reqId ->
-                        deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[reqId])
-                    }.distinct()
-                    if (audiences.size != 1) {
-                        throw IllegalStateException(
-                            "Inconsistent expected audiences across docRequestIds $targetIds"
-                        )
+                    if (sdJwtKb != null) {
+                        val audiences = targetIds.map { reqId ->
+                            deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[reqId])
+                        }.distinct()
+                        if (audiences.size != 1) {
+                            throw IllegalStateException(
+                                "Inconsistent expected audiences across docRequestIds $targetIds"
+                            )
+                        }
+                        if (documentTypeRepository != null) {
+                            validateSignedSdJwtTransactionDocRequestIds(
+                                sdJwtKb = sdJwtKb,
+                                allowedIds = document.docRequestIds ?: targetIds,
+                                deviceRequest = deviceRequest,
+                                documentTypeRepository = documentTypeRepository
+                            )
+                        }
+                        audiences.single()
+                    } else {
+                        null
                     }
-                    if (documentTypeRepository != null) {
-                        validateSignedSdJwtTransactionDocRequestIds(
-                            sdJwtKb = sdJwtKb,
-                            allowedIds = document.docRequestIds ?: targetIds,
-                            deviceRequest = deviceRequest,
-                            documentTypeRepository = documentTypeRepository
-                        )
-                    }
-                    audiences.single()
                 } else {
                     null
                 }
+                val requireHolderBinding = deviceRequest == null ||
+                    matchedReqIds.isEmpty() ||
+                    matchedReqIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 val transactionData = if (index < transactionDataList.size) {
                     transactionDataList[index]
                 } else if (deviceRequest != null && documentTypeRepository != null && matchedReqIds.isNotEmpty()) {
@@ -306,7 +325,14 @@ data class EncryptedDocuments internal constructor(
                 } else {
                     emptyList()
                 }
-                document.verify(encSessionTranscript, null, transactionData, atTime, expectedAudience)
+                document.verify(
+                    sessionTranscript = encSessionTranscript,
+                    eReaderKey = null,
+                    transactionData = transactionData,
+                    atTime = atTime,
+                    expectedAudience = expectedAudience,
+                    requireHolderBinding = requireHolderBinding,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying otherDocument $index in decrypted DeviceResponse", e)
@@ -394,6 +420,35 @@ data class EncryptedDocuments internal constructor(
                     issuerNamespaces = issuerNamespaces,
                     deviceNamespaces = deviceNamespaces,
                     deviceKey = deviceKey,
+                    errors = errors,
+                    docRequestIds = docRequestIds,
+                )
+            )
+        }
+
+        /**
+         * Low-level function to add a non-key-bound [MdocDocument] (without `deviceSigned`) to an
+         * encrypted documents structure.
+         *
+         * @param docType the type of the document, e.g. `"org.multipaz.movieticket.1"`.
+         * @param issuerAuth the issuer-signed MSO.
+         * @param issuerNamespaces the issuer-signed data elements to return.
+         * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
+         * @return the builder.
+         */
+        fun addKeylessDocument(
+            docType: String,
+            issuerAuth: CoseSign1,
+            issuerNamespaces: IssuerNamespaces,
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
+        ) = apply {
+            documents.add(
+                MdocDocument.fromKeylessNamespaces(
+                    docType = docType,
+                    issuerAuth = issuerAuth,
+                    issuerNamespaces = issuerNamespaces,
                     errors = errors,
                     docRequestIds = docRequestIds,
                 )
@@ -555,6 +610,9 @@ data class EncryptedDocuments internal constructor(
     }
 }
 
+internal fun DocRequest.allowsKeyless(deviceRequest: DeviceRequest): Boolean =
+    deviceRequest.version != "1.0" && docRequestInfo?.nonKeyBoundSupported == true
+
 internal fun matchesMdocIssuerIdentifiers(
     document: MdocDocument,
     docRequest: DocRequest
@@ -570,7 +628,8 @@ internal fun matchesMdocIssuerIdentifiers(
 internal fun validateMdocAgainstDocRequest(
     document: MdocDocument,
     reqId: Int,
-    docRequest: DocRequest
+    docRequest: DocRequest,
+    deviceRequest: DeviceRequest,
 ) {
     if ((docRequest.docRequestInfo?.docFormat ?: "mso_mdoc") != "mso_mdoc") {
         throw IllegalStateException("DocRequest at index $reqId is not an mso_mdoc request")
@@ -578,6 +637,11 @@ internal fun validateMdocAgainstDocRequest(
     if (document.docType != docRequest.docType) {
         throw IllegalStateException(
             "Document docType '${document.docType}' does not match DocRequest docType '${docRequest.docType}'"
+        )
+    }
+    if (document.deviceAuth == null && !docRequest.allowsKeyless(deviceRequest)) {
+        throw IllegalStateException(
+            "Keyless mdoc cannot satisfy DocRequest at index $reqId because nonKeyBoundSupported is not true"
         )
     }
     if (!matchesMdocIssuerIdentifiers(document, docRequest)) {
@@ -637,19 +701,20 @@ internal fun sdJwtVctMatchesDocRequest(
 }
 
 internal fun matchesSdJwtIssuerIdentifiers(
-    sdJwtKb: SdJwtKb,
+    sdJwt: SdJwt,
     docRequest: DocRequest
 ): Boolean {
     val reqIssuerIds = docRequest.docRequestInfo?.issuerIdentifiers
     if (reqIssuerIds.isNullOrEmpty()) return true
     val requiredAkis = reqIssuerIds.toSet()
-    return sdJwtKb.sdJwt.x5c?.certificates?.any { cert ->
+    return sdJwt.x5c?.certificates?.any { cert ->
         cert.authorityKeyIdentifier?.let { requiredAkis.contains(ByteString(it)) } ?: false
     } == true
 }
 
 internal fun validateSdJwtAgainstDocRequest(
-    sdJwtKb: SdJwtKb,
+    sdJwt: SdJwt,
+    isKeyless: Boolean,
     vct: String,
     reqId: Int,
     docRequest: DocRequest,
@@ -664,7 +729,12 @@ internal fun validateSdJwtAgainstDocRequest(
             "OtherDocument vct '$vct' does not match DocRequest docType '${docRequest.docType}'"
         )
     }
-    if (!matchesSdJwtIssuerIdentifiers(sdJwtKb, docRequest)) {
+    if (isKeyless && !docRequest.allowsKeyless(deviceRequest)) {
+        throw IllegalStateException(
+            "Keyless SD-JWT VC cannot satisfy DocRequest at index $reqId because nonKeyBoundSupported is not true"
+        )
+    }
+    if (!matchesSdJwtIssuerIdentifiers(sdJwt, docRequest)) {
         throw IllegalStateException(
             "OtherDocument certificate chain does not match requested issuerIdentifiers"
         )
@@ -778,7 +848,7 @@ internal suspend fun resolveEncryptedSdJwtTransactions(
     documentTypeRepository: DocumentTypeRepository
 ): List<TransactionData<*>> {
     val sdJwtKb = try {
-        SdJwtKb.fromCompactSerialization(otherDocument.data.toByteArray().zlibInflate().decodeToString())
+        otherDocument.parseSdJwtPresentation().second
     } catch (e: Exception) {
         if (e is CancellationException) throw e
         null

@@ -460,7 +460,7 @@ abstract class Credential {
     companion object {
         private const val TAG = "Credential"
 
-        private val credentialTableSpec = StorageTableSpec(
+        internal val credentialTableSpec = StorageTableSpec(
             name = "Credentials",
             supportPartitions = true,  // partition id is document id
             supportExpiration = false

@@ -277,11 +277,11 @@ IsoMdocCredential = {
   ;
   "docType": tstr,
 
-  ; The private key corresponding to DeviceKey in `issuerSigned`.
+  ; The private key corresponding to DeviceKey in `issuerSigned`, if used.
   ;
-  "deviceKeyPrivate": COSE_Key,
+  ? "deviceKeyPrivate": COSE_Key,
 
-  ; IssuerSigned according to ISO/IEC 18013-5:2021 clause 8.3.2.1.2.2
+  ; IssuerSigned according to ISO/IEC 18013-5
   ;
   "issuerSigned": IssuerSigned,
 }

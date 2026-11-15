@@ -76,6 +76,7 @@ import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -419,6 +420,7 @@ internal class ConsentGoldenEcosystem private constructor(
                 {
                   "id": "movie_tickets",
                   "format": "dc+sd-jwt",
+                  "require_cryptographic_holder_binding": false,
                   "multiple": true,
                   "meta": {
                     "vct_values": ["${UtopiaMovieTicket.MOVIE_TICKET_VCT}"]
@@ -1409,7 +1411,7 @@ internal class ConsentGoldenEcosystem private constructor(
             deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
             deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
         ): MdocCredential {
-            val mdocCredential = MdocCredential.create(
+            val mdocCredential = KeyBoundMdocCredential.create(
                 document = document,
                 asReplacementForIdentifier = null,
                 domain = "mdoc",

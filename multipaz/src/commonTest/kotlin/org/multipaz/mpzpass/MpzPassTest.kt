@@ -34,6 +34,8 @@ import org.multipaz.documenttype.StringOption
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.securearea.CreateKeySettings
@@ -92,7 +94,7 @@ class MpzPassTest {
             sdJwtVcDomain = "sdjwt",
             keylessSdJwtVcDomain = "sdjwt-keyless"
         )
-        val importedCredential = importedDoc.getCredentials().first() as MdocCredential
+        val importedCredential = importedDoc.getCredentials().first() as KeyBoundMdocCredential
         val keyInfo = harness.softwareSecureArea.getKeyInfo(importedCredential.alias)
         assertTrue(keyInfo.isUserAuthenticationRequired)
     }
@@ -147,7 +149,7 @@ class MpzPassTest {
         assertEquals(credential::class, importedCredential::class)
         assertEquals(credential.credentialType, importedCredential.credentialType)
         assertEquals(credential.issuerProvidedData, importedCredential.issuerProvidedData)
-        importedCredential as MdocCredential
+        importedCredential as KeyBoundMdocCredential
         assertNotEquals(credential.alias, importedCredential.alias)
         assertEquals(credential.secureArea, importedCredential.secureArea)
     }
@@ -255,6 +257,54 @@ class MpzPassTest {
     }
 
     @Test
+    fun testKeylessIsoMdocExportImport() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "The Last Utopian",
+            typeDisplayName = "Movie Ticket",
+            cardArt = ByteString(4, 5, 6),
+        )
+        val credential = UtopiaMovieTicket.getDocumentType().createKeylessMdocCredentialWithSampleData(
+            document = doc,
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "mdoc_keyless",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertFalse(pass.userAuthenticationRequired)
+        assertNull(pass.isoMdoc.single().deviceKeyPrivate)
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless",
+            keylessIsoMdocDomain = "mdoc-keyless"
+        )
+        assertEquals(importedDoc.mpzPassId, pass.uniqueId)
+        assertEquals(importedDoc.mpzPassVersion, pass.version)
+        assertEquals(doc.displayName, importedDoc.displayName)
+        assertEquals(doc.typeDisplayName, importedDoc.typeDisplayName)
+        assertEquals(doc.cardArt, importedDoc.cardArt)
+        assertEquals(1, importedDoc.getCredentials().size)
+        val importedCredential = importedDoc.getCredentials().single()
+        assertTrue(importedCredential is KeylessMdocCredential)
+        assertEquals("mdoc-keyless", importedCredential.domain)
+        assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, importedCredential.docType)
+        assertEquals(credential.issuerProvidedData, importedCredential.issuerProvidedData)
+    }
+
+    @Test
     fun passWithUpdate() = runTest {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
@@ -303,7 +353,7 @@ class MpzPassTest {
         assertEquals(credential::class, importedCredential::class)
         assertEquals(credential.credentialType, importedCredential.credentialType)
         assertEquals(credential.issuerProvidedData, importedCredential.issuerProvidedData)
-        importedCredential as MdocCredential
+        importedCredential as KeyBoundMdocCredential
         assertNotEquals(credential.alias, importedCredential.alias)
         assertEquals(credential.secureArea, importedCredential.secureArea)
 
@@ -1062,7 +1112,7 @@ class MpzPassTest {
         assertEquals(metadata, reloadedDoc.mpzPassMetadata)
 
         // Re-exporting from credential preserves mpzPassMetadata
-        val reexportedPass = (reloadedDoc.getCredentials().first() as MdocCredential).exportToMpzPass()
+        val reexportedPass = reloadedDoc.getCredentials().first().exportToMpzPass()
         assertEquals(metadata, reexportedPass.metadata)
 
         // Importing an updated version updates mpzPassMetadata

@@ -41,6 +41,8 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -49,6 +51,7 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -163,6 +166,7 @@ class DocumentStoreTestHarness(
             preferSignatureToKeyAgreement = true,
             domainsMdocSignature = listOf("mdoc"),
             domainsMdocKeyAgreement = listOf("mdoc_key_agreement"),
+            domainsKeylessMdoc = listOf("mdoc_keyless"),
             domainsKeylessSdJwt = listOf("sdjwt_keyless"),
             domainsKeyBoundSdJwt = listOf("sdjwt")
         )
@@ -319,6 +323,76 @@ class DocumentStoreTestHarness(
             validUntil = validUntil,
             dsKey = effectiveDsKey,
             otherVcts = otherVcts,
+        )
+        return document
+    }
+
+    suspend fun provisionKeylessMdoc(
+        displayName: String,
+        docType: String,
+        data: Map<String, List<Pair<String, DataItem>>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
+        domain: String = "mdoc_keyless",
+    ): Document {
+        initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
+        val document = documentStore.createDocument(
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
+        )
+        val issuerNamespaces = buildIssuerNamespaces {
+            for ((nsName, elements) in data) {
+                addNamespace(nsName) {
+                    for ((deName, deValue) in elements) {
+                        addDataElement(deName, deValue)
+                    }
+                }
+            }
+        }
+        addKeylessMdocCredentialWithData(
+            document = document,
+            docType = docType,
+            issuerNamespaces = issuerNamespaces,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            dsKey = effectiveDsKey,
+            domain = domain,
+        )
+        return document
+    }
+
+    suspend fun provisionKeylessSdJwtVc(
+        displayName: String,
+        vct: String,
+        data: List<Pair<String, JsonElement>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
+        otherVcts: List<String> = emptyList(),
+        domain: String = "sdjwt_keyless",
+    ): Document {
+        initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
+        val document = documentStore.createDocument(
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
+        )
+        val identityAttributes = buildJsonObject {
+            for ((claimName, claimValue) in data) {
+                put(claimName, claimValue)
+            }
+        }
+        addKeylessSdJwtVcCredentialWithData(
+            document = document,
+            vct = vct,
+            identityAttributes = identityAttributes,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            dsKey = effectiveDsKey,
+            otherVcts = otherVcts,
+            domain = domain,
         )
         return document
     }
@@ -500,7 +574,7 @@ class DocumentStoreTestHarness(
         keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         // Create authentication keys...
-        val mdocCredential = MdocCredential.create(
+        val mdocCredential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -568,6 +642,108 @@ class DocumentStoreTestHarness(
 
         // Now that we have issuer-provided authentication data we certify the authentication key.
         mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+    }
+
+    suspend fun addKeylessMdocCredentialWithData(
+        document: Document,
+        docType: String,
+        issuerNamespaces: IssuerNamespaces,
+        signedAt: Instant = this.signedAt,
+        validFrom: Instant = this.validFrom,
+        validUntil: Instant = this.validUntil,
+        dsKey: AsymmetricKey.X509Certified = this.dsKey,
+        domain: String = "mdoc_keyless",
+    ): KeylessMdocCredential {
+        val mdocCredential = KeylessMdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = domain,
+            docType = docType,
+        )
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = docType,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = null,
+        )
+        val taggedEncodedMso = Cbor.encode(
+            Tagged(
+                Tagged.ENCODED_CBOR,
+                Bstr(Cbor.encode(mso.toDataItem()))
+            )
+        )
+        val protectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                dsKey.certChain.toCoseX5t()
+            )
+        )
+        val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
+                dsKey.certChain.toDataItem()
+            )
+        )
+        val encodedIssuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                dsKey,
+                taggedEncodedMso,
+                true,
+                protectedHeaders,
+                unprotectedHeaders
+            ).toDataItem()
+        )
+        val issuerProvidedAuthenticationData = Cbor.encode(
+            buildCborMap {
+                put("nameSpaces", issuerNamespaces.toDataItem())
+                put("issuerAuth", RawCbor(encodedIssuerAuth))
+            }
+        )
+        mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+        return mdocCredential
+    }
+
+    suspend fun addKeylessSdJwtVcCredentialWithData(
+        document: Document,
+        vct: String,
+        identityAttributes: JsonObject,
+        signedAt: Instant = this.signedAt,
+        validFrom: Instant = this.validFrom,
+        validUntil: Instant = this.validUntil,
+        dsKey: AsymmetricKey.X509Certified = this.dsKey,
+        otherVcts: List<String> = emptyList(),
+        domain: String = "sdjwt_keyless",
+    ): KeylessSdJwtVcCredential {
+        val credential = KeylessSdJwtVcCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = domain,
+            vct = vct,
+            otherVcts = otherVcts,
+        )
+        val sdJwt = SdJwt.create(
+            issuerKey = dsKey,
+            kbKey = null,
+            claims = identityAttributes,
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://example-issuer.com")
+                put("vct", credential.vct)
+                put("iat", signedAt.epochSeconds)
+                put("nbf", validFrom.epochSeconds)
+                put("exp", validUntil.epochSeconds)
+            },
+        )
+        credential.certify(sdJwt.compactSerialization.encodeToByteString())
+        return credential
     }
 
     private suspend fun addSdJwtVcCredential(

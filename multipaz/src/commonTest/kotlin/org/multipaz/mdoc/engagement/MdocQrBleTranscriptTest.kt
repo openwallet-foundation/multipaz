@@ -44,6 +44,7 @@ import org.multipaz.mdoc.connectionmethod.BleAddressType
 import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
@@ -144,7 +145,8 @@ class MdocQrBleTranscriptTest {
             document: Document,
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
-            credential: Credential?
+            credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? = document.getCertifiedCredentials().firstOrNull()
 
         override suspend fun getBadges(document: Document): List<DocumentBadge> = emptyList()
@@ -170,7 +172,7 @@ class MdocQrBleTranscriptTest {
             displayName = "Annex D mDL",
             typeDisplayName = "Driving License"
         )
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc_key_agreement",

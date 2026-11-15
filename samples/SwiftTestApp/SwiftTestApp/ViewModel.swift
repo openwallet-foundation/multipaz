@@ -231,7 +231,8 @@ class ViewModel {
                     mdocNoUserAuthDomain: "mdoc_no_user_auth",
                     sdJwtUserAuthDomain: "sdjwt_user_auth",
                     sdJwtNoUserAuthDomain: "sdjwt_no_user_auth",
-                    sdJwtKeylessDomain: "sdjwt_keyless"
+                    sdJwtKeylessDomain: "sdjwt_keyless",
+                    mdocKeylessDomain: "mdoc_keyless"
                 ),
                 selectSecureAreaFn: { appData, suggestedCreateKeySettings in
                     print("in selectSecureAreaFn: appData=\(String(describing: appData)), algorithm=\(suggestedCreateKeySettings.algorithm)")
@@ -369,32 +370,50 @@ class ViewModel {
                 ISO_23220_5_CHV_1_DATA_ELEMENT
             ]
         }
-        let _ = try! await documentType.createMdocCredentialWithSampleData(
-            document: document,
-            secureArea: secureArea,
-            createKeySettings: CreateKeySettings(
-                algorithm: Algorithm.esp256,
-                nonce: ByteStringBuilder(initialCapacity: 3).appendString(string: "123").toByteString(),
-                userAuthenticationRequired: true,
-                userAuthenticationTimeout: 0,
-                validFrom: nil,
-                validUntil: nil
-            ),
-            dsKey: AsymmetricKey.X509CertifiedExplicit(
-                certChain: X509CertChain(certificates: [dsCert]),
-                privateKey: dsKey,
-                algorithm: Algorithm.esp256
-            ),
-            signedAt: signedAt.toKotlinInstant().truncateToWholeSeconds(),
-            validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
-            validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
-            expectedUpdate: nil,
-            domain: "mdoc_user_auth",
-            randomProvider: KotlinRandom.companion,
-            includeElement: { _, _ in KotlinBoolean(value: true) },
-            deviceKeyAuthorizedNamespaces: [],
-            deviceKeyAuthorizedDataElements: deviceKeyAuthorizedDataElements
-        )
+        if documentType.mdocDocumentType?.keyBound == false {
+            let _ = try! await documentType.createKeylessMdocCredentialWithSampleData(
+                document: document,
+                dsKey: AsymmetricKey.X509CertifiedExplicit(
+                    certChain: X509CertChain(certificates: [dsCert]),
+                    privateKey: dsKey,
+                    algorithm: Algorithm.esp256
+                ),
+                signedAt: signedAt.toKotlinInstant().truncateToWholeSeconds(),
+                validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
+                validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+                expectedUpdate: nil,
+                domain: "mdoc_keyless",
+                randomProvider: KotlinRandom.companion,
+                includeElement: { _, _ in KotlinBoolean(value: true) }
+            )
+        } else {
+            let _ = try! await documentType.createMdocCredentialWithSampleData(
+                document: document,
+                secureArea: secureArea,
+                createKeySettings: CreateKeySettings(
+                    algorithm: Algorithm.esp256,
+                    nonce: ByteStringBuilder(initialCapacity: 3).appendString(string: "123").toByteString(),
+                    userAuthenticationRequired: true,
+                    userAuthenticationTimeout: 0,
+                    validFrom: nil,
+                    validUntil: nil
+                ),
+                dsKey: AsymmetricKey.X509CertifiedExplicit(
+                    certChain: X509CertChain(certificates: [dsCert]),
+                    privateKey: dsKey,
+                    algorithm: Algorithm.esp256
+                ),
+                signedAt: signedAt.toKotlinInstant().truncateToWholeSeconds(),
+                validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
+                validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+                expectedUpdate: nil,
+                domain: "mdoc_user_auth",
+                randomProvider: KotlinRandom.companion,
+                includeElement: { _, _ in KotlinBoolean(value: true) },
+                deviceKeyAuthorizedNamespaces: [],
+                deviceKeyAuthorizedDataElements: deviceKeyAuthorizedDataElements
+            )
+        }
         try! await document.edit(editActionFn: { editor in
             editor.provisioned = true
         })
@@ -445,6 +464,7 @@ class ViewModel {
             preferSignatureToKeyAgreement: false,
             domainsMdocSignature: ["mdoc_user_auth", "mdoc_no_user_auth"],
             domainsMdocKeyAgreement: [],
+            domainsKeylessMdoc: ["mdoc_keyless"],
             domainsKeylessSdJwt: ["sdjwt_keyless"],
             domainsKeyBoundSdJwt: ["sdjwt_user_auth", "sdjwt_no_user_auth"]
         )

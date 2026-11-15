@@ -59,6 +59,8 @@ import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -108,8 +110,11 @@ object TestAppUtils {
     // This domain is for MdocCredential using mdoc MAC authentication and not requiring user authentication.
     const val CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH = "mdoc_mac_no_user_auth"
 
-    // This domain is for MdocCredential with software-backed keys (no auth)
+    // This domain is for KeyBoundMdocCredential with software-backed keys (no auth)
     const val CREDENTIAL_DOMAIN_MDOC_SOFTWARE = "mdoc_software"
+
+    // This domain is for KeylessMdocCredential
+    const val CREDENTIAL_DOMAIN_MDOC_KEYLESS = "mdoc_keyless"
 
     // This domain is for KeyBoundSdJwtVcCredential and requiring user authentication.
     const val CREDENTIAL_DOMAIN_SDJWT_USER_AUTH = "sdjwt_user_auth"
@@ -749,6 +754,7 @@ object TestAppUtils {
                 dsKey = dsKey,
                 numCredentialsPerDomain = numCredentialsPerDomain,
                 givenNameOverride = givenNameOverride,
+                displayName = displayName,
                 zkFriendly = zkFriendly,
                 deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
                 deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
@@ -767,7 +773,8 @@ object TestAppUtils {
                 validUntil = validUntil,
                 dsKey = dsKey,
                 numCredentialsPerDomain = numCredentialsPerDomain,
-                givenNameOverride = givenNameOverride
+                givenNameOverride = givenNameOverride,
+                displayName = displayName,
             )
         }
     }
@@ -808,10 +815,12 @@ object TestAppUtils {
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String,
+        displayName: String,
         zkFriendly: Boolean = false,
         deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
         deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
+        val isMovieTicket = documentType.mdocDocumentType?.docType == UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
                 addNamespace(nsName) {
@@ -825,6 +834,8 @@ object TestAppUtils {
                         if (sampleValue != null) {
                             val value = if (deName.startsWith("given_name")) {
                                 Tstr(givenNameOverride)
+                            } else if (isMovieTicket && deName == "movie") {
+                                Tstr(displayName)
                             } else {
                                 sampleValue
                             }
@@ -853,6 +864,67 @@ object TestAppUtils {
             )
         }
 
+        val signatureAlgorithm = dsKey.algorithm.curve?.defaultSigningAlgorithm ?: dsKey.algorithm
+
+        if (!documentType.mdocDocumentType!!.keyBound) {
+            val mdocCredential = KeylessMdocCredential.create(
+                document = document,
+                asReplacementForIdentifier = null,
+                domain = CREDENTIAL_DOMAIN_MDOC_KEYLESS,
+                docType = documentType.mdocDocumentType!!.docType,
+            )
+            val mso = MobileSecurityObject(
+                version = "1.0",
+                docType = documentType.mdocDocumentType!!.docType,
+                signedAt = signedAt,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = null,
+                digestAlgorithm = Algorithm.SHA256,
+                valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+                deviceKey = null,
+            )
+            val taggedEncodedMso = Cbor.encode(
+                Tagged(
+                    Tagged.ENCODED_CBOR,
+                    Bstr(Cbor.encode(mso.toDataItem()))
+                )
+            )
+            val protectedHeaders = mapOf<CoseLabel, DataItem>(
+                Pair(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                    signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                Pair(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                    dsKey.certChain.toCoseX5t()
+                )
+            )
+            val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+                Pair(
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
+                    dsKey.certChain.toCoseX5Chain()
+                )
+            )
+            val encodedIssuerAuth = Cbor.encode(
+                Cose.coseSign1Sign(
+                    dsKey,
+                    taggedEncodedMso,
+                    true,
+                    protectedHeaders,
+                    unprotectedHeaders
+                ).toDataItem()
+            )
+            val issuerProvidedAuthenticationData = Cbor.encode(
+                buildCborMap {
+                    put("nameSpaces", issuerNamespaces.toDataItem())
+                    put("issuerAuth", RawCbor(encodedIssuerAuth))
+                }
+            )
+            mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+            return
+        }
+
         // Create authentication keys...
         for (domain in listOf(
             CREDENTIAL_DOMAIN_MDOC_USER_AUTH,
@@ -876,7 +948,7 @@ object TestAppUtils {
             }
 
             for (n in 1..numCredentialsPerDomain) {
-                val mdocCredential = MdocCredential.create(
+                val mdocCredential = KeyBoundMdocCredential.create(
                     document = document,
                     asReplacementForIdentifier = null,
                     domain = domain,
@@ -998,7 +1070,7 @@ object TestAppUtils {
         val algorithm = deviceKeyAlgorithm
 
         val (credentials, openid4vciAttestationCompactSerialization) = if (useBatching) {
-            MdocCredential.createBatch(
+            KeyBoundMdocCredential.createBatch(
                 numberOfCredentials = 10,
                 document = document,
                 domain = CREDENTIAL_DOMAIN_MDOC_USER_AUTH,
@@ -1013,9 +1085,9 @@ object TestAppUtils {
                 )
             )
         } else {
-            val creds = mutableListOf<MdocCredential>()
+            val creds = mutableListOf<KeyBoundMdocCredential>()
             for (n in 1..numCredentialsPerDomain) {
-                val mdocCredential = MdocCredential.create(
+                val mdocCredential = KeyBoundMdocCredential.create(
                     document = document,
                     asReplacementForIdentifier = null,
                     domain = CREDENTIAL_DOMAIN_MDOC_USER_AUTH,
@@ -1122,12 +1194,14 @@ object TestAppUtils {
         validUntil: Instant,
         dsKey: AsymmetricKey,
         numCredentialsPerDomain: Int,
-        givenNameOverride: String
+        givenNameOverride: String,
+        displayName: String,
     ) {
         if (documentType.jsonDocumentType == null) {
             return
         }
 
+        val isMovieTicket = documentType.jsonDocumentType?.vct == UtopiaMovieTicket.MOVIE_TICKET_VCT
         val identityAttributes = buildJsonObject {
             for ((claimName, attribute) in documentType.jsonDocumentType!!.claims) {
                 // Skip sub-claims.
@@ -1138,6 +1212,8 @@ object TestAppUtils {
                 if (sampleValue != null) {
                     val value = if (claimName.startsWith("given_name")) {
                         JsonPrimitive(givenNameOverride)
+                    } else if (isMovieTicket && claimName == "movie") {
+                        JsonPrimitive(displayName)
                     } else {
                         sampleValue
                     }

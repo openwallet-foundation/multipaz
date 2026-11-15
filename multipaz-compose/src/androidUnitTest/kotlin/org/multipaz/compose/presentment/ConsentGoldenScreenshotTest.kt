@@ -527,6 +527,7 @@ class ConsentGoldenScreenshotTest {
                     {
                       "id": "ticket",
                       "format": "dc+sd-jwt",
+                      "require_cryptographic_holder_binding": false,
                       "meta": { "vct_values": ["${UtopiaMovieTicket.MOVIE_TICKET_VCT}"] },
                       "claims": [
                         { "path": ["ticket_id"] },

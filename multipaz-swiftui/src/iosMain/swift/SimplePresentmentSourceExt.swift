@@ -38,8 +38,9 @@ extension SimplePresentmentSource.Companion {
     ///   - getBadgesFn: a function to get badges for a document.
     ///   - getFaceMatchingModeFn: a function to determine face matching mode for a credential.
     ///   - preferSignatureToKeyAgreement: whether to use mdoc ECDSA authentication even if mdoc MAC authentication is possible (ISO mdoc only).
-    ///   - domainsMdocSignature: the domains to use for ``MdocCredential`` instances using mdoc ECDSA authentication.
-    ///   - domainsMdocKeyAgreement: the domains to use for ``MdocCredential`` instances using mdoc MAC authentication.
+    ///   - domainsMdocSignature: the domains to use for ``KeyBoundMdocCredential`` instances using mdoc ECDSA authentication.
+    ///   - domainsMdocKeyAgreement: the domains to use for ``KeyBoundMdocCredential`` instances using mdoc MAC authentication.
+    ///   - domainsKeylessMdoc: the domains to use for ``KeylessMdocCredential`` instances.
     ///   - domainsKeylessSdJwt: the domains to use for ``KeylessSdJwtVcCredential`` instances.
     ///   - domainsKeyBoundSdJwt: the domains to use for ``KeyBoundSdJwtVcCredential`` instances.
     public func create(
@@ -69,6 +70,7 @@ extension SimplePresentmentSource.Companion {
         preferSignatureToKeyAgreement: Bool = true,
         domainsMdocSignature: [ String ] = [],
         domainsMdocKeyAgreement: [ String ] = [],
+        domainsKeylessMdoc: [ String ] = [],
         domainsKeylessSdJwt: [ String ] = [],
         domainsKeyBoundSdJwt: [ String ] = [],
     ) -> SimplePresentmentSource {
@@ -91,6 +93,7 @@ extension SimplePresentmentSource.Companion {
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
             domainsMdocSignature: domainsMdocSignature,
             domainsMdocKeyAgreement: domainsMdocKeyAgreement,
+            domainsKeylessMdoc: domainsKeylessMdoc,
             domainsKeylessSdJwt: domainsKeylessSdJwt,
             domainsKeyBoundSdJwt: domainsKeyBoundSdJwt
         )

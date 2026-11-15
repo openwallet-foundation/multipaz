@@ -44,6 +44,7 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -612,7 +613,8 @@ class MdocNfcCceTranscriptTest {
             document: Document,
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
-            credential: Credential?
+            credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? {
             return document.getCertifiedCredentials().firstOrNull()
         }
@@ -687,7 +689,7 @@ class MdocNfcCceTranscriptTest {
             displayName = "Annex D mDL",
             typeDisplayName = "Driving License"
         )
-        val credential = MdocCredential.create(
+        val credential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc_key_agreement",

@@ -137,7 +137,7 @@ class TestValueMatchingClaimSet {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika-donor
                               claims:
                                 claim:
@@ -162,7 +162,7 @@ class TestValueMatchingClaimSet {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max-donor
                               claims:
                                 claim:
@@ -205,7 +205,7 @@ class TestValueMatchingClaimSet {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika-donor
                               claims:
                                 claim:
@@ -248,7 +248,7 @@ class TestValueMatchingClaimSet {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max-donor
                               claims:
                                 claim:

@@ -189,7 +189,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -228,7 +228,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -248,7 +248,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Max
                               claims:
                                 claim:
@@ -287,7 +287,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -325,7 +325,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-without-resident-address
                               claims:
                                 claim:
@@ -359,7 +359,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -379,7 +379,7 @@ class Iso18013TestSingleMdlQuery {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-without-resident-address
                               claims:
                                 claim:

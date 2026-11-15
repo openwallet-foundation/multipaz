@@ -34,7 +34,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.NameSpacedData
 import org.multipaz.document.buildDocumentStore
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
 import org.multipaz.mdoc.util.MdocUtil
@@ -107,7 +107,7 @@ class ProvisioningModelTest {
         assertEquals("Test Document", doc.typeDisplayName)
         val credentials = doc.getCredentials()
         assertEquals(2, credentials.size)
-        val credential = credentials.first() as MdocCredential
+        val credential = credentials.first() as KeyBoundMdocCredential
         assertTrue(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
     }
@@ -173,7 +173,7 @@ class ProvisioningModelTest {
             TestProvisioningClient()
         }.await()
         assertEquals(ByteString(0x01), docWithAlternate.appData)
-        val cred1 = docWithAlternate.getCredentials().first() as MdocCredential
+        val cred1 = docWithAlternate.getCredentials().first() as KeyBoundMdocCredential
         assertEquals(alternateSecureArea.identifier, cred1.secureArea.identifier)
 
         // Provision with appData = null -> should use default secureArea
@@ -184,7 +184,7 @@ class ProvisioningModelTest {
             TestProvisioningClient()
         }.await()
         assertNull(docWithDefault.appData)
-        val cred2 = docWithDefault.getCredentials().first() as MdocCredential
+        val cred2 = docWithDefault.getCredentials().first() as KeyBoundMdocCredential
         assertEquals(secureArea.identifier, cred2.secureArea.identifier)
     }
 
@@ -201,7 +201,7 @@ class ProvisioningModelTest {
         assertEquals("Test Document", doc.typeDisplayName)
         val credentials = doc.getCredentials()
         assertEquals(2, credentials.size)
-        val credential = credentials.first() as MdocCredential
+        val credential = credentials.first() as KeyBoundMdocCredential
         assertFalse(credential.isCertified)
         issue = true
         val doc1 = model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
@@ -213,7 +213,7 @@ class ProvisioningModelTest {
         assertEquals("Test Document", doc.typeDisplayName)
         val credentials1 = doc.getCredentials()
         assertEquals(2, credentials1.size)
-        val credential1 = credentials.first() as MdocCredential
+        val credential1 = credentials.first() as KeyBoundMdocCredential
         assertTrue(credential1.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
     }
@@ -269,7 +269,7 @@ class ProvisioningModelTest {
         val doc = documentStore.lookupDocument(documentIds.first())!!
         val credentials = doc.getCredentials()
         assertEquals(2, credentials.size)
-        val credential = credentials.first() as MdocCredential
+        val credential = credentials.first() as KeyBoundMdocCredential
         assertFalse(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
         assertFalse(doc.provisioned)

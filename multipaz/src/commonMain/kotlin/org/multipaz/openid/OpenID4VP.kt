@@ -768,7 +768,7 @@ object OpenID4VP {
                 addDocument(document)
             }
         }
-        mdocCredential.increaseUsageCount()
+        match.credential.increaseUsageCount()
         return Cbor.encode(deviceResponse.toDataItem()).toBase64Url()
     }
 
@@ -835,7 +835,7 @@ object OpenID4VP {
     ): String {
         match.source as PresentmentCredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
-        val claims = match.source.credentialQuery.claims as List<JsonRequestedClaim>
+        val claims = match.claims.keys.filterIsInstance<JsonRequestedClaim>()
 
         val sdJwt = SdJwt.fromCompactSerialization(sdjwtVcCredential.issuerProvidedData.decodeToString())
         val pathsToDisclose = claims.map { claim: JsonRequestedClaim -> claim.claimPath }
@@ -843,9 +843,12 @@ object OpenID4VP {
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
 
-        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData, match.transactionUserInput)
-
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
+            val transactionResponse = processTransactions(
+                sdjwtVcCredential,
+                match.transactionData,
+                match.transactionUserInput
+            )
             filteredSdJwt.present(
                 signingKey = AsymmetricKey.anonymous(
                     alias = sdjwtVcCredential.alias,
@@ -874,6 +877,9 @@ object OpenID4VP {
                 }
             }.compactSerialization
         } else {
+            check(match.transactionData.isEmpty()) {
+                "Transaction data is not supported for keyless SD-JWT credentials"
+            }
             filteredSdJwt.compactSerialization
         }
     }
