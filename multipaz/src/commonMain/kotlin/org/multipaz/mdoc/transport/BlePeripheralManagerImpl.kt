@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.toHex
@@ -450,8 +450,8 @@ internal class BlePeripheralManagerImpl(
         }
     }
 
-    override suspend fun setESenderKey(eSenderKey: EcPublicKey) {
-        identValue = deriveBleIdent(eSenderKey)
+    override suspend fun setESenderKeyBytes(eSenderKeyBytes: ByteString) {
+        identValue = deriveBleIdent(eSenderKeyBytes)
     }
 
     override suspend fun waitForStateCharacteristicWriteOrL2CAPClient() {

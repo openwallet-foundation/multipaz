@@ -23,6 +23,7 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
@@ -35,6 +36,7 @@ import org.multipaz.documenttype.StringOption
 import org.multipaz.util.fromBase64Url
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 import org.multipaz.documenttype.PortraitEquivalenceRequest
+import kotlin.time.Instant
 
 /**
  * Object containing the metadata of the Driving License
@@ -312,14 +314,14 @@ object DrivingLicense {
                 group = residentialAddressGroup
             )
             .addMdocAttribute(
-                type = DocumentAttributeType.Date,
+                type = DocumentAttributeType.DateTime,
                 identifier = "portrait_capture_date",
                 displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_PORTRAIT_IMAGE_TIMESTAMP),
                 description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_PORTRAIT_IMAGE_TIMESTAMP),
                 mandatory = false,
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.TODAY,
-                sampleValue = LocalDate.parse(SampleData.PORTRAIT_CAPTURE_DATE).toDataItemFullDate()
+                sampleValue = Instant.parse(SampleData.PORTRAIT_CAPTURE_DATE_TIME).toDataItemDateTimeString()
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.Number,
@@ -465,6 +467,17 @@ object DrivingLicense {
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
+                identifier = "resident_street",
+                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_RESIDENT_STREET),
+                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_RESIDENT_STREET),
+                mandatory = false,
+                mdocNamespace = MDL_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_STREET.toDataItem(),
+                group = residentialAddressGroup
+            )
+            .addMdocAttribute(
+                type = DocumentAttributeType.String,
                 identifier = "resident_city",
                 displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_RESIDENT_CITY),
                 description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_RESIDENT_CITY),
@@ -538,6 +551,17 @@ object DrivingLicense {
                 mdocNamespace = MDL_NAMESPACE,
                 icon = Icon.SIGNATURE,
                 sampleValue = SampleData.SIGNATURE_OR_USUAL_MARK_BASE64URL.fromBase64Url().toDataItem()
+            )
+            .addMdocAttribute(
+                type = DocumentAttributeType.Boolean,
+                identifier = "expiry_date_after_validuntil",
+                displayName = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_ATTRIBUTE_EXPIRY_DATE_AFTER_VALIDUNTIL),
+                description = getLocalizedString(GeneratedStringKeys.DRIVING_LICENSE_DESCRIPTION_EXPIRY_DATE_AFTER_VALIDUNTIL),
+                mandatory = false,
+                mdocNamespace = MDL_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = true.toDataItem()
             )
             .addMdocAttribute(
                 type = DocumentAttributeType.ComplexType,

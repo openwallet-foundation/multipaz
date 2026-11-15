@@ -25,6 +25,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
@@ -550,7 +551,8 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                 null
             }
 
-            transport.open(eDeviceKey.publicKey)
+            val eDeviceKeyBytes = DeviceEngagement.fromDataItem(initialParams.deviceEngagement).eDeviceKeyBytes
+            transport.open(eDeviceKeyBytes)
 
             if (isNfcOnly) {
                 transport.setExpectTransport(false)
@@ -570,7 +572,7 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                             options = settings.transportOptions,
                         )
                         secondaryTransport = createdTransport
-                        createdTransport.open(eSenderKey = eDeviceKey.publicKey)
+                        createdTransport.open(eSenderKeyBytes = eDeviceKeyBytes)
                         transport.setTransport(createdTransport)
                         handedOffToHybrid = true
 

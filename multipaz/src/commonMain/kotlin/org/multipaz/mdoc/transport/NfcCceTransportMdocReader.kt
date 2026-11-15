@@ -15,7 +15,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.nfc.nfcCceTransact
 import org.multipaz.mdoc.role.MdocRole
@@ -257,7 +256,7 @@ class NfcCceTransportMdocReader(
         }
     }
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         mutex.withLock {
             check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
             _state.value = State.CONNECTED
@@ -266,7 +265,7 @@ class NfcCceTransportMdocReader(
         if (negotiatedTransport != null) {
             negotiatedTransportOpenJob = CoroutineScope(Dispatchers.Default).launch {
                 try {
-                    negotiatedTransport.open(eSenderKey)
+                    negotiatedTransport.open(eSenderKeyBytes)
                     negotiatedTransportOpenJob = null
                     val pendingMessages = mutex.withLock {
                         val list = negotiatedTransportPendingOutgoingMessages.toList()

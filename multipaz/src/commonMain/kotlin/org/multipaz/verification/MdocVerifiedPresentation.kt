@@ -9,7 +9,12 @@ import org.multipaz.revocation.RevocationStatus
 import kotlin.time.Instant
 
 /**
- * A verified presentation of an ISO mdoc credential
+ * A verified presentation of an ISO mdoc credential.
+ *
+ * Note that producing this presentation does not check X.509 CRL/OCSP revocation on
+ * [documentSignerCertChain] or MSO revocation via [revocationStatus]; the caller is expected to
+ * verify issuer trust, certificate revocation, and [revocationStatus] (e.g., via
+ * `RevocationStatus.check`) separately when required.
  *
  * @property docType the ISO mdoc document type, e.g. `org.iso.18013.5.1.mDL`.
  * @property transactionResponses response to transaction data associated with the presented

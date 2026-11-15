@@ -10,9 +10,10 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.UUID
 import kotlin.math.min
@@ -47,18 +48,22 @@ import kotlin.time.Duration.Companion.seconds
  *   service discovery retries, and L2CAP exponential backoff retries in [BleCentralManagerImpl].
  * - **Protocol error conditions**: Verifying rejection of mismatched `BLEIdent` values, invalid
  *   negotiated MTU values (`< 22`), malformed GATT chunk headers, and `Ident` reads before
- *   [BlePeripheralManager.setESenderKey] is called.
+ *   [BlePeripheralManager.setESenderKeyBytes] is called.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BleManagerImplTest {
-    private lateinit var eDeviceKey: EcPublicKey
-    private lateinit var eReaderKey: EcPublicKey
+    private lateinit var eDeviceKey: ByteString
+    private lateinit var eReaderKey: ByteString
     private val serviceUuid = UUID.fromString("11111111-2222-3333-4444-555555555555")
 
     @BeforeTest
     fun setup() = runTest {
-        eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
-        eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        eDeviceKey = buildDeviceEngagement(
+            eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        ) {}.eDeviceKeyBytes
+        eReaderKey = buildDeviceEngagement(
+            eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        ) {}.eDeviceKeyBytes
     }
 
     /**
@@ -1122,7 +1127,7 @@ class BleManagerImplTest {
 
     /**
      * Verifies that when a central connects and reads the `Ident` characteristic before the
-     * peripheral has called [BlePeripheralManager.setESenderKey], the peripheral rejects the read
+     * peripheral has called [BlePeripheralManager.setESenderKeyBytes], the peripheral rejects the read
      * without failing the transport and the central retries `checkReaderIdentMatches` until
      * `setESenderKey` is called.
      */

@@ -17,6 +17,7 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.ASN1String
+import org.multipaz.asn1.ASN1StringTag
 import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
@@ -302,7 +303,10 @@ private suspend fun createRootIdentity(
             )
             put(
                 OID.COUNTRY_NAME.oid,
-                ASN1String(enrollmentInfo?.get("country")?.jsonPrimitive?.content ?: "US")
+                ASN1String(
+                    enrollmentInfo?.get("country")?.jsonPrimitive?.content ?: "US",
+                    ASN1StringTag.PRINTABLE_STRING.tag
+                )
             )
             enrollmentInfo?.get("state_or_province")?.jsonPrimitive?.content?.let {
                 put(OID.STATE_OR_PROVINCE_NAME.oid, ASN1String(it))
@@ -403,7 +407,7 @@ suspend fun generateServerIdentityLeafCertificate(
     val subject = X500Name(buildMap {
         put(OID.COMMON_NAME.oid, ASN1String(commonName))
         enrollmentRequest.country?.let {
-            put(OID.COUNTRY_NAME.oid, ASN1String(it))
+            put(OID.COUNTRY_NAME.oid, ASN1String(it, ASN1StringTag.PRINTABLE_STRING.tag))
         }
         enrollmentRequest.stateOrProvince?.let {
             put(OID.STATE_OR_PROVINCE_NAME.oid, ASN1String(it))

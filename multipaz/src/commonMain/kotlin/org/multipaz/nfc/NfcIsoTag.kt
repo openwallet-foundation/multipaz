@@ -53,16 +53,36 @@ abstract class NfcIsoTag {
      * @return the response APDU.
      * @throws NfcCommandFailedException if the command fails.
      */
-    suspend fun selectApplication(applicationId: ByteString): ResponseApdu {
+    suspend fun selectApplication(applicationId: ByteString): ResponseApdu =
+        selectApplication(
+            applicationId = applicationId,
+            p2 = Nfc.INS_SELECT_P2_APPLICATION,
+            le = 0,
+        )
+
+    /**
+     * Selects an application according to ISO 7816-4 clause 11.2.2 with explicit `P2` and `Le` values.
+     *
+     * @param applicationId the application to select, e.g. [Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID].
+     * @param p2 parameter byte 2 (e.g. [Nfc.INS_SELECT_P2_APPLICATION] or [Nfc.INS_SELECT_P2_NO_RESPONSE_DATA]).
+     * @param le maximum expected length of response data field (`0` to omit `Le`, `0x100` for short `Le = 0x00`).
+     * @return the response APDU.
+     * @throws NfcCommandFailedException if the command fails.
+     */
+    suspend fun selectApplication(
+        applicationId: ByteString,
+        p2: Int,
+        le: Int,
+    ): ResponseApdu {
         // ISO 7816-4 clause 11.2.2
         val response = transceive(
             CommandApdu(
                 cla = 0,
                 ins = Nfc.INS_SELECT,
                 p1 = Nfc.INS_SELECT_P1_APPLICATION,
-                p2 = Nfc.INS_SELECT_P2_APPLICATION,
+                p2 = p2,
                 payload = applicationId,
-                le = 0
+                le = le
             )
         )
         if (response.status != Nfc.RESPONSE_STATUS_SUCCESS) {

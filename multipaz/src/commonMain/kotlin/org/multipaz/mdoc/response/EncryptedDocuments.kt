@@ -244,7 +244,7 @@ data class EncryptedDocuments internal constructor(
         encDocsPt.otherDocuments.forEachIndexed { index, document ->
             try {
                 var matchedReqIds: List<Int> = emptyList()
-                val expectedAudience = if (deviceRequest != null && document.docFormat == "dc+sd-jwt") {
+                if (deviceRequest != null && document.docFormat == "dc+sd-jwt") {
                     val (sdJwt, sdJwtKb) = document.parseSdJwtPresentation()
                     val vct = (sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
                         ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
@@ -291,29 +291,14 @@ data class EncryptedDocuments internal constructor(
                         candidates
                     }
                     matchedReqIds = targetIds
-                    if (sdJwtKb != null) {
-                        val audiences = targetIds.map { reqId ->
-                            deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[reqId])
-                        }.distinct()
-                        if (audiences.size != 1) {
-                            throw IllegalStateException(
-                                "Inconsistent expected audiences across docRequestIds $targetIds"
-                            )
-                        }
-                        if (documentTypeRepository != null) {
-                            validateSignedSdJwtTransactionDocRequestIds(
-                                sdJwtKb = sdJwtKb,
-                                allowedIds = document.docRequestIds ?: targetIds,
-                                deviceRequest = deviceRequest,
-                                documentTypeRepository = documentTypeRepository
-                            )
-                        }
-                        audiences.single()
-                    } else {
-                        null
+                    if (sdJwtKb != null && documentTypeRepository != null) {
+                        validateSignedSdJwtTransactionDocRequestIds(
+                            sdJwtKb = sdJwtKb,
+                            allowedIds = document.docRequestIds ?: targetIds,
+                            deviceRequest = deviceRequest,
+                            documentTypeRepository = documentTypeRepository
+                        )
                     }
-                } else {
-                    null
                 }
                 val requireHolderBinding = deviceRequest == null ||
                     matchedReqIds.isEmpty() ||
@@ -330,7 +315,6 @@ data class EncryptedDocuments internal constructor(
                     eReaderKey = null,
                     transactionData = transactionData,
                     atTime = atTime,
-                    expectedAudience = expectedAudience,
                     requireHolderBinding = requireHolderBinding,
                 )
             } catch (e: Exception) {

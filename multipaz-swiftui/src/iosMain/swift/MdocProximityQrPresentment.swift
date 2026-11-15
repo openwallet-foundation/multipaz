@@ -61,7 +61,7 @@ final class MdocPresentmentViewModel: ObservableObject {
                 
                 let transport = try await ConnectionHelperKt.waitForConnection(
                     advertisedTransports,
-                    eSenderKey: eDeviceKey.publicKey
+                    eSenderKeyBytes: deviceEngagement.eDeviceKeyBytes
                 )
 
                 self.state = .transacting

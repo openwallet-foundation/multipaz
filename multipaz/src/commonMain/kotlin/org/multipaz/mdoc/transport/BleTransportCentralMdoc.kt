@@ -18,10 +18,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Instant
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -128,7 +128,7 @@ internal class BleTransportCentralMdoc(
             bleNumChunksReceived = centralManager.numChunksReceived,
         )
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         var timeScanningStarted: Instant
         var timeConnectingStarted: Instant? = null
         try {
@@ -157,7 +157,7 @@ internal class BleTransportCentralMdoc(
                             centralManager.requestMtu()
                             centralManager.peripheralDiscoverServices(uuid)
                             centralManager.peripheralDiscoverCharacteristics()
-                            centralManager.checkReaderIdentMatches(eSenderKey)
+                            centralManager.checkReaderIdentMatches(eSenderKeyBytes)
                             if (centralManager.l2capPsm != null) {
                                 centralManager.connectL2cap(centralManager.l2capPsm!!)
                             } else {

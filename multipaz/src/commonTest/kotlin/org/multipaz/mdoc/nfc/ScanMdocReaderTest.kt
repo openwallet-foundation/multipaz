@@ -4,13 +4,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
@@ -92,7 +93,7 @@ class ScanMdocReaderTest {
             _state.value = State.ADVERTISING
         }
 
-        override suspend fun open(eSenderKey: EcPublicKey) {
+        override suspend fun open(eSenderKeyBytes: ByteString) {
             _state.value = State.CONNECTED
         }
 
@@ -565,7 +566,7 @@ class ScanMdocReaderTest {
                 true
             }
         )
-        mdocTransportTap2.open(eDeviceKey.publicKey)
+        mdocTransportTap2.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
         val tagTap2 = NfcCceLoopbackIsoTag(helperTap2)
 
         val reader = FakeNfcTagReader(tags = listOf(tagTap1, tagTap2))
@@ -598,7 +599,7 @@ class ScanMdocReaderTest {
                     }
                 )
 
-                scanResult.transport.open(eReaderKey.publicKey)
+                scanResult.transport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
                 if (onHandoverAttempts == 2) {
                     // Queue the mdoc's response before sending the ENVELOPE command on Tap 2
                     mdocTransportTap2.sendMessage(response)

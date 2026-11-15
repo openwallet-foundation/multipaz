@@ -55,25 +55,35 @@ data class ZkDocumentData (
             put("docType", docType)
             val timestampStr = timestamp.toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO) + "Z"
             put("timestamp", Tagged(Tagged.DATE_TIME_STRING, Tstr(timestampStr)))
-            putCborMap("issuerSigned") {
-                issuerSigned.forEach { (namespaceName, dataElements) ->
-                    putCborArray(namespaceName) {
-                        dataElements.forEach { (dataElementName, dataElementValue) ->
-                            addCborMap {
-                                put("elementIdentifier", dataElementName)
-                                put("elementValue", dataElementValue)
+            if (issuerSigned.isNotEmpty()) {
+                putCborMap("issuerSigned") {
+                    issuerSigned.forEach { (namespaceName, dataElements) ->
+                        require(dataElements.isNotEmpty()) {
+                            "ZkNameSpaces entry '$namespaceName' in issuerSigned must not be empty"
+                        }
+                        putCborArray(namespaceName) {
+                            dataElements.forEach { (dataElementName, dataElementValue) ->
+                                addCborMap {
+                                    put("elementIdentifier", dataElementName)
+                                    put("elementValue", dataElementValue)
+                                }
                             }
                         }
                     }
                 }
             }
-            putCborMap("deviceSigned") {
-                deviceSigned.forEach { (namespaceName, dataElements) ->
-                    putCborArray(namespaceName) {
-                        dataElements.forEach { (dataElementName, dataElementValue) ->
-                            addCborMap {
-                                put("elementIdentifier", dataElementName)
-                                put("elementValue", dataElementValue)
+            if (deviceSigned.isNotEmpty()) {
+                putCborMap("deviceSigned") {
+                    deviceSigned.forEach { (namespaceName, dataElements) ->
+                        require(dataElements.isNotEmpty()) {
+                            "ZkNameSpaces entry '$namespaceName' in deviceSigned must not be empty"
+                        }
+                        putCborArray(namespaceName) {
+                            dataElements.forEach { (dataElementName, dataElementValue) ->
+                                addCborMap {
+                                    put("elementIdentifier", dataElementName)
+                                    put("elementValue", dataElementValue)
+                                }
                             }
                         }
                     }
@@ -121,21 +131,39 @@ data class ZkDocumentData (
             val timestamp = taggedTimestamp.asTagged.asTstr
 
             val issuerSigned = mutableMapOf<String, Map<String, DataItem>>()
-            dataItem.getOrNull("issuerSigned")?.asMap?.forEach { (nameSpaceItem, dateElementsItem) ->
-                val dataElementsMap = mutableMapOf<String, DataItem>()
-                dateElementsItem.asArray.forEach { zkSignedItem ->
-                    dataElementsMap.put(zkSignedItem["elementIdentifier"].asTstr, zkSignedItem["elementValue"])
+            dataItem.getOrNull("issuerSigned")?.asMap?.let { issuerSignedMap ->
+                require(issuerSignedMap.isNotEmpty()) {
+                    "'issuerSigned' map in ZkDocumentData must be omitted when empty"
                 }
-                issuerSigned.put(nameSpaceItem.asTstr, dataElementsMap)
+                issuerSignedMap.forEach { (nameSpaceItem, dataElementsItem) ->
+                    val elementsArray = dataElementsItem.asArray
+                    require(elementsArray.isNotEmpty()) {
+                        "ZkNameSpaces entry '${nameSpaceItem.asTstr}' in issuerSigned must not be empty"
+                    }
+                    val dataElementsMap = mutableMapOf<String, DataItem>()
+                    elementsArray.forEach { zkSignedItem ->
+                        dataElementsMap[zkSignedItem["elementIdentifier"].asTstr] = zkSignedItem["elementValue"]
+                    }
+                    issuerSigned[nameSpaceItem.asTstr] = dataElementsMap
+                }
             }
 
             val deviceSigned = mutableMapOf<String, Map<String, DataItem>>()
-            dataItem.getOrNull("deviceSigned")?.asMap?.forEach { (nameSpaceItem, dateElementsItem) ->
-                val dataElementsMap = mutableMapOf<String, DataItem>()
-                dateElementsItem.asArray.forEach { zkSignedItem ->
-                    dataElementsMap.put(zkSignedItem["elementIdentifier"].asTstr, zkSignedItem["elementValue"])
+            dataItem.getOrNull("deviceSigned")?.asMap?.let { deviceSignedMap ->
+                require(deviceSignedMap.isNotEmpty()) {
+                    "'deviceSigned' map in ZkDocumentData must be omitted when empty"
                 }
-                deviceSigned.put(nameSpaceItem.asTstr, dataElementsMap)
+                deviceSignedMap.forEach { (nameSpaceItem, dataElementsItem) ->
+                    val elementsArray = dataElementsItem.asArray
+                    require(elementsArray.isNotEmpty()) {
+                        "ZkNameSpaces entry '${nameSpaceItem.asTstr}' in deviceSigned must not be empty"
+                    }
+                    val dataElementsMap = mutableMapOf<String, DataItem>()
+                    elementsArray.forEach { zkSignedItem ->
+                        dataElementsMap[zkSignedItem["elementIdentifier"].asTstr] = zkSignedItem["elementValue"]
+                    }
+                    deviceSigned[nameSpaceItem.asTstr] = dataElementsMap
+                }
             }
 
             val msoX5chain = dataItem.getOrNull("msoX5chain")?.asX509CertChain

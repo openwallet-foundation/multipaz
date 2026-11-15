@@ -9,14 +9,17 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import kotlin.time.Clock
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 class VicalGeneratorTest {
@@ -52,7 +55,7 @@ class VicalGeneratorTest {
         val issuer3Cert = createSelfsignedCert(
             Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=Issuer 3 IACA"))
 
-        val vicalDate = Clock.System.now()
+        val vicalDate = Clock.System.now().truncateToWholeSeconds() + 123.milliseconds
         val vicalNextUpdate = vicalDate + 30.days
         val vicalNotAfter = vicalDate + 60.days
         val vicalIssueID = 42L
@@ -106,11 +109,11 @@ class VicalGeneratorTest {
         assertEquals(listOf(vicalCert), decodedSignedVical.vicalProviderCertificateChain.certificates)
         assertEquals("Test VICAL Provider", decodedSignedVical.vical.vicalProvider)
         assertEquals("1.0", decodedSignedVical.vical.version)
-        assertEquals(vicalDate, decodedSignedVical.vical.date)
-        assertEquals(vicalNextUpdate, decodedSignedVical.vical.nextUpdate)
+        assertEquals(vicalDate.truncateToWholeSeconds(), decodedSignedVical.vical.date)
+        assertEquals(vicalNextUpdate.truncateToWholeSeconds(), decodedSignedVical.vical.nextUpdate)
         assertEquals(vicalIssueID, decodedSignedVical.vical.vicalIssueID)
         assertEquals(3, decodedSignedVical.vical.certificateInfos.size)
-        assertEquals(vicalNotAfter, decodedSignedVical.vical.notAfter)
+        assertEquals(vicalNotAfter.truncateToWholeSeconds(), decodedSignedVical.vical.notAfter)
         assertEquals(vicalUrl, decodedSignedVical.vical.vicalUrl)
         assertEquals(vicalExtensions, decodedSignedVical.vical.extensions)
 
@@ -163,7 +166,10 @@ class VicalGeneratorTest {
             issuer = X500Name.fromName("C=US,CN=VICAL Root CA"),
             validFrom = now - 10.minutes,
             validUntil = now + 10.minutes,
-        ).includeSubjectKeyIdentifier().setBasicConstraints(ca = true, pathLenConstraint = null).build()
+        ).includeSubjectKeyIdentifier()
+            .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            .setBasicConstraints(ca = true, pathLenConstraint = null)
+            .build()
 
         val signerKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val signerCert = X509Cert.Builder(
@@ -236,5 +242,20 @@ class VicalGeneratorTest {
         assertEquals(null, info1.subject)
         assertEquals(null, info1.notBefore)
         assertEquals(null, info1.notAfter)
+
+        // Reject empty docTypes per Annex C.2.1 ([+ DocType])
+        val emptyDocTypeVical = SignedVical(
+            vical = signedVical.vical.copy(
+                certificateInfos = listOf(
+                    VicalCertificateInfo(certificate = caCert, docTypes = emptyList())
+                )
+            ),
+            vicalProviderCertificateChain = X509CertChain(listOf(signerCert, rootCert))
+        )
+        assertFailsWith<IllegalArgumentException> {
+            emptyDocTypeVical.generate(
+                signingKey = AsymmetricKey.anonymous(signerKey, signerKey.curve.defaultSigningAlgorithm)
+            )
+        }
     }
 }

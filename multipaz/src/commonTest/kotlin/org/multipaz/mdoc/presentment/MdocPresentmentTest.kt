@@ -294,46 +294,19 @@ class MdocPresentmentTest {
             sessionTranscript = sessionTranscript,
             deviceRequest = deviceRequest,
         )
-        assertEquals(
-            "Failed verification of audience",
-            assertFailsWith<IllegalStateException> {
-                dr.verify(sessionTranscript = sessionTranscript)
-            }.message
-        )
-        val mismatchedDeviceRequest = buildDeviceRequest(
-            sessionTranscript = sessionTranscript,
-            deviceRequestInfo = singleDocRequestInfo,
-        ) {
-            addDocRequest(
-                docType = EUPersonalID.EUPID_VCT,
-                nameSpaces = mapOf(
-                    "_" to mapOf(
-                        "sdjwtvc_given_name" to false,
-                        "sdjwtvc_family_name" to false
-                    )
-                ),
-                docRequestInfo = DocRequestInfo(
-                    docFormat = "dc+sd-jwt",
-                    dataElementIdentifierMapping = mapOf(
-                        "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
-                        "sdjwtvc_family_name" to buildJsonArray { add("family_name") },
-                    )
-                ),
-                readerKey = if (readerAuthType == ReaderAuthType.NONE) readerKey else null
+        // Per ISO/IEC 18013-5 Second Edition Annex H.2, both `nonce` and `aud` in the Key Binding
+        // JWT are `base64url(SHA-256(SessionTranscriptBytes))`, so verifying against the same
+        // SessionTranscript succeeds without `deviceRequest` and fails on a different transcript.
+        dr.verify(sessionTranscript = sessionTranscript)
+        assertFailsWith<IllegalStateException> {
+            dr.verify(
+                sessionTranscript = buildCborArray {
+                    add(Simple.NULL)
+                    add(Simple.NULL)
+                    add(byteArrayOf(9, 9, 9))
+                }
             )
-            if (readerAuthType == ReaderAuthType.READER_AUTH) {
-                addReaderAuthAll(readerKey)
-            }
         }
-        assertEquals(
-            "Failed verification of audience",
-            assertFailsWith<IllegalStateException> {
-                dr.verify(
-                    sessionTranscript = sessionTranscript,
-                    deviceRequest = mismatchedDeviceRequest,
-                )
-            }.message
-        )
         assertEquals(0, dr.documents.size)
 
         assertEquals(1, dr.otherDocuments.size)
@@ -346,51 +319,13 @@ class MdocPresentmentTest {
         )
         val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
 
-        val readerAuthExpectedAudience = deviceRequest.docRequests[0].readerAuth?.let {
-            Crypto.digest(
-                algorithm = Algorithm.SHA256,
-                message = Cbor.encode(
-                    Tagged(
-                        tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(it.toDataItem()))
-                    )
-                )
-            )
-        }?.toBase64Url()
-        val readerAuthAllExpectedAudience = if (deviceRequest.readerAuthAll.isNotEmpty()) {
-            deviceRequest.readerAuthAll.let {
-                val listOfReaderAuthAll = buildCborArray {
-                    deviceRequest.readerAuthAll.forEach {
-                        add(it.toDataItem())
-                    }
-                }
-                Crypto.digest(
-                    algorithm = Algorithm.SHA256,
-                    message = Cbor.encode(
-                        Tagged(
-                            tagNumber = Tagged.ENCODED_CBOR,
-                            taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
-                        )
-                    )
-                )
-            }.toBase64Url()
-        } else {
-            null
-        }
-
         val processedPayload = sdJwtKb.verify(
             issuerKey = harness.dsKey.publicKey,
             checkNonce = { nonce ->
                 expectedNonce == nonce
             },
             checkAudience = { aud ->
-                when (readerAuthType) {
-                    ReaderAuthType.NONE -> aud == "none"
-                    ReaderAuthType.READER_AUTH -> aud == readerAuthExpectedAudience
-                    ReaderAuthType.READER_AUTH_ALL, ReaderAuthType.READER_AUTH_AND_READER_AUTH_ALL -> {
-                        aud == readerAuthAllExpectedAudience
-                    }
-                }
+                expectedNonce == aud
             },
             checkCreationTime = { creationTimeInSdJwtKb ->
                 (creationTimeInSdJwtKb - creationTime).absoluteValue.inWholeSeconds < 5

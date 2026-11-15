@@ -368,6 +368,7 @@ internal class ConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+            atTime = NOW,
         )
     }
 
@@ -406,6 +407,7 @@ internal class ConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+            atTime = NOW,
         )
     }
 
@@ -483,6 +485,7 @@ internal class ConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+            atTime = NOW,
         )
     }
 

@@ -114,7 +114,8 @@ data class X509CertChain(
      *    - CA flag set to true
      *    - path length constraint that is sufficient for number of certificates in the chain
      *
-     * This method does not check certificate revocation lists.
+     * This method does not perform X.509 CRL or OCSP revocation checking; the caller is expected
+     * to check certificate revocation separately (e.g., via [X509Crl]) when required.
      *
      * @param validateAt time of the validation
      * @param requireBasicConstraints if non-leaf certificates must use basic constrains extension

@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -135,7 +136,7 @@ class Iso18013ReaderQrPresentmentTest {
             override val connectionMethods: List<MdocConnectionMethod>
                 get() = resolvedMethods
 
-            val readerOpenKeyDeferred = CompletableDeferred<EcPublicKey>()
+            val readerOpenKeyDeferred = CompletableDeferred<ByteString>()
             val connectedDeferred = CompletableDeferred<Unit>()
             val incoming = Channel<ByteArray>(Channel.UNLIMITED)
             var outgoing: Channel<ByteArray>? = null
@@ -156,8 +157,8 @@ class Iso18013ReaderQrPresentmentTest {
                 }
             }
 
-            override suspend fun open(eSenderKey: EcPublicKey) {
-                readerOpenKeyDeferred.complete(eSenderKey)
+            override suspend fun open(eSenderKeyBytes: ByteString) {
+                readerOpenKeyDeferred.complete(eSenderKeyBytes)
                 try {
                     connectedDeferred.await()
                     _state.value = State.CONNECTED
@@ -218,7 +219,7 @@ class Iso18013ReaderQrPresentmentTest {
 
             override suspend fun advertise() {}
 
-            override suspend fun open(eSenderKey: EcPublicKey) {
+            override suspend fun open(eSenderKeyBytes: ByteString) {
                 _state.value = State.CONNECTING
                 if (simulateConnectionHang) {
                     hangDeferred.await()
@@ -229,9 +230,9 @@ class Iso18013ReaderQrPresentmentTest {
                 } ?: throw MdocTransportException("No advertised reader for $connectionMethod")
 
                 val readerExpectedKey = readerTransport.readerOpenKeyDeferred.await()
-                if (readerExpectedKey != eSenderKey) {
+                if (readerExpectedKey != eSenderKeyBytes) {
                     _state.value = State.FAILED
-                    throw MdocTransportException("Mismatched eSenderKey")
+                    throw MdocTransportException("Mismatched eSenderKeyBytes")
                 }
 
                 outgoing = readerTransport.incoming
@@ -377,7 +378,7 @@ class Iso18013ReaderQrPresentmentTest {
 
             val readerJob = launch {
                 val connectedReaderTransport = advertisedTransports.waitForConnection(
-                    eSenderKey = eReaderKey.publicKey
+                    eSenderKeyBytes = readerEngagement.eReaderKeyBytes!!
                 )
                 try {
                     val msg1 = connectedReaderTransport.waitForMessage()
@@ -490,16 +491,17 @@ class Iso18013ReaderQrPresentmentTest {
                 transportFactory = factory,
                 options = MdocTransportOptions(),
             )
+            val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey, version = "1.1") {
+                advertised.forEach { t -> t.connectionMethods.forEach { addConnectionMethod(it) } }
+            }
             val encodedReaderEngagement = Cbor.encode(
-                buildReaderEngagement(eReaderKey = eReaderKey.publicKey, version = "1.1") {
-                    advertised.forEach { t -> t.connectionMethods.forEach { addConnectionMethod(it) } }
-                }.toDataItem(MdocEngagementType.READER_QR)
+                readerEngagement.toDataItem(MdocEngagementType.READER_QR)
             )
             val uri = "mdoc:" + encodedReaderEngagement.toBase64Url()
             val handover = ReaderEngagement.computeHandover(encodedReaderEngagement)
 
             val readerJob = launch {
-                val readerTransport = advertised.waitForConnection(eReaderKey.publicKey)
+                val readerTransport = advertised.waitForConnection(readerEngagement.eReaderKeyBytes!!)
                 try {
                     val encodedDeBytes = SessionEncryption.getDeviceEngagementBytes(readerTransport.waitForMessage())
                     val de = DeviceEngagement.fromDataItem(
@@ -561,16 +563,17 @@ class Iso18013ReaderQrPresentmentTest {
                 transportFactory = factory,
                 options = MdocTransportOptions(),
             )
+            val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey, version = "1.1") {
+                advertised.forEach { t -> t.connectionMethods.forEach { addConnectionMethod(it) } }
+            }
             val encodedReaderEngagement = Cbor.encode(
-                buildReaderEngagement(eReaderKey = eReaderKey.publicKey, version = "1.1") {
-                    advertised.forEach { t -> t.connectionMethods.forEach { addConnectionMethod(it) } }
-                }.toDataItem(MdocEngagementType.READER_QR)
+                readerEngagement.toDataItem(MdocEngagementType.READER_QR)
             )
             val uri = "mdoc:" + encodedReaderEngagement.toBase64Url()
             val handover = ReaderEngagement.computeHandover(encodedReaderEngagement)
 
             val readerJob = launch {
-                val readerTransport = advertised.waitForConnection(eReaderKey.publicKey)
+                val readerTransport = advertised.waitForConnection(readerEngagement.eReaderKeyBytes!!)
                 try {
                     val encodedDeBytes = SessionEncryption.getDeviceEngagementBytes(readerTransport.waitForMessage())
                     val de = DeviceEngagement.fromDataItem(
@@ -681,8 +684,11 @@ class Iso18013ReaderQrPresentmentTest {
         val uri = "mdoc:" + nonCanonicalReaderEngagement.toBase64Url()
         val expectedHandover = ReaderEngagement.computeHandover(nonCanonicalReaderEngagement)
 
+        val nonCanonicalEReaderKeyBytes = ByteString(
+            Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(nonCanonicalCoseKey)))
+        )
         val readerJob = launch {
-            val readerTransport = advertised.waitForConnection(eReaderKey.publicKey)
+            val readerTransport = advertised.waitForConnection(nonCanonicalEReaderKeyBytes)
             try {
                 val encodedDeBytes = SessionEncryption.getDeviceEngagementBytes(readerTransport.waitForMessage())
                 val de = DeviceEngagement.fromDataItem(

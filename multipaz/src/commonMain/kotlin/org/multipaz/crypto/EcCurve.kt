@@ -167,7 +167,7 @@ enum class EcCurve(
             P384 -> Algorithm.ESP384
             P521 -> Algorithm.ESP512
             BRAINPOOLP256R1 -> Algorithm.ESB256
-            BRAINPOOLP320R1 -> Algorithm.ESB384
+            BRAINPOOLP320R1 -> Algorithm.ESB320
             BRAINPOOLP384R1 -> Algorithm.ESB384
             BRAINPOOLP512R1 -> Algorithm.ESB512
             ED25519 -> Algorithm.ED25519

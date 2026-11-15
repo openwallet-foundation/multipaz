@@ -1,16 +1,21 @@
 package org.multipaz.mdoc.zkp
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborDouble
 import org.multipaz.cbor.CborInt
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 
 /**
@@ -46,6 +51,20 @@ sealed interface ZkSystemParamValue {
     data class BooleanValue(val value: Boolean): ZkSystemParamValue
 
     /**
+     * A list value (`[+ ParamValue]`).
+     *
+     * @property value the value.
+     */
+    data class ListValue(val value: List<ZkSystemParamValue>): ZkSystemParamValue
+
+    /**
+     * A map value (`{+ tstr => ParamValue}`).
+     *
+     * @property value the value.
+     */
+    data class MapValue(val value: Map<String, ZkSystemParamValue>): ZkSystemParamValue
+
+    /**
      * Encodes the value as Cbor.
      *
      * @return a [DataItem].
@@ -55,6 +74,12 @@ sealed interface ZkSystemParamValue {
         is DoubleValue -> this.value.toDataItem()
         is BooleanValue -> this.value.toDataItem()
         is LongValue -> this.value.toDataItem()
+        is ListValue -> buildCborArray {
+            value.forEach { add(it.toDataItem()) }
+        }
+        is MapValue -> buildCborMap {
+            value.forEach { (k, v) -> put(k, v.toDataItem()) }
+        }
     }
 
     /**
@@ -67,6 +92,8 @@ sealed interface ZkSystemParamValue {
         is DoubleValue -> JsonPrimitive(value)
         is LongValue -> JsonPrimitive(value)
         is StringValue -> JsonPrimitive(value)
+        is ListValue -> JsonArray(value.map { it.toJson() })
+        is MapValue -> JsonObject(value.mapValues { (_, v) -> v.toJson() })
     }
 
     companion object {
@@ -88,6 +115,14 @@ sealed interface ZkSystemParamValue {
                         else -> throw IllegalArgumentException("Unexpected CBOR")
                     }
                 }
+                is CborArray -> {
+                    require(value.items.isNotEmpty()) { "ParamValue list must not be empty" }
+                    ListValue(value.items.map { fromDataItem(it) })
+                }
+                is CborMap -> {
+                    require(value.items.isNotEmpty()) { "ParamValue map must not be empty" }
+                    MapValue(value.items.entries.associate { (k, v) -> k.asTstr to fromDataItem(v) })
+                }
                 else -> throw IllegalArgumentException("Unexpected Cbor data item $value")
             }
         }
@@ -99,16 +134,28 @@ sealed interface ZkSystemParamValue {
          * @return a [ZkSystemParamValue].
          */
         fun fromJson(value: JsonElement): ZkSystemParamValue {
-            return if (value.jsonPrimitive.isString) {
-                StringValue(value.jsonPrimitive.content)
-            } else if (value.jsonPrimitive.booleanOrNull != null) {
-                BooleanValue(value.jsonPrimitive.booleanOrNull!!)
-            } else if (value.jsonPrimitive.longOrNull != null) {
-                LongValue(value.jsonPrimitive.longOrNull!!)
-            } else if (value.jsonPrimitive.doubleOrNull != null) {
-                DoubleValue(value.jsonPrimitive.doubleOrNull!!)
-            } else {
-                throw IllegalArgumentException("Unexpected JsonElement $value")
+            return when (value) {
+                is JsonPrimitive -> {
+                    if (value.isString) {
+                        StringValue(value.content)
+                    } else if (value.booleanOrNull != null) {
+                        BooleanValue(value.booleanOrNull!!)
+                    } else if (value.longOrNull != null) {
+                        LongValue(value.longOrNull!!)
+                    } else if (value.doubleOrNull != null) {
+                        DoubleValue(value.doubleOrNull!!)
+                    } else {
+                        throw IllegalArgumentException("Unexpected JsonElement $value")
+                    }
+                }
+                is JsonArray -> {
+                    require(value.isNotEmpty()) { "ParamValue list must not be empty" }
+                    ListValue(value.map { fromJson(it) })
+                }
+                is JsonObject -> {
+                    require(value.isNotEmpty()) { "ParamValue map must not be empty" }
+                    MapValue(value.mapValues { (_, v) -> fromJson(v) })
+                }
             }
         }
     }

@@ -6,7 +6,9 @@ import org.multipaz.openid.dcql.DcqlCredentialQuery
 /**
  * Base class for source of a match.
  */
-sealed class PresentmentCredentialMatchSource
+sealed class PresentmentCredentialMatchSource {
+    internal abstract val allowsMultiple: Boolean
+}
 
 /**
  * OpenID4VP version for the source of a match.
@@ -15,7 +17,10 @@ sealed class PresentmentCredentialMatchSource
  */
 data class PresentmentCredentialMatchSourceOpenID4VP(
     val credentialQuery: DcqlCredentialQuery
-): PresentmentCredentialMatchSource()
+): PresentmentCredentialMatchSource() {
+    override val allowsMultiple: Boolean
+        get() = credentialQuery.multiple
+}
 
 /**
  * ISO 18013-5 version for the source of a match.
@@ -24,4 +29,7 @@ data class PresentmentCredentialMatchSourceOpenID4VP(
  */
 data class PresentmentCredentialMatchSourceIso18013(
     val docRequest: DocRequest
-): PresentmentCredentialMatchSource()
+): PresentmentCredentialMatchSource() {
+    override val allowsMultiple: Boolean
+        get() = docRequest.docRequestInfo?.uniqueDocSetRequired == false
+}

@@ -125,15 +125,13 @@ class TrustManager(
                     }
                     is TrustEntryVical -> {
                         val signedVical = SignedVical.parse(
-                            encodedSignedVical = localEntry.entry.encodedSignedVical.toByteArray(),
-                            disableSignatureVerification = true
+                            encodedSignedVical = localEntry.entry.encodedSignedVical.toByteArray()
                         )
                         loadedVicalTrustManagers[key] = VicalTrustManager(signedVical)
                     }
                     is TrustEntryRical -> {
                         val signedRical = SignedRical.parse(
-                            encodedSignedRical = localEntry.entry.encodedSignedRical.toByteArray(),
-                            disableSignatureVerification = true
+                            encodedSignedRical = localEntry.entry.encodedSignedRical.toByteArray()
                         )
                         loadedRicalTrustManagers[key] = RicalTrustManager(signedRical)
                     }
@@ -251,8 +249,7 @@ class TrustManager(
     ): TrustEntryVical {
         ensureInitialized()
         val signedVical = SignedVical.parse(
-            encodedSignedVical = encodedSignedVical.toByteArray(),
-            disableSignatureVerification = true
+            encodedSignedVical = encodedSignedVical.toByteArray()
         )
         val key = storageTable.insert(
             key = null,
@@ -296,8 +293,7 @@ class TrustManager(
     ): TrustEntryRical {
         ensureInitialized()
         val signedRical = SignedRical.parse(
-            encodedSignedRical = encodedSignedRical.toByteArray(),
-            disableSignatureVerification = true
+            encodedSignedRical = encodedSignedRical.toByteArray()
         )
         val key = storageTable.insert(
             key = null,
@@ -454,8 +450,6 @@ class TrustManager(
     /**
      * Updates the underlying byte data of an existing VICAL entry while preserving its metadata.
      *
-     * Signature verification is bypassed during parsing.
-     *
      * @param entry The existing [TrustEntryVical] to update.
      * @param encodedSignedVical The new CBOR/ASN.1 encoded bytes of the signed VICAL.
      * @return A new instance of [TrustEntryVical] containing the updated bytes.
@@ -467,8 +461,7 @@ class TrustManager(
     ): TrustEntryVical {
         ensureInitialized()
         val signedVical = SignedVical.parse(
-            encodedSignedVical = encodedSignedVical.toByteArray(),
-            disableSignatureVerification = true
+            encodedSignedVical = encodedSignedVical.toByteArray()
         )
 
         val localEntry = stateLock.withLock {
@@ -507,8 +500,6 @@ class TrustManager(
     /**
      * Updates the underlying byte data of an existing RICAL entry while preserving its metadata.
      *
-     * Signature verification is bypassed during parsing.
-     *
      * @param entry The existing [TrustEntryRical] to update.
      * @param encodedSignedRical The new encoded bytes of the signed RICAL.
      * @return A new instance of [TrustEntryRical] containing the updated bytes.
@@ -520,8 +511,7 @@ class TrustManager(
     ): TrustEntryRical {
         ensureInitialized()
         val signedRical = SignedRical.parse(
-            encodedSignedRical = encodedSignedRical.toByteArray(),
-            disableSignatureVerification = true
+            encodedSignedRical = encodedSignedRical.toByteArray()
         )
 
         val localEntry = stateLock.withLock {

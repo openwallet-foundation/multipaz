@@ -380,7 +380,7 @@ class MdocNfcServiceTest {
             state.value = State.ADVERTISING
         }
 
-        override suspend fun open(eSenderKey: EcPublicKey) {
+        override suspend fun open(eSenderKeyBytes: ByteString) {
             events.add("$name.open")
             openStarted.complete(Unit)
             try {
@@ -1374,7 +1374,9 @@ class MdocNfcServiceTest {
         val sessionEncryption: SessionEncryption,
         val deviceRequest: DeviceRequest,
         val encryptedDeviceRequest: ByteArray,
-    )
+    ) {
+        val eReaderKeyBytes: ByteString = ByteString(Cbor.encode(sessionTranscript.asArray[1]))
+    }
 
     private fun createReaderTransport(tag: NfcIsoTag): NfcCceTransportMdocReader {
         return NfcCceTransportMdocReader(tag, null).also {
@@ -1480,7 +1482,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 // Wait for mdoc to decrypt DeviceRequest and display consent prompt
@@ -1527,7 +1529,7 @@ class MdocNfcServiceTest {
                     assertTrue(readerSession2.deviceRequest.isStructurallyEquivalent(readerSession1.deviceRequest))
 
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     // 5. Reader receives DeviceResponse encrypted & signed under Tap 2's SessionTranscript
@@ -1620,7 +1622,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -1659,7 +1661,7 @@ class MdocNfcServiceTest {
                     assertFalse(readerSession2.deviceRequest.isStructurallyEquivalent(readerSession1.deviceRequest))
 
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     // 5. Verify no credential data is returned; reader receives session termination status
@@ -1771,7 +1773,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"), readerKey = readerKeyA)
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -1810,7 +1812,7 @@ class MdocNfcServiceTest {
                     assertFalse(readerSession2.deviceRequest.isStructurallyEquivalent(readerSession1.deviceRequest))
 
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     // 5. Verify no credential data is returned to Reader B; Reader B receives session termination status
@@ -1890,7 +1892,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -1932,7 +1934,7 @@ class MdocNfcServiceTest {
                     assertFalse(readerSession2.deviceRequest.isStructurallyEquivalent(readerSession1.deviceRequest))
 
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     // User approves consent and auth while phone remains on the second reader
@@ -2231,7 +2233,7 @@ class MdocNfcServiceTest {
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2349,7 +2351,7 @@ class MdocNfcServiceTest {
                 // Reader sends DeviceRequest over NFC while BLE is still connecting
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
                 val readerTransport = createReaderTransport(tag1)
-                readerTransport.open(readerSession.eReaderKey.publicKey)
+                readerTransport.open(readerSession.eReaderKeyBytes)
                 readerTransport.sendMessage(readerSession.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2444,7 +2446,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
                 val readerTransport = createReaderTransport(tag1)
-                readerTransport.open(readerSession.eReaderKey.publicKey)
+                readerTransport.open(readerSession.eReaderKeyBytes)
                 readerTransport.sendMessage(readerSession.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2525,7 +2527,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2554,7 +2556,7 @@ class MdocNfcServiceTest {
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     // Wait until Tap 2's message arrives and marks NFC connected again
@@ -2647,7 +2649,7 @@ class MdocNfcServiceTest {
                 // Request #1: given_name (sequence number 1)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
                 val readerTransport = createReaderTransport(tag1)
-                readerTransport.open(readerSession.eReaderKey.publicKey)
+                readerTransport.open(readerSession.eReaderKeyBytes)
                 readerTransport.sendMessage(readerSession.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2772,7 +2774,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name", "family_name"))
                 val readerTransport = createReaderTransport(tag1)
-                readerTransport.open(readerSession.eReaderKey.publicKey)
+                readerTransport.open(readerSession.eReaderKeyBytes)
                 readerTransport.sendMessage(readerSession.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2859,7 +2861,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
                 val readerTransport1 = createReaderTransport(tag1)
-                readerTransport1.open(readerSession1.eReaderKey.publicKey)
+                readerTransport1.open(readerSession1.eReaderKeyBytes)
                 readerTransport1.sendMessage(readerSession1.encryptedDeviceRequest)
 
                 withTimeout(5.seconds) { fixture.consentPromptShown.await() }
@@ -2926,7 +2928,7 @@ class MdocNfcServiceTest {
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
                     val readerTransport2 = createReaderTransport(tag2)
-                    readerTransport2.open(readerSession2.eReaderKey.publicKey)
+                    readerTransport2.open(readerSession2.eReaderKeyBytes)
                     readerTransport2.sendMessage(readerSession2.encryptedDeviceRequest)
 
                     val encryptedResponse = withTimeout(5.seconds) {
@@ -3006,7 +3008,7 @@ class MdocNfcServiceTest {
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
                 val readerTransport = createReaderTransport(tag1)
-                readerTransport.open(readerSession.eReaderKey.publicKey)
+                readerTransport.open(readerSession.eReaderKeyBytes)
                 readerTransport.sendMessage(readerSession.encryptedDeviceRequest)
 
                 val responseMessage = withTimeout(5.seconds) {
@@ -3136,7 +3138,7 @@ class MdocNfcServiceTest {
                     connectionMethod = nfcMethod,
                 )
                 readerTransport.setTag(tag)
-                readerTransport.open(deviceEngagement.eDeviceKey)
+                readerTransport.open(deviceEngagement.eDeviceKeyBytes)
                 try {
                     // Selecting A0000002480400 in readerTransport.open() must have deselected MdocNdefService
                     withTimeout(5.seconds) {
@@ -3324,7 +3326,7 @@ class MdocNfcServiceTest {
                                 override suspend fun advertise() {
                                     _state.value = State.ADVERTISING
                                 }
-                                override suspend fun open(eSenderKey: EcPublicKey) {
+                                override suspend fun open(eSenderKeyBytes: ByteString) {
                                     _state.value = State.FAILED
                                     throw MdocTransportException("BLE open failed")
                                 }
@@ -3385,7 +3387,7 @@ class MdocNfcServiceTest {
                                 override suspend fun advertise() {
                                     transportStateFlow.value = State.ADVERTISING
                                 }
-                                override suspend fun open(eSenderKey: EcPublicKey) {
+                                override suspend fun open(eSenderKeyBytes: ByteString) {
                                     transportStateFlow.value = State.CONNECTED
                                 }
                                 override suspend fun sendMessage(message: ByteArray) {}

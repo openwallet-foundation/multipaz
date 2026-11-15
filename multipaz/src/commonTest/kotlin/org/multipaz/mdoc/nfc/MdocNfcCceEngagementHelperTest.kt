@@ -24,6 +24,7 @@ import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -204,7 +205,7 @@ class MdocNfcCceEngagementHelperTest {
             apduCommandMaxSize = handoverResult.apduCommandMaxSize,
             apduResponseMaxSize = handoverResult.apduResponseMaxSize,
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -212,7 +213,7 @@ class MdocNfcCceEngagementHelperTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         val request = Cbor.encode(buildCborMap {
             put("data", Bstr(byteArrayOf(1, 2, 3)))
@@ -247,7 +248,7 @@ class MdocNfcCceEngagementHelperTest {
 
         assertEquals(
             """
-                CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=0)
+                CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=256)
                 ResponseApdu(status=36864, payload=ByteString(size=11 hex=a20019ffff011a00010000))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=92 hex=535aa100a20063312e31018201d818584ba401022001215820db1b6d2cc5e6baebd12fb76d4fa40957659832e41cade15db9038f37ef5ba321225820b0361e208471bb94a687089c4957fc4d9983abe04cdeeb155bcd690640137727), le=65536)
                 ResponseApdu(status=36864, payload=ByteString(size=100 hex=5362a100a40063312e31018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c058006a203f504f5))
@@ -286,7 +287,7 @@ class MdocNfcCceEngagementHelperTest {
             closed = true
         }
 
-        override suspend fun open(eSenderKey: EcPublicKey) {
+        override suspend fun open(eSenderKeyBytes: ByteString) {
             mutableState.value = State.CONNECTED
         }
 
@@ -375,7 +376,7 @@ class MdocNfcCceEngagementHelperTest {
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -383,7 +384,7 @@ class MdocNfcCceEngagementHelperTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
         mdocTransport.setTransport(bleMdocTransport)
 
         val request = Cbor.encode(buildCborMap {
@@ -506,7 +507,7 @@ class MdocNfcCceEngagementHelperTest {
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -514,7 +515,7 @@ class MdocNfcCceEngagementHelperTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
         mdocTransport.setTransport(bleMdocTransport)
 
         val request = Cbor.encode(buildCborMap {
@@ -775,7 +776,7 @@ class MdocNfcCceEngagementHelperTest {
             nfcTag = tag,
             negotiatedTransport = bleMdocReaderTransport
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -783,7 +784,7 @@ class MdocNfcCceEngagementHelperTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
         mdocTransport.setTransport(bleMdocTransport)
 
         // Simulate the holder leaving the NFC field before DeviceRequest is sent.
@@ -859,7 +860,7 @@ class MdocNfcCceEngagementHelperTest {
             nfcTag = tag,
             negotiatedTransport = null
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -867,7 +868,7 @@ class MdocNfcCceEngagementHelperTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         tag.failNextTransceive = true
 

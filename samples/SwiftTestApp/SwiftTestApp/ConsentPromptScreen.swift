@@ -189,6 +189,7 @@ private func calcRequestData(
         serial:  ASN1Integer.companion.fromRandom(numBits: 128, random: KotlinRandom.companion),
         validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+        crlUrl: "https://issuer.example.com/crl"
     )
     
     let mdlDoc = try! await documentStore.createDocument(
@@ -793,7 +794,8 @@ private func calcRequestData(
         serial: ASN1Integer.companion.fromRandom(numBits: 128, random: KotlinRandom.companion),
         validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
-        extensions: []
+        extensions: [],
+        crlUrl: "https://apps.multipaz.org/crl"
     )
     let readerCertChain = X509CertChain(certificates: [readerCert, readerRootCert])
     let requesterIdentity = Iso18013RequesterIdentity(certChain: readerCertChain)

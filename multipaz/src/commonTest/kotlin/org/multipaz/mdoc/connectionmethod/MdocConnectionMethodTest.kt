@@ -21,6 +21,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.AlternativeCarrierRecord
+import org.multipaz.nfc.NdefRecord
 import org.multipaz.nfc.Nfc
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
@@ -69,6 +70,45 @@ class MdocConnectionMethodTest {
             auxiliaryRecords = ndefList.single().auxiliaryRecords,
         )
         assertEquals(listOf(cm), decodedNfc)
+
+        // ISO/IEC 18013-5 Clause 11.2.3: reader HandoverRequest omits 0x01 and 0x02 LTVs (1-byte payload 0x01)
+        val hrNdef = MdocConnectionMethod.encodeNdefHandoverCarriers(
+            methods = listOf(cm),
+            handoverType = MdocNfcHandoverType.NEGOTIATED_HR,
+        ).single()
+        assertEquals("01", hrNdef.carrierRecord.payload.toByteArray().toHex())
+        assertEquals(
+            listOf(MdocConnectionMethod.Nfc(0xffff, 0x10000)),
+            MdocConnectionMethod.decodeNdefHandoverCarrier(
+                record = hrNdef.carrierRecord,
+                senderRole = MdocRole.MDOC_READER,
+                fallbackUuid = null,
+            )
+        )
+        // Missing LTVs in mdoc HandoverSelect must be rejected
+        assertEquals(
+            emptyList(),
+            MdocConnectionMethod.decodeNdefHandoverCarrier(
+                record = hrNdef.carrierRecord,
+                senderRole = MdocRole.MDOC,
+                fallbackUuid = null,
+            )
+        )
+        // Reversed LTV order (0x02 before 0x01) in HandoverSelect is accepted
+        val reversedLtvRecord = NdefRecord(
+            tnf = NdefRecord.Tnf.EXTERNAL_TYPE,
+            type = ByteString(Nfc.EXTERNAL_TYPE_ISO_18013_5_NFC.encodeToByteArray()),
+            id = ByteString("nfc".encodeToByteArray()),
+            payload = ByteString("01040200800003011000".fromHex())
+        )
+        assertEquals(
+            listOf(cm),
+            MdocConnectionMethod.decodeNdefHandoverCarrier(
+                record = reversedLtvRecord,
+                senderRole = MdocRole.MDOC,
+                fallbackUuid = null,
+            )
+        )
     }
 
     @Test

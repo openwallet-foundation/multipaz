@@ -87,15 +87,13 @@ class ConfigurableTrustManager(
                     }
                     is TrustEntryVical -> {
                         val signedVical = SignedVical.parse(
-                            encodedSignedVical = entry.encodedSignedVical.toByteArray(),
-                            disableSignatureVerification = true
+                            encodedSignedVical = entry.encodedSignedVical.toByteArray()
                         )
                         loadedVicalTrustManagers.add(VicalTrustManager(signedVical))
                     }
                     is TrustEntryRical -> {
                         val signedRical = SignedRical.parse(
-                            encodedSignedRical = entry.encodedSignedRical.toByteArray(),
-                            disableSignatureVerification = true
+                            encodedSignedRical = entry.encodedSignedRical.toByteArray()
                         )
                         loadedRicalTrustManagers.add(RicalTrustManager(signedRical))
                     }

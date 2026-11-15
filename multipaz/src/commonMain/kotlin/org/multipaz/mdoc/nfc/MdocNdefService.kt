@@ -19,6 +19,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.Capability
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
@@ -474,8 +475,11 @@ abstract class MdocNdefService : MdocNfcPresentmentService() {
                 preAdvertisedTransports + otherTransports
             }
             advertisedTransports = transports
+            val eDeviceKeyBytes = DeviceEngagement.fromDataItem(
+                Cbor.decode(encodedDeviceEngagement.toByteArray())
+            ).eDeviceKeyBytes
             val transport = transports.waitForConnection(
-                eSenderKey = eDeviceKey.publicKey,
+                eSenderKeyBytes = eDeviceKeyBytes,
             )
             connectedTransport = transport
             advertisedTransports = null

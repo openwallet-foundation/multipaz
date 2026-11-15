@@ -18,6 +18,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 class CachingRevocationCheckerTest {
     @BeforeTest
@@ -226,5 +229,31 @@ class CachingRevocationCheckerTest {
         assertEquals(RevocationCheckState.UNKNOWN, wrongSubCheck.state)
         assertFalse(wrongSubCheck.isTrusted)
         assertNotNull(wrongSubCheck.error)
+    }
+
+    @Test
+    fun identifierListCwtExpirationRoundtrip() = runTest {
+        val dsKey = createTestDsKey()
+        val iacaCert = dsKey.certChain.certificates.last()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val exp = now + 90.minutes
+        val revokedId = ByteString("deadbeef".fromHex())
+        val list = IdentifierList(
+            identifiers = setOf(revokedId),
+            creationTime = now,
+            expirationTime = exp
+        )
+        val uri = "https://issuer.example/identifierlists/exp-test"
+        val cwt = list.serializeAsCwt(dsKey, uri)
+
+        val parsedTrusted = IdentifierList.fromCwt(cwt, iacaCert, atTime = now)
+        assertEquals(now, parsedTrusted.creationTime)
+        assertEquals(exp, parsedTrusted.expirationTime)
+        assertTrue(parsedTrusted.contains(revokedId))
+
+        val parsedNoTrust = IdentifierList.fromCwtNoTrust(cwt)
+        assertEquals(now, parsedNoTrust.creationTime)
+        assertEquals(exp, parsedNoTrust.expirationTime)
+        assertTrue(parsedNoTrust.contains(revokedId))
     }
 }

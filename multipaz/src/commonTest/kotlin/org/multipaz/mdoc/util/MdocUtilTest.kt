@@ -504,4 +504,67 @@ class MdocUtilTest {
         assertTrue("1.10".compareTo("1.2") < 0)
         assertTrue("1.10".mdocVersionCompareTo("1.2") > 0)
     }
+
+    @Test
+    fun testGenerateCertificatesWithoutOptionalUrls() = runTest {
+        val validFrom = LocalDateTime(2026, 1, 1, 0, 0).toInstant(TimeZone.UTC)
+        val validUntil = LocalDateTime(2030, 1, 1, 0, 0).toInstant(TimeZone.UTC)
+
+        val iacaKey = AsymmetricKey.anonymous(
+            Crypto.createEcPrivateKey(EcCurve.P256),
+            Algorithm.ESP256
+        )
+        val iacaCert = MdocUtil.generateIacaCertificate(
+            iacaKey = iacaKey,
+            subject = X500Name.fromName("CN=Test IACA,C=US"),
+            serial = ASN1Integer(1),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        assertEquals(null, iacaCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid))
+        assertEquals(null, iacaCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid))
+
+        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(iacaCert)),
+                privateKey = (iacaKey as AsymmetricKey.AnonymousExplicit).privateKey
+            ),
+            dsKey = dsKey.publicKey,
+            subject = X500Name.fromName("CN=Test DS,C=US"),
+            serial = ASN1Integer(2),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        assertEquals(null, dsCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid))
+        assertEquals(null, dsCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid))
+
+        val readerRootKey = AsymmetricKey.anonymous(
+            Crypto.createEcPrivateKey(EcCurve.P256),
+            Algorithm.ESP256
+        )
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = readerRootKey,
+            subject = X500Name.fromName("CN=Test Reader Root,C=US"),
+            serial = ASN1Integer(3),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        assertEquals(null, readerRootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid))
+
+        val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerRootCert)),
+                privateKey = (readerRootKey as AsymmetricKey.AnonymousExplicit).privateKey
+            ),
+            readerKey = readerKey.publicKey,
+            subject = X500Name.fromName("CN=Test Reader,C=US"),
+            dnsName = null,
+            serial = ASN1Integer(4),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        assertEquals(null, readerCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid))
+    }
 }

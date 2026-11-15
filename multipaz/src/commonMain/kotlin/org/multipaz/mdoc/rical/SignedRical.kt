@@ -22,6 +22,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
+import kotlin.time.Instant
 
 data class SignedRical(
     val rical: Rical,
@@ -41,10 +42,14 @@ data class SignedRical(
             buildCborMap {
                 put("version", rical.version)
                 put("provider", rical.provider)
-                put("date", rical.date.toDataItemDateTimeString())
+                put("date", Instant.fromEpochSeconds(rical.date.epochSeconds).toDataItemDateTimeString())
                 put("type", rical.type)
-                rical.nextUpdate?.let { put("nextUpdate", it.toDataItemDateTimeString()) }
-                rical.notAfter?.let { put("notAfter", it.toDataItemDateTimeString()) }
+                rical.nextUpdate?.let {
+                    put("nextUpdate", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                }
+                rical.notAfter?.let {
+                    put("notAfter", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                }
                 putCborArray("certificateInfos") {
                     for (certInfo in rical.certificateInfos) {
                         addCborMap {
@@ -78,8 +83,12 @@ data class SignedRical(
                             certInfo.stateOrProvinceName?.let { put("stateOrProvinceName", it) }
                             certInfo.issuer?.let { put("issuer", it.toByteArray()) }
                             certInfo.subject?.let { put("subject", it.toByteArray()) }
-                            certInfo.notBefore?.let { put("notBefore", it.toDataItemDateTimeString()) }
-                            certInfo.notAfter?.let { put("notAfter", it.toDataItemDateTimeString()) }
+                            certInfo.notBefore?.let {
+                                put("notBefore", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                            }
+                            certInfo.notAfter?.let {
+                                put("notAfter", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                            }
                             if (certInfo.extensions.isNotEmpty()) {
                                 putCborMap("extensions") {
                                     certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
@@ -148,6 +157,9 @@ data class SignedRical(
                 ?: throw IllegalArgumentException("Signature Algorithm not set")
 
             if (!disableSignatureVerification) {
+                if (certChain.certificates.size > 1) {
+                    certChain.validate(validateValidity = false, validateCaValidity = false)
+                }
                 Cose.coseSign1Check(
                     certChain.certificates.first().publicKey,
                     null,
@@ -187,7 +199,11 @@ data class SignedRical(
                 } ?: emptyMap()
                 val trustConstraints = mutableListOf<RicalTrustConstraint>()
                 if (certInfo.hasKey("trustConstraints")) {
-                    for (trustConstraint in (certInfo["trustConstraints"] as CborArray).items) {
+                    val tcItems = (certInfo["trustConstraints"] as CborArray).items
+                    require(tcItems.isNotEmpty()) {
+                        "RICAL CertificateInfo trustConstraints array must not be empty when present"
+                    }
+                    for (trustConstraint in tcItems) {
                         val extensionsInTrustConstraint = trustConstraint.getOrNull("extensions")?.let { extMap ->
                             extMap.asMap.entries.associate { (extName, extValue) ->
                                 Pair(extName.asTstr, extValue)

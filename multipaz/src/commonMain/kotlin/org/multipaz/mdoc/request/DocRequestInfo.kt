@@ -12,6 +12,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -45,6 +46,12 @@ data class DocRequestInfo(
     val nonKeyBoundSupported: Boolean? = null,
     val otherInfo: Map<String, DataItem> = emptyMap(),
 ) {
+    init {
+        require(maximumResponseSize == null || maximumResponseSize >= 0) {
+            "maximumResponseSize must be non-negative (was $maximumResponseSize)"
+        }
+    }
+
     internal fun toDataItem() = buildCborMap {
         if (alternativeDataElements.isNotEmpty()) {
             putCborArray("alternativeDataElements") {
@@ -142,7 +149,10 @@ data class DocRequestInfo(
                 ByteString(it.asBstr)
             } ?: emptyList()
             val uniqueDocSetRequired = dataItem.getOrNull("uniqueDocSetRequired")?.asBoolean
-            val maximumResponseSize = dataItem.getOrNull("maximumResponseSize")?.asNumber
+            val maximumResponseSize = dataItem.getOrNull("maximumResponseSize")?.let { item ->
+                require(item is Uint) { "maximumResponseSize must be a CBOR uint" }
+                item.asNumber
+            }
             val zkRequest = dataItem.getOrNull("zkRequest")?.let {
                 ZkRequest.fromDataItem(it)
             }

@@ -72,6 +72,34 @@ class TestDocumentTypeRepository {
             DocumentAttributeType.ComplexType,
             documentTypes[0].mdocDocumentType?.namespaces?.get("org.iso.18013.5.1.aamva")?.dataElements?.get("domestic_driving_privileges")?.attribute?.type
         )
+        val mdlElements = documentTypes[0].mdocDocumentType?.namespaces?.get("org.iso.18013.5.1")?.dataElements
+        assertNotNull(mdlElements)
+        assertEquals(
+            DocumentAttributeType.DateTime,
+            mdlElements["portrait_capture_date"]?.attribute?.type
+        )
+        assertEquals(
+            Tagged.DATE_TIME_STRING,
+            (mdlElements["portrait_capture_date"]?.attribute?.sampleValueMdoc as? Tagged)?.tagNumber
+        )
+        assertEquals(
+            DocumentAttributeType.String,
+            mdlElements["resident_street"]?.attribute?.type
+        )
+        assertEquals(false, mdlElements["resident_street"]?.mandatory)
+        assertEquals(
+            DocumentAttributeType.Boolean,
+            mdlElements["expiry_date_after_validuntil"]?.attribute?.type
+        )
+        assertEquals(false, mdlElements["expiry_date_after_validuntil"]?.mandatory)
+        assertEquals(
+            DocumentAttributeSensitivity.VALIDITY,
+            mdlElements["expiry_date_after_validuntil"]?.attribute?.sensitivity
+        )
+        assertEquals(
+            Simple.TRUE,
+            mdlElements["expiry_date_after_validuntil"]?.attribute?.sampleValueMdoc
+        )
     }
 
     @Test

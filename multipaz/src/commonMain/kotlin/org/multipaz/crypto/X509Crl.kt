@@ -189,10 +189,10 @@ data class X509Crl(override val encoded: ByteString): X509Signed() {
          * Gets a [X509Crl] from a [DataItem].
          *
          * @param dataItem the data item, must have been encoded with [toDataItem].
-         * @return the certificate.
+         * @return the certificate revocation list.
          */
-        fun fromDataItem(dataItem: DataItem): X509Cert {
-            return X509Cert(ByteString(dataItem.asBstr))
+        fun fromDataItem(dataItem: DataItem): X509Crl {
+            return X509Crl(ByteString(dataItem.asBstr))
         }
     }
 }

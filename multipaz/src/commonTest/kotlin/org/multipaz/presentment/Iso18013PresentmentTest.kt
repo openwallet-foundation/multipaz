@@ -189,7 +189,7 @@ class Iso18013PresentmentTest {
             nfcTag = tag,
             negotiatedTransport = null
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -197,7 +197,7 @@ class Iso18013PresentmentTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         var receivedTelemetry: PresentmentTelemetry? = null
         val presentmentJob = launch {
@@ -328,7 +328,7 @@ class Iso18013PresentmentTest {
             nfcTag = tag,
             negotiatedTransport = null
         )
-        mdocReaderTransport.open(eReaderKey.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -336,7 +336,7 @@ class Iso18013PresentmentTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         var receivedTelemetry: PresentmentTelemetry? = null
         val presentmentJob = launch {
@@ -463,7 +463,7 @@ class Iso18013PresentmentTest {
             nfcTag = tag,
             negotiatedTransport = null
         )
-        mdocReaderTransport.open(eReaderKeySession.publicKey)
+        mdocReaderTransport.open(buildDeviceEngagement(eReaderKeySession.publicKey) {}.eDeviceKeyBytes)
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -471,7 +471,7 @@ class Iso18013PresentmentTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         val presentmentJob = launch {
             Iso18013Presentment(
@@ -564,7 +564,7 @@ class Iso18013PresentmentTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         var receivedTelemetry: PresentmentTelemetry? = null
         val presentmentJob = launch {
@@ -606,7 +606,7 @@ class Iso18013PresentmentTest {
         mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
 
         val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
-        mdocReaderTransport2.open(eReaderKey2.publicKey)
+        mdocReaderTransport2.open(buildDeviceEngagement(eReaderKey2.publicKey) {}.eDeviceKeyBytes)
 
         val params2 = activeEngagementParamsFlow.value
         val encodedCoseKey2 = Cbor.encode(eReaderKey2.publicKey.toCoseKey().toDataItem())
@@ -691,7 +691,7 @@ class Iso18013PresentmentTest {
                 true
             }
         )
-        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         var presentmentException: Throwable? = null
         var callbackTelemetry: PresentmentTelemetry? = null
@@ -738,7 +738,7 @@ class Iso18013PresentmentTest {
         mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
 
         val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
-        mdocReaderTransport2.open(eReaderKey2.publicKey)
+        mdocReaderTransport2.open(buildDeviceEngagement(eReaderKey2.publicKey) {}.eDeviceKeyBytes)
 
         val params2 = activeEngagementParamsFlow.value
         val encodedCoseKey2 = Cbor.encode(eReaderKey2.publicKey.toCoseKey().toDataItem())
@@ -798,7 +798,7 @@ class Iso18013PresentmentTest {
             private val hangForever = CompletableDeferred<ByteArray>()
 
             override suspend fun advertise() {}
-            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun open(eSenderKeyBytes: ByteString) {}
 
             override suspend fun sendMessage(message: ByteArray) {
                 sendMessageCalls += 1
@@ -857,7 +857,7 @@ class Iso18013PresentmentTest {
         override val scanningTime: Duration? = null
 
         override suspend fun advertise() {}
-        override suspend fun open(eSenderKey: EcPublicKey) {}
+        override suspend fun open(eSenderKeyBytes: ByteString) {}
         override suspend fun sendMessage(message: ByteArray) {}
         override suspend fun waitForMessage(): ByteArray = incomingMessage()
         override suspend fun close() {
@@ -1438,7 +1438,7 @@ class Iso18013PresentmentTest {
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}
-            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun open(eSenderKeyBytes: ByteString) {}
             override suspend fun sendMessage(message: ByteArray) {
                 loggedBeforeSendMessage = infoLogs.any { (tag, msg) ->
                     tag == "Iso180135Presentment" && msg.startsWith("DeviceResponse ready to send in ")
@@ -1588,7 +1588,7 @@ class Iso18013PresentmentTest {
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}
-            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun open(eSenderKeyBytes: ByteString) {}
             override suspend fun sendMessage(message: ByteArray) {
                 usageSumDuringSendMessage = mdlCredentials.sumOf { it.usageCount }
                 recordShareCallsDuringSendMessage = requesterHistory.recordShareCalls
@@ -1649,7 +1649,7 @@ class Iso18013PresentmentTest {
             override val scanningTime: Duration? = null
 
             override suspend fun advertise() {}
-            override suspend fun open(eSenderKey: EcPublicKey) {}
+            override suspend fun open(eSenderKeyBytes: ByteString) {}
             override suspend fun sendMessage(message: ByteArray) {
                 throw MdocTransportException("NFC field lost mid-transmission")
             }

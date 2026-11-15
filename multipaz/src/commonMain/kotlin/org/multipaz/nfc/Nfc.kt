@@ -106,11 +106,18 @@ object Nfc {
     const val INS_SELECT_P1_APPLICATION = 0x04
 
     /**
-     * Parameter value 1 for SELECT when selecting an application.
+     * Parameter value 2 for SELECT when selecting an application and requesting response data (FCI).
      *
      * Reference: ISO/IEC 7816-4 clause 11.2.2
      */
     const val INS_SELECT_P2_APPLICATION = 0x00
+
+    /**
+     * Parameter value 2 for SELECT when requesting that no response data field is returned.
+     *
+     * Reference: ISO/IEC 7816-4 clause 11.2.2, ISO/IEC 18013-5 clause 11.2.4 Table 11
+     */
+    const val INS_SELECT_P2_NO_RESPONSE_DATA = 0x0c
 
     /**
      * Parameter value 1 for SELECT when selecting a file.

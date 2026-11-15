@@ -135,6 +135,9 @@ suspend fun Iso18013ReaderQrPresentment(
         val eReaderKey = requireNotNull(readerEngagement.eReaderKey) {
             "EReaderKey is required in ReaderEngagement for Reader QR"
         }
+        val eReaderKeyBytes = requireNotNull(readerEngagement.eReaderKeyBytes) {
+            "EReaderKeyBytes is required in ReaderEngagement for Reader QR"
+        }
         require(eReaderKey.curve in supportedCurves) {
             "Unsupported EReaderKey curve ${eReaderKey.curve} (supported: $supportedCurves)"
         }
@@ -178,10 +181,10 @@ suspend fun Iso18013ReaderQrPresentment(
         onConnecting()
         try {
             if (connectionTimeout == null) {
-                createdTransport.open(eSenderKey = eReaderKey)
+                createdTransport.open(eSenderKeyBytes = eReaderKeyBytes)
             } else {
                 withTimeout(connectionTimeout) {
-                    createdTransport.open(eSenderKey = eReaderKey)
+                    createdTransport.open(eSenderKeyBytes = eReaderKeyBytes)
                 }
             }
         } catch (e: TimeoutCancellationException) {
@@ -194,7 +197,7 @@ suspend fun Iso18013ReaderQrPresentment(
                 deviceEngagement = deviceEngagement,
                 handover = handover,
                 eReaderKey = eReaderKey,
-                eReaderKeyBytes = readerEngagement.eReaderKeyBytes,
+                eReaderKeyBytes = eReaderKeyBytes,
             )
         )
         enteredPresentment = true

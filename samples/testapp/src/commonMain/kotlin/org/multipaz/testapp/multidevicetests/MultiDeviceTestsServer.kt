@@ -167,9 +167,10 @@ class MultiDeviceTestsServer(
                 transport.advertise()
             }
             val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val encodedDeviceEngagement = Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
+            val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
                 transport.connectionMethods.forEach { addConnectionMethod(it) }
-            }.toDataItem())
+            }
+            val encodedDeviceEngagement = Cbor.encode(deviceEngagement.toDataItem())
             val getPsmFromReader = (test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT)
             sendChannel.writeStringUtf8("TestPresentationPrepare ${iterationNumber} ${numIterationsTotal} " +
                     "${test.name} ${plan.prewarm} ${bleUseL2CAP} ${getPsmFromReader} " +
@@ -195,7 +196,7 @@ class MultiDeviceTestsServer(
             val holderTimeStart = Clock.System.now()
             withTimeout(45.seconds) {
                 sendChannel.writeStringUtf8("TestPresentationStart\n")
-                transport.open(eDeviceKey.publicKey)
+                transport.open(deviceEngagement.eDeviceKeyBytes)
                 val sessionEstablishmentMessage = transport.waitForMessage()
                 val eReaderKey = SessionEncryption.getEReaderKey(sessionEstablishmentMessage)
                 val encodedSessionTranscript = byteArrayOf(0x01, 0x02)

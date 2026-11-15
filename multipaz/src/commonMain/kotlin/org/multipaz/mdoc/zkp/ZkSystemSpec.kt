@@ -1,17 +1,7 @@
 package org.multipaz.mdoc.zkp
 
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import org.multipaz.cbor.CborDouble
-import org.multipaz.cbor.CborInt
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Simple
-import org.multipaz.cbor.Tstr
-import org.multipaz.cbor.toDataItem
 
 /**
  * ZkSystemSpec represents the specifications of a ZK System.
@@ -19,7 +9,7 @@ import org.multipaz.cbor.toDataItem
  * @property id the unique identifier of the ZK system.
  * @property system the name of the ZK system.
  */
-data class ZkSystemSpec (
+class ZkSystemSpec(
     val id: String,
     val system: String,
 ) {
@@ -43,6 +33,8 @@ data class ZkSystemSpec (
             is ZkSystemParamValue.LongValue -> paramValue.value as? T
             is ZkSystemParamValue.DoubleValue -> paramValue.value as? T
             is ZkSystemParamValue.BooleanValue -> paramValue.value as? T
+            is ZkSystemParamValue.ListValue -> paramValue.value as? T
+            is ZkSystemParamValue.MapValue -> paramValue.value as? T
             null -> null
         }
     }
@@ -88,6 +80,28 @@ data class ZkSystemSpec (
     }
 
     /**
+     * Adds a list parameter to the ZK system specification.
+     *
+     * @param key the key of the parameter.
+     * @param value the non-empty list of parameter values.
+     */
+    fun addParam(key: String, value: List<ZkSystemParamValue>) {
+        require(value.isNotEmpty()) { "ParamValue list must not be empty" }
+        _params[key] = ZkSystemParamValue.ListValue(value)
+    }
+
+    /**
+     * Adds a map parameter to the ZK system specification.
+     *
+     * @param key the key of the parameter.
+     * @param value the non-empty map of parameter values.
+     */
+    fun addParam(key: String, value: Map<String, ZkSystemParamValue>) {
+        require(value.isNotEmpty()) { "ParamValue map must not be empty" }
+        _params[key] = ZkSystemParamValue.MapValue(value)
+    }
+
+    /**
      * Adds parameter to the ZK system specification encoded in CBOR.
      *
      * @param key the key of the parameter.
@@ -106,4 +120,20 @@ data class ZkSystemSpec (
     fun addParam(key: String, value: JsonElement) {
         _params[key] = ZkSystemParamValue.fromJson(value)
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ZkSystemSpec) return false
+        return id == other.id && system == other.system && _params == other._params
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + system.hashCode()
+        result = 31 * result + _params.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "ZkSystemSpec(id=$id, system=$system, params=$_params)"
 }

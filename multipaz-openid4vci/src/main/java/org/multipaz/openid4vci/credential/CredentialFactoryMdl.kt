@@ -26,6 +26,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -145,8 +146,6 @@ class CredentialFactoryMdl : CredentialFactory {
                         addDataElement("resident_postal_code", addressObject["postal_code"])
                         added.add("postal_code")
                     }
-                    // TODO: enable this once resident_street is added to mDL
-                    /*
                     if (addressObject.hasKey("street")) {
                         // For mDL this is street address, format is using American conventions
                         // for now
@@ -164,14 +163,21 @@ class CredentialFactoryMdl : CredentialFactory {
                         addDataElement("resident_street", value.toDataItem())
                         added.add("resident_street")
                     }
-                     */
                 }
 
                 // Transfer core fields that have counterparts in the mDL credential
                 for ((nameItem, value) in coreData.asMap) {
                     val name = nameItem.asTstr
                     if (!added.contains(name) && mdocType.dataElements.contains(name)) {
-                        addDataElement(name, value)
+                        val mdocValue = if (name == "portrait_capture_date" &&
+                            value is Tagged &&
+                            value.tagNumber == Tagged.FULL_DATE_STRING
+                        ) {
+                            value.asDateString.atStartOfDayIn(TimeZone.UTC).toDataItemDateTimeString()
+                        } else {
+                            value
+                        }
+                        addDataElement(name, mdocValue)
                         added.add(name)
                     }
                 }

@@ -8,7 +8,9 @@ import org.multipaz.asn1.ASN1BitString
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
@@ -161,10 +163,25 @@ sealed class EcPublicKey(
                     )
                     val keySizeOctets = (curve.bitSize + 7) / 8
                     val x = coseKey.labels[Cose.COSE_KEY_PARAM_X.toCoseLabel]!!.asBstr
-                    val y = coseKey.labels[Cose.COSE_KEY_PARAM_Y.toCoseLabel]!!.asBstr
-                    check(x.size == keySizeOctets)
-                    check(y.size == keySizeOctets)
-                    // TODO: maybe check that (x, y) is a point on the curve?
+                    require(x.size == keySizeOctets) {
+                        "Expected $keySizeOctets-byte x coordinate for $curve, got ${x.size}"
+                    }
+                    val yItem = coseKey.labels[Cose.COSE_KEY_PARAM_Y.toCoseLabel]
+                        ?: throw IllegalArgumentException("Missing y coordinate (-3) in EC2 COSE_Key")
+                    val y = when (yItem) {
+                        is Bstr -> {
+                            require(yItem.value.size == keySizeOctets) {
+                                "Expected $keySizeOctets-byte y coordinate for $curve, got ${yItem.value.size}"
+                            }
+                            EcPointDecompression.checkPointOnCurve(curve, x, yItem.value)
+                            yItem.value
+                        }
+                        Simple.TRUE -> EcPointDecompression.decompressY(curve, x, yParity = true)
+                        Simple.FALSE -> EcPointDecompression.decompressY(curve, x, yParity = false)
+                        else -> throw IllegalArgumentException(
+                            "Expected bstr or bool for EC2 COSE_Key y (-3), got $yItem"
+                        )
+                    }
                     EcPublicKeyDoubleCoordinate(curve, x, y)
                 }
 

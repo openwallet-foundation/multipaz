@@ -78,6 +78,8 @@ import org.multipaz.util.Logger
 import org.multipaz.util.generateAllPaths
 import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Top-level request in ISO 18013-5.
@@ -128,6 +130,18 @@ data class DeviceRequest private constructor(
                 }
             }
         }
+        val seenZkSystemSpecs = mutableMapOf<String, ZkSystemSpec>()
+        for (docRequest in docRequests) {
+            val specs = docRequest.docRequestInfo?.zkRequest?.systemSpecs ?: continue
+            for (spec in specs) {
+                val existing = seenZkSystemSpecs.put(spec.id, spec)
+                if (existing != null && existing != spec) {
+                    throw IllegalArgumentException(
+                        "Conflicting ZkSystemSpec definitions for zkSystemId '${spec.id}'"
+                    )
+                }
+            }
+        }
     }
 
     internal var readerAuthAllVerified: Boolean = false
@@ -149,11 +163,19 @@ data class DeviceRequest private constructor(
     /**
      * Verifies reader authentication.
      *
+     * Note that this method does not perform X.509 CRL or OCSP revocation checking on reader
+     * certificate chains; the caller is expected to check certificate revocation separately
+     * (e.g., via [org.multipaz.crypto.X509Crl]) when required.
+     *
      * @param sessionTranscript the session transcript to use.
+     * @param atTime the point in time at which to validate reader certificate chains.
      * @throws SignatureVerificationException if reader authentication fails.
      */
     @Throws(SignatureVerificationException::class, CancellationException::class)
-    suspend fun verifyReaderAuthentication(sessionTranscript: DataItem) {
+    suspend fun verifyReaderAuthentication(
+        sessionTranscript: DataItem,
+        atTime: Instant = Clock.System.now(),
+    ) {
         if (readerAuthAll_.isNotEmpty()) {
             val readerAuthenticationAll = buildCborArray {
                 add("ReaderAuthenticationAll")
@@ -195,7 +217,7 @@ data class DeviceRequest private constructor(
                         ?: readerAuthAllSignature.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
                         certChain.certificates.first().verifyCoseX5t(x5tItem)
                     }
-                    certChain.validate()
+                    certChain.validate(validateAt = atTime)
                     Cose.coseSign1Check(
                         publicKey = certChain.certificates.first().publicKey,
                         detachedData = readerAuthenticationAllBytes,
@@ -203,7 +225,7 @@ data class DeviceRequest private constructor(
                         signatureAlgorithm = alg
                     )
                 } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    if (e is CancellationException) throw e
                     throw SignatureVerificationException(
                         message = "Error verifying ReaderAuthAll at index $readerAuthAllIndex",
                         cause = e
@@ -229,6 +251,7 @@ data class DeviceRequest private constructor(
                         ?: docRequest.readerAuth_.unprotectedHeaders[x5tLabel])?.let { x5tItem ->
                         certChain.certificates.first().verifyCoseX5t(x5tItem)
                     }
+                    certChain.validate(validateAt = atTime)
                     val readerAuthentication = buildCborArray {
                         add("ReaderAuthentication")
                         add(sessionTranscript)
@@ -343,40 +366,6 @@ data class DeviceRequest private constructor(
             }
         }
         return true
-    }
-
-    internal suspend fun getExpectedOtherDocumentAudience(docRequest: DocRequest?): String? {
-        if (docRequest == null) {
-            return null
-        }
-        return if (readerAuthAll_.isNotEmpty()) {
-            val listOfReaderAuthAll = buildCborArray {
-                readerAuthAll_.forEach {
-                    add(it.toDataItem())
-                }
-            }
-            Crypto.digest(
-                algorithm = Algorithm.SHA256,
-                message = Cbor.encode(
-                    Tagged(
-                        tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
-                    )
-                )
-            ).toBase64Url()
-        } else if (docRequest.readerAuth_ != null) {
-            Crypto.digest(
-                algorithm = Algorithm.SHA256,
-                message = Cbor.encode(
-                    Tagged(
-                        tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(docRequest.readerAuth_.toDataItem()))
-                    )
-                )
-            ).toBase64Url()
-        } else {
-            "none"
-        }
     }
 
     /**
@@ -782,6 +771,7 @@ data class DeviceRequest private constructor(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
      * @param requesterIdentities additional identities of the requester used for matching reader identifiers, if any.
+     * @param atTime the point in time at which to validate `docResponseEncryption` certificate chains.
      * @return the resulting [PresentmentData] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
@@ -790,6 +780,7 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
         requesterIdentities: List<RequesterIdentity> = emptyList(),
+        atTime: Instant = Clock.System.now(),
     ): PresentmentData {
         val effectiveRequesterIdentities = requesterIdentities.ifEmpty { getRequesterIdentities() }
         val faceMatchingModeCache = mutableMapOf<String, FaceMatchingMode>()
@@ -804,6 +795,14 @@ data class DeviceRequest private constructor(
 
         suspend fun DocRequestMatch.toPresentmentCredentialMatch(): PresentmentCredentialMatch {
             val docRequestInfo = docRequest.docRequestInfo
+            docRequestInfo?.docResponseEncryption?.let { encParams ->
+                try {
+                    encParams.validateCertificateChain(atTime = atTime)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw Iso18015ResponseException("Invalid docResponseEncryption certificate chain", e)
+                }
+            }
             val encryptionTargetCertificationChain =
                 docRequestInfo?.docResponseEncryption?.recipientCertificates?.let {
                     if (it.isNotEmpty()) {
@@ -846,30 +845,27 @@ data class DeviceRequest private constructor(
         val useCases = mutableListOf<PresentmentUseCase>()
 
         if (deviceRequestInfo == null || deviceRequestInfo.useCases.isEmpty()) {
-            // If useCases isn't set, treat as 18013-5:2021 request. In this case it's undefined
-            // what it means if multiple document requests are included (return both documents
-            // or one of them?) so just consider the first one
+            // ISO/IEC 18013-5:2021 request without UseCases: require every DocRequest to be satisfied.
             if (docRequests.isEmpty()) {
                 throw Iso18015ResponseException("No DocRequests in request")
             }
-            // As per 18013-5:2021 we only look at the first DocRequest.
-            val result = docRequestResults[0]
-            if (result.matches.isEmpty()) {
-                val detail = result.failureReason?.let { ": $it" } ?: ""
-                throw Iso18015ResponseException("No matching credentials for first DocRequest$detail")
-            }
-
-            // Create a single use-case containing a solution for each match for the first DocRequest.
-            val solutions = result.matches.map { match ->
-                PresentmentUseCaseSolution(listOf(match.toPresentmentCredentialMatch()))
-            }
-            useCases.add(
-                PresentmentUseCase(
-                    optional = false,
-                    solutions = solutions,
-                    allowMultiple = result.docRequest.docRequestInfo?.uniqueDocSetRequired == false
+            docRequestResults.forEachIndexed { index, result ->
+                if (result.matches.isEmpty()) {
+                    val detail = result.failureReason?.let { ": $it" } ?: ""
+                    val label = if (index == 0) "first DocRequest" else "DocRequest at index $index"
+                    throw Iso18015ResponseException("No matching credentials for $label$detail")
+                }
+                val solutions = result.matches.map { match ->
+                    PresentmentUseCaseSolution(listOf(match.toPresentmentCredentialMatch()))
+                }
+                useCases.add(
+                    PresentmentUseCase(
+                        optional = false,
+                        solutions = solutions,
+                        allowMultiple = result.docRequest.docRequestInfo?.uniqueDocSetRequired == false
+                    )
                 )
-            )
+            }
         } else {
             // Handle ISO 18013-5 Second Edition UseCases (similar to DCQL credential sets)
             for (useCase in deviceRequestInfo.useCases) {
@@ -878,7 +874,7 @@ data class DeviceRequest private constructor(
 
                 // A UseCase has multiple DocumentSets (which act as options).
                 // Each DocumentSet is a list of DocRequestIDs (references to docRequests).
-                for (documentSet in useCase.documentSets) {
+                useCase.documentSets.forEachIndexed { documentSetIndex, documentSet ->
                     // A DocumentSet is satisfied if ALL referenced DocRequests have at least one match.
                     val docRequestIds = documentSet.docRequestIds
                     val allRequestsSatisfied = docRequestIds.all { id ->
@@ -892,7 +888,12 @@ data class DeviceRequest private constructor(
                                 val id = docRequestIds[index]
                                 docRequestResults[id].matches[n].toPresentmentCredentialMatch()
                             }
-                            solutions.add(PresentmentUseCaseSolution(matches))
+                            solutions.add(
+                                PresentmentUseCaseSolution(
+                                    matches = matches,
+                                    optionIndex = documentSetIndex,
+                                )
+                            )
                         }
                         satisfied = true
                     }
@@ -930,6 +931,9 @@ data class DeviceRequest private constructor(
                     )
                 }
             }
+            if (useCases.isEmpty()) {
+                throw Iso18015ResponseException("No credentials match any UseCase")
+            }
         }
 
         return PresentmentData(useCases)
@@ -957,7 +961,7 @@ data class DeviceRequest private constructor(
             val docFormat = docRequest.docRequestInfo?.docFormat ?: "mso_mdoc"
             val certifiedCreds = document.getCertifiedCredentials()
             val credential = when (docFormat) {
-                "mso_mdoc" -> {
+                "mso_mdoc", "mso_mdoc_zk" -> {
                     certifiedCreds.find {
                         it is KeyBoundMdocCredential && it.docType == docRequest.docType
                     } ?: if (allowKeyless && docRequest.docType != "org.iso.18013.5.1.mDL") {
@@ -1046,6 +1050,19 @@ data class DeviceRequest private constructor(
                 }
             }
             else -> null
+        }
+    }
+
+    private fun hasMatchingZkSystem(
+        docRequest: DocRequest,
+        presentmentSource: PresentmentSource,
+        requestedClaims: List<RequestedClaim>,
+    ): Boolean {
+        val zkRequest = docRequest.docRequestInfo?.zkRequest ?: return false
+        val zkRepo = presentmentSource.zkSystemRepository ?: return false
+        return zkRequest.systemSpecs.any { spec ->
+            val zkSystem = zkRepo.lookup(spec.system) ?: return@any false
+            zkSystem.getMatchingSystemSpec(listOf(spec), requestedClaims) != null
         }
     }
 
@@ -1213,10 +1230,15 @@ data class DeviceRequest private constructor(
                 return ClaimMatchResult(null, reason)
             }
 
+            val zkRequired = docRequest.docRequestInfo?.zkRequest?.zkRequired == true ||
+                docRequest.docRequestInfo?.docFormat == "mso_mdoc_zk"
+            if (zkRequired && !hasMatchingZkSystem(docRequest, presentmentSource, matchingClaimValues.keys.toList())) {
+                return ClaimMatchResult(null, "no compatible ZK system for required ZK proof")
+            }
+
             val requireHolderBinding = !(
                 docRequest.allowsKeyless(this) &&
-                    docRequest.docRequestInfo?.zkRequest?.zkRequired != true &&
-                    docRequest.docRequestInfo?.docFormat != "mso_mdoc_zk" &&
+                    !zkRequired &&
                     selectedTransactions.isEmpty()
                 )
             val selectedCred = presentmentSource.selectCredential(
@@ -1313,6 +1335,10 @@ data class DeviceRequest private constructor(
         val allPermutations = generatePermutations(0, emptyList(), 0)
             .sortedBy { it.second }
 
+        val zkRequired = docRequest.docRequestInfo?.zkRequest?.zkRequired == true ||
+            docRequest.docRequestInfo?.docFormat == "mso_mdoc_zk"
+        var failedOnlyBecauseOfZk = false
+
         // 3. Find the first permutation that the credential satisfies
         for ((requestedClaims, _) in allPermutations) {
             val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
@@ -1362,11 +1388,14 @@ data class DeviceRequest private constructor(
             }
 
             if (!didNotMatch) {
+                if (zkRequired && !hasMatchingZkSystem(docRequest, presentmentSource, matchingClaimValues.keys.toList())) {
+                    failedOnlyBecauseOfZk = true
+                    continue
+                }
                 // Success! Select the credential with these specific claims
                 val requireHolderBinding = !(
                     docRequest.allowsKeyless(this) &&
-                        docRequest.docRequestInfo?.zkRequest?.zkRequired != true &&
-                        docRequest.docRequestInfo?.docFormat != "mso_mdoc_zk" &&
+                        !zkRequired &&
                         selectedTransactions.isEmpty()
                     )
                 val selectedCred = presentmentSource.selectCredential(
@@ -1397,7 +1426,10 @@ data class DeviceRequest private constructor(
             }
         }
 
-        return ClaimMatchResult(null, null)
+        return ClaimMatchResult(
+            null,
+            if (failedOnlyBecauseOfZk) "no compatible ZK system for required ZK proof" else null
+        )
     }
 
     private suspend fun findApplicableTransaction(
@@ -1469,16 +1501,19 @@ data class DeviceRequest private constructor(
                 )
             }
         }
+        val identities = mutableListOf<Iso18013RequesterIdentity>()
+        val seenCertChains = mutableSetOf<X509CertChain>()
         for (docRequest in docRequests) {
             docRequest.readerAuth?.let {
-                return listOf(Iso18013RequesterIdentity(
-                    certChain = (it.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+                val certChain = (it.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
                     ?: it.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
-                        )!!.asX509CertChain
-                ))
+                    )!!.asX509CertChain
+                if (seenCertChains.add(certChain)) {
+                    identities.add(Iso18013RequesterIdentity(certChain = certChain))
+                }
             }
         }
-        return emptyList()
+        return identities
     }
 
     /**

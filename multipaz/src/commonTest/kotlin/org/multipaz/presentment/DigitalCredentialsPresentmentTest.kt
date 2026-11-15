@@ -1625,7 +1625,7 @@ class DigitalCredentialsPresentmentTest {
             {
                 "iat": $iat,
                 "nonce": "$nonce",
-                "aud": "none",
+                "aud": "$nonce",
                 "sd_hash": "$sdHash",
                 "urn:eudi:sca:payment:1": {
                     "tip_amount": 24.65,
@@ -1647,7 +1647,7 @@ class DigitalCredentialsPresentmentTest {
         val processedJwt = sdJwtKb.verify(
             issuerKey = documentStoreTestHarness.dsKey.publicKey,
             checkNonce = { it == expectedNonce },
-            checkAudience = { it == "none" },
+            checkAudience = { it == expectedNonce },
             checkCreationTime = { (it - creationTime).absoluteValue < 5.minutes },
             transactionData = otherDoc.transactionData
         )

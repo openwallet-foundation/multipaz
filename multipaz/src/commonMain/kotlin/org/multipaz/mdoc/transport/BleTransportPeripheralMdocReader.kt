@@ -18,10 +18,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Instant
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -129,7 +129,7 @@ internal class BleTransportPeripheralMdocReader(
             bleNumChunksReceived = centralManager.numChunksReceived,
         )
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         var timeScanningStarted: Instant? = null
         var timeConnectingStarted: Instant? = null
         try {
@@ -159,7 +159,7 @@ internal class BleTransportPeripheralMdocReader(
                             centralManager.peripheralDiscoverServices(uuid)
                             centralManager.peripheralDiscoverCharacteristics()
                             // NOTE: ident characteristic isn't used when the mdoc is the GATT server so we don't call
-                            // centralManager.checkReaderIdentMatches(eSenderKey)
+                            // centralManager.checkReaderIdentMatches(eSenderKeyBytes)
                             if (centralManager.l2capPsm != null) {
                                 centralManager.connectL2cap(centralManager.l2capPsm!!)
                             } else {

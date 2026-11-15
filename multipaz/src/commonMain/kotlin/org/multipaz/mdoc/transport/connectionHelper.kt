@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.multipaz.crypto.EcPublicKey
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -67,8 +67,8 @@ suspend fun List<MdocConnectionMethod>.advertise(
  *
  * The first connection which a remote peer connects to is returned and the other ones are closed.
  *
- * @param eSenderKey This should be set to `EDeviceKey` if using forward engagement or `EReaderKey`
- *   if using reverse engagement.
+ * @param eSenderKeyBytes The exact wire-encoded `EDeviceKeyBytes` if using forward engagement or
+ *   `EReaderKeyBytes` if using reverse engagement, including the `#6.24` CBOR tag.
  * @return the [MdocTransport] a remote peer connected to, will be in [MdocTransport.State.CONNECTED] state.
  * @throws IllegalArgumentException if the list contains duplicate transports.
  * @throws IllegalStateException if no transport connected or if a transport is not in
@@ -76,7 +76,7 @@ suspend fun List<MdocConnectionMethod>.advertise(
  */
 @Throws(CancellationException::class, IllegalArgumentException::class, IllegalStateException::class)
 suspend fun List<MdocTransport>.waitForConnection(
-    eSenderKey: EcPublicKey
+    eSenderKeyBytes: ByteString,
 ): MdocTransport {
     require(distinct().size == size) {
         "Transport list must not contain duplicates"
@@ -101,7 +101,7 @@ suspend fun List<MdocTransport>.waitForConnection(
                 launch(start = CoroutineStart.LAZY) {
                     try {
                         Logger.i(TAG, "opening connection ${transport.connectionMethod}")
-                        transport.open(eSenderKey)
+                        transport.open(eSenderKeyBytes)
                         // Most transports reach State.CONNECTED before open() returns, but
                         // NfcTransportMdoc.open() returns in State.IDLE and transitions to
                         // State.CONNECTED later when the SELECT APDU is received.

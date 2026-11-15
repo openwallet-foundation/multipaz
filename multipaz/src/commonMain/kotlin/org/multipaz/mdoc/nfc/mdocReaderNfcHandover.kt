@@ -113,7 +113,11 @@ suspend fun mdocReaderNfcHandover(
     // First try Concurrent Channel Engagement (CCE), if requested...
     if (options.useCce) {
         val selectApplicationResponse = try {
-            tag.selectApplication(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID)
+            tag.selectApplication(
+                applicationId = Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID,
+                p2 = Nfc.INS_SELECT_P2_APPLICATION,
+                le = 0x100,
+            )
         } catch (e: NfcCommandFailedException) {
             if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND) {
                 Logger.i(TAG, "Selecting NFC CCE AID returned FILE_NOT_FOUND")

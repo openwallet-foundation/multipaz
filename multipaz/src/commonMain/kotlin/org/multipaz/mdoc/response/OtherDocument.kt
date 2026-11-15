@@ -90,7 +90,6 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        expectedAudience: String?,
         requireHolderBinding: Boolean = true,
     ) {
         _expectedAudience = null
@@ -101,7 +100,6 @@ data class OtherDocument(
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
                 atTime = atTime,
-                expectedAudience = expectedAudience,
                 requireHolderBinding = requireHolderBinding,
             )
             else -> throw IllegalStateException("Unsupported OtherDocument format '$docFormat'")
@@ -113,7 +111,6 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        expectedAudience: String?,
         requireHolderBinding: Boolean = true,
     ) {
         val (sdJwt, sdJwtKb) = parseSdJwtPresentation()
@@ -121,20 +118,25 @@ data class OtherDocument(
         val issuerCertChain = sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")
 
+        val expectedAudience: String?
         if (sdJwtKb != null) {
             val sessionTranscriptBytes = Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,
                 taggedItem = Bstr(Cbor.encode(sessionTranscript))
             )
-            val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
+            // Per ISO/IEC 18013-5 Second Edition Annex H.2, both `nonce` and `aud` in the
+            // Key Binding JWT are `base64url(SHA-256(SessionTranscriptBytes))`.
+            val expectedSessionTranscriptHash =
+                Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
+            expectedAudience = expectedSessionTranscriptHash
 
             sdJwtKb.verify(
                 issuerKey = issuerCertChain.certificates.first().publicKey,
                 checkNonce = { nonce ->
-                    expectedNonce == nonce
+                    expectedSessionTranscriptHash == nonce
                 },
                 checkAudience = { audience ->
-                    expectedAudience != null && expectedAudience == audience
+                    expectedSessionTranscriptHash == audience
                 },
                 checkCreationTime = { creationTime ->
                     val drift = (atTime - creationTime).absoluteValue
@@ -143,6 +145,7 @@ data class OtherDocument(
                 transactionData = transactionData
             )
         } else {
+            expectedAudience = null
             if (sdJwt.kbKey != null || sdJwt.jwtBody.containsKey("cnf")) {
                 throw IllegalStateException("Key-bound SD-JWT VC presented without Key Binding JWT")
             }
@@ -167,7 +170,7 @@ data class OtherDocument(
             throw IllegalStateException("SD-JWT is not valid anymore")
         }
         this.transactionData = transactionData
-        this._expectedAudience = if (sdJwtKb != null) expectedAudience else null
+        this._expectedAudience = expectedAudience
     }
 
     companion object {

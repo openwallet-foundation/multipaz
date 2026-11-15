@@ -47,6 +47,7 @@ import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.role.MdocRole
@@ -484,7 +485,7 @@ class MdocNfcCceTranscriptTest {
                 }
             }
 
-            override suspend fun open(eSenderKey: EcPublicKey) {
+            override suspend fun open(eSenderKeyBytes: ByteString) {
                 wasOpened = true
                 if (role == MdocRole.MDOC_READER) {
                     onBeforeReaderOpen?.invoke()
@@ -779,7 +780,7 @@ class MdocNfcCceTranscriptTest {
                     }
                 )
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -820,7 +821,7 @@ class MdocNfcCceTranscriptTest {
                 val readerTransport = scanResult.transport
                 val deviceEngagementItem = Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
                 val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementItem)
-                readerTransport.open(deviceEngagement.eDeviceKey)
+                readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
                 val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
                 val sessionTranscript = buildCborArray {
@@ -899,7 +900,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -1034,7 +1035,7 @@ class MdocNfcCceTranscriptTest {
                     }
                 )
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -1084,7 +1085,7 @@ class MdocNfcCceTranscriptTest {
                 val readerTransport = scanResult.transport
                 val deviceEngagementItem = Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
                 val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementItem)
-                readerTransport.open(deviceEngagement.eDeviceKey)
+                readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
                 val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
                 val sessionTranscript = buildCborArray {
@@ -1163,7 +1164,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -1344,13 +1345,13 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     val secondaryTransport = blePair.createTransport(
                         connectionMethod = connectionMethod!!,
                         role = MdocRole.MDOC,
                         options = MdocTransportOptions(bleUseL2CAP = true),
                     )
-                    secondaryTransport.open(eDeviceKey.publicKey)
+                    secondaryTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     mdocTransport.setTransport(secondaryTransport)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
@@ -1398,7 +1399,7 @@ class MdocNfcCceTranscriptTest {
         val deviceEngagement = DeviceEngagement.fromDataItem(
             Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
         )
-        readerTransport.open(deviceEngagement.eDeviceKey)
+        readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -1473,7 +1474,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -1668,13 +1669,13 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     val secondaryTransport = blePair.createTransport(
                         connectionMethod = connectionMethod!!,
                         role = MdocRole.MDOC,
                         options = MdocTransportOptions(bleUseL2CAP = true),
                     )
-                    secondaryTransport.open(eDeviceKey.publicKey)
+                    secondaryTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     mdocTransport.setTransport(secondaryTransport)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
@@ -1731,7 +1732,7 @@ class MdocNfcCceTranscriptTest {
         val deviceEngagement = DeviceEngagement.fromDataItem(
             Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
         )
-        readerTransport.open(deviceEngagement.eDeviceKey)
+        readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -1804,7 +1805,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -2013,13 +2014,13 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     val secondaryTransport = blePair.createTransport(
                         connectionMethod = connectionMethod!!,
                         role = MdocRole.MDOC,
                         options = MdocTransportOptions(bleUseL2CAP = true),
                     )
-                    secondaryTransport.open(eDeviceKey.publicKey)
+                    secondaryTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     mdocTransport.setTransport(secondaryTransport)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
@@ -2076,7 +2077,7 @@ class MdocNfcCceTranscriptTest {
         val deviceEngagement = DeviceEngagement.fromDataItem(
             Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
         )
-        readerTransport.open(deviceEngagement.eDeviceKey)
+        readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -2151,7 +2152,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -2343,7 +2344,7 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     launch {
                         nfcExchange1Completed.await()
@@ -2352,7 +2353,7 @@ class MdocNfcCceTranscriptTest {
                             role = MdocRole.MDOC,
                             options = MdocTransportOptions(bleUseL2CAP = true),
                         )
-                        secondaryTransport.open(eDeviceKey.publicKey)
+                        secondaryTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                         mdocTransport.setTransport(secondaryTransport)
                     }
                     Iso18013Presentment(
@@ -2404,7 +2405,7 @@ class MdocNfcCceTranscriptTest {
         val deviceEngagement = DeviceEngagement.fromDataItem(
             Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
         )
-        readerTransport.open(deviceEngagement.eDeviceKey)
+        readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -2480,7 +2481,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -2701,7 +2702,7 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -2752,7 +2753,7 @@ class MdocNfcCceTranscriptTest {
         assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
 
         val readerTransport = scanResult.transport
-        readerTransport.open(eReaderKey.publicKey)
+        readerTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         val encodedEReaderKeyCose = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -2829,7 +2830,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -3020,7 +3021,7 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -3077,7 +3078,7 @@ class MdocNfcCceTranscriptTest {
         assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
 
         val readerTransport = scanResult.transport
-        readerTransport.open(eReaderKey.publicKey)
+        readerTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         val encodedEReaderKeyCose = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -3162,7 +3163,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -3345,7 +3346,7 @@ class MdocNfcCceTranscriptTest {
                     }
                 )
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -3444,7 +3445,7 @@ class MdocNfcCceTranscriptTest {
                     assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
 
                     val readerTransport = scanResult.transport
-                    readerTransport.open(eReaderKey.publicKey)
+                    readerTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
                     val encodedEReaderKeyCose = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
                     val sessionTranscript = buildCborArray {
@@ -3523,7 +3524,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -3583,7 +3584,7 @@ class MdocNfcCceTranscriptTest {
             NFC: Re-tapped
 
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -3716,7 +3717,7 @@ class MdocNfcCceTranscriptTest {
                     }
                 )
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -3759,7 +3760,7 @@ class MdocNfcCceTranscriptTest {
                 val readerTransport = scanResult.transport
                 val deviceEngagementItem = Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
                 val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementItem)
-                readerTransport.open(deviceEngagement.eDeviceKey)
+                readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
                 val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
                 val sessionTranscript = buildCborArray {
@@ -3838,7 +3839,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 100,
@@ -3982,7 +3983,7 @@ class MdocNfcCceTranscriptTest {
                     }
                 )
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -4023,7 +4024,7 @@ class MdocNfcCceTranscriptTest {
                 val readerTransport = scanResult.transport
                 val deviceEngagementItem = Cbor.decode(scanResult.encodedDeviceEngagement.toByteArray())
                 val deviceEngagement = DeviceEngagement.fromDataItem(deviceEngagementItem)
-                readerTransport.open(deviceEngagement.eDeviceKey)
+                readerTransport.open(deviceEngagement.eDeviceKeyBytes)
 
                 val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
                 val sessionTranscript = buildCborArray {
@@ -4136,7 +4137,7 @@ class MdocNfcCceTranscriptTest {
 
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -4283,7 +4284,7 @@ class MdocNfcCceTranscriptTest {
                 )
                 mdocTransport.setExpectTransport(true, connectionMethod)
                 launch {
-                    mdocTransport.open(eDeviceKey.publicKey)
+                    mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
                     presentmentReady.complete(Unit)
                     Iso18013Presentment(
                         transport = mdocTransport,
@@ -4340,7 +4341,7 @@ class MdocNfcCceTranscriptTest {
         assertEquals(MdocHandoverType.CCE_HANDOVER, scanResult.type)
 
         val readerTransport = scanResult.transport
-        readerTransport.open(eReaderKey.publicKey)
+        readerTransport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
 
         val encodedEReaderKeyCose = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
@@ -4426,7 +4427,7 @@ class MdocNfcCceTranscriptTest {
         )
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -4536,7 +4537,7 @@ class MdocNfcCceTranscriptTest {
         )
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -4655,7 +4656,7 @@ class MdocNfcCceTranscriptTest {
         )
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -4781,7 +4782,7 @@ class MdocNfcCceTranscriptTest {
         )
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,
@@ -4932,7 +4933,7 @@ class MdocNfcCceTranscriptTest {
         )
         val expectedTranscript = """
             # The mdoc reader selects the NFC CCE application.
-            C-APDU: 00a4040007a0000002480401
+            C-APDU: 00a4040007a000000248040100
             # The mdoc responds with maximum command and response data lengths.
             # {
             #   0: 65535,

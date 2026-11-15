@@ -233,6 +233,8 @@ data class MobileSecurityObject(
             digestMap.forEach { (digestId, digest) ->
                 if (digestId < 0) {
                     addError("MSO digestID $digestId in namespace '$namespace' must be non-negative")
+                } else if (digestId > MAX_DIGEST_ID) {
+                    addError("MSO digestID $digestId in namespace '$namespace' must be <= 2^31 - 1")
                 }
                 if (expectedDigestSize != null && digest.size != expectedDigestSize) {
                     addError("MSO digest for digestID $digestId in namespace '$namespace' has length ${digest.size} bytes, expected $expectedDigestSize bytes for $digestAlgorithm")
@@ -250,16 +252,26 @@ data class MobileSecurityObject(
             if (ns.isEmpty()) {
                 addError("deviceKeyAuthorizedDataElements contains an empty namespace name")
             }
+            if (elemList.isEmpty()) {
+                addError("deviceKeyAuthorizedDataElements for namespace '$ns' must not be empty")
+            }
             elemList.forEach { elem ->
                 if (elem.isEmpty()) {
                     addError("deviceKeyAuthorizedDataElements for namespace '$ns' contains an empty element identifier")
                 }
             }
         }
+        val overlappingAuthNamespaces = deviceKeyAuthorizedNamespaces.intersect(deviceKeyAuthorizedDataElements.keys)
+        if (overlappingAuthNamespaces.isNotEmpty()) {
+            addError(
+                "Namespaces cannot appear in both AuthorizedNameSpaces and AuthorizedDataElements: $overlappingAuthNamespaces"
+            )
+        }
     }
 
     companion object {
         private const val TAG = "MobileSecurityObject"
+        private const val MAX_DIGEST_ID = 0x7fff_ffffL
 
         /**
          * Validates the CBOR structure of `MobileSecurityObject` according to ISO/IEC 18013-5:2021.
@@ -336,9 +348,13 @@ data class MobileSecurityObject(
             dataItem["valueDigests"].asMap.forEach { (namespace, digestIds) ->
                 val innerMap = mutableMapOf<Long, ByteString>()
                 digestIds.asMap.forEach { (digestId, digest) ->
-                    innerMap.put(digestId.asNumber, ByteString(digest.asBstr))
+                    val id = digestId.asNumber
+                    require(id in 0..MAX_DIGEST_ID) {
+                        "MSO digestID $id in namespace '${namespace.asTstr}' out of range [0, 2^31 - 1]"
+                    }
+                    innerMap[id] = ByteString(digest.asBstr)
                 }
-                valueDigests.put(namespace.asTstr, innerMap)
+                valueDigests[namespace.asTstr] = innerMap
             }
 
             val dkInfo = dataItem.getOrNull("deviceKeyInfo")
@@ -347,13 +363,32 @@ data class MobileSecurityObject(
             val deviceKeyAuthorizedNamespaces = mutableListOf<String>()
             val deviceKeyAuthorizedDataElements = mutableMapOf<String, List<String>>()
             dkInfo?.getOrNull("keyAuthorizations")?.let { keyAuthorizationsMap ->
+                require(keyAuthorizationsMap.asMap.isNotEmpty()) {
+                    "keyAuthorizations must not be empty when present"
+                }
                 keyAuthorizationsMap.getOrNull("nameSpaces")?.let { namespaces ->
-                    namespaces.asArray.forEach { deviceKeyAuthorizedNamespaces.add(it.asTstr) }
+                    val nsArray = namespaces.asArray
+                    require(nsArray.isNotEmpty()) {
+                        "keyAuthorizations nameSpaces must not be empty when present"
+                    }
+                    nsArray.forEach { deviceKeyAuthorizedNamespaces.add(it.asTstr) }
                 }
                 keyAuthorizationsMap.getOrNull("dataElements")?.let { dataElements ->
-                    dataElements.asMap.forEach { (namespace, dataElementArray) ->
-                        deviceKeyAuthorizedDataElements[namespace.asTstr] = dataElementArray.asArray.map { it.asTstr }
+                    val deMap = dataElements.asMap
+                    require(deMap.isNotEmpty()) {
+                        "keyAuthorizations dataElements must not be empty when present"
                     }
+                    deMap.forEach { (namespace, dataElementArray) ->
+                        val elemArray = dataElementArray.asArray
+                        require(elemArray.isNotEmpty()) {
+                            "keyAuthorizations dataElements for '${namespace.asTstr}' must not be empty"
+                        }
+                        deviceKeyAuthorizedDataElements[namespace.asTstr] = elemArray.map { it.asTstr }
+                    }
+                }
+                val overlap = deviceKeyAuthorizedNamespaces.intersect(deviceKeyAuthorizedDataElements.keys)
+                require(overlap.isEmpty()) {
+                    "Namespaces cannot appear in both AuthorizedNameSpaces and AuthorizedDataElements: $overlap"
                 }
             }
             val deviceKeyInfo = mutableMapOf<Long, DataItem>()

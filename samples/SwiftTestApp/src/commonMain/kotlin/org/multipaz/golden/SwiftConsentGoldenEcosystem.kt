@@ -441,6 +441,7 @@ class SwiftConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+            atTime = NOW,
         )
     }
 
@@ -496,6 +497,7 @@ class SwiftConsentGoldenEcosystem private constructor(
         return deviceRequest.execute(
             presentmentSource = source,
             keyAgreementPossible = emptyList(),
+            atTime = NOW,
         )
     }
 

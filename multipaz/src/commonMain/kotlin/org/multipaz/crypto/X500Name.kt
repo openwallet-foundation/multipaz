@@ -117,7 +117,12 @@ class X500Name(val components: Map<String, ASN1String>) {
                 if (oidForKey == null) {
                     throw IllegalArgumentException("Unknown OID for $key")
                 }
-                components.put(oidForKey, ASN1String(value))
+                val stringTag = when (oidForKey) {
+                    OID.COUNTRY_NAME.oid,
+                    OID.SERIAL_NUMBER.oid -> ASN1StringTag.PRINTABLE_STRING.tag
+                    else -> ASN1StringTag.UTF8_STRING.tag
+                }
+                components.put(oidForKey, ASN1String(value, stringTag))
             }
             return X500Name(components)
         }

@@ -7,6 +7,7 @@ import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.AlternativeCarrierRecord
 import org.multipaz.nfc.HandoverCarrierRecords
 import org.multipaz.nfc.NdefRecord
@@ -80,6 +81,7 @@ private fun ByteStringBuilder.appendNfcEncodedInt(dataType: UByte, value: Int) {
 
 internal fun encodeNfcNdefHandoverCarrier(
     nfc: MdocConnectionMethod.Nfc,
+    handoverType: MdocNfcHandoverType,
     sharedAuxiliaryReferences: List<String>,
 ): HandoverCarrierRecords {
     val carrierDataReference = MdocConnectionMethod.Nfc.CARRIER_DATA_REFERENCE_NFC
@@ -89,14 +91,18 @@ internal fun encodeNfcNdefHandoverCarrier(
         carrierDataReference.encodeToByteString(),
         buildByteString {
             appendUInt8(0x01) // Version
-            appendNfcEncodedInt(
-                NFC_DATA_TYPE_MAXIMUM_COMMAND_DATA_LENGTH,
-                nfc.commandDataFieldMaxLength.toInt()
-            )
-            appendNfcEncodedInt(
-                NFC_DATA_TYPE_MAXIMUM_RESPONSE_DATA_LENGTH,
-                nfc.responseDataFieldMaxLength.toInt()
-            )
+            // Per ISO/IEC 18013-5 Second Edition clause 11.2.3, maximum command/response data
+            // length fields are mandatory for the mdoc and shall not be used by the mdoc reader.
+            if (handoverType != MdocNfcHandoverType.NEGOTIATED_HR) {
+                appendNfcEncodedInt(
+                    NFC_DATA_TYPE_MAXIMUM_COMMAND_DATA_LENGTH,
+                    nfc.commandDataFieldMaxLength.toInt()
+                )
+                appendNfcEncodedInt(
+                    NFC_DATA_TYPE_MAXIMUM_RESPONSE_DATA_LENGTH,
+                    nfc.responseDataFieldMaxLength.toInt()
+                )
+            }
         }
     )
     val alternativeCarrierRecord = AlternativeCarrierRecord(
@@ -109,47 +115,101 @@ internal fun encodeNfcNdefHandoverCarrier(
     )
 }
 
-internal fun decodeNfcNdefHandoverCarrier(record: NdefRecord): MdocConnectionMethod.Nfc? {
+private const val DEFAULT_NFC_COMMAND_DATA_FIELD_MAX_LENGTH = 0xffffL
+private const val DEFAULT_NFC_RESPONSE_DATA_FIELD_MAX_LENGTH = 0x10000L
+
+internal fun decodeNfcNdefHandoverCarrier(
+    record: NdefRecord,
+    senderRole: MdocRole,
+): MdocConnectionMethod.Nfc? {
+    if (record.payload.size < 1) {
+        Logger.w(TAG, "Empty NFC carrier record payload")
+        return null
+    }
     with(ByteDataReader(record.payload)) {
         val version = getUInt8().toInt()
         if (version != 0x01) {
             Logger.w(TAG, "Expected version 0x01, found $version")
             return null
         }
-        val cmdLen = getUInt8()
-        val cmdType = getUInt8()
-        if (cmdType != NFC_DATA_TYPE_MAXIMUM_COMMAND_DATA_LENGTH) {
-            Logger.w(TAG, "expected type 0x01, found $cmdType")
-            return null
+        var commandDataFieldMaxLength: Long? = null
+        var responseDataFieldMaxLength: Long? = null
+        while (!exhausted()) {
+            val fieldLen = getUInt8().toInt()
+            if (fieldLen < 1 || numBytesRemaining() < fieldLen) {
+                Logger.w(TAG, "Invalid LTV field length $fieldLen with ${numBytesRemaining()} bytes remaining")
+                return null
+            }
+            val dataType = getUInt8()
+            val valueByteCount = fieldLen - 1
+            when (dataType) {
+                NFC_DATA_TYPE_MAXIMUM_COMMAND_DATA_LENGTH -> {
+                    if (valueByteCount < 1 || valueByteCount > 2) {
+                        Logger.w(TAG, "expected cmdLen in range 2-3, got $fieldLen")
+                        return null
+                    }
+                    if (commandDataFieldMaxLength != null) {
+                        Logger.w(TAG, "Duplicate NFC data type 0x01 in carrier record")
+                        return null
+                    }
+                    var value = 0u
+                    for (n in 0 until valueByteCount) {
+                        value = value * 256u + getUInt8()
+                    }
+                    commandDataFieldMaxLength = value.toLong()
+                }
+                NFC_DATA_TYPE_MAXIMUM_RESPONSE_DATA_LENGTH -> {
+                    if (valueByteCount < 1 || valueByteCount > 3) {
+                        Logger.w(TAG, "expected rspLen in range 2-4, got $fieldLen")
+                        return null
+                    }
+                    if (responseDataFieldMaxLength != null) {
+                        Logger.w(TAG, "Duplicate NFC data type 0x02 in carrier record")
+                        return null
+                    }
+                    var value = 0u
+                    for (n in 0 until valueByteCount) {
+                        value = value * 256u + getUInt8()
+                    }
+                    responseDataFieldMaxLength = value.toLong()
+                }
+                else -> {
+                    Logger.w(TAG, "Ignoring unknown NFC carrier data type 0x${dataType.toString(16)}")
+                    skip(valueByteCount)
+                }
+            }
         }
-        if (cmdLen < 2u || cmdLen > 3u) {
-            Logger.w(TAG, "expected cmdLen in range 2-3, got $cmdLen")
-            return null
+        return when (senderRole) {
+            MdocRole.MDOC -> {
+                if (commandDataFieldMaxLength == null || responseDataFieldMaxLength == null) {
+                    Logger.w(
+                        TAG,
+                        "Missing mandatory NFC command/response max length in mdoc carrier record " +
+                            "(cmd=$commandDataFieldMaxLength, rsp=$responseDataFieldMaxLength)"
+                    )
+                    return null
+                }
+                MdocConnectionMethod.Nfc(
+                    commandDataFieldMaxLength = commandDataFieldMaxLength,
+                    responseDataFieldMaxLength = responseDataFieldMaxLength,
+                )
+            }
+            MdocRole.MDOC_READER -> {
+                if (commandDataFieldMaxLength != null || responseDataFieldMaxLength != null) {
+                    Logger.w(
+                        TAG,
+                        "Reader included NFC command/response max length in Handover Request " +
+                            "(prohibited by ISO/IEC 18013-5 Second Edition clause 11.2.3); accepting for 2021 compatibility"
+                    )
+                }
+                MdocConnectionMethod.Nfc(
+                    commandDataFieldMaxLength = commandDataFieldMaxLength
+                        ?: DEFAULT_NFC_COMMAND_DATA_FIELD_MAX_LENGTH,
+                    responseDataFieldMaxLength = responseDataFieldMaxLength
+                        ?: DEFAULT_NFC_RESPONSE_DATA_FIELD_MAX_LENGTH,
+                )
+            }
         }
-        var commandDataFieldMaxLength = 0u
-        for (n in 0u until cmdLen - 1u) {
-            commandDataFieldMaxLength *= 256u
-            commandDataFieldMaxLength += getUInt8()
-        }
-        val rspLen = getUInt8()
-        val rspType = getUInt8()
-        if (rspType != NFC_DATA_TYPE_MAXIMUM_RESPONSE_DATA_LENGTH) {
-            Logger.w(TAG, "expected type 0x02, found $rspType")
-            return null
-        }
-        if (rspLen < 2u || rspLen > 4u) {
-            Logger.w(TAG, "expected rspLen in range 2-4, got $rspLen")
-            return null
-        }
-        var responseDataFieldMaxLength = 0u
-        for (n in 0u until rspLen - 1u) {
-            responseDataFieldMaxLength *= 256u
-            responseDataFieldMaxLength += getUInt8()
-        }
-        return MdocConnectionMethod.Nfc(
-            commandDataFieldMaxLength = commandDataFieldMaxLength.toLong(),
-            responseDataFieldMaxLength = responseDataFieldMaxLength.toLong(),
-        )
     }
 }
 
