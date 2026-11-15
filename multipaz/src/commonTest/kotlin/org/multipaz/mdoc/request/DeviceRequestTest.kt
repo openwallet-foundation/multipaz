@@ -13,8 +13,10 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Nint
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
@@ -22,6 +24,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
@@ -33,11 +36,12 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
@@ -49,10 +53,14 @@ import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.mdoc.zkp.ZkSystemParamValue
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.mdocPresentment
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
@@ -70,6 +78,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -109,7 +118,10 @@ class DeviceRequestTest {
             }.message
         )
 
-        deviceRequest.verifyReaderAuthentication(sessionTranscript)
+        deviceRequest.verifyReaderAuthentication(
+            sessionTranscript = sessionTranscript,
+            atTime = Instant.parse("2020-11-01T00:00:00Z"),
+        )
 
         // Now we can access readerAuthAll and readerAuth
         val readerAuth = deviceRequest.docRequests[0].readerAuth
@@ -160,7 +172,10 @@ class DeviceRequestTest {
         assertEquals(
             "Error verifying reader authentication for DocRequest at index 0",
             assertFailsWith(SignatureVerificationException::class) {
-                deviceRequest.verifyReaderAuthentication(sessionTranscript)
+                deviceRequest.verifyReaderAuthentication(
+                    sessionTranscript = sessionTranscript,
+                    atTime = Instant.parse("2020-11-01T00:00:00Z"),
+                )
             }.message
         )
 
@@ -2659,6 +2674,361 @@ class DeviceRequestTest {
                     docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
                 )
             }
+        }
+    }
+
+    @Test
+    fun zkRequestAndSystemSpecSecondEditionValidation() = runTest {
+        // 1. Empty systemSpecs is rejected
+        assertFailsWith<IllegalArgumentException> {
+            ZkRequest(systemSpecs = emptyList(), zkRequired = false)
+        }
+
+        // 2. ZkRequest omits "params" when empty and parses without "params"
+        val noParamsSpec = ZkSystemSpec(id = "spec1", system = "test-zk")
+        val zkReqNoParams = ZkRequest(systemSpecs = listOf(noParamsSpec), zkRequired = true)
+        val encodedNoParams = Cbor.encode(zkReqNoParams.toDataItem())
+        val rawMap = Cbor.decode(encodedNoParams)
+        assertFalse(rawMap["systemSpecs"].asArray.single().hasKey("params"))
+        val parsedNoParams = ZkRequest.fromDataItem(rawMap)
+        assertEquals(listOf(noParamsSpec), parsedNoParams.systemSpecs)
+        assertTrue(parsedNoParams.zkRequired)
+
+        // 3. ZkSystemSpec supports list and map params and includes params in equality/hashCode
+        val specWithNestedParams = ZkSystemSpec(id = "spec1", system = "test-zk").apply {
+            addParam("curves", listOf(ZkSystemParamValue.StringValue("P-256"), ZkSystemParamValue.LongValue(1L)))
+            addParam("config", mapOf("version" to ZkSystemParamValue.LongValue(2L)))
+        }
+        assertNotEquals(noParamsSpec, specWithNestedParams)
+        val roundTripped = ZkRequest.fromDataItem(
+            Cbor.decode(Cbor.encode(ZkRequest(listOf(specWithNestedParams), zkRequired = false).toDataItem()))
+        ).systemSpecs.single()
+        assertEquals(specWithNestedParams, roundTripped)
+        assertEquals(specWithNestedParams.hashCode(), roundTripped.hashCode())
+
+        // 4. Conflicting ZkSystemSpec definitions sharing the same zkSystemId across DocRequests are rejected
+        val transcript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(Simple.NULL) }
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(
+                sessionTranscript = transcript,
+                deviceRequestInfo = DeviceRequestInfo.fromValues(
+                    useCases = listOf(UseCase(true, listOf(DocumentSet(listOf(0, 1))), emptyMap()))
+                )
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to false)),
+                    docRequestInfo = DocRequestInfo(
+                        zkRequest = ZkRequest(listOf(noParamsSpec), zkRequired = false)
+                    )
+                )
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_21" to false)),
+                    docRequestInfo = DocRequestInfo(
+                        zkRequest = ZkRequest(listOf(specWithNestedParams), zkRequired = false)
+                    )
+                )
+            }
+        }
+
+        // 5. zkRequired = true fails execute() when no compatible ZK system is registered
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        val zkRequiredReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to false)),
+                docRequestInfo = DocRequestInfo(
+                    zkRequest = ZkRequest(listOf(noParamsSpec), zkRequired = true)
+                )
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            zkRequiredReq.execute(presentmentSource = harness.presentmentSource)
+        }
+    }
+
+    @Test
+    fun encryptionParametersAndMaximumResponseSizeValidation() = runTest {
+        val now = Clock.System.now()
+        val key1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val key2 = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        // 1. Empty recipientCertificate array when key is present is rejected
+        assertFailsWith<IllegalArgumentException> {
+            EncryptionParameters(
+                buildCborMap {
+                    put("recipientPublicKey", key1.publicKey.toCoseKey().toDataItem())
+                    putCborArray("recipientCertificate") {}
+                }
+            )
+        }
+
+        // 2. recipientPublicKey mismatching leaf recipientCertificate is rejected
+        val certForKey2 = buildX509Cert(
+            publicKey = key2.publicKey,
+            signingKey = AsymmetricKey.anonymous(key2),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Recipient"),
+            issuer = X500Name.fromName("CN=Recipient"),
+            validFrom = now - 1.days,
+            validUntil = now + 1.days
+        ) {}
+        assertFailsWith<IllegalArgumentException> {
+            EncryptionParameters.fromValues(
+                recipientPublicKey = key1.publicKey,
+                recipientCertificates = listOf(certForKey2)
+            )
+        }
+
+        // 3. Expired recipientCertificate fails execute()
+        val expiredCertForKey1 = buildX509Cert(
+            publicKey = key1.publicKey,
+            signingKey = AsymmetricKey.anonymous(key1),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Expired Recipient"),
+            issuer = X500Name.fromName("CN=Expired Recipient"),
+            validFrom = now - 10.days,
+            validUntil = now - 1.days
+        ) {}
+        val expiredEncParams = EncryptionParameters.fromValues(
+            recipientPublicKey = key1.publicKey,
+            recipientCertificates = listOf(expiredCertForKey1)
+        )
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        val transcript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val expiredEncReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(docResponseEncryption = expiredEncParams)
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            expiredEncReq.execute(presentmentSource = harness.presentmentSource, atTime = now)
+        }
+
+        // 4. Negative or Nint maximumResponseSize is rejected
+        assertFailsWith<IllegalArgumentException> {
+            DocRequestInfo(maximumResponseSize = -1L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DocRequestInfo.fromDataItem(buildCborMap { put("maximumResponseSize", Nint(1UL)) })
+        }
+
+        // 5. Exceeding maximumResponseSize fails mdocPresentment without incrementing usage count
+        val mdlCredBefore = harness.docMdl.getCertifiedCredentials().first()
+        val usageBefore = mdlCredBefore.usageCount
+        val tinyMaxSizeReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(maximumResponseSize = 10L)
+            )
+        }
+        val err = assertFailsWith<Iso18015ResponseException> {
+            mdocPresentment(
+                deviceRequest = tinyMaxSizeReq,
+                eReaderKey = null,
+                sessionTranscript = transcript,
+                source = harness.presentmentSource,
+                keyAgreementPossible = emptyList(),
+                requesterAppId = null,
+                requesterOrigin = null,
+                onDocumentsInFocus = {}
+            )
+        }
+        assertTrue(err.message!!.contains("maximumResponseSize"))
+        assertEquals(usageBefore, harness.docMdl.getCertifiedCredentials().first().usageCount)
+    }
+
+    @Test
+    fun readerAuthCertValidationMultiIdentitiesAndUseCaseConstraints() = runTest {
+        val now = Clock.System.now()
+        val transcript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(4, 5, 6)) }
+
+        suspend fun makeReaderCertifiedKey(label: String, validFrom: Instant, validUntil: Instant): AsymmetricKey.X509Certified {
+            val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val rootCert = MdocUtil.generateReaderRootCertificate(
+                readerRootKey = AsymmetricKey.anonymous(rootKey),
+                subject = X500Name.fromName("CN=$label Root,C=US"),
+                serial = ASN1Integer(10L),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                crlUrl = null
+            )
+            val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val leafCert = MdocUtil.generateReaderCertificate(
+                readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(rootCert)),
+                    privateKey = rootKey
+                ),
+                readerKey = leafKey.publicKey,
+                subject = X500Name.fromName("CN=$label,C=US"),
+                dnsName = null,
+                serial = ASN1Integer(11L),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            return AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(leafCert, rootCert)),
+                privateKey = leafKey
+            )
+        }
+
+        // 1. Per-DocRequest expired reader certificate is rejected by verifyReaderAuthentication()
+        val expiredReaderCertified = makeReaderCertifiedKey(
+            label = "Expired Reader",
+            validFrom = now - 20.days,
+            validUntil = now - 5.days
+        )
+        val expiredReaderReq = buildDeviceRequest(sessionTranscript = transcript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = expiredReaderCertified
+            )
+        }
+        assertFailsWith<SignatureVerificationException> {
+            expiredReaderReq.verifyReaderAuthentication(transcript, atTime = now)
+        }
+
+        // 2. getRequesterIdentities() returns all distinct DocRequest reader identities
+        val readerA = makeReaderCertifiedKey("Reader A", now - 2.days, now + 30.days)
+        val readerB = makeReaderCertifiedKey("Reader B", now - 2.days, now + 30.days)
+        val multiReaderReq = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(UseCase(true, listOf(DocumentSet(listOf(0, 1))), emptyMap()))
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerA
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_DOCTYPE,
+                nameSpaces = mapOf(EUPersonalID.EUPID_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerB
+            )
+        }
+        multiReaderReq.verifyReaderAuthentication(transcript, atTime = now)
+        val identities = multiReaderReq.getRequesterIdentities()
+        assertEquals(2, identities.size)
+        assertEquals(
+            setOf(
+                X509CertChain(listOf(readerA.certChain.certificates.first())),
+                X509CertChain(listOf(readerB.certChain.certificates.first()))
+            ),
+            identities.map { (it as Iso18013RequesterIdentity).certChain }.toSet()
+        )
+
+        // 3. v1.0 multi-DocRequest executes all DocRequests (and fails if second DocRequest cannot match)
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        val v10MultiReq = buildDeviceRequest(sessionTranscript = transcript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_DOCTYPE,
+                nameSpaces = mapOf(EUPersonalID.EUPID_NAMESPACE to mapOf("given_name" to false))
+            )
+        }
+        assertEquals("1.0", v10MultiReq.version)
+        val v10Result = v10MultiReq.execute(presentmentSource = harness.presentmentSource)
+        assertEquals(2, v10Result.useCases.size)
+
+        val v10UnsatisfiedSecondReq = buildDeviceRequest(sessionTranscript = transcript) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+            addDocRequest(
+                docType = "org.example.nonexistent.1",
+                nameSpaces = mapOf("org.example.nonexistent" to mapOf("foo" to false))
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            v10UnsatisfiedSecondReq.execute(presentmentSource = harness.presentmentSource)
+        }
+
+        // 4. All-optional UseCases with 0 matching credentials fails execute(), and selecting empty [] fails toPresentmentSelection()
+        val allOptionalZeroMatch = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(UseCase(mandatory = false, documentSets = listOf(DocumentSet(listOf(0))), purposeHints = emptyMap()))
+            )
+        ) {
+            addDocRequest(
+                docType = "org.example.nonexistent.1",
+                nameSpaces = mapOf("org.example.nonexistent" to mapOf("foo" to false))
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            allOptionalZeroMatch.execute(presentmentSource = harness.presentmentSource)
+        }
+
+        val optionalSatisfied = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(UseCase(mandatory = false, documentSets = listOf(DocumentSet(listOf(0))), purposeHints = emptyMap()))
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+        }.execute(presentmentSource = harness.presentmentSource)
+        assertFailsWith<IllegalArgumentException> {
+            optionalSatisfied.toPresentmentSelection(listOf(emptyList()))
+        }
+
+        // 5. PresentmentData prevents mixing solutions from different DocumentSet options
+        val twoOptionsData = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0)), DocumentSet(listOf(1))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(uniqueDocSetRequired = false)
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_DOCTYPE,
+                nameSpaces = mapOf(EUPersonalID.EUPID_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(uniqueDocSetRequired = false)
+            )
+        }.execute(presentmentSource = harness.presentmentSource)
+        assertTrue(twoOptionsData.useCases.single().solutions.size >= 2)
+        val firstOptIdx = twoOptionsData.useCases.single().solutions.indexOfFirst { it.optionIndex == 0 }
+        val secondOptIdx = twoOptionsData.useCases.single().solutions.indexOfFirst { it.optionIndex == 1 }
+        assertFailsWith<IllegalArgumentException> {
+            twoOptionsData.toPresentmentSelection(listOf(listOf(firstOptIdx, secondOptIdx)))
         }
     }
 }

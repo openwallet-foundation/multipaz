@@ -34,6 +34,7 @@ import org.multipaz.document.NameSpacedData
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
@@ -160,7 +161,7 @@ class DeviceResponseGeneratorTest {
             issuer = X500Name.fromName("CN=State of Utopia DS Key"),
             validFrom = validFrom,
             validUntil = validUntil
-        ).build()
+        ).setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE)).build()
         for (mdocCredential in listOf(mdocCredentialSign, mdocCredentialMac)) {
             val msoGenerator = MobileSecurityObjectGenerator(
                 Algorithm.SHA256,

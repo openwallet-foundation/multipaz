@@ -8,11 +8,18 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.UUID
 import org.multipaz.util.getUInt32
@@ -58,13 +65,15 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BleTransportTest {
-    private lateinit var senderKey: EcPublicKey
+    private lateinit var rawSenderKey: EcPublicKey
+    private lateinit var senderKey: ByteString
     private lateinit var senderIdent: ByteArray
     private val testUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
 
     @BeforeTest
     fun setup() = runTest {
-        senderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        rawSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        senderKey = buildDeviceEngagement(eDeviceKey = rawSenderKey) {}.eDeviceKeyBytes
         senderIdent = deriveBleIdent(senderKey)
     }
 
@@ -944,6 +953,62 @@ class BleTransportTest {
         assertEquals(true, peripheralMdocReaderDirectL2cap.stats.bleUsingL2cap)
         assertEquals(true, peripheralMdocReaderDirectL2cap.stats.bleL2capPsmInEngagement)
         peripheralMdocReaderDirectL2cap.close()
+    }
+
+    @Test
+    fun bleIdentUsesRawESenderKeyBytesWhenProvided() = runTest {
+        val dcKey = rawSenderKey as EcPublicKeyDoubleCoordinate
+        // Build a non-canonical EDeviceKeyBytes (e.g., compressed EC2 COSE_Key with -3 as bool)
+        val yParity = (dcKey.y.last().toInt() and 1) == 1
+        val compressedCoseKey = buildCborMap {
+            put(1, 2)
+            put(-1, 1)
+            put(-2, dcKey.x)
+            put(-3, yParity)
+        }
+        val rawESenderKeyBytes = ByteString(
+            Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(compressedCoseKey))))
+        )
+        val rawIdent = deriveBleIdent(rawESenderKeyBytes)
+        assertFalse(rawIdent.contentEquals(senderIdent))
+
+        // Reader (peripheral) advertises Ident derived from rawESenderKeyBytes, and mdoc (central) verifies it
+        val peripheralManager = FakeBlePeripheralManager()
+        val readerTransport = BleTransportCentralMdocReader(
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(),
+            peripheralManager = peripheralManager,
+            uuid = testUuid,
+        )
+        readerTransport.open(rawESenderKeyBytes)
+        assertContentEquals(rawIdent, peripheralManager.readIdentCharacteristic())
+
+        val centralManager = FakeBleCentralManager(expectedIdent = rawIdent)
+        val mdocTransport = BleTransportCentralMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            centralManager = centralManager,
+            uuid = testUuid,
+            psm = null,
+        )
+        // With uncompressed senderKey bytes, Ident check fails against compressed rawIdent
+        val mismatchManager = FakeBleCentralManager(expectedIdent = rawIdent)
+        val mismatchTransport = BleTransportCentralMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            centralManager = mismatchManager,
+            uuid = testUuid,
+            psm = null,
+        )
+        assertFailsWith<MdocTransportException> {
+            mismatchTransport.open(senderKey)
+        }
+
+        // With rawESenderKeyBytes, Ident check succeeds
+        mdocTransport.open(rawESenderKeyBytes)
+        assertEquals(MdocTransport.State.CONNECTED, mdocTransport.state.value)
+        mdocTransport.close()
+        readerTransport.close()
     }
 
     /**

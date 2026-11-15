@@ -215,7 +215,7 @@ class MdocNfcEngagementHelperTest {
                 ResponseApdu(status=36864, payload=ByteString(size=2 hex=0006))
                 CommandApdu(cla=0, ins=176, p1=0, p2=2, payload=ByteString(size=0), le=6)
                 ResponseApdu(status=36864, payload=ByteString(size=6 hex=d10201546500))
-                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=120 hex=0076910215487215910204616301013000510206616301036e6663001a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107b66eef55ee782ea2514bb6a1c42ad5b35c110a0369736f2e6f72673a31383031333a6e66636e6663010301ffff0402010000), le=0)
+                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=111 hex=006d910215487215910204616301013000510206616301036e6663001a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107b66eef55ee782ea2514bb6a1c42ad5b35c11010369736f2e6f72673a31383031333a6e66636e666301), le=0)
                 ResponseApdu(status=36864, payload=ByteString(size=0))
                 CommandApdu(cla=0, ins=176, p1=0, p2=0, payload=ByteString(size=0), le=2)
                 ResponseApdu(status=36864, payload=ByteString(size=2 hex=00c2))

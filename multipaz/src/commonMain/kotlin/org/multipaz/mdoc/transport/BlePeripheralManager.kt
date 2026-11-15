@@ -1,7 +1,7 @@
 package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.channels.Channel
-import org.multipaz.crypto.EcPublicKey
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.UUID
 
 internal interface BlePeripheralManager {
@@ -35,7 +35,7 @@ internal interface BlePeripheralManager {
 
     suspend fun advertiseService(uuid: UUID)
 
-    suspend fun setESenderKey(eSenderKey: EcPublicKey)
+    suspend fun setESenderKeyBytes(eSenderKeyBytes: ByteString)
 
     suspend fun waitForStateCharacteristicWriteOrL2CAPClient()
 

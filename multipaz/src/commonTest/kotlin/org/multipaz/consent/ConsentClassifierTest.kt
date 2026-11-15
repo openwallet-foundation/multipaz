@@ -47,6 +47,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 class ConsentClassifierTest {
 
@@ -1111,7 +1112,8 @@ class ConsentClassifierTest {
             Cbor.decode(requestHex.fromHex())
         )
         deviceRequest.verifyReaderAuthentication(
-            sessionTranscript = Cbor.decode(sessionTranscriptHex.fromHex())
+            sessionTranscript = Cbor.decode(sessionTranscriptHex.fromHex()),
+            atTime = Instant.parse("2026-11-10T00:00:00Z"),
         )
         val presentmentData = deviceRequest.execute(presentmentSource = harness.presentmentSource)
         val simpleConsent = assertNotNull(

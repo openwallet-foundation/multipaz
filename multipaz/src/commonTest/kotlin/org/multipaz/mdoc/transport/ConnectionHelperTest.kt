@@ -9,10 +9,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -28,11 +29,13 @@ import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ConnectionHelperTest {
-    private lateinit var senderKey: EcPublicKey
+    private lateinit var senderKey: ByteString
 
     @BeforeTest
     fun setup() = runTest {
-        senderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        senderKey = buildDeviceEngagement(
+            eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        ) {}.eDeviceKeyBytes
     }
 
     @Test
@@ -380,7 +383,7 @@ class ConnectionHelperTest {
             state.value = State.ADVERTISING
         }
 
-        override suspend fun open(eSenderKey: EcPublicKey) {
+        override suspend fun open(eSenderKeyBytes: ByteString) {
             openStarted = true
             try {
                 finishOpen.await()

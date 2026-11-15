@@ -100,6 +100,34 @@ class VerificationUtilTest {
         )
     }
 
+    private suspend fun createTestMdlDsCertChain(): X509CertChain {
+        val iacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val validFrom = Clock.System.now() - 1.days
+        val validUntil = validFrom + 365.days
+        val iacaCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaKey),
+            subject = X500Name.fromName("CN=Test IACA,C=US"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            issuerAltNameUrl = "https://issuer.example.com",
+            crlUrl = "https://issuer.example.com/crl",
+        )
+        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(iacaCert)),
+                privateKey = iacaKey
+            ),
+            dsKey = dsKey.publicKey,
+            subject = X500Name.fromName("CN=Test mDL DS,C=US"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        return X509CertChain(listOf(dsCert, iacaCert))
+    }
+
     @Test
     fun generateDcRequestMdoc_version10() = runTest {
         val identity = createTestVerifierIdentity()
@@ -520,7 +548,7 @@ class VerificationUtilTest {
                     "org.iso.18013.5.1" to mapOf("given_name" to "Mallory".toDataItem()),
                     "org.iso.23220.5.1" to mapOf("CHV_1" to Simple.TRUE),
                 ),
-                msoX5chain = identity.key.certChain,
+                msoX5chain = createTestMdlDsCertChain(),
             ),
             proof = ByteString(1, 2, 3),
         )
@@ -582,7 +610,7 @@ class VerificationUtilTest {
                     "org.iso.18013.5.1" to mapOf("given_name" to "Erika".toDataItem())
                 ),
                 deviceSigned = emptyMap(),
-                msoX5chain = identity.key.certChain,
+                msoX5chain = createTestMdlDsCertChain(),
             ),
             proof = ByteString(1, 2, 3),
         )
@@ -659,7 +687,7 @@ class VerificationUtilTest {
                     "org.iso.18013.5.1" to mapOf("given_name" to "Erika".toDataItem())
                 ),
                 deviceSigned = emptyMap(),
-                msoX5chain = identity.key.certChain,
+                msoX5chain = createTestMdlDsCertChain(),
             ),
             proof = ByteString(1, 2, 3),
         )
@@ -1045,7 +1073,7 @@ class VerificationUtilTest {
                     "org.iso.18013.5.1" to mapOf("given_name" to "Erika".toDataItem())
                 ),
                 deviceSigned = emptyMap(),
-                msoX5chain = identity.key.certChain,
+                msoX5chain = createTestMdlDsCertChain(),
             ),
             proof = ByteString(1, 2, 3),
         )
@@ -1177,7 +1205,7 @@ class VerificationUtilTest {
                     "org.iso.18013.5.1" to mapOf("given_name" to "Erika".toDataItem())
                 ),
                 deviceSigned = emptyMap(),
-                msoX5chain = identity.key.certChain,
+                msoX5chain = createTestMdlDsCertChain(),
             ),
             proof = ByteString(1, 2, 3),
         )

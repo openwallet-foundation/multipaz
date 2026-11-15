@@ -54,6 +54,12 @@ class VicalTrustManager(
         validateCaValidity: Boolean,
         docType: String?
     ): TrustResult {
+        if (atTime < signedVical.vical.date) {
+            return TrustResult(
+                isTrusted = false,
+                error = IllegalStateException("VICAL date is in the future ($atTime < ${signedVical.vical.date})")
+            )
+        }
         val notAfter = signedVical.vical.notAfter
         if (notAfter != null && atTime > notAfter) {
             return TrustResult(

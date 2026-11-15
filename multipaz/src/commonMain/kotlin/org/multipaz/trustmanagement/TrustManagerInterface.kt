@@ -75,6 +75,11 @@ interface TrustManagerInterface {
      *   - If [docType] is provided and trust is established via a VICAL, [docType] must be in the list of
      *     authorized document types for that certificate.
      *
+     * Note: This method does not perform X.509 CRL or OCSP revocation checking (such as IACA CRL
+     * checks on DS certificates or Reader CA CRL checks on reader certificates per ISO/IEC 18013-5
+     * Annex B.1.3 / B.1.6). Callers that require X.509 certificate revocation checking are expected
+     * to perform it separately (for example using [org.multipaz.crypto.X509Crl]).
+     *
      * @param chain the certificate chain without the self-signed root certificate.
      * @param atTime the point in time to check validity for.
      * @param validateCaValidity whether to validate validity intervals for CA certificates in the chain.

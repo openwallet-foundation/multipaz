@@ -18,7 +18,6 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
@@ -114,12 +113,16 @@ class NfcTransportMdocReader(
 
     private var ioJob: Job? = null
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         mutex.withLock {
             check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
             try {
                 _state.value = State.CONNECTING
-                tag.selectApplication(Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID)
+                tag.selectApplication(
+                    applicationId = Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID,
+                    p2 = Nfc.INS_SELECT_P2_NO_RESPONSE_DATA,
+                    le = 0,
+                )
                 _state.value = State.CONNECTED
             } catch (error: Exception) {
                 failTransport(error)

@@ -405,17 +405,32 @@ object MdocUtil {
         )
     }
 
+    private fun encodeCrlDistributionPointUrl(crlUrl: String): ByteArray =
+        ASN1.encode(
+            ASN1Sequence(listOf(
+                ASN1Sequence(listOf(
+                    ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
+                        ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
+                            ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.PRIMITIVE, 6,
+                                crlUrl.encodeToByteArray()
+                            )
+                        ))
+                    ))
+                ))
+            ))
+        )
+
     /**
-     * Generates a self-signed IACA certificate according to ISO/IEC 18013-5:2021 Annex B.1.2.
+     * Generates a self-signed IACA certificate according to ISO/IEC 18013-5 Annex B.1.2.
      *
      * @param iacaKey the private key.
      * @param subject the value to use for subject and issuer, e.g. "CN=Test IACA,C=ZZ".
      * @param serial the serial number to use for the certificate.
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
-     * @param issuerAltNameUrl the issuer alternative name (see RFC 5280 section 4.2.1.7),
+     * @param issuerAltNameUrl optional issuer alternative name (see RFC 5280 section 4.2.1.7),
      * e.g. "http://issuer.example.com/informative/web/page".
-     * @param crlUrl the URL for revocation (see RFC 5280 section 4.2.1.13).
+     * @param crlUrl optional URL for revocation (see RFC 5280 section 4.2.1.13).
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateIacaCertificate(
@@ -424,10 +439,10 @@ object MdocUtil {
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
-        issuerAltNameUrl: String,
-        crlUrl: String
+        issuerAltNameUrl: String? = null,
+        crlUrl: String? = null
     ): X509Cert {
-        return X509Cert.Builder(
+        val builder = X509Cert.Builder(
             publicKey = iacaKey.publicKey,
             signingKey = iacaKey,
             serialNumber = serial,
@@ -442,8 +457,9 @@ object MdocUtil {
             .setKeyUsage(setOf(X509KeyUsage.CRL_SIGN, X509KeyUsage.KEY_CERT_SIGN))
             // From 18013-5 table B.1: critical, CA=true, pathLenConstraint=0
             .setBasicConstraints(true, 0)
+        if (issuerAltNameUrl != null) {
             // From 18013-5 table B.1: non-critical, Email or URL
-            .addExtension(
+            builder.addExtension(
                 OID.X509_EXTENSION_ISSUER_ALT_NAME.oid,
                 false,
                 ASN1.encode(
@@ -457,30 +473,21 @@ object MdocUtil {
                     ))
                 )
             )
+        }
+        if (crlUrl != null) {
             // From 18013-5 table B.1: non-critical, The ‘reasons’ and ‘cRL Issuer’
             // fields shall not be used.
-            .addExtension(
+            builder.addExtension(
                 OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid,
                 false,
-                ASN1.encode(
-                    ASN1Sequence(listOf(
-                        ASN1Sequence(listOf(
-                            ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
-                                ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
-                                    ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.PRIMITIVE, 6,
-                                        crlUrl.encodeToByteArray()
-                                    )
-                                ))
-                            ))
-                        ))
-                    ))
-                )
+                encodeCrlDistributionPointUrl(crlUrl)
             )
-            .build()
+        }
+        return builder.build()
     }
 
     /**
-     * Generates a Document Signing certificate according to ISO/IEC 18013-5:2021 Annex B.1.4.
+     * Generates a Document Signing certificate according to ISO/IEC 18013-5 Annex B.1.4.
      *
      * @param iacaKey IACA certificate and private key.
      * @param dsKey the public part of the DS key.
@@ -488,6 +495,7 @@ object MdocUtil {
      * @param serial the serial number to use for the certificate.
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
+     * @param crlUrl optional URL for revocation; if null, copied from the IACA certificate if present.
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateDsCertificate(
@@ -497,9 +505,12 @@ object MdocUtil {
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
+        crlUrl: String? = null,
     ): X509Cert {
+        // TODO(ISO 18013-5 Second Edition Clause 12.3.6.6 / Annex B.1.4): Support optional MSO Revocation
+        //   Aggregation URI X.509 extension (OID.ISO_23220_4_REVOCATION_AGGREGATION_URI, 1.0.23220.4.2.1).
         val iacaCert = iacaKey.certChain.certificates.first()
-        return X509Cert.Builder(
+        val builder = X509Cert.Builder(
             publicKey = dsKey,
             signingKey = iacaKey,
             serialNumber = serial,
@@ -510,9 +521,9 @@ object MdocUtil {
         )
             .includeSubjectKeyIdentifier()
             .setAuthorityKeyIdentifierToCertificate(iacaCert)
-            // From 18013-5 table B.3: critical: Key certificate signature + CRL signature bits set
+            // From 18013-5 table B.3: critical: Digital signature bit set
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
-            // From 18013-5 table B.3: non-critical, Extended Key usage
+            // From 18013-5 table B.3: critical, Extended Key usage
             .addExtension(
                 OID.X509_EXTENSION_EXTENDED_KEY_USAGE.oid,
                 true,
@@ -520,33 +531,34 @@ object MdocUtil {
                     ASN1ObjectIdentifier(OID.ISO_18013_5_MDL_DS.oid)
                 )))
             )
-            // From 18013-5 table B.3: non-critical, Email or URL
-            .addExtension(
+        iacaCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid)?.let {
+            builder.addExtension(
                 OID.X509_EXTENSION_ISSUER_ALT_NAME.oid,
                 false,
-                iacaCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid)!!
+                it
             )
-            // From 18013-5 table B.3: non-critical, The ‘reasons’ and ‘cRL Issuer’
-            // fields shall not be used.
-            .addExtension(
+        }
+        val encodedCrlDp = crlUrl?.let { encodeCrlDistributionPointUrl(it) }
+            ?: iacaCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)
+        if (encodedCrlDp != null) {
+            builder.addExtension(
                 OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid,
                 false,
-                iacaCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)!!
+                encodedCrlDp
             )
-            .build()
+        }
+        return builder.build()
     }
 
     /**
      * Generates a self-signed reader root certificate.
-     *
-     * Note that there are no requirements in ISO/IEC 18013-5:2021 for reader root certificates.
      *
      * @param readerRootKey the private key.
      * @param subject the value to use for subject and issuer, e.g. "CN=Test Reader Root,C=ZZ".
      * @param serial the serial number to use for the certificate.
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
-     * @param crlUrl the URL for revocation (see RFC 5280 section 4.2.1.13).
+     * @param crlUrl optional URL for revocation (see RFC 5280 section 4.2.1.13).
      * @return a [X509Cert].
      */
     suspend fun generateReaderRootCertificate(
@@ -555,9 +567,9 @@ object MdocUtil {
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
-        crlUrl: String,
+        crlUrl: String? = null,
     ): X509Cert {
-        return X509Cert.Builder(
+        val builder = X509Cert.Builder(
             publicKey = readerRootKey.publicKey,
             signingKey = readerRootKey,
             serialNumber = serial,
@@ -570,30 +582,20 @@ object MdocUtil {
             .includeAuthorityKeyIdentifierAsSubjectKeyIdentifier()
             .setKeyUsage(setOf(X509KeyUsage.CRL_SIGN, X509KeyUsage.KEY_CERT_SIGN))
             .setBasicConstraints(true, 0)
+        if (crlUrl != null) {
             // From 18013-5 table B.1: non-critical, The ‘reasons’ and ‘cRL Issuer’
             // fields shall not be used.
-            .addExtension(
+            builder.addExtension(
                 OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid,
                 false,
-                ASN1.encode(
-                    ASN1Sequence(listOf(
-                        ASN1Sequence(listOf(
-                            ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
-                                ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, ASN1.encode(
-                                    ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.PRIMITIVE, 6,
-                                        crlUrl.encodeToByteArray()
-                                    )
-                                ))
-                            ))
-                        ))
-                    ))
-                )
+                encodeCrlDistributionPointUrl(crlUrl)
             )
-            .build()
+        }
+        return builder.build()
     }
 
     /**
-     * Generates a reader auth certificate according to ISO/IEC 18013-5:2021 Annex B.1.7.
+     * Generates a reader auth certificate according to ISO/IEC 18013-5 Annex B.1.7.
      *
      * @param readerRootKey the reader root certificate and the corresponding private key.
      * @param readerKey the public part of the reader key.
@@ -603,6 +605,7 @@ object MdocUtil {
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
      * @param extensions additional extensions to include in the reader certificate.
+     * @param crlUrl optional URL for revocation; if null, copied from the reader root certificate if present.
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateReaderCertificate(
@@ -613,7 +616,8 @@ object MdocUtil {
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
-        extensions: List<X509Extension> = emptyList()
+        extensions: List<X509Extension> = emptyList(),
+        crlUrl: String? = null,
     ): X509Cert {
         val readerRootCert = readerRootKey.certChain.certificates.first()
         val builder = X509Cert.Builder(
@@ -635,11 +639,15 @@ object MdocUtil {
                     ASN1ObjectIdentifier(OID.ISO_18013_5_MDL_READER_AUTH.oid)
                 )))
             )
-            .addExtension(
+        val encodedCrlDp = crlUrl?.let { encodeCrlDistributionPointUrl(it) }
+            ?: readerRootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)
+        if (encodedCrlDp != null) {
+            builder.addExtension(
                 OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid,
                 false,
-                readerRootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)!!
+                encodedCrlDp
             )
+        }
         if (dnsName != null) {
             builder.addExtension(
                 OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid,

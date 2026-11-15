@@ -165,6 +165,9 @@ enum class OID(
     /** mDoc RICAL. */
     ISO_23220_4_MDOC_RICAL("1.0.23220.4.1.10", "mDoc RICAL"),
 
+    /** mDoc Revocation Aggregation URI (X.509 extension). */
+    ISO_23220_4_REVOCATION_AGGREGATION_URI("1.0.23220.4.2.1", "mDoc Revocation Aggregation URI (X.509 extension)"),
+
     /** PKCS #7 Data content type. */
     PKCS7_DATA("1.2.840.113549.1.7.1", "PKCS #7 Data"),
 

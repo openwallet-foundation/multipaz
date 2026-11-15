@@ -2341,4 +2341,37 @@ class TrustManagerTest {
         )
         assertFalse(RicalTrustManager(otherInfoConstraintRical).verify(listOf(leafCert), atTime = now).isTrusted)
     }
+
+    @Test
+    fun vicalFutureDateAndTamperedSignatureRejected() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+        val testIaca = createTestIaca()
+        val parsedVical = SignedVical.parse(testIaca.encodedSignedVical.toByteArray())
+
+        // VicalTrustManager rejects verification when atTime < vical.date
+        val vicalTm = VicalTrustManager(parsedVical)
+        val futureCheck = vicalTm.verify(
+            listOf(testIaca.elboniaDs),
+            atTime = parsedVical.vical.date - 1.minutes
+        )
+        assertFalse(futureCheck.isTrusted)
+        assertNotNull(futureCheck.error)
+
+        // TrustManager.addVical and TrustManager.addRical verify COSE_Sign1 signatures by default
+        val tamperedVicalBytes = testIaca.encodedSignedVical.toByteArray().also {
+            it[it.lastIndex] = (it[it.lastIndex].toInt() xor 0xff).toByte()
+        }
+        assertFailsWith<Exception> {
+            trustManager.addVical(ByteString(tamperedVicalBytes), TrustMetadata())
+        }
+
+        val testRical = createTestRical()
+        val tamperedRicalBytes = testRical.encodedSignedRical.toByteArray().also {
+            it[it.lastIndex] = (it[it.lastIndex].toInt() xor 0xff).toByte()
+        }
+        assertFailsWith<Exception> {
+            trustManager.addRical(ByteString(tamperedRicalBytes), TrustMetadata())
+        }
+    }
 }

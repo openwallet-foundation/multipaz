@@ -118,6 +118,8 @@ sealed class RevocationStatus {
     companion object {
         /** Parses revocation status expressed as CBOR */
         fun fromDataItem(dataItem: DataItem): RevocationStatus {
+            // TODO(ISO 18013-5 Second Edition Clause 12.3.6.6): Parse optional `aggregation_uri` inside
+            //   `status_list` and `identifier_list` for MSO Revocation Aggregation.
             if (dataItem.hasKey("status_list")) {
                 val map = dataItem["status_list"]
                 if (map is CborMap && map.hasKey("idx") && map.hasKey("uri")) {

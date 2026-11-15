@@ -18,11 +18,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -160,7 +160,7 @@ internal class BleTransportPeripheralMdoc(
             bleNumChunksReceived = peripheralManager.numChunksReceived,
         )
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         var timeConnectingStarted: Instant? = null
         try {
             coroutineScope {
@@ -173,7 +173,7 @@ internal class BleTransportPeripheralMdoc(
                     currentJob = coroutineContext[Job]
                     advertising
                 }
-                peripheralManager.setESenderKey(eSenderKey)
+                peripheralManager.setESenderKeyBytes(eSenderKeyBytes)
                 if (!wasAdvertising) {
                     // Start advertising if we aren't already...
                     peripheralManager.waitForPowerOn()

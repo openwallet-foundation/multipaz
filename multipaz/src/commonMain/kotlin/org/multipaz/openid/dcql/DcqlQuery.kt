@@ -444,7 +444,7 @@ data class DcqlQuery(
             for (csq in credentialSetQueries) {
                 val solutions = mutableListOf<PresentmentUseCaseSolution>()
                 var satisfiedCsq = false
-                for (option in csq.options) {
+                csq.options.forEachIndexed { optionIndex, option ->
                     if (option.isSatisfied(credentialQueryIdToResponse)) {
                         val paths = option.credentialIds.map { credentialQueryIdToResponse[it]!!.matches.size }.generateAllPaths()
                         for (path in paths) {
@@ -460,7 +460,7 @@ data class DcqlQuery(
                                     faceMatchNeeded = match.faceMatchNeeded,
                                 )
                             }
-                            solutions.add(PresentmentUseCaseSolution(matches))
+                            solutions.add(PresentmentUseCaseSolution(matches, optionIndex = optionIndex))
                         }
                         satisfiedCsq = true
                     }

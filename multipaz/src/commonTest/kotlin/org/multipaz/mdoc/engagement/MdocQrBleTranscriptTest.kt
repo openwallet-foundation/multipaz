@@ -229,7 +229,7 @@ class MdocQrBleTranscriptTest {
                 _state.value = State.ADVERTISING
             }
 
-            override suspend fun open(eSenderKey: EcPublicKey) {
+            override suspend fun open(eSenderKeyBytes: ByteString) {
                 _state.value = State.CONNECTED
             }
 
@@ -288,7 +288,7 @@ class MdocQrBleTranscriptTest {
         val engagementParamsFlow = MutableStateFlow(params)
 
         launch(start = CoroutineStart.UNDISPATCHED) {
-            blePair.mdocTransport.open(eDeviceKey.publicKey)
+            blePair.mdocTransport.open(parsedDeviceEngagement.eDeviceKeyBytes)
             Iso18013Presentment(
                 transport = blePair.mdocTransport,
                 engagementParams = engagementParamsFlow,
@@ -301,7 +301,7 @@ class MdocQrBleTranscriptTest {
             presentmentDone.complete(Unit)
         }
 
-        blePair.readerTransport.open(parsedDeviceEngagement.eDeviceKey)
+        blePair.readerTransport.open(parsedDeviceEngagement.eDeviceKeyBytes)
         val encodedEReaderKey = Cbor.encode(eReaderKey.publicKey.toCoseKey().toDataItem())
         val sessionTranscript = buildCborArray {
             add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedDeviceEngagement)))

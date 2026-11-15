@@ -13,13 +13,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.IOException
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.buildByteString
-import org.multipaz.cbor.Bstr
-import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SecretKey
 import org.multipaz.util.Logger
@@ -954,14 +951,14 @@ internal class BleCentralManagerImpl(
         }
     }
 
-    override suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey) = withGattHandshake {
+    override suspend fun checkReaderIdentMatches(eSenderKeyBytes: ByteString) = withGattHandshake {
         val identUuid = checkNotNull(identCharacteristicUuid) { "identCharacteristicUuid is null" }
         if (!hasIdentCharacteristic) {
             Logger.w(TAG, "Peripheral omitted Ident characteristic ($identUuid); continuing with warning")
             addWarning(TransportWarning(TransportWarningCode.BLE_IDENT_NOT_SET))
             return@withGattHandshake
         }
-        expectedIdentValue = deriveBleIdent(eSenderKey)
+        expectedIdentValue = deriveBleIdent(eSenderKeyBytes)
         var retryCount = 0
         while (true) {
             try {
@@ -1204,10 +1201,9 @@ internal class BleCentralManagerImpl(
  */
 internal class BleReconnectRequiredException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-internal suspend fun deriveBleIdent(eSenderKey: EcPublicKey): ByteArray {
-    val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
+internal suspend fun deriveBleIdent(eSenderKeyBytes: ByteString): ByteArray {
     val info = "BLEIdent".encodeToByteArray()
-    return SecretKey(ikm).use {
+    return SecretKey(eSenderKeyBytes.toByteArray()).use {
         Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, null, info, 16).use { key -> key.encoded }
     }
 }

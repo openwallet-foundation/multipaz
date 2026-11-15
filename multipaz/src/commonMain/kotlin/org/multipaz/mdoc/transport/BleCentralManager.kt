@@ -1,7 +1,7 @@
 package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.channels.Channel
-import org.multipaz.crypto.EcPublicKey
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.UUID
 
 internal interface BleCentralManager {
@@ -42,7 +42,7 @@ internal interface BleCentralManager {
 
     suspend fun peripheralDiscoverCharacteristics()
 
-    suspend fun checkReaderIdentMatches(eSenderKey: EcPublicKey)
+    suspend fun checkReaderIdentMatches(eSenderKeyBytes: ByteString)
 
     suspend fun subscribeToCharacteristics()
 

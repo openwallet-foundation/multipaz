@@ -18,6 +18,7 @@ import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.AndroidMdocTransportFactory
 import org.multipaz.mdoc.transport.BleCentralConfig
@@ -130,7 +131,9 @@ class AndroidEmulatorBleRetryTest {
         } else {
             MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
         }
-        val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use {
+            buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes
+        }
 
         val hciFactory = createNetsimHciFactory(faultConfig = faultConfig)
         val androidFactory = AndroidMdocTransportFactory(centralConfig = centralConfig)
@@ -194,7 +197,9 @@ class AndroidEmulatorBleRetryTest {
         } else {
             MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
         }
-        val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use {
+            buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes
+        }
 
         val hciFactory = createNetsimHciFactory()
         val androidFactory = AndroidMdocTransportFactory()

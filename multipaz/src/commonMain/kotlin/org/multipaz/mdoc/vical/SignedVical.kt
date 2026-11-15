@@ -24,6 +24,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
+import kotlin.time.Instant
 
 /**
  * A signed VICAL according to ISO/IEC 18013-5 Annex C.
@@ -49,12 +50,22 @@ data class SignedVical(
             buildCborMap {
                 put("version", vical.version)
                 put("vicalProvider", vical.vicalProvider)
-                put("date", vical.date.toDataItemDateTimeString())
-                vical.nextUpdate?.let { put("nextUpdate", it.toDataItemDateTimeString())}
-                vical.notAfter?.let { put("notAfter", it.toDataItemDateTimeString())}
+                put("date", Instant.fromEpochSeconds(vical.date.epochSeconds).toDataItemDateTimeString())
+                vical.nextUpdate?.let {
+                    put("nextUpdate", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                }
+                vical.notAfter?.let {
+                    put("notAfter", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                }
                 vical.vicalIssueID?.let { put("vicalIssueID", it.toDataItem()) }
                 putCborArray("certificateInfos") {
                     for (certInfo in vical.certificateInfos) {
+                        require(certInfo.docTypes.isNotEmpty()) {
+                            "VICAL CertificateInfo docType array must not be empty"
+                        }
+                        require(certInfo.certificateProfiles == null || certInfo.certificateProfiles.isNotEmpty()) {
+                            "VICAL CertificateInfo certificateProfile array must not be empty when present"
+                        }
                         addCborMap {
                             put("certificate", certInfo.certificate.encoded.toByteArray())
                             put("serialNumber", Tagged(
@@ -75,8 +86,12 @@ data class SignedVical(
                             certInfo.stateOrProvinceName?.let { put("stateOrProvinceName", it) }
                             certInfo.issuer?.let { put("issuer", it.toByteArray()) }
                             certInfo.subject?.let { put("subject", it.toByteArray()) }
-                            certInfo.notBefore?.let { put("notBefore", it.toDataItemDateTimeString()) }
-                            certInfo.notAfter?.let { put("notAfter", it.toDataItemDateTimeString()) }
+                            certInfo.notBefore?.let {
+                                put("notBefore", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                            }
+                            certInfo.notAfter?.let {
+                                put("notAfter", Instant.fromEpochSeconds(it.epochSeconds).toDataItemDateTimeString())
+                            }
                             if (certInfo.extensions.isNotEmpty()) {
                                 putCborMap("extensions") {
                                     certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
@@ -174,6 +189,9 @@ data class SignedVical(
                 ?: throw IllegalArgumentException("Signature Algorithm not set")
 
             if (!disableSignatureVerification) {
+                if (certChain.certificates.size > 1) {
+                    certChain.validate(validateValidity = false, validateCaValidity = false)
+                }
                 Cose.coseSign1Check(
                     certChain.certificates.first().publicKey,
                     null,
@@ -209,8 +227,15 @@ data class SignedVical(
                             "(${ski.toHex()})")
                 }
                 val docTypes = (certInfo["docType"] as CborArray).items.map { it.asTstr }
+                require(docTypes.isNotEmpty()) {
+                    "VICAL CertificateInfo docType array must not be empty"
+                }
                 val certProfiles = certInfo.getOrNull("certificateProfile")?.let {
-                    (it as CborArray).items.map { item -> item.asTstr }
+                    val profiles = (it as CborArray).items.map { item -> item.asTstr }
+                    require(profiles.isNotEmpty()) {
+                        "VICAL CertificateInfo certificateProfile array must not be empty when present"
+                    }
+                    profiles
                 }
                 val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
                     it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }

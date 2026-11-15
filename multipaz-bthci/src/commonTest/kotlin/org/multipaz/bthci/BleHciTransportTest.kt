@@ -1214,7 +1214,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus(aclDataPacketLength = 27, totalNumAclDataPackets = 4)
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val mdocTransport = BleTransportCentralMdoc(
                 role = MdocRole.MDOC,
@@ -1276,7 +1276,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus(aclDataPacketLength = 27, totalNumAclDataPackets = 4)
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val mdocTransport = BleTransportPeripheralMdoc(
                 role = MdocRole.MDOC,
@@ -1336,7 +1336,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus(aclDataPacketLength = 27, totalNumAclDataPackets = 4)
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val centralManager = createCentralManager(bus.centralIo)
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
@@ -1393,7 +1393,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus(aclDataPacketLength = 27, totalNumAclDataPackets = 4)
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
             val mdocTransport = BleTransportPeripheralMdoc(
@@ -1456,7 +1456,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus()
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val mdocTransport = BleTransportCentralMdoc(
                 role = MdocRole.MDOC,
@@ -1505,7 +1505,7 @@ class BleHciTransportTest {
                 useExtendedAdvertisingReports = true
             )
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
             val centralManager = createCentralManager(bus.centralIo)
@@ -1562,7 +1562,7 @@ class BleHciTransportTest {
         withContext(Dispatchers.Default) {
             val bus = VirtualHciBus()
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val mdocTransport = BleTransportCentralMdoc(
                 role = MdocRole.MDOC,
@@ -2793,9 +2793,10 @@ class BleHciTransportTest {
                 )
                 mdocTransport = createdMdocTransport
 
+                val parsedDe = DeviceEngagement.fromDataItem(deviceEngagement)
                 coroutineScope {
-                    val readerOpen = async { readerTransport.open(eDeviceKey.publicKey) }
-                    val mdocOpen = async { createdMdocTransport.open(eDeviceKey.publicKey) }
+                    val readerOpen = async { readerTransport.open(parsedDe.eDeviceKeyBytes) }
+                    val mdocOpen = async { createdMdocTransport.open(parsedDe.eDeviceKeyBytes) }
                     readerOpen.await()
                     mdocOpen.await()
                 }
@@ -2942,12 +2943,14 @@ class BleHciTransportTest {
                 transcript = transcriptLogger
             )
             val serviceUuid = UUID.fromString("11111111-2222-3333-4444-555555555555")
-            val eSenderKey = EcPrivateKeyDoubleCoordinate(
-                EcCurve.P256,
-                "3f0b81e0661a02c1f35022382829094643f5f812ef63218ff194902bc339c70f".fromHex(),
-                "df961d0e5b9615a56f918d4be1f9354586a2f6e1e2ff8f014b6260b34132fa53".fromHex(),
-                "2a190a15292d0160650c0156b2e6fb19645262cf4719813f6e40826992ef428f".fromHex()
-            ).publicKey
+            val eSenderKey = buildDeviceEngagement(
+                EcPrivateKeyDoubleCoordinate(
+                    EcCurve.P256,
+                    "3f0b81e0661a02c1f35022382829094643f5f812ef63218ff194902bc339c70f".fromHex(),
+                    "df961d0e5b9615a56f918d4be1f9354586a2f6e1e2ff8f014b6260b34132fa53".fromHex(),
+                    "2a190a15292d0160650c0156b2e6fb19645262cf4719813f6e40826992ef428f".fromHex()
+                ).publicKey
+            ) {}.eDeviceKeyBytes
             val centralAddr = byteArrayOf(0x55, 0x44, 0x33, 0x22, 0x11, 0xC0.toByte())
             val peripheralAddr = byteArrayOf(0xEE.toByte(), 0xDD.toByte(), 0xCC.toByte(), 0xBB.toByte(), 0xAA.toByte(), 0xC0.toByte())
             val centralManager = createCentralManager(bus.centralIo, randomAddress = centralAddr)
@@ -3287,7 +3290,7 @@ class BleHciTransportTest {
     fun l2capCreditReplenishmentAndLargeMultiSduPayloadOverVirtualHci() = runTest {
         withContext(Dispatchers.Default) {
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
             val bus = VirtualHciBus(aclDataPacketLength = 251, totalNumAclDataPackets = 16)
             val centralManager = createCentralManager(bus.centralIo)
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
@@ -3360,12 +3363,12 @@ class BleHciTransportTest {
     fun identCharacteristicMismatchFailsImmediatelyWithoutRetryOverVirtualHci() = runTest {
         withContext(Dispatchers.Default) {
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
             val bus = VirtualHciBus()
             val centralManager = createCentralManager(bus.centralIo)
             val peripheralManager = createPeripheralManager(bus.peripheralIo)
 
-            val wrongSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val wrongSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
             val mdoc = BleTransportCentralMdoc(
                 role = MdocRole.MDOC,
@@ -3417,7 +3420,7 @@ class BleHciTransportTest {
     fun peripheralInfersMtuFromWriteWhenMtuCallbackMissedOverVirtualHci() = runTest {
         withContext(Dispatchers.Default) {
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
             val bus = VirtualHciBus(
                 aclDataPacketLength = 251,
                 totalNumAclDataPackets = 8,
@@ -3504,7 +3507,7 @@ class BleHciTransportTest {
     fun transportSpecificTerminationBothDirectionsOverVirtualHci() = runTest {
         withContext(Dispatchers.Default) {
             val serviceUuid = UUID.randomUUID()
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
             // Direction 1: Central -> Peripheral (ATT_WRITE_CMD 0x02 on State)
             run {
                 val bus = VirtualHciBus()
@@ -3603,7 +3606,7 @@ class BleHciTransportTest {
                     faultConfig = FaultConfig(injectPeripheralGapClientRequestsOnConnect = true)
                 )
                 val serviceUuid = UUID.randomUUID()
-                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
 
                 val centralManager = if (expectedDeviceName == null) {
                     createCentralManager(bus.centralIo)
@@ -4084,7 +4087,7 @@ class BleHciTransportTest {
             }
 
             val svcUuid = UUID(9UL, 9UL)
-            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
             val factory = BtHciMdocTransportFactory(
                 centralConfig = BleCentralConfig(
                     postScanDelay = 1.milliseconds,
@@ -4264,7 +4267,7 @@ class BleHciTransportTest {
                     )
                 )
                 val serviceUuid = UUID.randomUUID()
-                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+                val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes }
                 val centralManager = createCentralManager(bus.centralIo)
                 val peripheralManager = createPeripheralManager(bus.peripheralIo)
                 val mdoc = BleTransportCentralMdoc(
@@ -4389,7 +4392,7 @@ class BleHciTransportTest {
                     )
                 }
 
-                readerTransport.open(eReaderKey.publicKey)
+                readerTransport.open(readerEngagement.eReaderKeyBytes!!)
                 assertEquals(expectedUsingL2cap, readerTransport.stats.bleUsingL2cap)
                 assertEquals(expectedReaderPsmInEngagement, readerTransport.stats.bleL2capPsmInEngagement)
                 val firstMessage = readerTransport.waitForMessage()

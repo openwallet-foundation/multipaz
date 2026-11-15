@@ -106,7 +106,8 @@ internal object TrustManagerUtil {
                 )
                 if (docType != null) {
                     val isDocTypeAuthorized = trustPoints.any { tp ->
-                        tp.docTypes.isEmpty() || tp.docTypes.contains(docType)
+                        (tp.trustManager !is VicalTrustManager && tp.docTypes.isEmpty()) ||
+                            tp.docTypes.contains(docType)
                     }
                     if (!isDocTypeAuthorized) {
                         throw IllegalStateException(
@@ -149,7 +150,10 @@ internal object TrustManagerUtil {
                         if (isSelfSigned(cert)) {
                             verifySignature(cert, cert)
                         }
-                        if (docType != null && trustPoint.docTypes.isNotEmpty() && !trustPoint.docTypes.contains(docType)) {
+                        if (docType != null &&
+                            (trustPoint.trustManager is VicalTrustManager || trustPoint.docTypes.isNotEmpty()) &&
+                            !trustPoint.docTypes.contains(docType)
+                        ) {
                             throw IllegalStateException(
                                 "DocType '$docType' is not authorized by VICAL for certificate '${cert.subject.name}'"
                             )

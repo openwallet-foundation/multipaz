@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -38,6 +39,7 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.mdoc.request.DeviceRequest
@@ -1229,6 +1231,11 @@ object VerificationUtil {
     /**
      * Generates [VerifiedPresentation] from an ISO 18013-5 response.
      *
+     * Note that this method does not check X.509 CRL/OCSP revocation on issuer certificate chains
+     * or MSO/status-list credential revocation via [VerifiedPresentation.revocationStatus]; the
+     * caller is expected to check issuer trust, certificate revocation, and credential revocation
+     * status separately when required.
+     *
      * @param now the current time.
      * @param deviceResponse the `DeviceResponse` CBOR.
      * @param sessionTranscript the ISO mdoc `SessionTranscript` CBOR.
@@ -1266,7 +1273,8 @@ object VerificationUtil {
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             documentTypeRepository = documentTypeRepository,
-            zkSystemRepository = zkSystemRepository
+            zkSystemRepository = zkSystemRepository,
+            request = request,
         )
         if (request != null) {
             checkDeviceRequestSatisfied(request, presentations, documentTypeRepository)
@@ -1276,6 +1284,11 @@ object VerificationUtil {
 
     /**
      * Generates [VerifiedPresentation] from an ISO 18013-5 response.
+     *
+     * Note that this method does not check X.509 CRL/OCSP revocation on issuer certificate chains
+     * or MSO/status-list credential revocation via [VerifiedPresentation.revocationStatus]; the
+     * caller is expected to check issuer trust, certificate revocation, and credential revocation
+     * status separately when required.
      *
      * @param now the current time.
      * @param deviceResponse the `DeviceResponse` CBOR.
@@ -1363,11 +1376,12 @@ object VerificationUtil {
             if (useCases.isNullOrEmpty()) {
                 return counts.all { it >= 1 }
             }
-            return useCases.all { useCase ->
-                !useCase.mandatory || useCase.documentSets.any { docSet ->
+            fun isUseCaseSatisfied(useCase: UseCase): Boolean =
+                useCase.documentSets.any { docSet ->
                     docSet.docRequestIds.all { reqId -> reqId in counts.indices && counts[reqId] >= 1 }
                 }
-            }
+            return useCases.all { !it.mandatory || isUseCaseSatisfied(it) } &&
+                useCases.any { isUseCaseSatisfied(it) }
         }
 
         fun assign(presIndex: Int): Boolean {
@@ -1518,7 +1532,8 @@ object VerificationUtil {
         sessionTranscript: DataItem,
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
-        vpTokenIdentifier: String? = null
+        vpTokenIdentifier: String? = null,
+        request: DeviceRequest? = null,
     ): List<VerifiedPresentation> {
         if (deviceResponse.encryptedDocuments.isNotEmpty()) {
             throw IllegalStateException("Unexpected encryptedDocuments in DeviceResponse")
@@ -1586,10 +1601,54 @@ object VerificationUtil {
                     "ZK document timestamp ${zkDocument.documentData.timestamp} is outside allowed 5m drift from $now"
                 )
             }
-            val zkSystemSpec = zkSystemRepository?.getAllZkSystemSpecs()?.find {
+            val msoX5chain = zkDocument.documentData.msoX5chain
+                ?: throw IllegalStateException("Expected x5chain for the issuer")
+            if (msoX5chain.certificates.isEmpty()) {
+                throw IllegalStateException("ZK document msoX5chain must not be empty")
+            }
+            if (msoX5chain.certificates.size > 1) {
+                try {
+                    msoX5chain.validate(validateValidity = false, validateCaValidity = false)
+                } catch (e: Exception) {
+                    throw IllegalStateException("ZK document msoX5chain validation failed", e)
+                }
+            }
+            val dsCert = msoX5chain.certificates.first()
+            if (X509KeyUsage.DIGITAL_SIGNATURE !in dsCert.keyUsage) {
+                throw IllegalStateException("DS certificate in ZK document does not have digitalSignature key usage")
+            }
+            if (zkDocument.documentData.docType == "org.iso.18013.5.1.mDL") {
+                if (OID.ISO_18013_5_MDL_DS.oid !in dsCert.extendedKeyUsage) {
+                    throw IllegalStateException("mDL DS certificate in ZK document is missing mDL DS Extended Key Usage")
+                }
+                val mdlElements = zkDocument.documentData.issuerSigned["org.iso.18013.5.1"].orEmpty() +
+                    zkDocument.documentData.deviceSigned["org.iso.18013.5.1"].orEmpty()
+                mdlElements["issuing_country"]?.let { countryItem ->
+                    val issuingCountry = countryItem.asTstr
+                    if (dsCert.subject.countryName == null || issuingCountry != dsCert.subject.countryName) {
+                        throw IllegalStateException(
+                            "mDL issuing_country '$issuingCountry' does not match DS certificate countryName '${dsCert.subject.countryName}'"
+                        )
+                    }
+                }
+                mdlElements["issuing_jurisdiction"]?.let { jurisdictionItem ->
+                    val issuingJurisdiction = jurisdictionItem.asTstr
+                    val dsState = dsCert.subject.stateOrProvinceName
+                    if (dsState != null && issuingJurisdiction != dsState) {
+                        throw IllegalStateException(
+                            "mDL issuing_jurisdiction '$issuingJurisdiction' does not match DS certificate stateOrProvinceName '$dsState'"
+                        )
+                    }
+                }
+            }
+            val requestZkSystemSpec = request?.docRequests
+                ?.mapNotNull { it.docRequestInfo?.zkRequest }
+                ?.flatMap { it.systemSpecs }
+                ?.find { it.id == zkDocument.documentData.zkSystemSpecId }
+            val zkSystemSpec = requestZkSystemSpec ?: zkSystemRepository?.getAllZkSystemSpecs()?.find {
                 it.id == zkDocument.documentData.zkSystemSpecId
             } ?: throw IllegalStateException("Zk System '${zkDocument.documentData.zkSystemSpecId}' was not found.")
-            zkSystemRepository.lookup(zkSystemSpec.system)
+            zkSystemRepository?.lookup(zkSystemSpec.system)
                 ?.verifyProof(
                     zkDocument = zkDocument,
                     zkSystemSpec = zkSystemSpec,
@@ -1599,10 +1658,6 @@ object VerificationUtil {
                 ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
 
             val dt = documentTypeRepository?.getDocumentTypeForMdoc(zkDocument.documentData.docType)
-
-            if (zkDocument.documentData.msoX5chain == null) {
-                throw IllegalStateException("Expected x5chain for the issuer")
-            }
 
             val issuerSignedClaims = mutableListOf<MdocClaim>()
             for ((namespaceName, dataElements) in zkDocument.documentData.issuerSigned) {

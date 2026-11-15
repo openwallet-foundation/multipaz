@@ -27,6 +27,7 @@ import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
@@ -34,6 +35,8 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
+import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseMac0
 import org.multipaz.cose.CoseSign1
@@ -67,6 +70,8 @@ import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
+import org.multipaz.mdoc.issuersigned.IssuerSignedItem
+import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
@@ -131,6 +136,12 @@ class DeviceResponseTest {
                     )
                 )
             )
+
+        private suspend fun transcriptAudience(sessionTranscript: DataItem): String =
+            Crypto.digest(
+                Algorithm.SHA256,
+                Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(sessionTranscript))))
+            ).toBase64Url()
 
         private fun findSubarrayOffset(haystack: ByteArray, needle: ByteArray): Int {
             require(needle.isNotEmpty() && needle.size <= haystack.size)
@@ -800,7 +811,7 @@ class DeviceResponseTest {
                 digests.items[digestId] = Bstr(digests[digestId].asBstr.copyOf(20))
             },
             sessionTranscript,
-            "Digest mismatch for data element given_name in org.iso.18013.5.1"
+            "Invalid MSO: MSO digest for digestID ${digestId.asNumber} in namespace 'org.iso.18013.5.1' has length 20 bytes, expected 32 bytes for SHA256"
         )
     }
 
@@ -1163,13 +1174,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.18013.5.1": [24(<< {
-                    "digestID": 6,
-                    "random": h'a2bc4547ceb4ec25a8617f13f8a21673',
+                    "digestID": 20,
+                    "random": h'a8617f13f8a21673a1200718d435e7cb',
                     "elementIdentifier": "age_over_18",
                     "elementValue": true
                   } >>), 24(<< {
-                    "digestID": 43,
-                    "random": h'3eda470c3cc1f18d4979e7b3d99311fe',
+                    "digestID": 35,
+                    "random": h'4979e7b3d99311fe288479d603befbfe',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]
@@ -1185,13 +1196,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.23220.1": [24(<< {
-                    "digestID": 35,
-                    "random": h'ff4f6a83adf75071a2666f94a5b7412b',
+                    "digestID": 29,
+                    "random": h'6b48169d22735cace8eb8879a69be443',
                     "elementIdentifier": "family_name",
                     "elementValue": "Mustermann"
                   } >>), 24(<< {
-                    "digestID": 4,
-                    "random": h'f6c860d47511d198e9a1b4ee69d6d66e',
+                    "digestID": 38,
+                    "random": h'8bb7547c4b90bf20da946c40048bcc0b',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]
@@ -1287,13 +1298,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.18013.5.1": [24(<< {
-                    "digestID": 6,
-                    "random": h'a2bc4547ceb4ec25a8617f13f8a21673',
+                    "digestID": 20,
+                    "random": h'a8617f13f8a21673a1200718d435e7cb',
                     "elementIdentifier": "age_over_18",
                     "elementValue": true
                   } >>), 24(<< {
-                    "digestID": 43,
-                    "random": h'3eda470c3cc1f18d4979e7b3d99311fe',
+                    "digestID": 35,
+                    "random": h'4979e7b3d99311fe288479d603befbfe',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]
@@ -1370,8 +1381,7 @@ class DeviceResponseTest {
                               "elementValue": "Elbonia DMV"
                             }
                           ]
-                        },
-                        "deviceSigned": {}
+                        }
                       } >>)
                     }
                   ]
@@ -1459,13 +1469,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.18013.5.1": [24(<< {
-                    "digestID": 6,
-                    "random": h'a2bc4547ceb4ec25a8617f13f8a21673',
+                    "digestID": 20,
+                    "random": h'a8617f13f8a21673a1200718d435e7cb',
                     "elementIdentifier": "age_over_18",
                     "elementValue": true
                   } >>), 24(<< {
-                    "digestID": 43,
-                    "random": h'3eda470c3cc1f18d4979e7b3d99311fe',
+                    "digestID": 35,
+                    "random": h'4979e7b3d99311fe288479d603befbfe',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]
@@ -1513,7 +1523,7 @@ class DeviceResponseTest {
                 keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias),
             ),
             nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(encSessionTranscriptBytes)).toBase64Url(),
-            audience = "none",
+            audience = Crypto.digest(Algorithm.SHA256, Cbor.encode(encSessionTranscriptBytes)).toBase64Url(),
             creationTime = euPidTimeSigned,
         ).compactSerialization
 
@@ -1963,7 +1973,10 @@ class DeviceResponseTest {
             add(Simple.NULL)
             add(byteArrayOf(1, 2, 3))
         }
-        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val otherDocument = arbitraryAudienceOtherDocument(
+            sessionTranscript,
+            audience = transcriptAudience(sessionTranscript)
+        )
         val response = buildDeviceResponse(
             sessionTranscript = sessionTranscript,
             status = DeviceResponse.STATUS_OK,
@@ -2070,15 +2083,6 @@ class DeviceResponseTest {
             )
             addReaderAuthAll(readerKey)
         }
-        val listOfReaderAuthAll = buildCborArray {
-            request.readerAuthAll.forEach { add(it.toDataItem()) }
-        }
-        val readerAuthAllAudience = Crypto.digest(
-            algorithm = Algorithm.SHA256,
-            message = Cbor.encode(
-                Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(listOfReaderAuthAll)))
-            )
-        ).toBase64Url()
         val taggedTranscript = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(sessionTranscript)))
         val nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(taggedTranscript)).toBase64Url()
         val sdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
@@ -2094,7 +2098,7 @@ class DeviceResponseTest {
             creationTime = euPidTimeSigned
         ) {
             put("nonce", nonce)
-            put("aud", readerAuthAllAudience)
+            put("aud", nonce)
             put("sd_hash", sdHash)
             putJsonObject(TestTxType.kbJwtResponseClaimName) {
                 put("doc_request_id", 99)
@@ -2129,7 +2133,7 @@ class DeviceResponseTest {
             creationTime = euPidTimeSigned
         ) {
             put("nonce", nonce)
-            put("aud", readerAuthAllAudience)
+            put("aud", nonce)
             put("sd_hash", sdHash)
             putJsonObject(TestTxType.kbJwtResponseClaimName) {
                 put("doc_request_id", 0)
@@ -2218,16 +2222,8 @@ class DeviceResponseTest {
             )
             addReaderAuthAll(readerKey)
         }
-        val listOfReaderAuthAll = buildCborArray {
-            request.readerAuthAll.forEach { add(it.toDataItem()) }
-        }
-        val readerAuthAllAudience = Crypto.digest(
-            algorithm = Algorithm.SHA256,
-            message = Cbor.encode(
-                Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(listOfReaderAuthAll)))
-            )
-        ).toBase64Url()
-        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = readerAuthAllAudience)
+        val expectedAudience = transcriptAudience(sessionTranscript)
+        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = expectedAudience)
         val response = buildDeviceResponse(
             sessionTranscript = sessionTranscript,
             status = DeviceResponse.STATUS_OK,
@@ -2239,12 +2235,17 @@ class DeviceResponseTest {
             deviceRequest = request,
             atTime = euPidTimeSigned
         )
-        assertEquals(readerAuthAllAudience, response.otherDocuments.single().expectedAudience)
+        assertEquals(expectedAudience, response.otherDocuments.single().expectedAudience)
 
         // Verify that a subsequent failed verification resets expectedAudience to null
+        val otherSessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(9, 9, 9))
+        }
         assertFailsWith<IllegalStateException> {
             response.verify(
-                sessionTranscript = sessionTranscript,
+                sessionTranscript = otherSessionTranscript,
                 deviceRequest = null,
                 atTime = euPidTimeSigned
             )
@@ -2260,7 +2261,10 @@ class DeviceResponseTest {
             add(Simple.NULL)
             add(byteArrayOf(1, 2, 3))
         }
-        val otherDocument = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val otherDocument = arbitraryAudienceOtherDocument(
+            sessionTranscript,
+            audience = transcriptAudience(sessionTranscript)
+        )
         val response = buildDeviceResponse(
             sessionTranscript = sessionTranscript,
             status = DeviceResponse.STATUS_OK,
@@ -2293,7 +2297,7 @@ class DeviceResponseTest {
                 atTime = euPidTimeSigned
             )
         }
-        assertEquals("Failed verification of audience", error.message)
+        assertEquals("Cannot resolve DocRequest for otherDocument", error.message)
     }
 
     @Test
@@ -2310,7 +2314,10 @@ class DeviceResponseTest {
             originalSessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters
         )
-        val otherDocument = arbitraryAudienceOtherDocument(encryptedSessionTranscript, audience = "none")
+        val otherDocument = arbitraryAudienceOtherDocument(
+            encryptedSessionTranscript,
+            audience = transcriptAudience(encryptedSessionTranscript)
+        )
         val outOfRangeEncrypted = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters,
@@ -2436,7 +2443,7 @@ class DeviceResponseTest {
             documentTypeRepository = aliasRepo,
         )
         assertEquals(1, decrypted.otherDocuments.size)
-        assertEquals("none", decrypted.otherDocuments.single().expectedAudience)
+        assertEquals(transcriptAudience(encryptedSessionTranscript), decrypted.otherDocuments.single().expectedAudience)
 
         val wrongEncryptionParamsDocRequestId = EncryptedDocuments.Builder(
             sessionTranscript = sessionTranscript,
@@ -2894,7 +2901,8 @@ class DeviceResponseTest {
                 )
             )
         }
-        val nonTxOtherDoc = arbitraryAudienceOtherDocument(sessionTranscript, audience = "none")
+        val expectedAud = transcriptAudience(sessionTranscript)
+        val nonTxOtherDoc = arbitraryAudienceOtherDocument(sessionTranscript, audience = expectedAud)
         val nonTxResponse = buildDeviceResponse(
             sessionTranscript = sessionTranscript,
             status = DeviceResponse.STATUS_OK,
@@ -2911,7 +2919,7 @@ class DeviceResponseTest {
                 atTime = euPidTimeSigned,
             )
         }
-        assertEquals("Failed verification of audience", noRepoError.message)
+        assertEquals("Cannot resolve DocRequest for otherDocument", noRepoError.message)
         assertEquals(null, nonTxResponse.otherDocuments.single().expectedAudience)
 
         // Rejected when DocumentTypeRepository does not declare requestedBaseVct in otherVcts
@@ -2951,7 +2959,7 @@ class DeviceResponseTest {
             documentTypeRepository = repoWithAlias,
             atTime = euPidTimeSigned,
         )
-        assertEquals("none", nonTxResponse.otherDocuments.single().expectedAudience)
+        assertEquals(expectedAud, nonTxResponse.otherDocuments.single().expectedAudience)
 
         val verifiedPresentations = VerificationUtil.verifyMdocDeviceResponse(
             now = euPidTimeSigned,
@@ -3003,7 +3011,7 @@ class DeviceResponseTest {
             creationTime = euPidTimeSigned,
         ) {
             put("nonce", nonce)
-            put("aud", "none")
+            put("aud", nonce)
             put("sd_hash", sdHash)
             putJsonObject(TestTxType.kbJwtResponseClaimName) {
                 put("doc_request_id", 0)
@@ -3042,7 +3050,7 @@ class DeviceResponseTest {
             documentTypeRepository = repoWithAlias,
             atTime = euPidTimeSigned,
         )
-        assertEquals("none", txResponse.otherDocuments.single().expectedAudience)
+        assertEquals(nonce, txResponse.otherDocuments.single().expectedAudience)
 
         // Still rejected even with alias when another dc+sd-jwt DocRequest explicitly requests EUPID_VCT
         val txRequestWithExplicitSubtype = buildDeviceRequest(
@@ -3235,6 +3243,9 @@ class DeviceResponseTest {
         val readerKey0 = createReaderKey("Reader 0")
         val readerKey1 = createReaderKey("Reader 1")
 
+        val mdlAki = ByteString(mdlDsCert.authorityKeyIdentifier!!)
+        val wrongAki = ByteString(ByteArray(mdlAki.size) { 0x55 })
+
         val twoPidRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
             deviceRequestInfo = deviceRequestInfoForIds(0, 1),
@@ -3244,6 +3255,7 @@ class DeviceResponseTest {
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
                 docRequestInfo = DocRequestInfo(
                     docFormat = "dc+sd-jwt",
+                    issuerIdentifiers = listOf(wrongAki),
                     dataElementIdentifierMapping = mapOf(
                         "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
                     )
@@ -3255,6 +3267,7 @@ class DeviceResponseTest {
                 nameSpaces = mapOf("_" to mapOf("sdjwtvc_family_name" to false)),
                 docRequestInfo = DocRequestInfo(
                     docFormat = "dc+sd-jwt",
+                    issuerIdentifiers = listOf(mdlAki),
                     dataElementIdentifierMapping = mapOf(
                         "sdjwtvc_family_name" to buildJsonArray { add(JsonPrimitive("family_name")) }
                     )
@@ -3262,13 +3275,10 @@ class DeviceResponseTest {
                 readerKey = readerKey1
             )
         }
-        val reader1Audience = Crypto.digest(
-            algorithm = Algorithm.SHA256,
-            message = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(twoPidRequest.docRequests[1].readerAuth!!.toDataItem()))))
-        ).toBase64Url()
-        val otherDocWithoutIds = arbitraryAudienceOtherDocument(sessionTranscript, audience = reader1Audience)
+        val expectedPidAudience = transcriptAudience(sessionTranscript)
+        val otherDocWithoutIds = arbitraryAudienceOtherDocument(sessionTranscript, audience = expectedPidAudience)
 
-        // Without docRequestIds, two requests with different per-request readerAuth audiences cannot be disambiguated
+        // Without docRequestIds, fallback resolves index 0 whose issuerIdentifiers does not match
         val ambiguousResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
             addOtherDocument(otherDocWithoutIds)
         }
@@ -3276,14 +3286,14 @@ class DeviceResponseTest {
             ambiguousResponse.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
         }
 
-        // With docRequestIds = [1], verification resolves DocRequest 1's audience and succeeds
+        // With docRequestIds = [1], verification resolves DocRequest 1 and succeeds
         val disambiguatedResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
             addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(1)))
         }
         disambiguatedResponse.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
-        assertEquals(reader1Audience, disambiguatedResponse.otherDocuments.single().expectedAudience)
+        assertEquals(expectedPidAudience, disambiguatedResponse.otherDocuments.single().expectedAudience)
 
-        // Pointing docRequestIds to index 0 (wrong readerKey) or [0, 1] (conflicting audiences) fails
+        // Pointing docRequestIds to index 0 or [0, 1] fails because DocRequest 0 requires wrongAki
         assertFailsWith<IllegalStateException> {
             buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
                 addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(0)))
@@ -3295,9 +3305,42 @@ class DeviceResponseTest {
             }.verify(sessionTranscript, deviceRequest = twoPidRequest, atTime = euPidTimeSigned)
         }
 
+        // When both DocRequests allow the issuer (even with distinct per-request readerAuth keys),
+        // docRequestIds = [0, 1] succeeds under DIS Annex H.2 shared SessionTranscriptBytes audience
+        val sharedPidRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0, 1),
+        ) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    issuerIdentifiers = listOf(mdlAki),
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                ),
+                readerKey = readerKey0
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("sdjwtvc_family_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    issuerIdentifiers = listOf(mdlAki),
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_family_name" to buildJsonArray { add(JsonPrimitive("family_name")) }
+                    )
+                ),
+                readerKey = readerKey1
+            )
+        }
+        buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(otherDocWithoutIds.copy(docRequestIds = listOf(0, 1)))
+        }.verify(sessionTranscript, deviceRequest = sharedPidRequest, atTime = euPidTimeSigned)
+
         // 2. Two mso_mdoc DocRequests with the same docType: disambiguating AKI and satisfying [0, 1] with one document
-        val mdlAki = ByteString(mdlDsCert.authorityKeyIdentifier!!)
-        val wrongAki = ByteString(ByteArray(mdlAki.size) { 0x55 })
         val twoMdlDiffAkiRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
             deviceRequestInfo = deviceRequestInfoForIds(0, 1),
@@ -3515,7 +3558,7 @@ class DeviceResponseTest {
                 keyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias)
             ),
             nonce = nonce,
-            audience = "none",
+            audience = nonce,
             creationTime = euPidTimeSigned
         ) {
             putJsonObject(TestTxType.kbJwtResponseClaimName) {
@@ -3562,8 +3605,10 @@ class DeviceResponseTest {
             originalSessionTranscript = sessionTranscript,
             encryptionParameters = encryptionParameters
         )
-        val otherDoc1 = arbitraryAudienceOtherDocument(encSessionTranscript, audience = "none")
-            .copy(docRequestIds = listOf(1))
+        val otherDoc1 = arbitraryAudienceOtherDocument(
+            encSessionTranscript,
+            audience = transcriptAudience(encSessionTranscript)
+        ).copy(docRequestIds = listOf(1))
         val zkSpec = ZkSystemSpec(id = "zk_spec_1", system = "mock_zk")
         val zkDoc2 = ZkDocument(
             documentData = ZkDocumentData(
@@ -4114,7 +4159,6 @@ class DeviceResponseTest {
             eReaderKey = null,
             transactionData = emptyList(),
             atTime = mdlTimeValidityBegin,
-            expectedAudience = null,
             requireHolderBinding = false
         )
         assertEquals(1, parsedAllowKeyless.otherDocuments.size)
@@ -4186,7 +4230,6 @@ class DeviceResponseTest {
                 eReaderKey = null,
                 transactionData = emptyList(),
                 atTime = euPidTimeValidityBegin,
-                expectedAudience = null,
                 requireHolderBinding = false
             )
         }
@@ -4576,15 +4619,6 @@ class DeviceResponseTest {
             }
             req.verifyReaderAuthentication(sessionTranscript)
 
-            val expectedAudience = Crypto.digest(
-                algorithm = Algorithm.SHA256,
-                message = Cbor.encode(
-                    Tagged(
-                        tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(req.docRequests.single().readerAuth!!.toDataItem()))
-                    )
-                )
-            ).toBase64Url()
             val sessionTranscriptBytes = Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,
                 taggedItem = Bstr(Cbor.encode(sessionTranscript))
@@ -4600,7 +4634,7 @@ class DeviceResponseTest {
             val sdJwtKb = filteredSdJwt.present(
                 signingKey = kbSigningKey,
                 nonce = expectedNonce,
-                audience = expectedAudience,
+                audience = expectedNonce,
                 creationTime = now
             )
 
@@ -4620,6 +4654,350 @@ class DeviceResponseTest {
                 deviceRequest = req
             )
             assertEquals(1, parsed.otherDocuments.size)
+        }
+    }
+
+    @Test
+    fun secondEditionMsoZkDocumentDataAndMdocVerificationChecks() = runTest {
+        provisionDocuments()
+        val now = Clock.System.now().let { Instant.fromEpochSeconds(it.epochSeconds) }
+
+        // 1. ZkDocumentData omits empty issuerSigned/deviceSigned and rejects present-but-empty maps/arrays
+        val zkDataIssuerOnly = ZkDocumentData(
+            zkSystemSpecId = "spec1",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            timestamp = now,
+            issuerSigned = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_18" to Simple.TRUE)),
+            deviceSigned = emptyMap(),
+            msoX5chain = X509CertChain(listOf(mdlDsCert))
+        )
+        val encodedZkData = Cbor.decode(Cbor.encode(zkDataIssuerOnly.toDataItem()))
+        assertTrue(encodedZkData.hasKey("issuerSigned"))
+        assertFalse(encodedZkData.hasKey("deviceSigned"))
+        assertEquals(zkDataIssuerOnly, ZkDocumentData.fromDataItem(encodedZkData))
+
+        assertFailsWith<IllegalArgumentException> {
+            ZkDocumentData.fromDataItem(
+                buildCborMap {
+                    put("zkSystemId", "spec1")
+                    put("docType", DrivingLicense.MDL_DOCTYPE)
+                    put("timestamp", now.toDataItemDateTimeString())
+                    putCborMap("issuerSigned") {}
+                }
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ZkDocumentData.fromDataItem(
+                buildCborMap {
+                    put("zkSystemId", "spec1")
+                    put("docType", DrivingLicense.MDL_DOCTYPE)
+                    put("timestamp", now.toDataItemDateTimeString())
+                    putCborMap("deviceSigned") {
+                        putCborArray(DrivingLicense.MDL_NAMESPACE) {}
+                    }
+                }
+            )
+        }
+
+        // 2. MobileSecurityObject and IssuerSignedItem reject DigestID > 2^31 - 1, and keyAuthorizations rejects empty/overlapping entries
+        val deviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val tooLargeDigestMso = MobileSecurityObject(
+            version = "1.0",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            signedAt = now,
+            validFrom = now,
+            validUntil = now + 30.days,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = mapOf(
+                DrivingLicense.MDL_NAMESPACE to mapOf(0x8000_0000L to ByteString(ByteArray(32)))
+            ),
+            deviceKey = deviceKey.publicKey
+        )
+        assertTrue(tooLargeDigestMso.validate(now = null).hasErrors)
+        assertFailsWith<IllegalArgumentException> {
+            MobileSecurityObject.fromDataItem(tooLargeDigestMso.toDataItem())
+        }
+        assertTrue(
+            IssuerSignedItem.fromValues(
+                digestId = 0x8000_0000L,
+                random = ByteString(ByteArray(16)),
+                dataElementIdentifier = "given_name",
+                dataElementValue = "Erika".toDataItem()
+            ).validate().hasErrors
+        )
+        val overlappingKeyAuthMso = MobileSecurityObject(
+            version = "1.0",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            signedAt = now,
+            validFrom = now,
+            validUntil = now + 30.days,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = mapOf(
+                DrivingLicense.MDL_NAMESPACE to mapOf(0L to ByteString(ByteArray(32)))
+            ),
+            deviceKey = deviceKey.publicKey,
+            deviceKeyAuthorizedNamespaces = listOf("org.example.ns"),
+            deviceKeyAuthorizedDataElements = mapOf("org.example.ns" to listOf("elem1"))
+        )
+        assertTrue(overlappingKeyAuthMso.validate(now = null).hasErrors)
+        assertFailsWith<IllegalArgumentException> {
+            MobileSecurityObject.fromDataItem(overlappingKeyAuthMso.toDataItem())
+        }
+        val emptyKeyAuthCbor = buildCborMap {
+            put("version", "1.0")
+            put("digestAlgorithm", "SHA-256")
+            put("docType", DrivingLicense.MDL_DOCTYPE)
+            putCborMap("valueDigests") {
+                putCborMap(DrivingLicense.MDL_NAMESPACE) {
+                    put(0L, ByteArray(32))
+                }
+            }
+            putCborMap("deviceKeyInfo") {
+                put("deviceKey", deviceKey.publicKey.toCoseKey().toDataItem())
+                putCborMap("keyAuthorizations") {}
+            }
+            putCborMap("validityInfo") {
+                put("signed", now.toDataItemDateTimeString())
+                put("validFrom", now.toDataItemDateTimeString())
+                put("validUntil", (now + 30.days).toDataItemDateTimeString())
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MobileSecurityObject.fromDataItem(emptyKeyAuthCbor)
+        }
+
+        // 3. MdocDocument.verify() enforces DS DIGITAL_SIGNATURE KeyUsage, mDL DS EKU, issuing_country, and expiry_date_after_validuntil
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(7, 8, 9)) }
+        suspend fun buildSignedMdlDoc(
+            dsSigningKey: AsymmetricKey.X509Certified,
+            elements: Map<String, DataItem>,
+            validUntil: Instant = now + 30.days,
+        ): MdocDocument {
+            val issuerNs = buildIssuerNamespaces {
+                addNamespace(DrivingLicense.MDL_NAMESPACE) {
+                    for ((k, v) in elements) {
+                        addDataElement(k, v)
+                    }
+                }
+            }
+            val mso = MobileSecurityObject(
+                version = "1.0",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                signedAt = now - 1.days,
+                validFrom = now - 1.days,
+                validUntil = validUntil,
+                expectedUpdate = null,
+                digestAlgorithm = Algorithm.SHA256,
+                valueDigests = issuerNs.getValueDigests(Algorithm.SHA256),
+                deviceKey = deviceKey.publicKey
+            )
+            val taggedMso = Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(mso.toDataItem()))))
+            val issuerAuth = Cose.coseSign1Sign(
+                signingKey = dsSigningKey,
+                message = taggedMso,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = mapOf(
+                    Cose.COSE_LABEL_X5CHAIN.toCoseLabel to dsSigningKey.certChain.toDataItem()
+                )
+            )
+            val deviceNs = buildDeviceNamespaces {}
+            val deviceAuthenticationBytes = Cbor.encode(
+                Tagged(
+                    Tagged.ENCODED_CBOR,
+                    Bstr(
+                        Cbor.encode(
+                            buildCborArray {
+                                add("DeviceAuthentication")
+                                add(sessionTranscript)
+                                add(DrivingLicense.MDL_DOCTYPE)
+                                add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(deviceNs.toDataItem()))))
+                            }
+                        )
+                    )
+                )
+            )
+            val deviceSig = Cose.coseSign1Sign(
+                signingKey = AsymmetricKey.anonymous(deviceKey, Algorithm.ES256),
+                message = deviceAuthenticationBytes,
+                includeMessageInPayload = false,
+                protectedHeaders = mapOf(
+                    Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                ),
+                unprotectedHeaders = emptyMap()
+            )
+            return MdocDocument(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                issuerAuth = issuerAuth,
+                issuerNamespaces = issuerNs,
+                deviceAuth = DeviceAuth.Signature(deviceSig),
+                deviceNamespaces = deviceNs,
+                errors = emptyMap()
+            )
+        }
+
+        // 3a. DS cert without mDL DS EKU fails for mDL
+        val dsNoEkuKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsNoEkuCert = buildX509Cert(
+            publicKey = dsNoEkuKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(dsNoEkuKey),
+            serialNumber = ASN1Integer(99L),
+            subject = X500Name.fromName("CN=No EKU DS,C=US"),
+            issuer = X500Name.fromName("CN=No EKU DS,C=US"),
+            validFrom = now - 2.days,
+            validUntil = now + 60.days
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+        val docNoEku = buildSignedMdlDoc(
+            dsSigningKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsNoEkuCert)), dsNoEkuKey),
+            elements = mapOf("given_name" to "Erika".toDataItem())
+        )
+        assertFailsWith<IllegalStateException> {
+            docNoEku.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+        }
+
+        // 3b. mDL issuing_country mismatching DS certificate countryName fails
+        val iacaUsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val iacaUsCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaUsKey),
+            subject = X500Name.fromName("CN=US IACA,C=US"),
+            serial = ASN1Integer(100L),
+            validFrom = now - 2.days,
+            validUntil = now + 365.days,
+            issuerAltNameUrl = null,
+            crlUrl = null
+        )
+        val dsUsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsUsCert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaUsCert)), iacaUsKey),
+            dsKey = dsUsKey.publicKey,
+            subject = X500Name.fromName("CN=US DS,C=US,ST=US-CA"),
+            serial = ASN1Integer(101L),
+            validFrom = now - 2.days,
+            validUntil = now + 365.days
+        )
+        val dsUsCertified = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(dsUsCert, iacaUsCert)),
+            privateKey = dsUsKey
+        )
+        val docWrongCountry = buildSignedMdlDoc(
+            dsSigningKey = dsUsCertified,
+            elements = mapOf("issuing_country" to "DE".toDataItem())
+        )
+        assertFailsWith<IllegalStateException> {
+            docWrongCountry.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+        }
+
+        // 3c. mDL issuing_jurisdiction mismatching DS certificate stateOrProvinceName fails
+        val docWrongState = buildSignedMdlDoc(
+            dsSigningKey = dsUsCertified,
+            elements = mapOf(
+                "issuing_country" to "US".toDataItem(),
+                "issuing_jurisdiction" to "US-NY".toDataItem()
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            docWrongState.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+        }
+
+        // 3d. expiry_date_after_validuntil = false or with expiry_date <= validUntil fails; valid case passes
+        val docFalseFlag = buildSignedMdlDoc(
+            dsSigningKey = dsUsCertified,
+            elements = mapOf(
+                "issuing_country" to "US".toDataItem(),
+                "issuing_jurisdiction" to "US-CA".toDataItem(),
+                "expiry_date" to LocalDate.parse("2035-01-01").toDataItemFullDate(),
+                "expiry_date_after_validuntil" to Simple.FALSE
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            docFalseFlag.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+        }
+
+        val docExpiryBeforeMso = buildSignedMdlDoc(
+            dsSigningKey = dsUsCertified,
+            elements = mapOf(
+                "issuing_country" to "US".toDataItem(),
+                "issuing_jurisdiction" to "US-CA".toDataItem(),
+                "expiry_date" to (now + 5.days).toDataItemDateTimeString(),
+                "expiry_date_after_validuntil" to Simple.TRUE
+            ),
+            validUntil = now + 30.days
+        )
+        assertFailsWith<IllegalStateException> {
+            docExpiryBeforeMso.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = now
+            )
+        }
+
+        val docValidAfterValidUntil = buildSignedMdlDoc(
+            dsSigningKey = dsUsCertified,
+            elements = mapOf(
+                "issuing_country" to "US".toDataItem(),
+                "issuing_jurisdiction" to "US-CA".toDataItem(),
+                "expiry_date" to (now + 90.days).toDataItemDateTimeString(),
+                "expiry_date_after_validuntil" to Simple.TRUE
+            ),
+            validUntil = now + 30.days
+        )
+        docValidAfterValidUntil.verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            transactionData = emptyList(),
+            atTime = now
+        )
+
+        // 4. VerificationUtil.verifyMdocDeviceResponse rejects empty DeviceResponse when all UseCases are optional
+        val optionalOnlyReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(UseCase(mandatory = false, documentSets = listOf(DocumentSet(listOf(0))), purposeHints = emptyMap()))
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false))
+            )
+        }
+        val emptyResp = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {}
+        assertFailsWith<IllegalStateException> {
+            VerificationUtil.verifyMdocDeviceResponse(
+                now = now,
+                deviceResponse = emptyResp.toDataItem(),
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                documentTypeRepository = null,
+                zkSystemRepository = null,
+                request = optionalOnlyReq
+            )
         }
     }
 }

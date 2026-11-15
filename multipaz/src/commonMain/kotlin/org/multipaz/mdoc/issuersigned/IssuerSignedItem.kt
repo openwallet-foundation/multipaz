@@ -79,6 +79,8 @@ data class IssuerSignedItem(
                 val dId = dataItem["digestID"].asNumber
                 if (dId < 0) {
                     addError("IssuerSignedItem 'digestID' must be non-negative (was $dId)")
+                } else if (dId > 0x7fff_ffffL) {
+                    addError("IssuerSignedItem 'digestID' must be <= 2^31 - 1 (was $dId)")
                 }
             } catch (e: Throwable) {
                 addError("IssuerSignedItem 'digestID' is not a number: ${e.message}")

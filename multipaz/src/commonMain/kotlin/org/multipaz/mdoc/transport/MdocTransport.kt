@@ -1,9 +1,9 @@
 package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.CancellationException
-import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import kotlin.time.Duration
 
@@ -124,10 +124,11 @@ abstract class MdocTransport {
     /**
      * Opens the connection to the other peer.
      *
-     * @param eSenderKey This should be set to `EDeviceKey` if using forward engagement or
-     * `EReaderKey` if using reverse engagement.
+     * @param eSenderKeyBytes The exact wire-encoded `EDeviceKeyBytes` if using forward engagement
+     *   or `EReaderKeyBytes` if using reverse engagement, including the `#6.24` CBOR tag, used for
+     *   BLE `Ident` derivation per ISO/IEC 18013-5 Second Edition clause 11.1.4.1.
      */
-    abstract suspend fun open(eSenderKey: EcPublicKey)
+    abstract suspend fun open(eSenderKeyBytes: ByteString)
 
     /**
      * Sends a message to the other peer.

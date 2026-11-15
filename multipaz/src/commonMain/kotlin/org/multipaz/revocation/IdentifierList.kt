@@ -21,6 +21,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -107,6 +108,8 @@ class IdentifierList(
     }
 
     companion object {
+        private const val EXP_CLAIM = 4L
+        private const val IAT_CLAIM = 6L
         private const val IDENTIFIER_LIST_CLAIM = 65530L
         private const val TTL_CLAIM = 65534L
 
@@ -177,13 +180,27 @@ class IdentifierList(
             }
             val identifiers = identifierListClaim["identifiers"] as? CborMap
                 ?: throw IllegalArgumentException("not a valid identifier list CWT")
-            val builder = Builder()
-            for (identifier in identifiers.items.keys) {
-                if (identifier is Bstr) {
-                    builder.add(ByteString(identifier.value))
+            val issuedAt = body.getOrNull(IAT_CLAIM)?.let {
+                Instant.fromEpochSeconds(it.asNumber)
+            }
+            val creationTime = issuedAt ?: Clock.System.now()
+            val expirationTime = body.getOrNull(EXP_CLAIM)?.let {
+                Instant.fromEpochSeconds(it.asNumber)
+            } ?: body.getOrNull(TTL_CLAIM)?.let { ttl ->
+                creationTime + ttl.asNumber.seconds
+            } ?: (creationTime + 20.minutes)
+            val parsedIdentifiers = buildSet {
+                for (identifier in identifiers.items.keys) {
+                    if (identifier is Bstr) {
+                        add(ByteString(identifier.value))
+                    }
                 }
             }
-            return builder.build()
+            return IdentifierList(
+                identifiers = parsedIdentifiers,
+                creationTime = creationTime,
+                expirationTime = expirationTime,
+            )
         }
     }
 }

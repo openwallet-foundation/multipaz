@@ -19,12 +19,29 @@ data class PresentmentData(
     val useCases: List<PresentmentUseCase>,
 ) {
 
+    private fun compatibleMultiIndices(
+        useCase: PresentmentUseCase,
+        candidateIndices: List<Int>,
+    ): List<Int> {
+        if (candidateIndices.isEmpty()) return emptyList()
+        val anchor = useCase.solutions[candidateIndices.first()]
+        return candidateIndices.filter { idx ->
+            val candidate = useCase.solutions[idx]
+            candidate.optionIndex == anchor.optionIndex &&
+                candidate.matches.size == anchor.matches.size &&
+                candidate.matches.indices.all { pos ->
+                    anchor.matches[pos].source.allowsMultiple ||
+                        candidate.matches[pos].credential == anchor.matches[pos].credential
+                }
+        }
+    }
+
     /**
      * Returns the default selection of solution indices for each use-case.
      *
-     * For each use-case, if [PresentmentUseCase.allowMultiple] is `true`, all solutions are selected by default;
-     * otherwise only the first solution (`0`) is selected. If [preselectedDocuments] is non-empty, solutions matching
-     * [preselectedDocuments] are preferred.
+     * For each use-case, if [PresentmentUseCase.allowMultiple] is `true`, all compatible solutions from the first
+     * option are selected by default; otherwise only the first solution (`0`) is selected. If [preselectedDocuments]
+     * is non-empty, solutions matching [preselectedDocuments] are preferred.
      *
      * @param preselectedDocuments either empty or a list of documents the user already selected.
      * @return a list of selected solution index lists, one per use-case.
@@ -34,7 +51,7 @@ data class PresentmentData(
             return useCases.map { useCase ->
                 when {
                     useCase.solutions.isEmpty() -> emptyList()
-                    useCase.allowMultiple -> useCase.solutions.indices.toList()
+                    useCase.allowMultiple -> compatibleMultiIndices(useCase, useCase.solutions.indices.toList())
                     else -> listOf(0)
                 }
             }
@@ -46,9 +63,9 @@ data class PresentmentData(
                     useCase.solutions[idx].matches.all { it.credential.document in preselectedSet }
                 }
                 when {
-                    matchingIndices.isNotEmpty() -> matchingIndices
+                    matchingIndices.isNotEmpty() -> compatibleMultiIndices(useCase, matchingIndices)
                     useCase.optional -> emptyList()
-                    else -> useCase.solutions.indices.toList()
+                    else -> compatibleMultiIndices(useCase, useCase.solutions.indices.toList())
                 }
             } else {
                 val matchingIndex = useCase.solutions.indexOfFirst { solution ->
@@ -80,6 +97,9 @@ data class PresentmentData(
         require(selections.size == useCases.size) {
             "Expected selectionPerUseCase length to be that of useCases"
         }
+        require(useCases.isEmpty() || selections.any { it.isNotEmpty() }) {
+            "At least one use-case must be selected"
+        }
         val matches = mutableListOf<PresentmentCredentialMatch>()
         useCases.forEachIndexed { index, useCase ->
             val selectedIndices = selections[index]
@@ -92,14 +112,25 @@ data class PresentmentData(
                     }
                 }
                 val useCaseMatches = mutableListOf<PresentmentCredentialMatch>()
+                val selectedOptionIndices = mutableSetOf<Int>()
                 for (selection in selectedIndices) {
                     require(selection in useCase.solutions.indices) {
                         "Cannot select out-of-bound use-case at index $index"
                     }
                     val solution = useCase.solutions[selection]
+                    selectedOptionIndices.add(solution.optionIndex)
                     solution.matches.forEach { match ->
                         val input = transactionUserInput[match] ?: emptyMap()
                         useCaseMatches.add(match.copy(transactionUserInput = input))
+                    }
+                }
+                require(selectedOptionIndices.size <= 1) {
+                    "Cannot select solutions from multiple options in use-case at index $index"
+                }
+                val singleSources = useCaseMatches.filter { !it.source.allowsMultiple }.groupBy { it.source }
+                for ((_, sourceMatches) in singleSources) {
+                    require(sourceMatches.map { it.credential }.distinct().size <= 1) {
+                        "Cannot select multiple credentials for a single-credential request in use-case at index $index"
                     }
                 }
                 matches.addAll(useCaseMatches.distinctBy { it.credential to it.source })
@@ -111,8 +142,8 @@ data class PresentmentData(
     /**
      * Selects a particular combination of credentials to present.
      *
-     * If [preselectedDocuments] is empty, this picks the first solution for each use-case (or all solutions if
-     * [PresentmentUseCase.allowMultiple] is `true`).
+     * If [preselectedDocuments] is empty, this picks the first solution for each use-case (or all compatible solutions
+     * from the first option if [PresentmentUseCase.allowMultiple] is `true`).
      *
      * Otherwise, if [preselectedDocuments] is not empty, the solutions are selected such that
      * the list of returned credentials match the documents in [preselectedDocuments].
@@ -131,11 +162,12 @@ data class PresentmentData(
 
         val matches = mutableListOf<PresentmentCredentialMatch>()
         useCases.forEach { useCase ->
+            if (useCase.solutions.isEmpty()) {
+                return@forEach
+            }
             if (useCase.allowMultiple) {
-                val useCaseMatches = mutableListOf<PresentmentCredentialMatch>()
-                useCase.solutions.forEach { solution ->
-                    useCaseMatches.addAll(solution.matches)
-                }
+                val chosenIndices = compatibleMultiIndices(useCase, useCase.solutions.indices.toList())
+                val useCaseMatches = chosenIndices.flatMap { useCase.solutions[it].matches }
                 matches.addAll(useCaseMatches.distinctBy { it.credential to it.source })
             } else {
                 matches.addAll(useCase.solutions[0].matches)
@@ -153,19 +185,18 @@ data class PresentmentData(
                     solution.matches.all { setOfPreselectedDocuments.contains(it.credential.document) }
                 }
                 if (matchingSolutions.isNotEmpty()) {
-                    // Solutions from the same credential_set/useCase option share the same list of sources;
-                    // also keep separate groups if multiple solutions exist so we can match either the
-                    // combined multi-credential selection or a specific option group.
-                    val combinedMatches = matchingSolutions
-                        .flatMap { it.matches }
-                        .distinctBy { it.credential to it.source }
-                    options.add(combinedMatches)
-                    val groupsBySource = matchingSolutions.groupBy { solution ->
-                        solution.matches.map { it.source }
+                    val compatibleGroups = matchingSolutions.groupBy { solution ->
+                        solution.optionIndex to solution.matches
+                            .filter { !it.source.allowsMultiple }
+                            .map { it.source to it.credential }
                     }
-                    if (groupsBySource.size > 1) {
-                        for (group in groupsBySource.values) {
-                            options.add(group.flatMap { it.matches }.distinctBy { it.credential to it.source })
+                    for (group in compatibleGroups.values) {
+                        options.add(group.flatMap { it.matches }.distinctBy { it.credential to it.source })
+                    }
+                    for (solution in matchingSolutions) {
+                        val singleList = solution.matches
+                        if (options.none { it == singleList }) {
+                            options.add(singleList)
                         }
                     }
                 }
@@ -191,7 +222,8 @@ data class PresentmentData(
             path.forEachIndexed { useCaseNum, optionIndex ->
                 chosenMatches.addAll(candidateOptionsPerUseCase[useCaseNum][optionIndex])
             }
-            if (chosenMatches.size == preselectedDocuments.size &&
+            if (chosenMatches.isNotEmpty() &&
+                chosenMatches.size == preselectedDocuments.size &&
                 chosenMatches.all { setOfPreselectedDocuments.contains(it.credential.document) }
             ) {
                 return PresentmentSelection(chosenMatches)
@@ -225,7 +257,9 @@ data class PresentmentData(
             path.forEachIndexed { useCaseIndex, selectionIndex ->
                 allMatches.addAll(allUseCaseSelections[useCaseIndex][selectionIndex])
             }
-            finalSelections.add(PresentmentSelection(allMatches))
+            if (allMatches.isNotEmpty() || useCases.isEmpty()) {
+                finalSelections.add(PresentmentSelection(allMatches))
+            }
         }
         return finalSelections
     }

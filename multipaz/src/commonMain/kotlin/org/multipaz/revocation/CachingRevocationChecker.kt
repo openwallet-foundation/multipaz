@@ -78,7 +78,10 @@ class CachingRevocationChecker(
         atTime: Instant,
         bypassCache: Boolean,
         preferJwt: Boolean
-    ): RevocationCheckResult = when (revocationStatus) {
+    ): RevocationCheckResult {
+        // TODO(ISO 18013-5 Second Edition Clause 12.3.6.6): Support MSO Revocation Aggregation
+        //   via `aggregation_uri` and X.509 extension 1.0.23220.4.2.1 (`OID.ISO_23220_4_REVOCATION_AGGREGATION_URI`).
+        return when (revocationStatus) {
             is RevocationStatus.StatusList ->
                 checkStatusList(revocationStatus, issuerCert, onlyTrusted, atTime, bypassCache, preferJwt)
             is RevocationStatus.IdentifierList ->
@@ -89,6 +92,7 @@ class CachingRevocationChecker(
                 error = IllegalStateException("Unknown revocation status format")
             )
         }
+    }
 
     private suspend fun fetchOrGetCached(
         uri: String,

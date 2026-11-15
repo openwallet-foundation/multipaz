@@ -232,6 +232,16 @@ data class X509Cert(
         }
 
     /**
+     * The extended key usage OIDs (OID 2.5.29.37) or the empty set if not present.
+     */
+    val extendedKeyUsage: Set<String>
+        get() {
+            val extVal = getExtensionValue(OID.X509_EXTENSION_EXTENDED_KEY_USAGE.oid) ?: return emptySet()
+            val seq = ASN1.decode(extVal) as ASN1Sequence
+            return seq.elements.filterIsInstance<ASN1ObjectIdentifier>().map { it.oid }.toSet()
+        }
+
+    /**
      * Certificate basic constraints (if defined).
      *
      * @return a pair of the CA flag and the path length constraint value if defined.

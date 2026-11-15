@@ -15,6 +15,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -22,6 +23,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 class RicalGeneratorTest {
@@ -56,7 +58,7 @@ class RicalGeneratorTest {
         val rp3Cert = createSelfsignedCert(
             Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=RP 3"))
 
-        val ricalDate = Clock.System.now()
+        val ricalDate = Clock.System.now().truncateToWholeSeconds() + 456.milliseconds
         val ricalNextUpdate = ricalDate + 30.days
         val ricalNotAfter = ricalDate + 40.days
         val ricalIssueID = 42L
@@ -122,9 +124,9 @@ class RicalGeneratorTest {
         assertEquals("Test RICAL Provider", decodedSignedRical.rical.provider)
         assertEquals("1.0", decodedSignedRical.rical.version)
         assertEquals(Rical.RICAL_TYPE_READER_AUTHENTICATION, decodedSignedRical.rical.type)
-        assertEquals(ricalDate, decodedSignedRical.rical.date)
-        assertEquals(ricalNextUpdate, decodedSignedRical.rical.nextUpdate)
-        assertEquals(ricalNotAfter, decodedSignedRical.rical.notAfter)
+        assertEquals(ricalDate.truncateToWholeSeconds(), decodedSignedRical.rical.date)
+        assertEquals(ricalNextUpdate.truncateToWholeSeconds(), decodedSignedRical.rical.nextUpdate)
+        assertEquals(ricalNotAfter.truncateToWholeSeconds(), decodedSignedRical.rical.notAfter)
         assertEquals(ricalIssueID, decodedSignedRical.rical.id)
         assertEquals(ricalExtensions,decodedSignedRical.rical.extensions)
         assertEquals(3, decodedSignedRical.rical.certificateInfos.size)
@@ -163,7 +165,10 @@ class RicalGeneratorTest {
             issuer = X500Name.fromName("C=US,CN=RICAL Root CA"),
             validFrom = now - 10.minutes,
             validUntil = now + 10.minutes,
-        ).includeSubjectKeyIdentifier().setBasicConstraints(ca = true, pathLenConstraint = null).build()
+        ).includeSubjectKeyIdentifier()
+            .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            .setBasicConstraints(ca = true, pathLenConstraint = null)
+            .build()
 
         val signerKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val signerCert = X509Cert.Builder(

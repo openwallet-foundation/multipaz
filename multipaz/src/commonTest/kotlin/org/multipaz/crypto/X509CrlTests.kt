@@ -207,4 +207,22 @@ class X509CrlTests {
         assertEquals(2, crl.extensions.size)
         assertEquals(OID.X509_EXTENSION_AUTHORITY_KEY_IDENTIFIER.oid, crl.extensions[0].oid)
     }
+
+    @Test
+    fun roundtripDataItem() = runTest {
+        val signingKey = AsymmetricKey.ephemeral()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val original = buildX509Crl(
+            signingKey = signingKey,
+            issuer = X500Name.fromName("CN=CRL Issuer,C=US"),
+            thisUpdate = now,
+            nextUpdate = now + 5.hours
+        ) {
+            addRevoked(ASN1Integer(42L), now)
+        }
+        val decoded: X509Crl = X509Crl.fromDataItem(original.toDataItem())
+        decoded.verify(signingKey.publicKey)
+        assertEquals(original, decoded)
+        assertEquals(listOf(ASN1Integer(42L)), decoded.revokedSerials)
+    }
 }

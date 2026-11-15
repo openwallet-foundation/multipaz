@@ -145,19 +145,20 @@ private fun MdocProximityQrPresentmentAndroid(
                                 options = qrSettings.createTransportOptions,
                             )
                             advertisedTransports = transports
-                            val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
+                            val deviceEngagementObj = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
                                 transports.forEach { transport ->
                                     transport.connectionMethods.forEach { cm -> addConnectionMethod(cm) }
                                 }
                                 capabilities.forEach { (capability, value) -> addCapability(capability, value) }
-                            }.toDataItem()
+                            }
+                            val deviceEngagement = deviceEngagementObj.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))
                             qrCodeToShow = "mdoc:" + encodedDeviceEngagement.toByteArray().toBase64Url()
 
                             state = StateAndroid.SHOW_QR_CODE
 
                             val transport = transports.waitForConnection(
-                                eSenderKey = eDeviceKey.publicKey,
+                                eSenderKeyBytes = deviceEngagementObj.eDeviceKeyBytes,
                             )
                             connectedTransport = transport
                             advertisedTransports = null

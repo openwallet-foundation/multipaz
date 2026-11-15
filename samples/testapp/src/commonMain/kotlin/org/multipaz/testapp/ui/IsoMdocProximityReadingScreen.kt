@@ -733,7 +733,7 @@ fun IsoMdocProximityReadingScreen(
                                     readerQrUriToShow.value = "mdoc:" + encodedReaderEngagement.toBase64Url()
 
                                     val transport = advertisedTransports.waitForConnection(
-                                        eSenderKey = generatedReaderKey.publicKey
+                                        eSenderKeyBytes = readerEngagement.eReaderKeyBytes!!
                                     )
                                     connectedTransport = transport
                                     readerTransport.value = transport
@@ -1325,8 +1325,13 @@ private suspend fun doReaderFlowWithTransport(
     try {
         readerTransport.value = transport
         val t0 = Clock.System.now()
+        val parsedDeviceEngagement = DeviceEngagement.fromDataItem(
+            Cbor.decode(encodedDeviceEngagement.toByteArray())
+        )
         if (!alreadyOpened) {
-            transport.open(eDeviceKey)
+            transport.open(
+                eSenderKeyBytes = parsedDeviceEngagement.eDeviceKeyBytes,
+            )
         }
         val encryptedDeviceRequest = sessionEncryption.encryptMessage(
             messagePlaintext = deviceRequest,

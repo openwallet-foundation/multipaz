@@ -351,6 +351,7 @@ class ViewModel {
             serial:  ASN1Integer.companion.fromRandom(numBits: 128, random: KotlinRandom.companion),
             validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
             validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+            crlUrl: "https://issuer.example.com/crl"
         )
         let document = try! await documentStore.createDocument(
             displayName: displayName,

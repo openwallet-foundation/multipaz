@@ -39,9 +39,10 @@ suspend fun Credential.getRevocationInfo(trustManager: TrustManagerInterface): R
         is MdocCredential -> {
             val issuerSigned = Cbor.decode(issuerProvidedData.toByteArray())
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
-            val certChain = issuerAuth.unprotectedHeaders[
-                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-            ]!!.asX509CertChain.certificates
+            val x5chainHeader = issuerAuth.protectedHeaders[CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)]
+                ?: issuerAuth.unprotectedHeaders[CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)]
+                ?: throw IllegalArgumentException("No x5chain in issuerAuth headers")
+            val certChain = x5chainHeader.asX509CertChain.certificates
             val trustResult = trustManager.verify(certChain, mso.validFrom, docType = docType)
             mso.revocationStatus?.let { RevocationInfo(it, trustResult.trustChain?.certificates?.last()) }
         }

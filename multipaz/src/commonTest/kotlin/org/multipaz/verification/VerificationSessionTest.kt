@@ -4,8 +4,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -38,6 +40,7 @@ import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
+import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -61,7 +64,6 @@ import org.multipaz.util.zlibDeflate
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -823,8 +825,8 @@ class VerificationSessionTest {
             creationTime = now - 1.days,
             expiresIn = 11.days,
         )
-        // Presentation created for an unsigned request (aud = "none")
-        val unsignedPresentation = credential.present(
+        // Presentation with legacy aud = "none" must be rejected per DIS Annex H.2
+        val legacyAudPresentation = credential.present(
             signingKey = holderKey,
             nonce = expectedNonce,
             audience = "none",
@@ -838,7 +840,7 @@ class VerificationSessionTest {
             addOtherDocument(
                 OtherDocument(
                     docFormat = "dc+sd-jwt",
-                    data = ByteString(unsignedPresentation.encodeToByteArray().zlibDeflate())
+                    data = ByteString(legacyAudPresentation.encodeToByteArray().zlibDeflate())
                 )
             )
         }
@@ -857,11 +859,17 @@ class VerificationSessionTest {
             addDocRequest(
                 docType = EUPersonalID.EUPID_VCT,
                 nameSpaces = mapOf("_" to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "given_name" to buildJsonArray { add(JsonPrimitive("given_name")) }
+                    )
+                )
             )
             addReaderAuthAll(readerIdentity.key)
         }
 
-        // Replaying an aud="none" OtherDocument against a signed DeviceRequest must fail
+        // An aud="none" OtherDocument must fail verification against DIS Annex H.2 audience check
         val drParsed = DeviceResponse.fromDataItem(deviceResponse.toDataItem())
         assertFailsWith<IllegalStateException> {
             drParsed.verify(

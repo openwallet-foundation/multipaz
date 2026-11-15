@@ -85,16 +85,18 @@ data class DeviceResponse internal constructor(
      *  - For document format `dc+sd-jwt`:
      *    - The SD-JWT+KB is constructed from decompressing [OtherDocument.data]
      *    - Verification is done with [org.multipaz.sdjwt.SdJwtKb.verify] using the issuer signing key
-     *      from the leaf certificate in the [org.multipaz.sdjwt.SdJwt.x5c], the nonce derived from
-     *      the session transcript, creation-time is checked against the passed-in [atTime], and
-     *      audience is checked to be derived from `ReaderAuthAll` or `ReaderAuth` for signed
-     *      requests or `none` for unsigned requests.
+     *      from the leaf certificate in the [org.multipaz.sdjwt.SdJwt.x5c], both `nonce` and `aud`
+     *      derived from `base64url(SHA-256(SessionTranscriptBytes))` per ISO/IEC 18013-5 Second
+     *      Edition Annex H.2, and creation-time checked against the passed-in [atTime].
      *    - The credential's validity period includes the passed-in [atTime].
      *
      * The following checks are expected to be done by the application:
      * - Determining whether the issuer's document signing certificate is trusted.
      *   An application can use [org.multipaz.trustmanagement.TrustManagerInterface] to do this.
-     * - Checking whether the MSO is revoked, or any of the keys involved are revoked.
+     * - Checking whether any X.509 certificates in the issuer chain are revoked (e.g. via CRL or OCSP)
+     *   and whether the MSO itself is revoked (e.g. via [org.multipaz.revocation.RevocationChecker]
+     *   against [org.multipaz.mdoc.mso.MobileSecurityObject.revocationStatus]). Neither check is
+     *   performed automatically by this method.
      * - Checking the integrity of any Zero-Knowledge Proofs for documents returned in [zkDocuments].
      *   An application can use [org.multipaz.mdoc.zkp.ZkSystem] to do this.
      * - Checking or decrypting any encrypted documents returned in [encryptedDocuments].
@@ -102,8 +104,8 @@ data class DeviceResponse internal constructor(
      *
      * @param sessionTranscript the session transcript to use.
      * @param eReaderKey the ephemeral reader key or `null` if not using session encryption.
-     * @param deviceRequest the request to which this response is given; required when verifying
-     *   `dc+sd-jwt` documents in [otherDocuments] or when transaction data was sent in the request.
+     * @param deviceRequest the request to which this response is given; required when matching
+     *   returned documents against request constraints or when transaction data was sent in the request.
      * @param documentTypeRepository repository that contains all known transaction types; must
      *   be given if [deviceRequest] is given and contains transaction data.
      * @param atTime the point in time for validating whether returned documents are valid.
@@ -265,7 +267,6 @@ data class DeviceResponse internal constructor(
                         throw IllegalStateException("Invalid docRequestId $id in OtherDocument")
                     }
                 }
-                val expectedAudience: String?
                 val transactionData: List<TransactionData<*>>
                 val requireHolderBinding = explicitIds.isEmpty() ||
                     explicitIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
@@ -283,17 +284,6 @@ data class DeviceResponse internal constructor(
                             deviceRequest = deviceRequest,
                             documentTypeRepository = documentTypeRepository
                         )
-                    }
-                    if (sdJwtKb != null) {
-                        val audiences = explicitIds.map { id ->
-                            deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[id])
-                        }.distinct()
-                        if (audiences.size != 1) {
-                            throw IllegalStateException("Inconsistent expected audiences across docRequestIds $explicitIds")
-                        }
-                        expectedAudience = audiences.single()
-                    } else {
-                        expectedAudience = null
                     }
                     transactionData = if (documentTypeRepository == null) {
                         emptyList()
@@ -314,7 +304,6 @@ data class DeviceResponse internal constructor(
                         )
                     }
                 } else {
-                    expectedAudience = null
                     transactionData = emptyList()
                 }
                 otherDocument.verify(
@@ -322,7 +311,6 @@ data class DeviceResponse internal constructor(
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    expectedAudience = expectedAudience,
                     requireHolderBinding = requireHolderBinding,
                 )
             } else {
@@ -336,7 +324,7 @@ data class DeviceResponse internal constructor(
                 } else {
                     null
                 }
-                if (deviceRequest != null && docRequest == null && deviceRequest.docRequests.any { it.hasTransactionData() }) {
+                if (deviceRequest != null && docRequest == null) {
                     throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
                 }
                 val requireHolderBinding = deviceRequest == null ||
@@ -352,13 +340,11 @@ data class DeviceResponse internal constructor(
                         documentTypeRepository = documentTypeRepository
                     )
                 }
-                val expectedAudience = deviceRequest?.getExpectedOtherDocumentAudience(docRequest)
                 otherDocument.verify(
                     sessionTranscript = sessionTranscript,
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    expectedAudience = expectedAudience,
                     requireHolderBinding = requireHolderBinding,
                 )
                 if (docRequest != null && otherDocument.docFormat == "dc+sd-jwt") {
@@ -602,15 +588,7 @@ data class DeviceResponse internal constructor(
             return candidates.single()
         }
         if (candidates.none { deviceRequest.docRequests[it].hasTransactionData() }) {
-            if (sdJwtKb == null) {
-                return candidates.first()
-            }
-            val audiences = candidates.map { index ->
-                deviceRequest.getExpectedOtherDocumentAudience(deviceRequest.docRequests[index])
-            }.distinct()
-            if (audiences.size == 1) {
-                return candidates.first()
-            }
+            return candidates.first()
         }
         return -1
     }

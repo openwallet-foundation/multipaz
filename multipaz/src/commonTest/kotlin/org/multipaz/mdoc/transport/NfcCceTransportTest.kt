@@ -18,8 +18,8 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -46,11 +46,13 @@ import kotlin.time.Duration.Companion.seconds
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NfcCceTransportTest {
-    private lateinit var senderKey: EcPublicKey
+    private lateinit var senderKey: ByteString
 
     @BeforeTest
     fun setup() = runTest {
-        senderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        senderKey = buildDeviceEngagement(
+            eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+        ) {}.eDeviceKeyBytes
     }
 
     /**
@@ -534,7 +536,7 @@ class NfcCceTransportTest {
 
         override suspend fun advertise() {}
 
-        override suspend fun open(eSenderKey: EcPublicKey) {
+        override suspend fun open(eSenderKeyBytes: ByteString) {
             _state.value = State.CONNECTING
             openGate?.await()
             _state.value = State.CONNECTED

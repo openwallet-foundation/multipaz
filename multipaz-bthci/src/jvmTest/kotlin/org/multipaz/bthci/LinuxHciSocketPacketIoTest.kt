@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.BleCentralConfig
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -62,7 +63,9 @@ class LinuxHciSocketPacketIoTest {
                     }
 
                     val serviceUuid = UUID.randomUUID()
-                    val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey }
+                    val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use {
+                        buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes
+                    }
 
                     val centralFactory = BtHciMdocTransportFactory(
                         centralConfig = BleCentralConfig(

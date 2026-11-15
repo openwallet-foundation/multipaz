@@ -619,6 +619,7 @@ sealed class MdocConnectionMethod {
                     is Nfc -> result.add(
                         encodeNfcNdefHandoverCarrier(
                             nfc = method,
+                            handoverType = handoverType,
                             sharedAuxiliaryReferences = sharedAuxiliaryReferences,
                         )
                     )
@@ -661,7 +662,7 @@ sealed class MdocConnectionMethod {
                 record.type.decodeToString() == NfcConst.EXTERNAL_TYPE_ISO_18013_5_NFC &&
                 record.id.decodeToString() == Nfc.CARRIER_DATA_REFERENCE_NFC
             ) {
-                return listOfNotNull(decodeNfcNdefHandoverCarrier(record))
+                return listOfNotNull(decodeNfcNdefHandoverCarrier(record, senderRole))
             } else if (record.tnf == NdefRecord.Tnf.EXTERNAL_TYPE) {
                 val externalType = record.type.decodeToString()
                 if (externalType == NfcConst.EXTERNAL_TYPE_ISO_18013_5_DEVICE_ENGAGEMENT ||

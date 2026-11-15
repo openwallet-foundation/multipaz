@@ -7,6 +7,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -118,8 +119,8 @@ class NfcTransportTests {
 
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        mdoc.open(eSenderKey = eReaderKey.publicKey)
-        mdocReader.open(eSenderKey = eDeviceKey.publicKey)
+        mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+        mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         // Do two ping-pongs, one where messages won't need chunking, one where they do.
 
@@ -143,7 +144,7 @@ class NfcTransportTests {
         // Check via the transcript that only the second interaction was chunked.
         assertEquals(
             """
-CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480400), le=0) (12 bytes)
+CommandApdu(cla=0, ins=164, p1=4, p2=12, payload=ByteString(size=7 hex=a0000002480400), le=0) (12 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=1028 hex=538204000000000000000000000... (1037 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=2052 hex=5382080000000000000000000000000000000000... (2054 bytes)
@@ -187,8 +188,8 @@ close
 
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        mdoc.open(eSenderKey = eReaderKey.publicKey)
-        mdocReader.open(eSenderKey = eDeviceKey.publicKey)
+        mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+        mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         // Check that maxTransceiveLength of 4 KiB is respected
 
@@ -205,7 +206,7 @@ close
         // Check via the transcript messages are chunked to fit in 4 KiB APDUs
         assertEquals(
             """
-CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480400), le=0) (12 bytes)
+CommandApdu(cla=0, ins=164, p1=4, p2=12, payload=ByteString(size=7 hex=a0000002480400), le=0) (12 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
 CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=4089 hex=53822800000000000000000000... (4096 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
@@ -252,8 +253,8 @@ close
 
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        mdoc.open(eSenderKey = eReaderKey.publicKey)
-        mdocReader.open(eSenderKey = eDeviceKey.publicKey)
+        mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+        mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
 
         tag.failNextTransceive = true
         mdocReader.sendMessage(ByteArray(64))
@@ -293,7 +294,7 @@ close
 
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         assertFailsWith<MdocTransportException> {
-            mdocReader.open(eSenderKey = eDeviceKey.publicKey)
+            mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
         }
         assertEquals(MdocTransport.State.FAILED, mdocReader.state.value)
         assertEquals(1, tag.closeCount)
@@ -365,7 +366,7 @@ close
             options = MdocTransportOptions(),
             connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
-        mdoc1.open(eSenderKey = eReaderKey.publicKey)
+        mdoc1.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
         val wrongSelect = CommandApdu(
             cla = 0x00,
             ins = Nfc.INS_SELECT,
@@ -388,7 +389,7 @@ close
             options = MdocTransportOptions(),
             connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
-        mdoc2.open(eSenderKey = eReaderKey.publicKey)
+        mdoc2.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
         val unsupportedApdu = CommandApdu(
             cla = 0x00,
             ins = 0x99,
@@ -408,7 +409,7 @@ close
             options = MdocTransportOptions(),
             connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
-        mdoc3.open(eSenderKey = eReaderKey.publicKey)
+        mdoc3.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
         val validSelect = CommandApdu(
             cla = 0x00,
             ins = Nfc.INS_SELECT,
@@ -461,7 +462,7 @@ close
             options = MdocTransportOptions(),
             connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
-        mdoc.open(eSenderKey = eReaderKey.publicKey)
+        mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
         assertEquals(
             Nfc.RESPONSE_STATUS_SUCCESS,
             NfcTransportMdoc.processCommandApdu(validSelect).status
@@ -498,7 +499,7 @@ close
             options = MdocTransportOptions(),
             connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
         )
-        mdoc2.open(eSenderKey = eReaderKey.publicKey)
+        mdoc2.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
         NfcTransportMdoc.onDeactivated()
         assertEquals(MdocTransport.State.FAILED, mdoc2.state.value)
         mdoc2.close()

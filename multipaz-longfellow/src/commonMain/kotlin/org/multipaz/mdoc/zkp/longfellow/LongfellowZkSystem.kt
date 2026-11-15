@@ -9,7 +9,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -65,29 +64,29 @@ class LongfellowZkSystem(): ZkSystem {
         return timestamp.truncateToWholeSeconds().toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO) + "Z"
     }
 
-    private fun getLongfellowZkSystemSpec(zkSystemSpec: ZkSystemSpec): LongfellowZkSystemSpec? {
-        val entry = circuits.find { circuitEntry ->
-            val circuitSpec = circuitEntry.zkSystemSpec
-
-            circuitSpec.getParam<String>("circuit_hash") == zkSystemSpec.getParam<String>("circuit_hash") &&
-                    circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
-                    circuitSpec.getParam<Long>("num_attributes") == zkSystemSpec.getParam<Long>("num_attributes")
-        }
-
-        return entry?.longfellowZkSystemSpec
+    private fun findCircuitEntry(zkSystemSpec: ZkSystemSpec): CircuitEntry? {
+        val reqHash = zkSystemSpec.getParam<String>("circuit_hash") ?: return null
+        val reqVersion = zkSystemSpec.getParam<Long>("version")
+        val reqNumAttributes = zkSystemSpec.getParam<Long>("num_attributes")
+        val reqBlockEncHash = zkSystemSpec.getParam<Long>("block_enc_hash")
+        val reqBlockEncSig = zkSystemSpec.getParam<Long>("block_enc_sig")
+        return circuits
+            .filter { circuitEntry ->
+                val circuitSpec = circuitEntry.zkSystemSpec
+                circuitSpec.getParam<String>("circuit_hash") == reqHash &&
+                    (reqVersion == null || circuitSpec.getParam<Long>("version") == reqVersion) &&
+                    (reqNumAttributes == null || circuitSpec.getParam<Long>("num_attributes") == reqNumAttributes) &&
+                    (reqBlockEncHash == null || circuitSpec.getParam<Long>("block_enc_hash") == reqBlockEncHash) &&
+                    (reqBlockEncSig == null || circuitSpec.getParam<Long>("block_enc_sig") == reqBlockEncSig)
+            }
+            .maxByOrNull { it.zkSystemSpec.getParam<Long>("version") ?: Long.MIN_VALUE }
     }
 
-    private fun getCircuitBytes(zkSystemSpec: ZkSystemSpec): ByteString? {
-        val entry = circuits.find { circuitEntry ->
-            val circuitSpec = circuitEntry.zkSystemSpec
+    private fun getLongfellowZkSystemSpec(zkSystemSpec: ZkSystemSpec): LongfellowZkSystemSpec? =
+        findCircuitEntry(zkSystemSpec)?.longfellowZkSystemSpec
 
-            circuitSpec.getParam<String>("circuit_hash") == zkSystemSpec.getParam<String>("circuit_hash") &&
-            circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
-            circuitSpec.getParam<Long>("num_attributes") == zkSystemSpec.getParam<Long>("num_attributes")
-        }
-
-        return entry?.circuitBytes
-    }
+    private fun getCircuitBytes(zkSystemSpec: ZkSystemSpec): ByteString? =
+        findCircuitEntry(zkSystemSpec)?.circuitBytes
 
     private fun parseCircuitFilename(circuitFileName: String): Pair<ZkSystemSpec, LongfellowZkSystemSpec>? {
         val circuitNameParts = circuitFileName.split("_")
@@ -223,14 +222,14 @@ class LongfellowZkSystem(): ZkSystem {
         }
 
         val zkDocument = ZkDocument(
-            proof=ByteString(proof),
-            documentData = ZkDocumentData (
+            proof = ByteString(proof),
+            documentData = ZkDocumentData(
                 zkSystemSpecId = zkSystemSpec.id,
                 docType = docType,
                 timestamp = adjustedTimestamp,
                 issuerSigned = issuerSigned,
                 deviceSigned = emptyMap(),     // TODO: support deviceSigned in Longfellow
-                msoX5chain = X509CertChain(listOf(issuerCert)),
+                msoX5chain = document.issuerCertChain,
             )
         )
 
@@ -356,25 +355,34 @@ class LongfellowZkSystem(): ZkSystem {
             return null
         }
 
-        // Get the set of allowed circuit hashes from the input list for efficient lookup.
-        val allowedCircuitHashes = zkSystemSpecs
-            .mapNotNull { it.getParam<String>("circuit_hash") }
-            .toSet()
+        var bestMatch: Pair<ZkSystemSpec, Long>? = null
+        for (reqSpec in zkSystemSpecs) {
+            if (reqSpec.system != name) continue
+            val reqCircuitHash = reqSpec.getParam<String>("circuit_hash") ?: continue
+            val reqVersion = reqSpec.getParam<Long>("version")
+            val reqNumAttributes = reqSpec.getParam<Long>("num_attributes")
+            if (reqNumAttributes != null && reqNumAttributes != numAttributesRequested) continue
+            val reqBlockEncHash = reqSpec.getParam<Long>("block_enc_hash")
+            val reqBlockEncSig = reqSpec.getParam<Long>("block_enc_sig")
 
-        // If no valid hashes are provided from the input list, we cannot find a match.
-        if (allowedCircuitHashes.isEmpty()) {
-            return null
-        }
+            for (entry in circuits) {
+                val circuitSpec = entry.zkSystemSpec
+                val circuitVersion = circuitSpec.getParam<Long>("version") ?: Long.MIN_VALUE
+                if (circuitSpec.getParam<String>("circuit_hash") != reqCircuitHash) continue
+                if (circuitSpec.getParam<Long>("num_attributes") != numAttributesRequested) continue
+                if (reqVersion != null && circuitVersion != reqVersion) continue
+                if (reqBlockEncHash != null && circuitSpec.getParam<Long>("block_enc_hash") != reqBlockEncHash) continue
+                if (reqBlockEncSig != null && circuitSpec.getParam<Long>("block_enc_sig") != reqBlockEncSig) continue
 
-        // Find all specs which match ...
-        val applicableSpecs = systemSpecs
-            .filter { spec ->
-                val circuitHash = spec.getParam<String>("circuit_hash")
-                val hashMatches = (circuitHash != null && circuitHash in allowedCircuitHashes)
-                val numAttributesMatch = spec.getParam<Long>("num_attributes") == numAttributesRequested
-                hashMatches && numAttributesMatch
+                if (bestMatch == null || circuitVersion > bestMatch.second) {
+                    val resolved = ZkSystemSpec(id = reqSpec.id, system = name)
+                    for ((k, v) in circuitSpec.params) {
+                        resolved.addParam(k, v.toDataItem())
+                    }
+                    bestMatch = resolved to circuitVersion
+                }
             }
-        // ... and pick the one with the biggest version number
-        return applicableSpecs.maxByOrNull { it.getParam<Long>("version") ?: Long.MIN_VALUE }
+        }
+        return bestMatch?.first
     }
 }

@@ -351,14 +351,14 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                 val requesterSupportedZkSpecs = docRequest.docRequestInfo.zkRequest.systemSpecs
                 val zkSystemRepository = source.zkSystemRepository
                 if (zkSystemRepository != null) {
-                    // Find the first ZK System that the requester supports and matches the document
+                    // Find the first ZK System spec that the requester supports and matches the document
                     for (zkSpec in requesterSupportedZkSpecs) {
                         val zkSystem = zkSystemRepository.lookup(zkSpec.system)
                         if (zkSystem == null) {
                             continue
                         }
                         val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                            zkSystemSpecs = requesterSupportedZkSpecs,
+                            zkSystemSpecs = listOf(zkSpec),
                             requestedClaims = match.claims.keys.toList()
                         )
                         if (matchingZkSystemSpec != null) {
@@ -370,12 +370,25 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                 }
             }
 
+            val zkRequired = docRequest.docRequestInfo?.zkRequest?.zkRequired == true ||
+                docRequest.docRequestInfo?.docFormat == "mso_mdoc_zk"
+            if (zkRequired && (zkSystemMatch == null || zkSystemSpec == null)) {
+                throw Iso18015ResponseException(
+                    "ZK proof is required by DocRequest ${docRequest.docRequestId} but no compatible ZkSystemSpec was found"
+                )
+            }
             if (zkRequested && zkSystemSpec == null) {
                 Logger.w(TAG, "Reader requested ZK proof but no compatible ZkSpec was found.")
             }
 
             // The session transcript to use depends on whether the response is to be encrypted
             val sessionTranscriptToUse = docRequest.docRequestInfo?.docResponseEncryption?.let {
+                try {
+                    it.validateCertificateChain(atTime = creationTime)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw Iso18015ResponseException("Invalid docResponseEncryption certificate chain", e)
+                }
                 EncryptedDocuments.buildSessionTranscript(
                     originalSessionTranscript = sessionTranscript,
                     encryptionParameters = it
@@ -429,35 +442,12 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         tagNumber = Tagged.ENCODED_CBOR,
                         taggedItem = Bstr(Cbor.encode(sessionTranscriptToUse))
                     )
-                    // The audience depends on readerAuthAll and/or readerAuth
-                    val audience = if (deviceRequest.readerAuthAll.isNotEmpty()) {
-                        val listOfReaderAuthAll = buildCborArray {
-                            deviceRequest.readerAuthAll.forEach {
-                                add(it.toDataItem())
-                            }
-                        }
-                        Crypto.digest(
-                            algorithm = Algorithm.SHA256,
-                            message = Cbor.encode(
-                                Tagged(
-                                    tagNumber = Tagged.ENCODED_CBOR,
-                                    taggedItem = Bstr(Cbor.encode(listOfReaderAuthAll))
-                                )
-                            )
-                        ).toBase64Url()
-                    } else if (docRequest.readerAuth != null) {
-                        Crypto.digest(
-                            algorithm = Algorithm.SHA256,
-                            message = Cbor.encode(
-                                Tagged(
-                                    tagNumber = Tagged.ENCODED_CBOR,
-                                    taggedItem = Bstr(Cbor.encode(docRequest.readerAuth!!.toDataItem()))
-                                )
-                            )
-                        ).toBase64Url()
-                    } else {
-                        "none"
-                    }
+                    // Per ISO/IEC 18013-5 Second Edition Annex H.2, both `nonce` and `aud` in the
+                    // Key Binding JWT are `base64url(SHA-256(SessionTranscriptBytes))`.
+                    val sessionTranscriptHash = Crypto.digest(
+                        Algorithm.SHA256,
+                        Cbor.encode(sessionTranscriptToUseBytes)
+                    ).toBase64Url()
                     val sdJwtVc = SdJwt.fromCompactSerialization(match.credential.issuerProvidedData.decodeToString())
                     val pathsToDisclose = match.claims.map { (requestedClaim, _) ->
                         requestedClaim as MdocRequestedClaim
@@ -484,8 +474,8 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                             keyInfo = match.credential.secureArea.getKeyInfo(match.credential.alias),
                             unlockReason = PresentmentUnlockReason(match.credential),
                         ),
-                        nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptToUseBytes)).toBase64Url(),
-                        audience = audience,
+                        nonce = sessionTranscriptHash,
+                        audience = sessionTranscriptHash,
                         creationTime = creationTime
                     ) {
                         if (!match.transactionData.isEmpty()) {
@@ -544,9 +534,6 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                 else -> throw IllegalStateException("No support for presenting credential of type ${match.credential.credentialType}")
             }
 
-            if (!deferStateCommit) {
-                match.credential.increaseUsageCount()
-            }
             credentialsPresented.add(match.credential)
         }
 
@@ -560,6 +547,20 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
         throw AuthenticationFailedException("User authentication failed", e)
     }
 
+    val minMaxResponseSize = selection.matches.mapNotNull { match ->
+        val src = match.source as PresentmentCredentialMatchSourceIso18013
+        val dr = deviceRequest.docRequests.getOrNull(src.docRequest.docRequestId) ?: src.docRequest
+        dr.docRequestInfo?.maximumResponseSize
+    }.minOrNull()
+    if (minMaxResponseSize != null) {
+        val encodedSize = Cbor.encode(deviceResponse.toDataItem()).size.toLong()
+        if (encodedSize > minMaxResponseSize) {
+            throw Iso18015ResponseException(
+                "DeviceResponse size ($encodedSize bytes) exceeds maximumResponseSize ($minMaxResponseSize bytes)"
+            )
+        }
+    }
+
     val commitState: suspend () -> Unit = {
         for (credential in credentialsPresented) {
             credential.increaseUsageCount()
@@ -571,11 +572,8 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
             )
         }
     }
-    if (!deferStateCommit && selection.matches.isNotEmpty()) {
-        source.requesterHistory?.recordShare(
-            requester = requester,
-            trustedRequesterIdentity = trustedRequesterIdentity,
-        )
+    if (!deferStateCommit) {
+        commitState()
     }
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())

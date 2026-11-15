@@ -95,7 +95,7 @@ class MultiDeviceTestsClient(
                 try {
                     withTimeout(45.seconds) {
                         val timeStart = Clock.System.now()
-                        transport.open(eDeviceKey)
+                        transport.open(deviceEngagement.eDeviceKeyBytes)
 
                         val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
                         val encodedSessionTranscript = byteArrayOf(0x01, 0x02)

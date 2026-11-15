@@ -14,7 +14,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.nfc.MdocNfcPresentmentService
 import org.multipaz.mdoc.role.MdocRole
@@ -163,7 +162,7 @@ class NfcTransportMdoc(
         }
     }
 
-    override suspend fun open(eSenderKey: EcPublicKey) {
+    override suspend fun open(eSenderKeyBytes: ByteString) {
         mutex.withLock {
             check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
             Logger.i(TAG, "open")

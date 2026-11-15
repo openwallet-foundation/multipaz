@@ -1,9 +1,13 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
@@ -22,6 +26,7 @@ import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.KeylessMdocCredential
@@ -39,10 +44,16 @@ import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.request.MdocRequestedClaim
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 /**
  * A document in a [DeviceResponse].
+ *
+ * Note that verification of this document (via [DeviceResponse.verify]) does not check X.509 CRL/OCSP
+ * revocation on [issuerCertChain] or MSO revocation via [MobileSecurityObject.revocationStatus];
+ * the caller is expected to check issuer trust, certificate revocation, and MSO revocation status
+ * (e.g., via `RevocationStatus.check`) separately when required.
  *
  * @property docType the type of the document, e.g. "org.iso.18013.5.1.mDL".
  * @property issuerAuth the issuer-signed Mobile Security Object.
@@ -153,6 +164,19 @@ class MdocDocument(
     ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain = issuerCertChain
+        if (issuerAuthorityCertChain.certificates.isEmpty()) {
+            throw IllegalStateException("Issuer certificate chain is empty")
+        }
+        if (issuerAuthorityCertChain.certificates.size > 1) {
+            try {
+                issuerAuthorityCertChain.validate(
+                    validateValidity = false,
+                    validateCaValidity = false
+                )
+            } catch (e: Exception) {
+                throw IllegalStateException("Issuer certificate chain validation failed", e)
+            }
+        }
         val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
         if (x5tLabel in issuerAuth.protectedHeaders && x5tLabel in issuerAuth.unprotectedHeaders) {
             throw IllegalStateException("COSE x5t cannot appear in both protected and unprotected headers of IssuerAuth")
@@ -188,11 +212,21 @@ class MdocDocument(
 
         // Check validity
         val dsCert = issuerAuthorityCertChain.certificates[0]
+        if (X509KeyUsage.DIGITAL_SIGNATURE !in dsCert.keyUsage) {
+            throw IllegalStateException("DS certificate does not have digitalSignature key usage")
+        }
+        if (docType == "org.iso.18013.5.1.mDL" && OID.ISO_18013_5_MDL_DS.oid !in dsCert.extendedKeyUsage) {
+            throw IllegalStateException("mDL DS certificate is missing mDL DS Extended Key Usage")
+        }
         if (mso.signedAt < dsCert.validityNotBefore || mso.signedAt > dsCert.validityNotAfter) {
             throw IllegalStateException("MSO signed date is outside DS certificate validity period")
         }
         if (rejectIfValidUntilAfterNotAfter && mso.validUntil > dsCert.validityNotAfter) {
             throw IllegalStateException("MSO validUntil is after DS certificate validity period")
+        }
+        val msoValidation = mso.validate(now = null)
+        if (msoValidation.hasErrors) {
+            throw IllegalStateException("Invalid MSO: ${msoValidation.errors.first().message}")
         }
         if (atTime < mso.validFrom) {
             throw IllegalStateException("MSO is not yet valid")
@@ -287,6 +321,16 @@ class MdocDocument(
                 ?: throw IllegalStateException("No digests IDs for namespace $namespace")
             innerMap.forEach { (dataElementName, issuerSignedItem) ->
                 require(dataElementName == issuerSignedItem.dataElementIdentifier)
+                if (issuerSignedItem.random.size < 16) {
+                    throw IllegalStateException(
+                        "IssuerSignedItem random for $dataElementName in $namespace must be at least 16 bytes"
+                    )
+                }
+                if (issuerSignedItem.digestId !in 0..0x7fff_ffffL) {
+                    throw IllegalStateException(
+                        "IssuerSignedItem digestID for $dataElementName in $namespace out of range"
+                    )
+                }
                 // Note: If this instance was created via fromDataItem() use the digest from there.
                 val digest = if (issuerNamespaceDigests != null) {
                     issuerNamespaceDigests[namespace]!![dataElementName]!!
@@ -310,6 +354,54 @@ class MdocDocument(
                     throw IllegalStateException(
                         "Device-signed data element '$dataElementName' in namespace '$namespaceName' is not authorized by MSO"
                     )
+                }
+            }
+        }
+
+        // Check mDL-specific cross-checks per ISO/IEC 18013-5 Second Edition Clauses 13.1 and 13.4.11
+        if (docType == "org.iso.18013.5.1.mDL") {
+            val mdlElements = issuerNamespaces.data["org.iso.18013.5.1"]
+                ?.mapValues { it.value.dataElementValue }
+                .orEmpty() + deviceNamespaces.data["org.iso.18013.5.1"].orEmpty()
+            mdlElements["issuing_country"]?.let { countryItem ->
+                val issuingCountry = countryItem.asTstr
+                if (dsCert.subject.countryName == null || issuingCountry != dsCert.subject.countryName) {
+                    throw IllegalStateException(
+                        "mDL issuing_country '$issuingCountry' does not match DS certificate countryName '${dsCert.subject.countryName}'"
+                    )
+                }
+            }
+            mdlElements["issuing_jurisdiction"]?.let { jurisdictionItem ->
+                val issuingJurisdiction = jurisdictionItem.asTstr
+                val dsState = dsCert.subject.stateOrProvinceName
+                if (dsState != null && issuingJurisdiction != dsState) {
+                    throw IllegalStateException(
+                        "mDL issuing_jurisdiction '$issuingJurisdiction' does not match DS certificate stateOrProvinceName '$dsState'"
+                    )
+                }
+            }
+            mdlElements["expiry_date_after_validuntil"]?.let { afterValidUntilItem ->
+                if (afterValidUntilItem != Simple.TRUE) {
+                    throw IllegalStateException(
+                        "mDL expiry_date_after_validuntil must be encoded as CBOR Simple.TRUE"
+                    )
+                }
+                mdlElements["expiry_date"]?.let { expiryItem ->
+                    if (expiryItem is Tagged && expiryItem.tagNumber == Tagged.DATE_TIME_STRING) {
+                        val expiryInstant = expiryItem.asDateTimeString
+                        if (expiryInstant <= mso.validUntil) {
+                            throw IllegalStateException(
+                                "mDL expiry_date ($expiryInstant) is not after MSO validUntil (${mso.validUntil}) despite expiry_date_after_validuntil"
+                            )
+                        }
+                    } else if (expiryItem is Tagged && expiryItem.tagNumber == Tagged.FULL_DATE_STRING) {
+                        val latestExpiryEndOfDay = expiryItem.asDateString.atStartOfDayIn(TimeZone.of("UTC-12")) + 1.days
+                        if (latestExpiryEndOfDay <= mso.validUntil) {
+                            throw IllegalStateException(
+                                "mDL expiry_date (${expiryItem.asDateString}) is not after MSO validUntil (${mso.validUntil}) despite expiry_date_after_validuntil"
+                            )
+                        }
+                    }
                 }
             }
         }
