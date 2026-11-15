@@ -15,10 +15,8 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.yearsUntil
 import org.multipaz.cbor.RawCbor
@@ -95,10 +93,11 @@ class CredentialFactoryMdl : CredentialFactory {
             .mdocDocumentType!!.namespaces[DrivingLicense.MDL_NAMESPACE]!!
 
         val timeZone = TimeZone.currentSystemDefault()
-        val dateOfBirthInstant = dateOfBirth.atStartOfDayIn(timeZone)
-        // over 18/21 is calculated purely based on calendar date (not based on the birth time zone)
-        val ageOver18 = now > dateOfBirthInstant.plus(18, DateTimeUnit.YEAR, timeZone)
-        val ageOver21 = now > dateOfBirthInstant.plus(21, DateTimeUnit.YEAR, timeZone)
+        // Per ISO/IEC 18013-5 Clause 13.4.6, age_over_NN shall be calculated to be valid at
+        // the timestamp in the validFrom element in the MSO.
+        val ageAtValidFrom = dateOfBirth.yearsUntil(validFrom.toLocalDateTime(timeZone).date)
+        val ageOver18 = ageAtValidFrom >= 18
+        val ageOver21 = ageAtValidFrom >= 21
 
         val issuerNamespaces = buildIssuerNamespaces {
             addNamespace(DrivingLicense.MDL_NAMESPACE) {
@@ -190,12 +189,11 @@ class CredentialFactoryMdl : CredentialFactory {
                     added.add("portrait")
                 }
 
-                // Values derived from the birth_date
-                addDataElement("age_in_years",
-                    Uint(dateOfBirth.yearsUntil(now.toLocalDateTime(timeZone).date).toULong()))
+                // Values derived from the birth_date at MSO validFrom
+                addDataElement("age_in_years", Uint(ageAtValidFrom.coerceAtLeast(0).toULong()))
                 addDataElement("age_birth_year", Uint(dateOfBirth.year.toULong()))
                 addDataElement("age_over_18", if (ageOver18) Simple.TRUE else Simple.FALSE)
-                addDataElement( "age_over_21", if (ageOver21) Simple.TRUE else Simple.FALSE)
+                addDataElement("age_over_21", if (ageOver21) Simple.TRUE else Simple.FALSE)
 
                 // Add all mandatory elements for completeness if they are missing.
                 for ((elementName, data) in mdocType.dataElements) {

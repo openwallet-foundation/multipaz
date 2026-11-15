@@ -750,7 +750,8 @@ object OpenID4VP {
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
             requestedClaims = match.claims.keys.filterIsInstance<MdocRequestedClaim>(),
-            deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials)
+            deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),
+            iso18013AgeOverSubstitution = false,
         )
         val deviceResponse = buildDeviceResponse(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),

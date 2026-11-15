@@ -981,7 +981,8 @@ private func calcRequestData(
     let presentmentData = try! await deviceRequest!.execute(
         presentmentSource: source,
         keyAgreementPossible: [],
-        requesterIdentities: requester.requesterIdentities
+        requesterIdentities: requester.requesterIdentities,
+        atTime: KotlinClockCompanion.shared.getSystem().now()
     )
     return RequestData(
         requester: requester,

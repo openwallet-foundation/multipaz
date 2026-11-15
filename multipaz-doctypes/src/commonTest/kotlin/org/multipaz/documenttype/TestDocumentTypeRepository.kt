@@ -544,4 +544,43 @@ class TestDocumentTypeRepository {
         assertNotNull(json.getDocumentAttribute("address.house_number"))
     }
 
+    @Test
+    fun testDrivingLicenseAllAgeOver00To99AndFullSampleRequest() {
+        val dlDocType = DrivingLicense.getDocumentType()
+        val mdlNs = dlDocType.mdocDocumentType!!.namespaces[DrivingLicense.MDL_NAMESPACE]!!
+        val sampleTrueThresholds = setOf(13, 16, 18, 21, 25)
+        val sampleFalseThresholds = setOf(60, 62, 65, 68)
+        val sampleThresholds = sampleTrueThresholds + sampleFalseThresholds
+
+        for (nn in 0..99) {
+            val key = "age_over_${nn.toString().padStart(2, '0')}"
+            val de = mdlNs.dataElements[key]
+            assertNotNull(de, "Missing $key in DrivingLicense MDL_NAMESPACE")
+            assertEquals(false, de.mandatory)
+            assertEquals(DocumentAttributeType.Boolean, de.attribute.type)
+            assertEquals(DocumentAttributeSensitivity.AGE_INFORMATION, de.attribute.sensitivity)
+            assertEquals("Older than $nn years", de.attribute.displayName)
+            when (nn) {
+                in sampleTrueThresholds -> assertEquals(Simple.TRUE, de.attribute.sampleValueMdoc)
+                in sampleFalseThresholds -> assertEquals(Simple.FALSE, de.attribute.sampleValueMdoc)
+                else -> assertNull(de.attribute.sampleValueMdoc, "Expected null sampleValueMdoc for $key")
+            }
+        }
+
+        // Verify "full" sample requests in DrivingLicense and IDPass keep the existing 46 mDL elements
+        for (dt in listOf(dlDocType, IDPass.getDocumentType())) {
+            val fullReq = dt.cannedRequests.find { it.id == "full" }?.mdocRequest
+            assertNotNull(fullReq)
+            val fullMdlElements = fullReq.namespacesToRequest
+                .find { it.namespace == DrivingLicense.MDL_NAMESPACE }!!
+                .dataElementsToRequest.keys.map { it.attribute.identifier }
+            assertEquals(46, fullMdlElements.size)
+            val requestedAgeOverThresholds = fullMdlElements
+                .filter { it.startsWith("age_over_") }
+                .map { it.removePrefix("age_over_").toInt() }
+                .toSet()
+            assertEquals(sampleThresholds, requestedAgeOverThresholds)
+        }
+    }
+
 }

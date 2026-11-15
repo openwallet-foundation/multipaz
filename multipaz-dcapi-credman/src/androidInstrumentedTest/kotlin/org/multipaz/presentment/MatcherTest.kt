@@ -6609,4 +6609,184 @@ class MatcherTest {
         Assert.assertTrue(isoMatch.contains("__Movie Ticket SD-JWT__"))
         Assert.assertTrue(isoMatch.contains("The Last Utopian"))
     }
+
+    @Test
+    fun testMatcher_Iso18013_mdlAgeOverNearestSubstitution() = runTest {
+        val initMdlHolder30: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.provisionMdoc(
+                displayName = "mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to Tstr("Erika"),
+                        "age_over_18" to Simple.TRUE,
+                        "age_over_21" to Simple.TRUE,
+                        "age_over_60" to Simple.FALSE,
+                        "age_in_years" to 30.toDataItem(),
+                    )
+                )
+            )
+        }
+
+        // 1. Step 1: Nearest true >= NN (request age_over_19 -> Older than 21 years: true)
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 21 years: true
+            """.trimIndent().trim() + "\n",
+            testMatcherIso18013(initMdlHolder30) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
+                ) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_19" to false))
+                    )
+                }
+            }
+        )
+
+        // 2. Step 2: Nearest false <= NN (request age_over_65 -> Older than 60 years: false)
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 60 years: false
+            """.trimIndent().trim() + "\n",
+            testMatcherIso18013(initMdlHolder30) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
+                ) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_65" to false))
+                    )
+                }
+            }
+        )
+
+        // 3. Step 3 gap (age_over_50 between 21=T and 60=F): falls back to AlternativeDataElements (age_in_years)
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Age in years: 30
+            """.trimIndent().trim() + "\n",
+            testMatcherIso18013(initMdlHolder30) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
+                ) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("age_over_50" to false)),
+                        docRequestInfo = DocRequestInfo(
+                            alternativeDataElements = listOf(
+                                AlternativeDataElementSet(
+                                    requestedElement = ElementReference(
+                                        namespace = DrivingLicense.MDL_NAMESPACE,
+                                        dataElement = "age_over_50",
+                                    ),
+                                    alternativeElementSets = listOf(
+                                        listOf(
+                                            ElementReference(
+                                                namespace = DrivingLicense.MDL_NAMESPACE,
+                                                dataElement = "age_in_years",
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+        )
+
+        // 4. Collapsing deduplication: requesting age_over_19 + age_over_20 both resolve to age_over_21 once
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 21 years: true
+            """.trimIndent().trim() + "\n",
+            testMatcherIso18013(initMdlHolder30) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
+                ) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to linkedMapOf(
+                                "age_over_19" to false,
+                                "age_over_20" to false,
+                            )
+                        )
+                    )
+                }
+            }
+        )
+
+        // 5. Max-2 age_over_NN cap: requesting 3 age_over_NN elements emits at most the first 2
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older than 18 years: true
+                    Older than 21 years: true
+            """.trimIndent().trim() + "\n",
+            testMatcherIso18013(initMdlHolder30) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO,
+                ) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to linkedMapOf(
+                                "age_over_18" to false,
+                                "age_over_21" to false,
+                                "age_over_65" to false,
+                            )
+                        )
+                    )
+                }
+            }
+        )
+
+        // 6. OpenID4VP DCQL does NOT perform ISO 18013-5 Clause 13.4.6 nearest-attestation substitution
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initMdlHolder30,
+                dcql = """
+                    {
+                      "credentials": [{
+                        "id": "mdl",
+                        "format": "mso_mdoc",
+                        "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                        "claims": [{ "path": ["${DrivingLicense.MDL_NAMESPACE}", "age_over_19"] }]
+                      }]
+                    }
+                """.trimIndent().trim(),
+            )
+        )
+    }
 }

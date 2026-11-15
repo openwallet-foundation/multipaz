@@ -655,6 +655,9 @@ class MdocDocument(
          * @param deviceNamespaces additional device-signed claims to present.
          * @param errors the errors to return.
          * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
+         * @param iso18013AgeOverSubstitution `true` to apply ISO/IEC 18013-5 Clause 13.4.6 nearest
+         *   `age_over_NN` substitution and max-2 capping for mDL (`org.iso.18013.5.1.mDL`), `false`
+         *   for exact claim path protocols such as OpenID4VP DCQL.
          * @return a [MdocDocument].
          */
         suspend fun fromPresentment(
@@ -665,9 +668,14 @@ class MdocDocument(
             deviceNamespaces: DeviceNamespaces = buildDeviceNamespaces {},
             errors: Map<String, Map<String, Int>> = emptyMap(),
             docRequestIds: List<Int>? = null,
+            iso18013AgeOverSubstitution: Boolean = true,
         ): MdocDocument {
             val issuerAuth = credential.issuerAuth
-            val filteredIssuerNamespaces = credential.issuerNamespaces.filter(requestedClaims)
+            val filteredIssuerNamespaces = credential.issuerNamespaces.filter(
+                requestedClaims = requestedClaims,
+                iso18013AgeOverSubstitution = iso18013AgeOverSubstitution &&
+                    credential.docType == "org.iso.18013.5.1.mDL",
+            )
             return when (credential) {
                 is KeyBoundMdocCredential -> fromNamespaces(
                     sessionTranscript = sessionTranscript,
