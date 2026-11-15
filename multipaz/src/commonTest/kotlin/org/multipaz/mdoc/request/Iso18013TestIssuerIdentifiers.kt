@@ -235,7 +235,7 @@ class Iso18013TestIssuerIdentifiers {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Issuer1
                               claims:
                                 claim:
@@ -275,7 +275,7 @@ class Iso18013TestIssuerIdentifiers {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Issuer1
                               claims:
                                 claim:

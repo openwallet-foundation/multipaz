@@ -34,7 +34,8 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.credential.Credential
 import org.multipaz.credential.CredentialLoaderBuilder
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mpzpass.MpzPass
 import org.multipaz.provisioning.Provisioning
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
@@ -318,9 +319,10 @@ class DocumentStore private constructor(
      * [ImportMpzPassException] will be thrown.
      *
      * @param mpzPass The [MpzPass] to import.
-     * @param isoMdocDomain The domain string to use when creating ISO mdoc credentials.
-     * @param sdJwtVcDomain The domain string to use when creating SD-JWT VC credentials.
+     * @param isoMdocDomain The domain string to use when creating key-bound ISO mdoc credentials.
+     * @param sdJwtVcDomain The domain string to use when creating key-bound SD-JWT VC credentials.
      * @param keylessSdJwtVcDomain the domain string to use when creating keyless SD-JWT VC credentials.
+     * @param keylessIsoMdocDomain the domain string to use when creating keyless ISO mdoc credentials.
      * @return An existing [Document] if updating, otherwise a newly created [Document]. In both cases
      * the returned document will have the credentials included in [mpzPass].
      * @throws IllegalStateException if a SoftwareSecureArea implementation cannot be found in the repository.
@@ -332,7 +334,8 @@ class DocumentStore private constructor(
         mpzPass: MpzPass,
         isoMdocDomain: String,
         sdJwtVcDomain: String,
-        keylessSdJwtVcDomain: String
+        keylessSdJwtVcDomain: String,
+        keylessIsoMdocDomain: String = "mdoc_keyless"
     ): Document {
         val softwareSecureArea = secureAreaRepository.getImplementation(SoftwareSecureArea.IDENTIFIER)
             ?: throw IllegalStateException(
@@ -368,26 +371,35 @@ class DocumentStore private constructor(
 
         try {
             mpzPass.isoMdoc.forEach { isoMdoc ->
-                val createKeySettingsBuilder = SoftwareCreateKeySettings.Builder()
-                    .setPrivateKey(isoMdoc.deviceKeyPrivate)
-                if (mpzPass.userAuthenticationRequired) {
-                    createKeySettingsBuilder.setUserAuthenticationRequired(
-                        true,
-                        setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC)
+                val credential = if (isoMdoc.deviceKeyPrivate != null) {
+                    val createKeySettingsBuilder = SoftwareCreateKeySettings.Builder()
+                        .setPrivateKey(isoMdoc.deviceKeyPrivate)
+                    if (mpzPass.userAuthenticationRequired) {
+                        createKeySettingsBuilder.setUserAuthenticationRequired(
+                            true,
+                            setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC)
+                        )
+                    }
+                    val importedKeyInfo = softwareSecureArea.createKey(
+                        alias = null,
+                        createKeySettings = createKeySettingsBuilder.build()
+                    )
+                    KeyBoundMdocCredential.createForExistingAlias(
+                        document = document,
+                        asReplacementForIdentifier = null,
+                        domain = isoMdocDomain,
+                        secureArea = softwareSecureArea,
+                        docType = isoMdoc.docType,
+                        existingKeyAlias = importedKeyInfo.alias,
+                    )
+                } else {
+                    KeylessMdocCredential.create(
+                        document = document,
+                        asReplacementForIdentifier = null,
+                        domain = keylessIsoMdocDomain,
+                        docType = isoMdoc.docType,
                     )
                 }
-                val importedKeyInfo = softwareSecureArea.createKey(
-                    alias = null,
-                    createKeySettings = createKeySettingsBuilder.build()
-                )
-                val credential = MdocCredential.createForExistingAlias(
-                    document = document,
-                    asReplacementForIdentifier = null,
-                    domain = isoMdocDomain,
-                    secureArea = softwareSecureArea,
-                    docType = isoMdoc.docType,
-                    existingKeyAlias = importedKeyInfo.alias,
-                )
                 credential.certify(
                     issuerProvidedAuthenticationData = ByteString(
                         Cbor.encode(buildCborMap {
@@ -463,7 +475,8 @@ class DocumentStore private constructor(
         private val secureAreaRepository: SecureAreaRepository,
     ) {
         private val credentialLoaderBuilder = CredentialLoaderBuilder().apply {
-            addMdocCredential()
+            addKeyBoundMdocCredential()
+            addKeylessMdocCredential()
             addKeylessSdJwtVcCredential()
             addKeyBoundSdJwtVcCredential()
         }

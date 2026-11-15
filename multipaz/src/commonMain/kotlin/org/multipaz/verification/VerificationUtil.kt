@@ -50,6 +50,7 @@ import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.allowsKeyless
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -132,7 +133,8 @@ object VerificationUtil {
         cborTransactionData: TransactionsInfo? = null,
         docRequestOtherInfo: Map<String, DataItem> = emptyMap(),
         issuerIdentifiers: List<ByteString> = emptyList(),
-        deviceRequestVersion: String? = null
+        deviceRequestVersion: String? = null,
+        requireCryptographicHolderBinding: Boolean = true,
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequest(
@@ -150,7 +152,8 @@ object VerificationUtil {
                 cborTransactionData = cborTransactionData,
                 docRequestOtherInfo = docRequestOtherInfo,
                 issuerIdentifiers = issuerIdentifiers,
-                deviceRequestVersion = deviceRequestVersion
+                deviceRequestVersion = deviceRequestVersion,
+                requireCryptographicHolderBinding = requireCryptographicHolderBinding,
             )
         }
         return buildJsonObject {
@@ -341,7 +344,8 @@ object VerificationUtil {
         cborTransactionData: TransactionsInfo?,
         docRequestOtherInfo: Map<String, DataItem>,
         issuerIdentifiers: List<ByteString> = emptyList(),
-        deviceRequestVersion: String? = null
+        deviceRequestVersion: String? = null,
+        requireCryptographicHolderBinding: Boolean = true,
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -363,7 +367,13 @@ object VerificationUtil {
                         verifierIdentities = verifierIdentities,
                         responseMode = OpenID4VP.ResponseMode.DC_API,
                         responseUri = null,
-                        dcqlQuery = calcDcqlMdoc(docType, claims, zkSystemSpecs, issuerIdentifiers),
+                        dcqlQuery = calcDcqlMdoc(
+                            docType = docType,
+                            claims = claims,
+                            zkSystemSpecs = zkSystemSpecs,
+                            issuerIdentifiers = issuerIdentifiers,
+                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                        ),
                         jsonTransactionData = jsonTransactionData
                     )
                 )
@@ -443,7 +453,12 @@ object VerificationUtil {
                                 dataElementIdentifierMapping = dataElementIdentifierMapping,
                                 transactionData = cborTransactionData,
                                 otherInfo = docRequestOtherInfo,
-                                issuerIdentifiers = issuerIdentifiers
+                                issuerIdentifiers = issuerIdentifiers,
+                                nonKeyBoundSupported = if (!requireCryptographicHolderBinding && zkRequest == null) {
+                                    true
+                                } else {
+                                    null
+                                },
                             )
                         },
                         readerKey = readerKey
@@ -513,7 +528,8 @@ object VerificationUtil {
         jsonTransactionData: List<String> = emptyList(),
         cborTransactionData: TransactionsInfo? = null,
         issuerIdentifiers: List<ByteString> = emptyList(),
-        deviceRequestVersion: String? = null
+        deviceRequestVersion: String? = null,
+        requireCryptographicHolderBinding: Boolean = true,
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -553,7 +569,8 @@ object VerificationUtil {
                                 jsonTransactionData = jsonTransactionData,
                                 docRequestOtherInfo = emptyMap(),
                                 issuerIdentifiers = issuerIdentifiers,
-                                deviceRequestVersion = deviceRequestVersion
+                                deviceRequestVersion = deviceRequestVersion,
+                                requireCryptographicHolderBinding = requireCryptographicHolderBinding,
                             )["data"] as JsonObject
                         )
                     }
@@ -575,7 +592,12 @@ object VerificationUtil {
                                 verifierIdentities = verifierIdentities,
                                 responseMode = OpenID4VP.ResponseMode.DC_API,
                                 responseUri = null,
-                                dcqlQuery = calcDcqlSdJwt(vct, claims, issuerIdentifiers),
+                                dcqlQuery = calcDcqlSdJwt(
+                                    vct = vct,
+                                    claims = claims,
+                                    issuerIdentifiers = issuerIdentifiers,
+                                    requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                                ),
                                 jsonTransactionData = jsonTransactionData
                             )
                         )
@@ -593,7 +615,8 @@ object VerificationUtil {
         docType: String,
         claims: List<MdocRequestedClaim>,
         zkSystemSpecs: List<ZkSystemSpec>,
-        issuerIdentifiers: List<ByteString> = emptyList()
+        issuerIdentifiers: List<ByteString> = emptyList(),
+        requireCryptographicHolderBinding: Boolean = true,
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
@@ -602,6 +625,9 @@ object VerificationUtil {
                     put("format", JsonPrimitive("mso_mdoc_zk"))
                 } else {
                     put("format", JsonPrimitive("mso_mdoc"))
+                    if (!requireCryptographicHolderBinding) {
+                        put("require_cryptographic_holder_binding", JsonPrimitive(false))
+                    }
                 }
                 putJsonObject("meta") {
                     put("doctype_value", JsonPrimitive(docType))
@@ -649,12 +675,16 @@ object VerificationUtil {
     private fun calcDcqlSdJwt(
         vct: List<String>,
         claims: List<JsonRequestedClaim>,
-        issuerIdentifiers: List<ByteString> = emptyList()
+        issuerIdentifiers: List<ByteString> = emptyList(),
+        requireCryptographicHolderBinding: Boolean = true,
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
                 put("id", JsonPrimitive("cred1"))
                 put("format", JsonPrimitive("dc+sd-jwt"))
+                if (!requireCryptographicHolderBinding) {
+                    put("require_cryptographic_holder_binding", JsonPrimitive(false))
+                }
                 putJsonObject("meta") {
                     put(
                         "vct_values",
@@ -1006,10 +1036,16 @@ object VerificationUtil {
                             documentTypeRepository = documentTypeRepository,
                             zkSystemRepository = if (credQueryData.zkRequested) zkSystemRepository else null,
                             transactionData = transactionData,
-                            vpTokenIdentifier = credId
+                            vpTokenIdentifier = credId,
+                            requireHolderBinding = credQueryData.requireCryptographicHolderBinding,
                         )
                         check(mdocVerifiedPresentations.size == 1)
                         val mdocPresentation = mdocVerifiedPresentations.single() as MdocVerifiedPresentation
+                        if (credQueryData.requireCryptographicHolderBinding && !mdocPresentation.holderBound) {
+                            throw IllegalStateException(
+                                "Cryptographic holder binding is required for query '$credId', but mdoc presentation is not holder-bound"
+                            )
+                        }
                         if (!credQueryData.zkRequested && mdocPresentation.zkpUsed) {
                             throw IllegalStateException(
                                 "Unexpected ZK presentation for non-ZK query '$credId'"
@@ -1186,6 +1222,7 @@ object VerificationUtil {
             transactionData = transactionData,
             revocationStatus = sdJwt.revocationStatus,
             docRequestIds = docRequestIds,
+            holderBound = sdJwtKb != null,
         )
     }
 
@@ -1254,7 +1291,8 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
         transactionData: List<TransactionData<*>>,
-        vpTokenIdentifier: String
+        vpTokenIdentifier: String,
+        requireHolderBinding: Boolean = true,
     ): List<VerifiedPresentation> {
         val deviceResponse = DeviceResponse.fromDataItem(deviceResponse)
         if (deviceResponse.status != DeviceResponse.STATUS_OK) {
@@ -1265,7 +1303,8 @@ object VerificationUtil {
         deviceResponse.verifySingleDoc(
             sessionTranscript = sessionTranscript,
             transactionData = transactionData,
-            atTime = now
+            atTime = now,
+            requireHolderBinding = requireHolderBinding,
         )
         return createVerifiedPresentationList(
             now = now,
@@ -1361,6 +1400,9 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
     ): Boolean {
         val req = request.docRequests[reqIndex]
+        if (!presentation.holderBound && !req.allowsKeyless(request)) {
+            return false
+        }
         val docFormat = req.docRequestInfo?.docFormat ?: "mso_mdoc"
         when (docFormat) {
             "dc+sd-jwt" -> {
@@ -1415,6 +1457,9 @@ object VerificationUtil {
 
             "mso_mdoc", "mso_mdoc_zk" -> {
                 if (presentation !is MdocVerifiedPresentation || presentation.docType != req.docType) {
+                    return false
+                }
+                if (!presentation.holderBound && presentation.docType == "org.iso.18013.5.1.mDL") {
                     return false
                 }
                 val zkRequest = req.docRequestInfo?.zkRequest
@@ -1531,6 +1576,7 @@ object VerificationUtil {
                     transactionData = document.transactionData,
                     revocationStatus = document.mso.revocationStatus,
                     docRequestIds = document.docRequestIds,
+                    holderBound = document.deviceAuth != null,
                 )
             )
         }
@@ -1636,6 +1682,7 @@ object VerificationUtil {
                     transactionData = document.transactionData,
                     now = now,
                     expectedAudience = document.expectedAudience,
+                    requireCryptographicHolderBinding = document.holderBindingRequired,
                     docRequestIds = document.docRequestIds,
                 )
             )

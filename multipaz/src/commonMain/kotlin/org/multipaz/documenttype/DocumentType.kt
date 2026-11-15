@@ -36,7 +36,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.sdjwt.SdJwt
@@ -89,12 +90,14 @@ class DocumentType private constructor(
          * Initialize the [mdocBuilder].
          *
          * @param mdocDocType the DocType of the ISO mdoc.
+         * @param keyBound whether credentials of this document type are bound to a device key.
          * @return the builder.
          */
         fun addMdocDocumentType(
             mdocDocType: String,
+            keyBound: Boolean = true,
         ) = apply {
-            mdocBuilder = MdocDocumentType.Builder(mdocDocType)
+            mdocBuilder = MdocDocumentType.Builder(mdocDocType, keyBound = keyBound)
         }
 
         /**
@@ -405,6 +408,7 @@ class DocumentType private constructor(
                     portraitEquivalenceRequest = portraitEquivalenceRequest,
                     namespacesToRequest = nsRequests,
                     portraitEquivalenceData = mdocBuilder!!.supportsPortraitImageEquivalence,
+                    keyBound = mdocBuilder!!.keyBound,
                 )
             }
             val jsonRequest = if (jsonClaims == null) {
@@ -432,7 +436,11 @@ class DocumentType private constructor(
                     }
                     list
                 }
-                JsonCannedRequest(jsonBuilder!!.vct, claims)
+                JsonCannedRequest(
+                    vct = jsonBuilder!!.vct,
+                    claimsToRequest = claims,
+                    keyBound = jsonBuilder!!.keyBound,
+                )
             }
             sampleRequests.add(
                 SingleDocumentCannedRequest(
@@ -455,7 +463,7 @@ class DocumentType private constructor(
     }
 
     /**
-     * Adds a [MdocCredential] to a [Document] with sample data for the document type.
+     * Adds a [KeyBoundMdocCredential] to a [Document] with sample data for the document type.
      *
      * @param document the [Document] to add the credential to.
      * @param secureArea the [SecureArea] to use for `DeviceKey`.
@@ -470,7 +478,7 @@ class DocumentType private constructor(
      * @param includeElement predicate to filter which elements are included.
      * @param deviceKeyAuthorizedNamespaces namespaces the device key is authorized to sign.
      * @param deviceKeyAuthorizedDataElements data elements the device key is authorized to sign, keyed by namespace.
-     * @return the [MdocCredential] that was added to [document].
+     * @return the [KeyBoundMdocCredential] that was added to [document].
      */
     suspend fun createMdocCredentialWithSampleData(
         document: Document,
@@ -486,7 +494,7 @@ class DocumentType private constructor(
         includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
         deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
         deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
-    ): MdocCredential {
+    ): KeyBoundMdocCredential {
         require(mdocDocumentType != null)
 
         val issuerNamespaces = buildIssuerNamespaces(
@@ -504,7 +512,7 @@ class DocumentType private constructor(
             }
         }
 
-        val mdocCredential = MdocCredential.create(
+        val mdocCredential = KeyBoundMdocCredential.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = domain,
@@ -520,7 +528,7 @@ class DocumentType private constructor(
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            expectedUpdate = null,
+            expectedUpdate = expectedUpdate,
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().ecPublicKey,
@@ -570,7 +578,112 @@ class DocumentType private constructor(
             }
         )
 
-        // Now that we have issuer-provided authentication data we ccan ertify the authentication key.
+        // Now that we have issuer-provided authentication data we can certify the authentication key.
+        mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+        return mdocCredential
+    }
+
+    /**
+     * Adds a [KeylessMdocCredential] to a [Document] with sample data for the document type.
+     *
+     * @param document the [Document] to add the credential to.
+     * @param dsKey the key to sign the MSO with and its certificate chain.
+     * @param signedAt the time the MSO was signed.
+     * @param validFrom the time at which the credential is valid from.
+     * @param validUntil the time at which the credential is valid until.
+     * @param expectedUpdate the time at which to expect an update, or `null`.
+     * @param domain the domain to use for the credential.
+     * @param randomProvider random number generator to use.
+     * @param includeElement predicate to filter which elements are included.
+     * @return the [KeylessMdocCredential] that was added to [document].
+     */
+    suspend fun createKeylessMdocCredentialWithSampleData(
+        document: Document,
+        dsKey: AsymmetricKey.X509Certified,
+        signedAt: Instant,
+        validFrom: Instant,
+        validUntil: Instant,
+        expectedUpdate: Instant? = null,
+        domain: String = "mdoc_keyless",
+        randomProvider: Random = Crypto.secureRandom,
+        includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
+    ): KeylessMdocCredential {
+        require(mdocDocumentType != null)
+        require(mdocDocumentType.docType != "org.iso.18013.5.1.mDL") {
+            "mDL (org.iso.18013.5.1.mDL) must always be key-bound per ISO/IEC 18013-5 Clause 13.3"
+        }
+
+        val issuerNamespaces = buildIssuerNamespaces(
+            randomProvider = randomProvider
+        ) {
+            for ((nsName, ns) in mdocDocumentType.namespaces) {
+                addNamespace(nsName) {
+                    for ((deName, de) in ns.dataElements) {
+                        val sampleValue = de.attribute.sampleValueMdoc
+                        if (sampleValue != null && includeElement(nsName, de)) {
+                            addDataElement(deName, sampleValue)
+                        }
+                    }
+                }
+            }
+        }
+
+        val mdocCredential = KeylessMdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = domain,
+            docType = mdocDocumentType.docType,
+        )
+
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = mdocDocumentType.docType,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = expectedUpdate,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = null,
+        )
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
+
+        val signatureAlgorithm = dsKey.algorithm.curve?.defaultSigningAlgorithm ?: dsKey.algorithm
+        val protectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5T),
+                dsKey.certChain.toCoseX5t()
+            )
+        )
+        val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
+                dsKey.certChain.toCoseX5Chain()
+            )
+        )
+        val encodedIssuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                dsKey,
+                taggedEncodedMso,
+                true,
+                protectedHeaders,
+                unprotectedHeaders
+            ).toDataItem()
+        )
+        val issuerProvidedAuthenticationData = Cbor.encode(
+            buildCborMap {
+                put("nameSpaces", issuerNamespaces.toDataItem())
+                put("issuerAuth", RawCbor(encodedIssuerAuth))
+            }
+        )
+
         mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
         return mdocCredential
     }

@@ -60,6 +60,8 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
@@ -76,10 +78,13 @@ import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.presentment.TransactionData
+import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -139,15 +144,15 @@ class DeviceResponseTest {
     private lateinit var secureAreaRepository: SecureAreaRepository
 
     private lateinit var mdlDocument: Document
-    private lateinit var mdlCredentialSignature: MdocCredential
-    private lateinit var mdlCredentialMac: MdocCredential
+    private lateinit var mdlCredentialSignature: KeyBoundMdocCredential
+    private lateinit var mdlCredentialMac: KeyBoundMdocCredential
     private lateinit var mdlTimeSigned: Instant
     private lateinit var mdlTimeValidityBegin: Instant
     private lateinit var mdlTimeValidityEnd: Instant
     private lateinit var mdlTimeExpectedUpdate: Instant
 
     private lateinit var photoIdDocument: Document
-    private lateinit var photoIdCredential: MdocCredential
+    private lateinit var photoIdCredential: KeyBoundMdocCredential
     private lateinit var photoIdTimeSigned: Instant
     private lateinit var photoIdTimeValidityBegin: Instant
     private lateinit var photoIdTimeValidityEnd: Instant
@@ -300,7 +305,7 @@ class DeviceResponseTest {
     private suspend fun createMdlCredentialWithAuthorizations(
         authorizedNamespaces: List<String> = emptyList(),
         authorizedDataElements: Map<String, List<String>> = emptyMap()
-    ): MdocCredential {
+    ): KeyBoundMdocCredential {
         val document = documentStore.createDocument()
         return DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
             document = document,
@@ -3846,6 +3851,360 @@ class DeviceResponseTest {
             )
             assertTrue(validationResult.hasErrors)
             assertTrue(validationResult.errors.any { it.message.contains("x5t") })
+        }
+    }
+
+    @Test
+    fun keylessMdocDocumentVerificationAndAntiStripping() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val dsCertifiedKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey)
+
+        val movieDoc = documentStore.createDocument()
+        val keylessMovieCred = UtopiaMovieTicket.getDocumentType().createKeylessMdocCredentialWithSampleData(
+            document = movieDoc,
+            dsKey = dsCertifiedKey,
+            signedAt = mdlTimeSigned,
+            validFrom = mdlTimeValidityBegin,
+            validUntil = mdlTimeValidityEnd,
+            domain = "mdoc_keyless"
+        )
+
+        val response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = keylessMovieCred,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                        namespaceName = UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                        dataElementName = "ticket_id",
+                        intentToRetain = false
+                    )
+                ),
+                docRequestIds = listOf(0)
+            )
+        }
+        val encoded = Cbor.encode(response.toDataItem())
+        val rawDocItem = Cbor.decode(encoded)["documents"][0]
+        assertFalse(rawDocItem.hasKey("deviceSigned"))
+
+        // 1. Default standalone verify() requires holder binding -> rejects keyless mdoc
+        val parsedDefault = DeviceResponse.fromDataItem(Cbor.decode(encoded))
+        assertFailsWith<IllegalStateException> {
+            parsedDefault.verify(sessionTranscript = sessionTranscript, atTime = mdlTimeValidityBegin)
+        }
+
+        // 2. Standalone verifySingleDoc(requireHolderBinding = false) succeeds and deviceAuth is null
+        val parsedAllowKeyless = DeviceResponse.fromDataItem(Cbor.decode(encoded))
+        parsedAllowKeyless.verifySingleDoc(
+            sessionTranscript = sessionTranscript,
+            transactionData = emptyList(),
+            atTime = mdlTimeValidityBegin,
+            requireHolderBinding = false
+        )
+        assertNull(parsedAllowKeyless.documents.single().deviceAuth)
+
+        // 3. DeviceRequest without nonKeyBoundSupported = true (or v1.0) rejects keyless mdoc
+        val reqWithoutNonKeyBound = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(nonKeyBoundSupported = false)
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(encoded)).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin,
+                deviceRequest = reqWithoutNonKeyBound
+            )
+        }
+
+        // 4. DeviceRequest v1.1 with nonKeyBoundSupported = true accepts keyless mdoc AND key-bound mdoc
+        val reqWithNonKeyBound = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+            )
+        }
+        val parsedWithReq = DeviceResponse.fromDataItem(Cbor.decode(encoded))
+        parsedWithReq.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin,
+            deviceRequest = reqWithNonKeyBound
+        )
+        assertNull(parsedWithReq.documents.single().deviceAuth)
+
+        val keyBoundPhotoIdReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = PhotoID.PHOTO_ID_DOCTYPE,
+                nameSpaces = mapOf(PhotoID.ISO_23220_2_NAMESPACE to mapOf("family_name" to false)),
+                docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+            )
+        }
+        val keyBoundPhotoIdResp = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addDocument(
+                credential = photoIdCredential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = PhotoID.PHOTO_ID_DOCTYPE,
+                        namespaceName = PhotoID.ISO_23220_2_NAMESPACE,
+                        dataElementName = "family_name",
+                        intentToRetain = false
+                    )
+                ),
+                docRequestIds = listOf(0)
+            )
+        }
+        val verifiedKeyBoundPhotoIdResp = DeviceResponse.fromDataItem(
+            Cbor.decode(Cbor.encode(keyBoundPhotoIdResp.toDataItem()))
+        )
+        verifiedKeyBoundPhotoIdResp.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = photoIdTimeValidityBegin,
+            deviceRequest = keyBoundPhotoIdReq
+        )
+
+        // 5. EncryptedDocuments with keyless mdoc verifies when nonKeyBoundSupported = true
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encParams = EncryptionParameters.fromValues(
+            recipientPublicKey = recipientKey.publicKey
+        )
+        val reqWithNonKeyBoundEnc = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(
+                    nonKeyBoundSupported = true,
+                    docResponseEncryption = encParams
+                )
+            )
+        }
+        val encResp = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addEncryptedDocuments(encryptionParameters = encParams, docRequestIds = listOf(0)) {
+                addDocument(
+                    credential = keylessMovieCred,
+                    requestedClaims = listOf(
+                        MdocRequestedClaim(
+                            docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                            namespaceName = UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE,
+                            dataElementName = "ticket_id",
+                            intentToRetain = false
+                        )
+                    ),
+                    docRequestIds = listOf(0)
+                )
+            }
+        }
+        val parsedEnc = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(encResp.toDataItem())))
+        parsedEnc.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin,
+            deviceRequest = reqWithNonKeyBoundEnc
+        )
+        val decryptedPt = parsedEnc.encryptedDocuments.single().decrypt(
+            recipientPrivateKey = AsymmetricKey.anonymous(recipientKey),
+            encryptionParameters = encParams,
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin,
+            deviceRequest = reqWithNonKeyBoundEnc
+        )
+        assertEquals(1, decryptedPt.documents.size)
+        assertNull(decryptedPt.documents.single().deviceAuth)
+
+        // 6. Anti-stripping security check: stripping deviceSigned from a key-bound MSO MUST fail
+        // even when requireHolderBinding = false / nonKeyBoundSupported = true!
+        val validKeyBoundDoc = verifiedKeyBoundPhotoIdResp.documents.single()
+        val strippedDeviceSignedCbor = buildCborMap {
+            put("version", "1.1")
+            put("status", 0)
+            putCborArray("documents") {
+                addCborMap {
+                    put("docType", validKeyBoundDoc.docType)
+                    putCborMap("issuerSigned") {
+                        put("nameSpaces", validKeyBoundDoc.issuerNamespaces.toDataItem())
+                        put("issuerAuth", validKeyBoundDoc.issuerAuth.toDataItem())
+                    }
+                    putCborArray("docRequestIds") { add(0) }
+                }
+            }
+        }
+        val strippedParsed = DeviceResponse.fromDataItem(strippedDeviceSignedCbor)
+        assertFailsWith<IllegalStateException> {
+            strippedParsed.verifySingleDoc(
+                sessionTranscript = sessionTranscript,
+                transactionData = emptyList(),
+                atTime = photoIdTimeValidityBegin,
+                requireHolderBinding = false
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            strippedParsed.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = photoIdTimeValidityBegin,
+                deviceRequest = keyBoundPhotoIdReq
+            )
+        }
+    }
+
+    @Test
+    fun keylessOtherDocumentSdJwtVerificationAndAntiStripping() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val dsCertifiedKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey)
+
+        val movieDoc = documentStore.createDocument()
+        val keylessSdJwtCred = UtopiaMovieTicket.getDocumentType().createKeylessSdJwtVcCredentialWithSampleData(
+            document = movieDoc,
+            dsKey = dsCertifiedKey,
+            signedAt = mdlTimeSigned,
+            validFrom = mdlTimeValidityBegin,
+            validUntil = mdlTimeValidityEnd,
+            domain = "sdjwt_keyless"
+        )
+        val filteredKeylessPresentation = SdJwt.fromCompactSerialization(
+            keylessSdJwtCred.issuerProvidedData.decodeToString()
+        ).filter { path, _ ->
+            path.first().jsonPrimitive.content == "ticket_id"
+        }.compactSerialization
+
+        val response = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString(filteredKeylessPresentation.encodeToByteArray().zlibDeflate()),
+                    docRequestIds = listOf(0)
+                )
+            )
+        }
+        val encoded = Cbor.encode(response.toDataItem())
+        val decompressedJwt = response.otherDocuments.single().data.toByteArray().zlibInflate().decodeToString()
+        assertTrue(decompressedJwt.endsWith("~"))
+
+        // 1. Default standalone verify() requires holder binding -> rejects keyless SD-JWT
+        assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(encoded)).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+
+        // 2. Standalone OtherDocument.verify(requireHolderBinding = false) succeeds
+        val parsedAllowKeyless = DeviceResponse.fromDataItem(Cbor.decode(encoded))
+        parsedAllowKeyless.otherDocuments.single().verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            transactionData = emptyList(),
+            atTime = mdlTimeValidityBegin,
+            expectedAudience = null,
+            requireHolderBinding = false
+        )
+        assertEquals(1, parsedAllowKeyless.otherDocuments.size)
+
+        // 3. DeviceRequest without nonKeyBoundSupported = true rejects keyless SD-JWT
+        val reqWithoutNonKeyBound = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf("c0" to buildJsonArray { add(JsonPrimitive("ticket_id")) }),
+                    nonKeyBoundSupported = false
+                )
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(encoded)).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin,
+                deviceRequest = reqWithoutNonKeyBound
+            )
+        }
+
+        // 4. DeviceRequest v1.1 with nonKeyBoundSupported = true accepts keyless SD-JWT
+        val reqWithNonKeyBound = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf("c0" to buildJsonArray { add(JsonPrimitive("ticket_id")) }),
+                    nonKeyBoundSupported = true
+                )
+            )
+        }
+        val parsedWithReq = DeviceResponse.fromDataItem(Cbor.decode(encoded))
+        parsedWithReq.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin,
+            deviceRequest = reqWithNonKeyBound
+        )
+        assertEquals(1, parsedWithReq.otherDocuments.size)
+
+        // 5. Anti-stripping security check: key-bound SD-JWT (with cnf) stripped of its KB-JWT MUST fail
+        // even when requireHolderBinding = false or nonKeyBoundSupported = true!
+        val keyBoundSdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val strippedPresentation = keyBoundSdJwt.filter { _, _ -> true }.compactSerialization
+        assertTrue(strippedPresentation.endsWith("~"))
+        val strippedResponse = buildDeviceResponse(sessionTranscript, DeviceResponse.STATUS_OK) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString(strippedPresentation.encodeToByteArray().zlibDeflate()),
+                    docRequestIds = listOf(0)
+                )
+            )
+        }
+        val strippedEncoded = Cbor.encode(strippedResponse.toDataItem())
+        assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(strippedEncoded)).otherDocuments.single().verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = emptyList(),
+                atTime = euPidTimeValidityBegin,
+                expectedAudience = null,
+                requireHolderBinding = false
+            )
+        }
+        val euPidReqNonKeyBound = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = deviceRequestInfoForIds(0)
+        ) {
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf("c0" to buildJsonArray { add(JsonPrimitive("given_name")) }),
+                    nonKeyBoundSupported = true
+                )
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(strippedEncoded)).verify(
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeValidityBegin,
+                deviceRequest = euPidReqNonKeyBound
+            )
         }
     }
 }

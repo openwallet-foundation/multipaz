@@ -52,6 +52,7 @@ import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.ElementReference
 import org.multipaz.mdoc.request.TransactionsInfo
 import org.multipaz.mdoc.request.UseCase
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentialsCredman
@@ -106,6 +107,7 @@ class MatcherTest {
         dcql: String,
         readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
         multisign: Boolean = false,
+        jsonTransactionData: List<String> = emptyList(),
         transformRequestData: (requestData: JsonObject) -> JsonObject = { it },
     ): String {
         return testMatcherDcql(
@@ -116,6 +118,7 @@ class MatcherTest {
             dcqlProvider = { dcql },
             readerAuthKeyProvider = readerAuthKeyProvider,
             multisign = multisign,
+            jsonTransactionData = jsonTransactionData,
             transformRequestData = transformRequestData
         )
     }
@@ -128,6 +131,7 @@ class MatcherTest {
         dcqlProvider: (harness: DocumentStoreTestHarness) -> String,
         readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
         multisign: Boolean = false,
+        jsonTransactionData: List<String> = emptyList(),
         transformRequestData: (requestData: JsonObject) -> JsonObject = { it },
     ): String {
         val harness = DocumentStoreTestHarness()
@@ -171,7 +175,8 @@ class MatcherTest {
             },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
-            dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql)
+            dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql),
+            jsonTransactionData = jsonTransactionData
         )
         val protocolName = when (version) {
             OpenID4VP.Version.DRAFT_24 -> "openid4vp"
@@ -5181,7 +5186,7 @@ class MatcherTest {
                 )
             },
             deviceRequestBuilder = { _, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -5236,7 +5241,7 @@ class MatcherTest {
                 )
             },
             deviceRequestBuilder = { _, sessionTranscript ->
-                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                DeviceRequest.Builder(sessionTranscript, deviceRequestInfo = SINGLE_DOC_REQUEST_INFO)
                     .addDocRequest(
                         docType = DrivingLicense.MDL_DOCTYPE,
                         nameSpaces = mapOf(
@@ -6334,5 +6339,274 @@ class MatcherTest {
             """.trimIndent().trim() + "\n",
             matcherResult
         )
+    }
+
+    @Test
+    fun testMatcher_KeylessMdoc_OpenID4VP_and_Iso18013() = runTest {
+        val initKeylessMdoc: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
+            harness.provisionKeylessMdoc(
+                displayName = "Movie Ticket Mdoc",
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                data = mapOf(
+                    UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to listOf(
+                        "ticket_id" to Tstr("987654321"),
+                        "movie" to Tstr("The Last Utopian"),
+                    )
+                )
+            )
+        }
+
+        fun mdocDcql(extraFields: String = "") = """
+            {
+              "credentials": [{
+                "id": "ticket",
+                "format": "mso_mdoc",
+                "meta": { "doctype_value": "${UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE}" },
+                "claims": [
+                  { "path": ["${UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE}", "movie"] }
+                ]
+                $extraFields
+              }]
+            }
+        """.trimIndent().trim()
+
+        // 1. OpenID4VP: omitted or true require_cryptographic_holder_binding must NOT match keyless mdoc
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessMdoc,
+                dcql = mdocDcql(),
+            )
+        )
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessMdoc,
+                dcql = mdocDcql(""", "require_cryptographic_holder_binding": true"""),
+            )
+        )
+
+        // 2. OpenID4VP: require_cryptographic_holder_binding = false matches keyless mdoc
+        val openidMatch = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initKeylessMdoc,
+            dcql = mdocDcql(""", "require_cryptographic_holder_binding": false"""),
+        )
+        Assert.assertTrue(openidMatch.contains("__Movie Ticket Mdoc__"))
+        Assert.assertTrue(openidMatch.contains("The Last Utopian"))
+
+        // 3. OpenID4VP: transaction_data targeting a keyless mdoc must NOT match
+        val pingTxData = listOf(PingTransaction.sampleData.getSerializedJson(credentialIds = listOf("ticket")))
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessMdoc,
+                dcql = mdocDcql(""", "require_cryptographic_holder_binding": false"""),
+                jsonTransactionData = pingTxData,
+            )
+        )
+
+        // 4. ISO 18013-7 Annex C: nonKeyBoundSupported omitted or false must NOT match
+        Assert.assertEquals(
+            "",
+            testMatcherIso18013(initKeylessMdoc) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                ) {
+                    addDocRequest(
+                        docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                        nameSpaces = mapOf(
+                            UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("movie" to false)
+                        )
+                    )
+                }
+            }
+        )
+        Assert.assertEquals(
+            "",
+            testMatcherIso18013(initKeylessMdoc) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                ) {
+                    addDocRequest(
+                        docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                        nameSpaces = mapOf(
+                            UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("movie" to false)
+                        ),
+                        docRequestInfo = DocRequestInfo(nonKeyBoundSupported = false)
+                    )
+                }
+            }
+        )
+
+        // 5. ISO 18013-7 Annex C: nonKeyBoundSupported = true matches keyless mdoc
+        val isoMatch = testMatcherIso18013(initKeylessMdoc) { _, sessionTranscript ->
+            buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+            ) {
+                addDocRequest(
+                    docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                    nameSpaces = mapOf(
+                        UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("movie" to false)
+                    ),
+                    docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+                )
+            }
+        }
+        Assert.assertTrue(isoMatch.contains("__Movie Ticket Mdoc__"))
+        Assert.assertTrue(isoMatch.contains("The Last Utopian"))
+    }
+
+    @Test
+    fun testMatcher_KeylessSdJwt_OpenID4VP_and_Iso18013() = runTest {
+        val initKeylessSdJwt: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
+            harness.provisionKeylessSdJwtVc(
+                displayName = "Movie Ticket SD-JWT",
+                vct = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                data = listOf(
+                    "ticket_id" to JsonPrimitive("987654321"),
+                    "movie" to JsonPrimitive("The Last Utopian"),
+                )
+            )
+        }
+
+        fun sdJwtDcql(extraFields: String = "") = """
+            {
+              "credentials": [{
+                "id": "ticket",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["${UtopiaMovieTicket.MOVIE_TICKET_VCT}"] },
+                "claims": [
+                  { "path": ["movie"] }
+                ]
+                $extraFields
+              }]
+            }
+        """.trimIndent().trim()
+
+        // 1. OpenID4VP: omitted or true require_cryptographic_holder_binding must NOT match keyless SD-JWT
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessSdJwt,
+                dcql = sdJwtDcql(),
+            )
+        )
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessSdJwt,
+                dcql = sdJwtDcql(""", "require_cryptographic_holder_binding": true"""),
+            )
+        )
+
+        // 2. OpenID4VP: require_cryptographic_holder_binding = false matches keyless SD-JWT
+        val openidMatch = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initKeylessSdJwt,
+            dcql = sdJwtDcql(""", "require_cryptographic_holder_binding": false"""),
+        )
+        Assert.assertTrue(openidMatch.contains("__Movie Ticket SD-JWT__"))
+        Assert.assertTrue(openidMatch.contains("The Last Utopian"))
+
+        // 3. OpenID4VP: transaction_data targeting a keyless SD-JWT must NOT match
+        val pingTxData = listOf(PingTransaction.sampleData.getSerializedJson(credentialIds = listOf("ticket")))
+        Assert.assertEquals(
+            "",
+            testMatcherDcql(
+                version = OpenID4VP.Version.DRAFT_29,
+                signRequest = true,
+                encryptionKey = null,
+                harnessInitializer = initKeylessSdJwt,
+                dcql = sdJwtDcql(""", "require_cryptographic_holder_binding": false"""),
+                jsonTransactionData = pingTxData,
+            )
+        )
+
+        // 4. ISO 18013-7 Annex C: nonKeyBoundSupported omitted or false must NOT match keyless SD-JWT
+        val sdJwtMapping = mapOf(
+            "sdjwtkb_movie" to buildJsonArray { add(JsonPrimitive("movie")) }
+        )
+        Assert.assertEquals(
+            "",
+            testMatcherIso18013(initKeylessSdJwt) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                ) {
+                    addDocRequest(
+                        docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                        nameSpaces = mapOf("_" to mapOf("sdjwtkb_movie" to false)),
+                        docRequestInfo = DocRequestInfo(
+                            docFormat = "dc+sd-jwt",
+                            dataElementIdentifierMapping = sdJwtMapping
+                        )
+                    )
+                }
+            }
+        )
+        Assert.assertEquals(
+            "",
+            testMatcherIso18013(initKeylessSdJwt) { _, sessionTranscript ->
+                buildDeviceRequest(
+                    sessionTranscript = sessionTranscript,
+                    deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+                ) {
+                    addDocRequest(
+                        docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                        nameSpaces = mapOf("_" to mapOf("sdjwtkb_movie" to false)),
+                        docRequestInfo = DocRequestInfo(
+                            docFormat = "dc+sd-jwt",
+                            dataElementIdentifierMapping = sdJwtMapping,
+                            nonKeyBoundSupported = false
+                        )
+                    )
+                }
+            }
+        )
+
+        // 5. ISO 18013-7 Annex C: nonKeyBoundSupported = true matches keyless SD-JWT
+        val isoMatch = testMatcherIso18013(initKeylessSdJwt) { _, sessionTranscript ->
+            buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+                deviceRequestInfo = SINGLE_DOC_REQUEST_INFO
+            ) {
+                addDocRequest(
+                    docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                    nameSpaces = mapOf("_" to mapOf("sdjwtkb_movie" to false)),
+                    docRequestInfo = DocRequestInfo(
+                        docFormat = "dc+sd-jwt",
+                        dataElementIdentifierMapping = sdJwtMapping,
+                        nonKeyBoundSupported = true
+                    )
+                )
+            }
+        }
+        Assert.assertTrue(isoMatch.contains("__Movie Ticket SD-JWT__"))
+        Assert.assertTrue(isoMatch.contains("The Last Utopian"))
     }
 }

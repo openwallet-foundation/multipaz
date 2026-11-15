@@ -151,6 +151,9 @@ class LongfellowZkSystem(): ZkSystem {
         sessionTranscript: DataItem,
         timestamp: Instant
     ): ZkDocument {
+        require(document.deviceAuth != null) {
+            "Longfellow ZKP requires a key-bound mdoc with deviceAuth"
+        }
         val longfellowZkSystemSpec = getLongfellowZkSystemSpec(zkSystemSpec)
             ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
         val circuitBytes = getCircuitBytes(zkSystemSpec)

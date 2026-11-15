@@ -48,6 +48,7 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
@@ -100,7 +101,7 @@ class DeviceRetrievalHelperTest {
     private lateinit var secureAreaRepository: SecureAreaRepository
     private lateinit var document: Document
     private lateinit var nameSpacedData: NameSpacedData
-    private lateinit var mdocCredential: MdocCredential
+    private lateinit var mdocCredential: KeyBoundMdocCredential
     private lateinit var timeSigned: Instant
     private lateinit var timeValidityBegin: Instant
     private lateinit var timeValidityEnd: Instant
@@ -141,7 +142,7 @@ class DeviceRetrievalHelperTest {
         timeValidityEnd = fromEpochMilliseconds(nowMillis + 10 * 86400 * 1000)
         val secureArea =
             secureAreaRepository.getImplementation(AndroidKeystoreSecureArea.IDENTIFIER)
-        mdocCredential = MdocCredential.create(
+        mdocCredential = KeyBoundMdocCredential.create(
             document,
             null,
             CREDENTIAL_DOMAIN,

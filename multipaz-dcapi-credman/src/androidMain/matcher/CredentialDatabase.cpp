@@ -48,6 +48,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         std::map<std::string, std::vector<std::string>> keyAuthorizedDataElements;
         bool supportsPortraitImageEquivalence = false;
         bool omitClaims = false;
+        bool keyBound = true;
         std::map<std::string, std::string> claimDisplayNames;
         std::map resultingClaims = std::map<std::string, Claim>();
 
@@ -67,6 +68,11 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             auto mdoc = mdocPtr->asMap();
             documentId = mdoc->get("documentId")->asTstr()->value();
             mdocDoctype = mdoc->get("docType")->asTstr()->value();
+
+            const auto& keyBoundPtr = mdoc->get("keyBound");
+            if (keyBoundPtr != nullptr && keyBoundPtr->asBool() != nullptr) {
+                keyBound = keyBoundPtr->asBool()->value();
+            }
 
             const auto& piePtr = mdoc->get("supportsPortraitImageEquivalence");
             if (piePtr != nullptr && piePtr->asBool() != nullptr) {
@@ -164,6 +170,11 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             documentId = sdjwt->get("documentId")->asTstr()->value();
             vcVct = sdjwt->get("vct")->asTstr()->value();
 
+            const auto& keyBoundPtr = sdjwt->get("keyBound");
+            if (keyBoundPtr != nullptr && keyBoundPtr->asBool() != nullptr) {
+                keyBound = keyBoundPtr->asBool()->value();
+            }
+
             const auto& otherVctsPtr = sdjwt->get("otherVcts");
             if (otherVctsPtr != nullptr && otherVctsPtr->asArray() != nullptr) {
                 auto arr = otherVctsPtr->asArray();
@@ -240,7 +251,8 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 supportsPortraitImageEquivalence,
                 omitClaims,
                 claimDisplayNames,
-                noClaimsRequestedText
+                noClaimsRequestedText,
+                keyBound
             )
         );
     }
@@ -321,6 +333,9 @@ Claim* Credential::findMatchingClaim(const DcqlRequestedClaim& requestedClaim) {
                 isDeviceSigned = true;
             }
         }
+        if (isDeviceSigned && !keyBound) {
+            return nullptr;
+        }
         auto dynIt = dynamicDeviceClaims.find(joinedPath);
         if (dynIt == dynamicDeviceClaims.end()) {
             std::string displayName = isDeviceSigned ? "" : lookupClaimDisplayName(requestedClaim.path);
@@ -350,7 +365,7 @@ Claim* Credential::findMatchingClaim(const DcqlRequestedClaim& requestedClaim) {
     }
 
     // Check KeyAuthorizations for device-signed data elements
-    if (requestedClaim.path.size() == 2) {
+    if (keyBound && requestedClaim.path.size() == 2) {
         const std::string& ns = requestedClaim.path[0];
         const std::string& elem = requestedClaim.path[1];
         bool authorized = false;

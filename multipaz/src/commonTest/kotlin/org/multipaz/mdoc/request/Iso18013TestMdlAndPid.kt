@@ -216,7 +216,7 @@ class Iso18013TestMdlAndPid {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:
@@ -235,7 +235,7 @@ class Iso18013TestMdlAndPid {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-PID-Erika
                               claims:
                                 claim:

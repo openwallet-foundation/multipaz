@@ -137,7 +137,7 @@ class TestMdlAndPid {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-Erika
                               claims:
                                 claim:

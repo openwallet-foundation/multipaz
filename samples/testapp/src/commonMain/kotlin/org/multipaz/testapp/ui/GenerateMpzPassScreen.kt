@@ -207,18 +207,31 @@ private suspend fun generateMpzPass(
     }
 
     if (generateMdoc) {
-        val credential = documentType.createMdocCredentialWithSampleData(
-            document = doc,
-            secureArea = softwareSecureArea,
-            createKeySettings = CreateKeySettings(),
-            dsKey = dsKey,
-            signedAt = signedAt,
-            validFrom = validFrom,
-            validUntil = validUntil,
-            expectedUpdate = expectedUpdate,
-            domain = "mdoc",
-        )
-        return credential.exportToMpzPass()
+        if (documentType.mdocDocumentType!!.keyBound) {
+            val credential = documentType.createMdocCredentialWithSampleData(
+                document = doc,
+                secureArea = softwareSecureArea,
+                createKeySettings = CreateKeySettings(),
+                dsKey = dsKey,
+                signedAt = signedAt,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = expectedUpdate,
+                domain = "mdoc",
+            )
+            return credential.exportToMpzPass()
+        } else {
+            val credential = documentType.createKeylessMdocCredentialWithSampleData(
+                document = doc,
+                dsKey = dsKey,
+                signedAt = signedAt,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = expectedUpdate,
+                domain = "mdoc_keyless",
+            )
+            return credential.exportToMpzPass()
+        }
     } else {
         if (documentType.jsonDocumentType!!.keyBound) {
             val credential = documentType.createKeyBoundSdJwtVcCredentialWithSampleData(

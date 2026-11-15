@@ -1540,11 +1540,13 @@ class Iso18013PresentmentTest {
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
             credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? = delegate.selectCredential(
             document,
             requestedClaims,
             keyAgreementPossible,
             credential,
+            requireHolderBinding,
         )
 
         override suspend fun getBadges(document: Document): List<DocumentBadge> =

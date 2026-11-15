@@ -25,6 +25,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentRequest
@@ -67,8 +68,8 @@ class DeviceResponseGeneratorTest {
     private lateinit var storage: Storage
     private lateinit var secureAreaRepository: SecureAreaRepository
 
-    private lateinit var mdocCredentialSign: MdocCredential
-    private lateinit var mdocCredentialMac: MdocCredential
+    private lateinit var mdocCredentialSign: KeyBoundMdocCredential
+    private lateinit var mdocCredentialMac: KeyBoundMdocCredential
     private lateinit var document: Document
     private lateinit var timeSigned: Instant
     private lateinit var timeValidityBegin: Instant
@@ -122,7 +123,7 @@ class DeviceResponseGeneratorTest {
         timeSigned = Instant.fromEpochSeconds(nowSeconds)
         timeValidityBegin = Instant.fromEpochSeconds(nowSeconds + 3600)
         timeValidityEnd = Instant.fromEpochSeconds(nowSeconds + 10 * 86400)
-        mdocCredentialSign = MdocCredential.create(
+        mdocCredentialSign = KeyBoundMdocCredential.create(
             document,
             null,
             AUTH_KEY_DOMAIN,
@@ -133,7 +134,7 @@ class DeviceResponseGeneratorTest {
                 .build()
         )
         assertFalse(mdocCredentialSign.isCertified)
-        mdocCredentialMac = MdocCredential.create(
+        mdocCredentialMac = KeyBoundMdocCredential.create(
             document,
             null,
             AUTH_KEY_DOMAIN,

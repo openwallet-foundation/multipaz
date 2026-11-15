@@ -23,6 +23,8 @@ import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -45,7 +47,7 @@ import kotlin.time.Instant
  * @property docType the type of the document, e.g. "org.iso.18013.5.1.mDL".
  * @property issuerAuth the issuer-signed Mobile Security Object.
  * @property issuerNamespaces the issuer-signed data elements.
- * @property deviceAuth a structure with the device signed signature or MAC.
+ * @property deviceAuth a structure with the device signed signature or MAC, or `null` for a non-key-bound mdoc.
  * @property deviceNamespaces the device-signed data elements.
  * @property errors the errors in the document.
  * @property docRequestIds optional list of `DocRequest` indices in `DeviceRequest.docRequests`
@@ -55,7 +57,7 @@ class MdocDocument(
     val docType: String,
     val issuerAuth: CoseSign1,
     val issuerNamespaces: IssuerNamespaces,
-    val deviceAuth: DeviceAuth,
+    val deviceAuth: DeviceAuth?,
     val deviceNamespaces: DeviceNamespaces,
     val errors: Map<String, Map<String, Int>>,
     val docRequestIds: List<Int>? = null,
@@ -64,6 +66,9 @@ class MdocDocument(
     init {
         if (docRequestIds != null) {
             validateDocRequestIds(docRequestIds)
+        }
+        if (deviceAuth == null && deviceNamespaces.data.isNotEmpty()) {
+            throw IllegalArgumentException("deviceNamespaces must be empty when deviceAuth is null")
         }
     }
     /**
@@ -102,21 +107,23 @@ class MdocDocument(
             put("issuerAuth", issuerAuth.toDataItem())
             put("nameSpaces", issuerNamespaces.toDataItem())
         }
-        putCborMap("deviceSigned") {
-            putCborMap("deviceAuth") {
-                when (deviceAuth) {
-                    is DeviceAuth.Ecdsa -> {
-                        put("deviceSignature", deviceAuth.signature.toDataItem())
-                    }
-                    is DeviceAuth.Mac -> {
-                        put("deviceMac", deviceAuth.mac.toDataItem())
+        if (deviceAuth != null) {
+            putCborMap("deviceSigned") {
+                putCborMap("deviceAuth") {
+                    when (deviceAuth) {
+                        is DeviceAuth.Ecdsa -> {
+                            put("deviceSignature", deviceAuth.signature.toDataItem())
+                        }
+                        is DeviceAuth.Mac -> {
+                            put("deviceMac", deviceAuth.mac.toDataItem())
+                        }
                     }
                 }
+                put("nameSpaces", Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(Cbor.encode(deviceNamespaces.toDataItem()))
+                ))
             }
-            put("nameSpaces", Tagged(
-                tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(deviceNamespaces.toDataItem()))
-            ))
         }
         if (docRequestIds != null) {
             putCborArray("docRequestIds") {
@@ -142,6 +149,7 @@ class MdocDocument(
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
         rejectIfValidUntilAfterNotAfter: Boolean = false,
+        requireHolderBinding: Boolean = true,
     ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain = issuerCertChain
@@ -193,61 +201,80 @@ class MdocDocument(
             throw IllegalStateException("MSO is not valid anymore")
         }
 
-        // Check DeviceAuth
-        val deviceAuthentication = buildCborArray {
-            add("DeviceAuthentication")
-            add(sessionTranscript)
-            add(docType)
-            add(Tagged(
-                tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(deviceNamespaces.toDataItem()))
-            ))
+        // Check DeviceAuth / Holder Binding
+        val msoDeviceKey = mso.deviceKey
+        if (docType == "org.iso.18013.5.1.mDL" && msoDeviceKey == null) {
+            throw IllegalStateException("mDL (org.iso.18013.5.1.mDL) must be key-bound and contain deviceKeyInfo in MSO")
         }
-        val deviceAuthenticationBytes = Cbor.encode(Tagged(
-            Tagged.ENCODED_CBOR,
-            Bstr(Cbor.encode(deviceAuthentication))
-        ))
-        when (deviceAuth) {
-            is DeviceAuth.Ecdsa -> {
-                try {
-                    Cose.coseSign1Check(
-                        publicKey = mso.deviceKey,
-                        detachedData = deviceAuthenticationBytes,
-                        signature = deviceAuth.signature,
-                        signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(
-                            deviceAuth.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
-                        )
-                    )
-                } catch (e: SignatureVerificationException) {
-                    throw IllegalStateException("Device authentication signature failed to verify", e)
-                }
+        if (msoDeviceKey != null && deviceAuth == null) {
+            throw IllegalStateException("Key-bound mdoc (MSO contains deviceKeyInfo) is missing deviceSigned")
+        }
+        if (msoDeviceKey == null && deviceAuth != null) {
+            throw IllegalStateException("Keyless mdoc (MSO has no deviceKeyInfo) must not include deviceSigned")
+        }
+        if (deviceAuth == null) {
+            if (requireHolderBinding) {
+                throw IllegalStateException("Keyless mdoc is not permitted when nonKeyBoundSupported is not true")
             }
-            is DeviceAuth.Mac -> {
-                if (eReaderKey == null) {
-                    throw IllegalArgumentException("Device authentication is MAC but eReaderKey was not set")
-                }
-                val sessionTranscriptBytes = Cbor.encode(Tagged(
-                    Tagged.ENCODED_CBOR,
-                    Bstr(Cbor.encode(sessionTranscript)))
-                )
-                val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
-                val info = "EMacKey".encodeToByteArray()
-                val expectedTag = eReaderKey.keyAgreement(mso.deviceKey).use { sharedSecretKey ->
-                    Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
-                        Cose.coseMac0(
-                            algorithm = Algorithm.HMAC_SHA256,
-                            key = eMacKey,
-                            message = deviceAuthenticationBytes,
-                            includeMessageInPayload = false,
-                            protectedHeaders = mapOf(
-                                CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
-                            ),
-                            unprotectedHeaders = mapOf()
-                        ).tag
+            if (transactionData.isNotEmpty()) {
+                throw IllegalStateException("Transaction data is not supported with keyless mdoc")
+            }
+        } else {
+            val deviceAuthentication = buildCborArray {
+                add("DeviceAuthentication")
+                add(sessionTranscript)
+                add(docType)
+                add(Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(Cbor.encode(deviceNamespaces.toDataItem()))
+                ))
+            }
+            val deviceAuthenticationBytes = Cbor.encode(Tagged(
+                Tagged.ENCODED_CBOR,
+                Bstr(Cbor.encode(deviceAuthentication))
+            ))
+            when (deviceAuth) {
+                is DeviceAuth.Ecdsa -> {
+                    try {
+                        Cose.coseSign1Check(
+                            publicKey = msoDeviceKey!!,
+                            detachedData = deviceAuthenticationBytes,
+                            signature = deviceAuth.signature,
+                            signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(
+                                deviceAuth.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+                            )
+                        )
+                    } catch (e: SignatureVerificationException) {
+                        throw IllegalStateException("Device authentication signature failed to verify", e)
                     }
                 }
-                if (!(expectedTag contentEquals deviceAuth.mac.tag)) {
-                    throw IllegalStateException("Device authentication MAC failed to verify")
+                is DeviceAuth.Mac -> {
+                    if (eReaderKey == null) {
+                        throw IllegalArgumentException("Device authentication is MAC but eReaderKey was not set")
+                    }
+                    val sessionTranscriptBytes = Cbor.encode(Tagged(
+                        Tagged.ENCODED_CBOR,
+                        Bstr(Cbor.encode(sessionTranscript)))
+                    )
+                    val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
+                    val info = "EMacKey".encodeToByteArray()
+                    val expectedTag = eReaderKey.keyAgreement(msoDeviceKey!!).use { sharedSecretKey ->
+                        Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
+                            Cose.coseMac0(
+                                algorithm = Algorithm.HMAC_SHA256,
+                                key = eMacKey,
+                                message = deviceAuthenticationBytes,
+                                includeMessageInPayload = false,
+                                protectedHeaders = mapOf(
+                                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                                ),
+                                unprotectedHeaders = mapOf()
+                            ).tag
+                        }
+                    }
+                    if (!(expectedTag contentEquals deviceAuth.mac.tag)) {
+                        throw IllegalStateException("Device authentication MAC failed to verify")
+                    }
                 }
             }
         }
@@ -332,7 +359,7 @@ class MdocDocument(
         var result = docType.hashCode()
         result = 31 * result + issuerAuth.hashCode()
         result = 31 * result + issuerNamespaces.hashCode()
-        result = 31 * result + deviceAuth.hashCode()
+        result = 31 * result + (deviceAuth?.hashCode() ?: 0)
         result = 31 * result + deviceNamespaces.hashCode()
         result = 31 * result + errors.hashCode()
         result = 31 * result + (docRequestIds?.hashCode() ?: 0)
@@ -374,14 +401,21 @@ class MdocDocument(
                 IssuerNamespaces.fromDataItem(it)
             } ?: buildIssuerNamespaces {}
 
-            val deviceSigned = dataItem["deviceSigned"]
-            val deviceAuthDataItem = deviceSigned["deviceAuth"]
-            val deviceAuth = if (deviceAuthDataItem.hasKey("deviceSignature")) {
-                DeviceAuth.Ecdsa(deviceAuthDataItem["deviceSignature"].asCoseSign1)
+            val deviceSigned = dataItem.getOrNull("deviceSigned")
+            val deviceAuth: DeviceAuth?
+            val deviceNamespaces: DeviceNamespaces
+            if (deviceSigned != null) {
+                val deviceAuthDataItem = deviceSigned["deviceAuth"]
+                deviceAuth = if (deviceAuthDataItem.hasKey("deviceSignature")) {
+                    DeviceAuth.Ecdsa(deviceAuthDataItem["deviceSignature"].asCoseSign1)
+                } else {
+                    DeviceAuth.Mac(deviceAuthDataItem["deviceMac"].asCoseMac0)
+                }
+                deviceNamespaces = DeviceNamespaces.fromDataItem(deviceSigned["nameSpaces"].asTaggedEncodedCbor)
             } else {
-                DeviceAuth.Mac(deviceAuthDataItem["deviceMac"].asCoseMac0)
+                deviceAuth = null
+                deviceNamespaces = buildDeviceNamespaces {}
             }
-            val deviceNamespaces = DeviceNamespaces.fromDataItem(deviceSigned["nameSpaces"].asTaggedEncodedCbor)
             val docRequestIds = dataItem.getOrNull("docRequestIds")?.asDocRequestIds()
             val errors = dataItem.getOrNull("errors")?.asMap?.entries?.associate { (namespace, errorItems) ->
                 namespace.asTstr to errorItems.asMap.entries.associate { (dataElementName, errorCode) ->
@@ -489,6 +523,35 @@ class MdocDocument(
         }
 
         /**
+         * Creates a non-key-bound [MdocDocument] from [IssuerNamespaces] without `deviceSigned`.
+         *
+         * @param docType the type of the document, e.g. `"org.multipaz.movieticket.1"`.
+         * @param issuerAuth the issuer-signed MSO.
+         * @param issuerNamespaces the issuer-signed data elements to return.
+         * @param errors the errors to return.
+         * @param docRequestIds optional list of `DocRequest` indices satisfied by this document.
+         * @return a [MdocDocument].
+         */
+        fun fromKeylessNamespaces(
+            docType: String,
+            issuerAuth: CoseSign1,
+            issuerNamespaces: IssuerNamespaces,
+            errors: Map<String, Map<String, Int>> = emptyMap(),
+            docRequestIds: List<Int>? = null,
+        ): MdocDocument {
+            return MdocDocument(
+                docType = docType,
+                issuerAuth = issuerAuth,
+                issuerNamespaces = issuerNamespaces,
+                deviceAuth = null,
+                deviceNamespaces = buildDeviceNamespaces {},
+                errors = errors,
+                docRequestIds = docRequestIds,
+                issuerNamespaceDigests = null
+            )
+        }
+
+        /**
          * Creates a [MdocDocument] by presenting claims from an [MdocCredential].
          *
          * @param sessionTranscript the session transcript to use.
@@ -511,22 +574,39 @@ class MdocDocument(
         ): MdocDocument {
             val issuerAuth = credential.issuerAuth
             val filteredIssuerNamespaces = credential.issuerNamespaces.filter(requestedClaims)
-            return fromNamespaces(
-                sessionTranscript = sessionTranscript,
-                eReaderKey = eReaderKey,
-                docType = credential.docType,
-                issuerAuth = issuerAuth,
-                issuerNamespaces = filteredIssuerNamespaces,
-                deviceNamespaces = deviceNamespaces,
-                deviceKey = AsymmetricKey.AnonymousSecureAreaBased(
-                    alias = credential.alias,
-                    secureArea = credential.secureArea,
-                    keyInfo = credential.secureArea.getKeyInfo(credential.alias),
-                    unlockReason = PresentmentUnlockReason(credential),
-                ),
-                errors = errors,
-                docRequestIds = docRequestIds,
-            )
+            return when (credential) {
+                is KeyBoundMdocCredential -> fromNamespaces(
+                    sessionTranscript = sessionTranscript,
+                    eReaderKey = eReaderKey,
+                    docType = credential.docType,
+                    issuerAuth = issuerAuth,
+                    issuerNamespaces = filteredIssuerNamespaces,
+                    deviceNamespaces = deviceNamespaces,
+                    deviceKey = AsymmetricKey.AnonymousSecureAreaBased(
+                        alias = credential.alias,
+                        secureArea = credential.secureArea,
+                        keyInfo = credential.secureArea.getKeyInfo(credential.alias),
+                        unlockReason = PresentmentUnlockReason(credential),
+                    ),
+                    errors = errors,
+                    docRequestIds = docRequestIds,
+                )
+                is KeylessMdocCredential -> {
+                    require(deviceNamespaces.data.isEmpty()) {
+                        "Keyless mdoc credentials cannot include device-signed data elements"
+                    }
+                    fromKeylessNamespaces(
+                        docType = credential.docType,
+                        issuerAuth = issuerAuth,
+                        issuerNamespaces = filteredIssuerNamespaces,
+                        errors = errors,
+                        docRequestIds = docRequestIds,
+                    )
+                }
+                else -> throw IllegalArgumentException(
+                    "Unsupported MdocCredential implementation: ${credential::class}"
+                )
+            }
         }
     }
 }

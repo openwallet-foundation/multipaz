@@ -6,7 +6,10 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
@@ -16,9 +19,13 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.days
 
 class MobileSecurityObjectTest {
@@ -165,5 +172,73 @@ class MobileSecurityObjectTest {
             MobileSecurityObject.fromDataItem(Cbor.decode(Cbor.encode(mso.toDataItem()))),
             mso
         )
+    }
+
+    @Test
+    fun testKeylessMsoRoundTrip() = runTest {
+        val randomProvider = Random(42)
+        val issuerNamespaces = buildIssuerNamespaces(randomProvider = randomProvider) {
+            addNamespace(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE) {
+                addDataElement("ticket_id", "12345".toDataItem())
+                addDataElement("movie", "The Last Utopian".toDataItem())
+            }
+        }
+        val d = LocalDate.parse("2026-01-01").atStartOfDayIn(TimeZone.UTC)
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+            signedAt = d,
+            validFrom = d,
+            validUntil = d + 30.days,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = null,
+        )
+        assertNull(mso.deviceKey)
+        val cborItem = mso.toDataItem()
+        assertFalse(cborItem.hasKey("deviceKeyInfo"))
+        val decoded = MobileSecurityObject.fromDataItem(Cbor.decode(Cbor.encode(cborItem)))
+        assertEquals(mso, decoded)
+        assertNull(decoded.deviceKey)
+    }
+
+    @Test
+    fun testMdlRejectsNullDeviceKey() {
+        val d = LocalDate.parse("2026-01-01").atStartOfDayIn(TimeZone.UTC)
+        assertFailsWith<IllegalArgumentException> {
+            MobileSecurityObject(
+                version = "1.0",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                signedAt = d,
+                validFrom = d,
+                validUntil = d + 30.days,
+                expectedUpdate = null,
+                digestAlgorithm = Algorithm.SHA256,
+                valueDigests = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(0L to "00".repeat(32).fromHexByteString())
+                ),
+                deviceKey = null,
+            )
+        }
+
+        val cborMissingDeviceKeyInfo = buildCborMap {
+            put("version", "1.0")
+            put("digestAlgorithm", "SHA-256")
+            put("docType", DrivingLicense.MDL_DOCTYPE)
+            putCborMap("valueDigests") {
+                putCborMap(DrivingLicense.MDL_NAMESPACE) {
+                    put(0L, "00".repeat(32).fromHex())
+                }
+            }
+            putCborMap("validityInfo") {
+                put("signed", d.toDataItemDateTimeString())
+                put("validFrom", d.toDataItemDateTimeString())
+                put("validUntil", (d + 30.days).toDataItemDateTimeString())
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MobileSecurityObject.fromDataItem(cborMissingDeviceKeyInfo)
+        }
     }
 }

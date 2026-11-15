@@ -219,7 +219,7 @@ class TestPrivacyPreservingAgeRequest {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL
                               claims:
                                 claim:
@@ -256,7 +256,7 @@ class TestPrivacyPreservingAgeRequest {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-no-age-over
                               claims:
                                 claim:
@@ -299,7 +299,7 @@ class TestPrivacyPreservingAgeRequest {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL-only-birth-date
                               claims:
                                 claim:

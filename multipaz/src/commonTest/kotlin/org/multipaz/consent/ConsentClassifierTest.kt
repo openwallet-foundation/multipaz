@@ -75,16 +75,27 @@ class ConsentClassifierTest {
             harness.documentTypeRepository.addDocumentType(dt)
             val doc = harness.documentStore.createDocument(displayName = dt.displayName)
             if (dt.mdocDocumentType != null) {
-                dt.createMdocCredentialWithSampleData(
-                    document = doc,
-                    secureArea = harness.softwareSecureArea,
-                    createKeySettings = SoftwareCreateKeySettings.Builder().build(),
-                    dsKey = harness.dsKey,
-                    signedAt = harness.signedAt,
-                    validFrom = harness.validFrom,
-                    validUntil = harness.validUntil,
-                    deviceKeyAuthorizedNamespaces = authorizedNamespaces,
-                )
+                if (dt.mdocDocumentType!!.keyBound) {
+                    dt.createMdocCredentialWithSampleData(
+                        document = doc,
+                        secureArea = harness.softwareSecureArea,
+                        createKeySettings = SoftwareCreateKeySettings.Builder().build(),
+                        dsKey = harness.dsKey,
+                        signedAt = harness.signedAt,
+                        validFrom = harness.validFrom,
+                        validUntil = harness.validUntil,
+                        deviceKeyAuthorizedNamespaces = authorizedNamespaces,
+                    )
+                } else {
+                    dt.createKeylessMdocCredentialWithSampleData(
+                        document = doc,
+                        dsKey = harness.dsKey,
+                        signedAt = harness.signedAt,
+                        validFrom = harness.validFrom,
+                        validUntil = harness.validUntil,
+                        domain = "mdoc_keyless",
+                    )
+                }
             }
             if (dt.jsonDocumentType != null) {
                 if (dt.jsonDocumentType!!.keyBound) {

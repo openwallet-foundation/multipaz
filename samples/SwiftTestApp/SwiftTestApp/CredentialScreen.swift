@@ -84,6 +84,9 @@ struct CredentialScreen: View {
 private func keyAuthorizationsText(mdocCredential: MdocCredential) -> AttributedString {
     do {
         let mso = mdocCredential.mso
+        if mso.deviceKey == nil {
+            return AttributedString("Keyless (no device key)")
+        }
         let authorizedNamespaces = mso.deviceKeyAuthorizedNamespaces
         let authorizedDataElements = mso.deviceKeyAuthorizedDataElements
         if authorizedNamespaces.isEmpty && authorizedDataElements.isEmpty {

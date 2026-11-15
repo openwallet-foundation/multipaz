@@ -15,7 +15,11 @@ import org.multipaz.document.DocumentStore
 import org.multipaz.document.getIosMdocDoctypes
 import org.multipaz.document.getIosSdJwtVcTypes
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.toByteArray
@@ -176,7 +180,9 @@ private suspend fun updateOsCredentialManagerUnlocked(
         val documents = documentStore.listDocuments()
         for (document in documents) {
             val displayName = document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
-            val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
+            val certifiedCreds = document.getCertifiedCredentials()
+            val mdocCredential = (certifiedCreds.find { it is KeyBoundMdocCredential }
+                ?: certifiedCreds.find { it is KeylessMdocCredential }) as MdocCredential?
             if (mdocCredential != null) {
                 if (iosMdocDoctypes == null || iosMdocDoctypes.contains(mdocCredential.docType)) {
                     val regId = "mdoc:${document.identifier}"
@@ -194,8 +200,8 @@ private suspend fun updateOsCredentialManagerUnlocked(
                 }
             }
             if (hasOpenID4VPProtocol) {
-                val sdJwtCredential = document.getCertifiedCredentials()
-                    .find { it is SdJwtVcCredential } as SdJwtVcCredential?
+                val sdJwtCredential = (certifiedCreds.find { it is KeyBoundSdJwtVcCredential }
+                    ?: certifiedCreds.find { it is KeylessSdJwtVcCredential }) as SdJwtVcCredential?
                 if (sdJwtCredential != null) {
                     val allVcts = listOf(sdJwtCredential.vct) + sdJwtCredential.otherVcts
                     val vctsToRegister = if (iosSdJwtVcTypes == null) {

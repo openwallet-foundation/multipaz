@@ -1,7 +1,6 @@
 package org.multipaz.presentment
 
 import org.multipaz.credential.Credential
-import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentBadge
@@ -9,6 +8,8 @@ import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
@@ -21,14 +22,9 @@ import org.multipaz.request.RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import kotlin.time.Clock
 import kotlin.time.Instant
-
-
-private data class CredentialForPresentment(
-    val credential: Credential?,
-    val credentialKeyAgreement: Credential?
-)
 
 /**
  * An implementation of [PresentmentSource] for when using ISO mdoc and IETF SD-JWT VC credentials.
@@ -46,12 +42,13 @@ private data class CredentialForPresentment(
  * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
  * @property preferSignatureToKeyAgreement whether to use mdoc ECDSA authentication even if mdoc MAC authentication
  *   is possible (ISO mdoc only).
- * @property domainsMdocSignature the domains to use for [org.multipaz.mdoc.credential.MdocCredential] instances using
+ * @property domainsMdocSignature the domains to use for [KeyBoundMdocCredential] instances using
  * mdoc ECDSA authentication, will be tried in order.
- * @property domainsMdocKeyAgreement the domains to use for [org.multipaz.mdoc.credential.MdocCredential] instances
+ * @property domainsMdocKeyAgreement the domains to use for [KeyBoundMdocCredential] instances
  * using mdoc MAC authentication, will be tried in order.
+ * @property domainsKeylessMdoc the domains to use for [KeylessMdocCredential] instances, will be tried in order.
  * @property domainsKeylessSdJwt the domains to use for [KeylessSdJwtVcCredential] instances, will be tried in order.
- * @property domainsKeyBoundSdJwt the domains to use for [org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential]
+ * @property domainsKeyBoundSdJwt the domains to use for [KeyBoundSdJwtVcCredential]
  * instances, will be tried in order.
  */
 class SimplePresentmentSource(
@@ -71,6 +68,7 @@ class SimplePresentmentSource(
     val preferSignatureToKeyAgreement: Boolean = true,
     val domainsMdocSignature: List<String> = emptyList(),
     val domainsMdocKeyAgreement: List<String> = emptyList(),
+    val domainsKeylessMdoc: List<String> = emptyList(),
     val domainsKeylessSdJwt: List<String> = emptyList(),
     val domainsKeyBoundSdJwt: List<String> = emptyList(),
 ): PresentmentSource(
@@ -113,11 +111,60 @@ class SimplePresentmentSource(
         return getFaceMatchingModeFn(credential, requesterIdentities)
     }
 
-    private suspend fun Document.findCredential(domains: List<String>, now: Instant): Credential? {
+    private suspend inline fun <reified T : Credential> Document.findCredentialOfType(
+        domains: List<String>,
+        now: Instant,
+    ): T? {
         for (domain in domains) {
-            findCredential(domain, now)?.let {
-                return it
+            var candidate: T? = null
+            getCertifiedCredentialsForDomain(domain)
+                .filterIsInstance<T>()
+                .filter { now >= it.validFrom && now <= it.validUntil }
+                .forEach { cred ->
+                    if (candidate == null || cred.usageCount < candidate.usageCount) {
+                        candidate = cred
+                    }
+                }
+            if (candidate != null) {
+                return candidate
             }
+        }
+        return null
+    }
+
+    private suspend fun selectMdocCredential(
+        document: Document,
+        keyAgreementPossible: List<EcCurve>,
+        requireHolderBinding: Boolean,
+        now: Instant,
+    ): Credential? {
+        val sigCred = document.findCredentialOfType<KeyBoundMdocCredential>(domains = domainsMdocSignature, now = now)
+        val kaCred = document.findCredentialOfType<KeyBoundMdocCredential>(domains = domainsMdocKeyAgreement, now = now)
+        if (!preferSignatureToKeyAgreement && kaCred != null) {
+            val keyInfo = kaCred.secureArea.getKeyInfo(kaCred.alias)
+            if (keyAgreementPossible.contains(keyInfo.algorithm.curve!!)) {
+                return kaCred
+            }
+        }
+        if (sigCred != null) {
+            return sigCred
+        }
+        if (!requireHolderBinding) {
+            return document.findCredentialOfType<KeylessMdocCredential>(domains = domainsKeylessMdoc, now = now)
+        }
+        return null
+    }
+
+    private suspend fun selectSdJwtCredential(
+        document: Document,
+        requireHolderBinding: Boolean,
+        now: Instant,
+    ): Credential? {
+        document.findCredentialOfType<KeyBoundSdJwtVcCredential>(domains = domainsKeyBoundSdJwt, now = now)?.let {
+            return it
+        }
+        if (!requireHolderBinding) {
+            return document.findCredentialOfType<KeylessSdJwtVcCredential>(domains = domainsKeylessSdJwt, now = now)
         }
         return null
     }
@@ -127,90 +174,59 @@ class SimplePresentmentSource(
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
         credential: Credential?,
+        requireHolderBinding: Boolean,
     ): Credential? {
         val now = Clock.System.now()
-        val credsForPresentment = if (requestedClaims.isNotEmpty()) {
-            when (requestedClaims[0]) {
-                is MdocRequestedClaim -> {
-                    CredentialForPresentment(
-                        credential = document.findCredential(domains = domainsMdocSignature, now = now),
-                        credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
-                    )
-                }
-                is JsonRequestedClaim -> {
-                    if (document.getCertifiedCredentials().firstOrNull() is KeylessSdJwtVcCredential) {
-                        CredentialForPresentment(
-                            credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
-                            credentialKeyAgreement = null
-                        )
-                    } else {
-                        CredentialForPresentment(
-                            credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
-                            credentialKeyAgreement = null
-                        )
-                    }
-                }
-            }
-        } else if (credential != null) {
-            when (credential) {
-                is MdocCredential -> {
-                    CredentialForPresentment(
-                        credential = document.findCredential(domains = domainsMdocSignature, now = now),
-                        credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
-                    )
-                }
-                is KeylessSdJwtVcCredential -> {
-                    CredentialForPresentment(
-                        credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
-                        credentialKeyAgreement = null
-                    )
-                }
-                is KeyBoundSdJwtVcCredential -> {
-                    CredentialForPresentment(
-                        credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
-                        credentialKeyAgreement = null
-                    )
-                }
-                else -> {
-                    CredentialForPresentment(
-                        credential = document.findCredential(domains = domainsMdocSignature, now = now)
-                            ?: document.findCredential(domains = domainsKeyBoundSdJwt, now = now)
-                            ?: document.findCredential(domains = domainsKeylessSdJwt, now = now),
-                        credentialKeyAgreement = null
-                    )
-                }
-            }
-        } else {
-            val certifiedCreds = document.getCertifiedCredentials()
-            val mdocCred = document.findCredential(domains = domainsMdocSignature, now = now)
-            val mdocKeyAgreementCred = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
-            if (mdocCred != null || mdocKeyAgreementCred != null) {
-                CredentialForPresentment(
-                    credential = mdocCred,
-                    credentialKeyAgreement = mdocKeyAgreementCred
+        if (requestedClaims.isNotEmpty()) {
+            return when (requestedClaims[0]) {
+                is MdocRequestedClaim -> selectMdocCredential(
+                    document = document,
+                    keyAgreementPossible = keyAgreementPossible,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
                 )
-            } else if (certifiedCreds.any { it is KeylessSdJwtVcCredential }) {
-                CredentialForPresentment(
-                    credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
-                    credentialKeyAgreement = null
-                )
-            } else {
-                CredentialForPresentment(
-                    credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
-                    credentialKeyAgreement = null
+                is JsonRequestedClaim -> selectSdJwtCredential(
+                    document = document,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
                 )
             }
         }
-        if (!preferSignatureToKeyAgreement && credsForPresentment.credentialKeyAgreement != null) {
-            credsForPresentment.credentialKeyAgreement as SecureAreaBoundCredential
-            val keyInfo = credsForPresentment.credentialKeyAgreement.secureArea.getKeyInfo(
-                credsForPresentment.credentialKeyAgreement.alias
-            )
-            if (keyAgreementPossible.contains(keyInfo.algorithm.curve!!)) {
-                return credsForPresentment.credentialKeyAgreement
+        if (credential != null) {
+            return when (credential) {
+                is MdocCredential -> selectMdocCredential(
+                    document = document,
+                    keyAgreementPossible = keyAgreementPossible,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
+                )
+                is SdJwtVcCredential -> selectSdJwtCredential(
+                    document = document,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
+                )
+                else -> selectMdocCredential(
+                    document = document,
+                    keyAgreementPossible = keyAgreementPossible,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
+                ) ?: selectSdJwtCredential(
+                    document = document,
+                    requireHolderBinding = requireHolderBinding,
+                    now = now,
+                )
             }
         }
-        return credsForPresentment.credential
+        return selectMdocCredential(
+            document = document,
+            keyAgreementPossible = keyAgreementPossible,
+            requireHolderBinding = requireHolderBinding,
+            now = now,
+        ) ?: selectSdJwtCredential(
+            document = document,
+            requireHolderBinding = requireHolderBinding,
+            now = now,
+        )
     }
 
     // Companion object needed for multipaz-swift, see SimplePresentmentSourceExt.swift

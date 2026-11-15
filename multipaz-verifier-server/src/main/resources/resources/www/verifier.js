@@ -877,6 +877,7 @@ function rawDcqlReset_movie_and_id() {
     {
       "id": "movieticket",
       "format": "dc+sd-jwt",
+      "require_cryptographic_holder_binding": false,
       "meta": {
         "vct_values": ["https://utopia.example.com/vct/movieticket"]
       },
@@ -942,6 +943,7 @@ function rawDcqlReset_movie_and_id_alt() {
     {
       "id": "movieticket",
       "format": "dc+sd-jwt",
+      "require_cryptographic_holder_binding": false,
       "meta": {
         "vct_values": ["https://utopia.example.com/vct/movieticket"]
       },

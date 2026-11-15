@@ -7,7 +7,8 @@ import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.DocumentUtil
-import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -233,7 +234,7 @@ open class DocumentProvisioningHandler(
             createCredential = { credentialIdentifierToReplace ->
                 when (format) {
                     is CredentialFormat.Mdoc -> {
-                        MdocCredential.create(
+                        KeyBoundMdocCredential.create(
                             document = document,
                             asReplacementForIdentifier = credentialIdentifierToReplace,
                             domain = domain,
@@ -270,18 +271,28 @@ open class DocumentProvisioningHandler(
     ): List<Credential> {
         val settings = getDocumentProvisioningSettings(document, credentialMetadata, issuerMetadata)
         val now = Clock.System.now()
+        val domain = when (credentialMetadata.format) {
+            is CredentialFormat.Mdoc -> settings.mdocKeylessDomain
+            is CredentialFormat.SdJwt -> settings.sdJwtKeylessDomain
+        }
         DocumentUtil.managedCredentialHelper(
             document = document,
-            domain = settings.sdJwtKeylessDomain,
+            domain = domain,
             createCredential = { credentialIdentifierToReplace ->
-                // KeylessSdJwtVcCredential is the only keyless credential which is supported.
-                require(credentialMetadata.format is CredentialFormat.SdJwt)
-                KeylessSdJwtVcCredential.create(
-                    document = document,
-                    asReplacementForIdentifier = credentialIdentifierToReplace,
-                    domain = settings.sdJwtKeylessDomain,
-                    vct = credentialMetadata.format.vct
-                )
+                when (val format = credentialMetadata.format) {
+                    is CredentialFormat.Mdoc -> KeylessMdocCredential.create(
+                        document = document,
+                        asReplacementForIdentifier = credentialIdentifierToReplace,
+                        domain = domain,
+                        docType = format.docType
+                    )
+                    is CredentialFormat.SdJwt -> KeylessSdJwtVcCredential.create(
+                        document = document,
+                        asReplacementForIdentifier = credentialIdentifierToReplace,
+                        domain = domain,
+                        vct = format.vct
+                    )
+                }
             },
             now = now,
             numCredentials = settings.keylessCredentialNumPerDomain,
@@ -309,7 +320,7 @@ open class DocumentProvisioningHandler(
             if (certifiedInDomain.isEmpty()) {
                 continue
             }
-            val maxUses = if (domain == settings.sdJwtKeylessDomain) {
+            val maxUses = if (domain == settings.sdJwtKeylessDomain || domain == settings.mdocKeylessDomain) {
                 settings.keylessCredentialMaxUses
             } else {
                 settings.keyBoundCredentialMaxUses

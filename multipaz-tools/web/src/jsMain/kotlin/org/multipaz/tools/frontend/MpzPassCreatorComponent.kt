@@ -145,6 +145,7 @@ val MpzPassCreatorComponent = FC {
 
     // ISO mDoc options
     var docType by useState("org.iso.18013.5.1.mDL")
+    var mdocKeyBound by useState(true)
     var namespaces by useState<List<EditableNamespace>>(emptyList())
 
     // Generation State
@@ -374,8 +375,13 @@ val MpzPassCreatorComponent = FC {
                 )
                 val now = Clock.System.now().truncateToWholeSeconds()
 
+                val effectiveKeyBound = mdocKeyBound || docType.trim() == DrivingLicense.MDL_DOCTYPE
                 for (i in 0 until count) {
-                    val deviceKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
+                    val deviceKeyPrivate = if (effectiveKeyBound) {
+                        Crypto.createEcPrivateKey(EcCurve.P256)
+                    } else {
+                        null
+                    }
                     val mso = MobileSecurityObject(
                         version = "1.0",
                         docType = docType.trim(),
@@ -385,7 +391,7 @@ val MpzPassCreatorComponent = FC {
                         expectedUpdate = null,
                         digestAlgorithm = Algorithm.SHA256,
                         valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-                        deviceKey = deviceKeyPrivate.publicKey
+                        deviceKey = deviceKeyPrivate?.publicKey
                     )
                     val msoBytes = Cbor.encode(mso.toDataItem())
 
@@ -500,7 +506,7 @@ val MpzPassCreatorComponent = FC {
             } finally {
                 dsCertifiedKey?.close()
                 passSigningKey?.close()
-                isoMdocList.forEach { it.deviceKeyPrivate.close() }
+                isoMdocList.forEach { it.deviceKeyPrivate?.close() }
                 isGenerating = false
             }
         }
@@ -1448,6 +1454,29 @@ val MpzPassCreatorComponent = FC {
                     }
                     value = docType
                     onChange = { docType = it.target.value }
+                }
+                val isMdlDocType = docType.trim() == DrivingLicense.MDL_DOCTYPE
+                label {
+                    css {
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        marginTop = 12.px
+                        cursor = if (isMdlDocType) Cursor.notAllowed else Cursor.pointer
+                        color = if (isMdlDocType) Color("#94a3b8") else Color("#f1f5f9")
+                        fontSize = 13.px
+                    }
+                    input {
+                        type = "checkbox".unsafeCast<InputType>()
+                        checked = mdocKeyBound || isMdlDocType
+                        disabled = isMdlDocType
+                        onChange = { mdocKeyBound = it.target.checked }
+                    }
+                    +if (isMdlDocType) {
+                        "Key-Bound Credential (mandatory for org.iso.18013.5.1.mDL)"
+                    } else {
+                        "Key-Bound Credential (uncheck for keyless ISO mDoc)"
+                    }
                 }
             }
 

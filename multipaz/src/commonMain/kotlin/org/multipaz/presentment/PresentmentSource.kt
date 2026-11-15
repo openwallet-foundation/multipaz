@@ -103,6 +103,7 @@ abstract class PresentmentSource(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is one of the given curves.
      * @param credential the candidate credential being considered, if known.
+     * @param requireHolderBinding `true` if the selected credential must be cryptographically bound to a holder key.
      * @return a [Credential] belonging to [document] that may be presented or `null`.
      */
     abstract suspend fun selectCredential(
@@ -110,6 +111,7 @@ abstract class PresentmentSource(
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
         credential: Credential? = null,
+        requireHolderBinding: Boolean = true,
     ): Credential?
 
     /**
@@ -180,11 +182,13 @@ abstract class PresentmentSource(
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
             credential: Credential?,
+            requireHolderBinding: Boolean,
         ): Credential? = this@PresentmentSource.selectCredential(
             document = document,
             requestedClaims = requestedClaims,
             keyAgreementPossible = keyAgreementPossible,
             credential = credential,
+            requireHolderBinding = requireHolderBinding,
         )
 
         override suspend fun getBadges(document: Document): List<DocumentBadge> =

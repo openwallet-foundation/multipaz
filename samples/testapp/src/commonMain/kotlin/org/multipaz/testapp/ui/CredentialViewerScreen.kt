@@ -140,33 +140,37 @@ fun CredentialViewerScreen(
                         )
                         val keyAuthorizationsText = try {
                             val mso = (credentialInfo.credential as MdocCredential).mso
-                            val authorizedNamespaces = mso.deviceKeyAuthorizedNamespaces
-                            val authorizedDataElements = mso.deviceKeyAuthorizedDataElements
-                            if (authorizedNamespaces.isEmpty() && authorizedDataElements.isEmpty()) {
-                                AnnotatedString("None")
+                            if (mso.deviceKey == null) {
+                                AnnotatedString("Keyless (no device key)")
                             } else {
-                                buildAnnotatedString {
-                                    var firstSection = true
-                                    if (authorizedNamespaces.isNotEmpty()) {
-                                        firstSection = false
-                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                                            append("Namespaces:")
+                                val authorizedNamespaces = mso.deviceKeyAuthorizedNamespaces
+                                val authorizedDataElements = mso.deviceKeyAuthorizedDataElements
+                                if (authorizedNamespaces.isEmpty() && authorizedDataElements.isEmpty()) {
+                                    AnnotatedString("None")
+                                } else {
+                                    buildAnnotatedString {
+                                        var firstSection = true
+                                        if (authorizedNamespaces.isNotEmpty()) {
+                                            firstSection = false
+                                            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                                append("Namespaces:")
+                                            }
+                                            for (ns in authorizedNamespaces) {
+                                                append("\n• $ns")
+                                            }
                                         }
-                                        for (ns in authorizedNamespaces) {
-                                            append("\n• $ns")
-                                        }
-                                    }
-                                    if (authorizedDataElements.isNotEmpty()) {
-                                        if (!firstSection) {
-                                            append("\n\n")
-                                        }
-                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                                            append("Data Elements:")
-                                        }
-                                        for ((ns, elements) in authorizedDataElements) {
-                                            append("\n• $ns:")
-                                            for (elem in elements) {
-                                                append("\n  - $elem")
+                                        if (authorizedDataElements.isNotEmpty()) {
+                                            if (!firstSection) {
+                                                append("\n\n")
+                                            }
+                                            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                                append("Data Elements:")
+                                            }
+                                            for ((ns, elements) in authorizedDataElements) {
+                                                append("\n• $ns:")
+                                                for (elem in elements) {
+                                                    append("\n  - $elem")
+                                                }
                                             }
                                         }
                                     }

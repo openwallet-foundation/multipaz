@@ -124,6 +124,21 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
         }
 
         bool multiple = cJSON_IsTrue(cJSON_GetObjectItem(credential, "multiple"));
+        bool requireCryptographicHolderBinding = true;
+        cJSON* rchbItem = cJSON_GetObjectItem(credential, "require_cryptographic_holder_binding");
+        if (rchbItem != nullptr && cJSON_IsFalse(rchbItem)) {
+            requireCryptographicHolderBinding = false;
+        }
+        if (format == "mso_mdoc_zk") {
+            requireCryptographicHolderBinding = true;
+        }
+        bool hasTransactionData = false;
+        for (const auto& rc : requestedClaims) {
+            if (!rc.path.empty() && rc.path[0] == "org.iso.transactiondata") {
+                hasTransactionData = true;
+                break;
+            }
+        }
         std::vector<std::vector<uint8_t>> readerAuthAkis;
         dcqlCredentialQueries.push_back(DcqlCredentialQuery(
                 id,
@@ -135,7 +150,9 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
                 requestedClaims,
                 claimSets,
                 false,
-                multiple
+                multiple,
+                requireCryptographicHolderBinding,
+                hasTransactionData
         ));
     }
 
@@ -244,13 +261,22 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
 
     std::map<std::string, QueryResponse> credentialQueryIdToResponse;
     for (auto& query: dcqlCredentialQueries) {
+        bool allowKeyless = !query.requireCryptographicHolderBinding &&
+            query.format != "mso_mdoc_zk" &&
+            !query.hasTransactionData;
         std::vector<Credential*> credsSatifyingMeta;
         for (auto& cred: credentialDatabase->credentials) {
             if (!cred.supportsProtocol(protocol)) {
                 continue;
             }
+            if (!cred.keyBound && !allowKeyless) {
+                continue;
+            }
             if (query.format == "mso_mdoc" || query.format == "mso_mdoc_zk") {
                 if (cred.mdocDocType != query.mdocDocType) {
+                    continue;
+                }
+                if (!cred.keyBound && query.mdocDocType == "org.iso.18013.5.1.mDL") {
                     continue;
                 }
             } else if (query.format == "dc+sd-jwt") {

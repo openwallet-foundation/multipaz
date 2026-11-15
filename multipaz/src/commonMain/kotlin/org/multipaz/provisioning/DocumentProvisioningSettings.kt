@@ -23,7 +23,8 @@ import kotlin.time.Duration.Companion.seconds
  * @param mdocNoUserAuthDomain the domain to use when requesting ISO mdoc credentials without user auth required.
  * @param sdJwtUserAuthDomain the domain to use when requesting key-bound IETF SD-JWT VC credentials with user auth required.
  * @param sdJwtNoUserAuthDomain the domain to use when requesting key-bound IETF SD-JWT VC credentials without user auth required.
- * @param sdJwtKeylessDomain the domain to use when requesting non-key-bound IETF SD-JWT VC credentials
+ * @param sdJwtKeylessDomain the domain to use when requesting non-key-bound IETF SD-JWT VC credentials.
+ * @param mdocKeylessDomain the domain to use when requesting non-key-bound ISO mdoc credentials.
  */
 data class DocumentProvisioningSettings(
     val minValidTime: Duration = 5.days,
@@ -38,7 +39,8 @@ data class DocumentProvisioningSettings(
     val mdocNoUserAuthDomain: String = "mdoc_no_user_auth",
     val sdJwtUserAuthDomain: String = "sdjwt_user_auth",
     val sdJwtNoUserAuthDomain: String = "sdjwt_no_user_auth",
-    val sdJwtKeylessDomain: String = "sdjwt_keyless"
+    val sdJwtKeylessDomain: String = "sdjwt_keyless",
+    val mdocKeylessDomain: String = "mdoc_keyless"
 ) {
     /**
      * Creates a new [DocumentProvisioningSettings] with default values.
@@ -56,6 +58,7 @@ data class DocumentProvisioningSettings(
         mdocNoUserAuthDomain = "mdoc_no_user_auth",
         sdJwtUserAuthDomain = "sdjwt_user_auth",
         sdJwtNoUserAuthDomain = "sdjwt_no_user_auth",
-        sdJwtKeylessDomain = "sdjwt_keyless"
+        sdJwtKeylessDomain = "sdjwt_keyless",
+        mdocKeylessDomain = "mdoc_keyless"
     )
 }

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.response.allowsKeyless
 
 /**
  * Details about query for a particular credential in DCQL query.
@@ -89,6 +90,11 @@ sealed class QueryData {
                         } else {
                             emptyList()
                         }
+                        val requireCryptographicHolderBinding = if (isZk) {
+                            true
+                        } else {
+                            (credential["require_cryptographic_holder_binding"] as? JsonPrimitive)?.booleanOrNull ?: true
+                        }
                         MdocQueryData(
                             id = id,
                             multiple = multiple,
@@ -97,6 +103,7 @@ sealed class QueryData {
                             zkRequested = isZk,
                             zkRequired = isZk,
                             zkSystemSpecIds = zkSystemSpecIds,
+                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
                         )
                     }
                     else -> throw IllegalArgumentException("'format' value '$format' is invalid in credential query '$id'")
@@ -134,6 +141,7 @@ sealed class QueryData {
                     zkRequested = zkRequest != null,
                     zkRequired = zkRequest?.zkRequired == true,
                     zkSystemSpecIds = zkRequest?.systemSpecs?.map { it.id },
+                    requireCryptographicHolderBinding = !(docRequest.allowsKeyless(deviceRequest) && zkRequest == null),
                 )
             }
         }

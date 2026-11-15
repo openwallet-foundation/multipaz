@@ -105,7 +105,8 @@ private val validity = 5.minutes
 
 private val supportedScopes = recordTypes.keys + setOf(
     "utopia_naturalization_sd_jwt",
-    "utopia_movie_ticket_sd_jwt"
+    "utopia_movie_ticket_sd_jwt",
+    "utopia_movie_ticket_mdoc"
 )
 
 // We do not allow "#", "&" and "?" characters as they belong to query/fragment part of the

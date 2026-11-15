@@ -40,14 +40,22 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
+import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.TrustedRequesterIdentity
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -2251,8 +2259,8 @@ class DeviceRequestTest {
                 deviceRequestInfo = singleDocUseCaseInfo()
             ) {
                 addDocRequest(
-                    docType = DrivingLicense.MDL_DOCTYPE,
-                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    docType = PhotoID.PHOTO_ID_DOCTYPE,
+                    nameSpaces = mapOf(PhotoID.PHOTO_ID_NAMESPACE to mapOf("given_name" to false)),
                     docRequestInfo = DocRequestInfo(nonKeyBoundSupported = flag)
                 )
             }
@@ -2477,6 +2485,179 @@ class DeviceRequestTest {
             )
             assertFailsWith<SignatureVerificationException> {
                 badReq.verifyReaderAuthentication(transcript)
+            }
+        }
+    }
+
+    @Test
+    fun nonKeyBoundSupportedExecutionAndDomainSeparation() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
+
+        val sharedDomainDoc = harness.provisionKeylessMdoc(
+            displayName = "Keyless Movie Ticket",
+            docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+            data = mapOf(
+                UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to listOf(
+                    "ticket_id" to Tstr("99999")
+                )
+            ),
+            domain = "shared_domain"
+        )
+        harness.provisionKeylessSdJwtVc(
+            displayName = "Keyless SD-JWT Movie Ticket",
+            vct = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+            data = listOf("ticket_id" to kotlinx.serialization.json.JsonPrimitive("88888")),
+            domain = "shared_domain"
+        )
+
+        val sharedDomainSource = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            resolveTrustFn = { null },
+            showConsentPromptFn = ::promptModelSilentConsent,
+            domainsMdocSignature = listOf("shared_domain"),
+            domainsKeylessMdoc = listOf("shared_domain"),
+            domainsKeyBoundSdJwt = listOf("shared_domain"),
+            domainsKeylessSdJwt = listOf("shared_domain")
+        )
+        val transcript = buildCborArray { add("test") }
+
+        // 1. Without nonKeyBoundSupported = true, keyless credentials MUST NOT match even when sharing a domain
+        val reqHolderBoundOnly = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false))
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            reqHolderBoundOnly.execute(sharedDomainSource)
+        }
+
+        // 2. With nonKeyBoundSupported = true, keyless mdoc and keyless SD-JWT match
+        val reqKeylessMdocAllowed = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+            )
+        }
+        val mdocMatchResult = reqKeylessMdocAllowed.execute(sharedDomainSource)
+        assertEquals(1, mdocMatchResult.useCases.single().solutions.size)
+        assertTrue(
+            mdocMatchResult.useCases.single().solutions.single().matches.single().credential is KeylessMdocCredential
+        )
+
+        val reqKeylessSdJwtAllowed = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_VCT,
+                nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "c0" to buildJsonArray { add("ticket_id") }
+                    ),
+                    nonKeyBoundSupported = true
+                )
+            )
+        }
+        val sdJwtMatchResult = reqKeylessSdJwtAllowed.execute(sharedDomainSource)
+        assertEquals(1, sdJwtMatchResult.useCases.single().solutions.size)
+        assertTrue(
+            sdJwtMatchResult.useCases.single().solutions.single().matches.single().credential is KeylessSdJwtVcCredential
+        )
+
+        // 3. zkRequired = true never matches keyless mdoc; zkRequired = false falls back to non-ZK keyless mdoc
+        val zkSpecs = listOf(ZkSystemSpec(id = "0", system = "longfellow-zk"))
+        val reqZkRequired = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(
+                    nonKeyBoundSupported = true,
+                    zkRequest = ZkRequest(systemSpecs = zkSpecs, zkRequired = true)
+                )
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            reqZkRequired.execute(sharedDomainSource)
+        }
+
+        val reqZkOptional = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false)),
+                docRequestInfo = DocRequestInfo(
+                    nonKeyBoundSupported = true,
+                    zkRequest = ZkRequest(systemSpecs = zkSpecs, zkRequired = false)
+                )
+            )
+        }
+        assertEquals(1, reqZkOptional.execute(sharedDomainSource).useCases.single().solutions.size)
+
+        // 4. Transaction data requests never match keyless credentials
+        val reqWithTxData = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE,
+                nameSpaces = mapOf(
+                    UtopiaMovieTicket.MOVIE_TICKET_NAMESPACE to mapOf("ticket_id" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf("org.multipaz.transaction.ping" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    nonKeyBoundSupported = true,
+                    transactionData = TransactionsInfo(
+                        mapOf("org.multipaz.transaction.ping" to Bstr(byteArrayOf(1, 2, 3)))
+                    )
+                )
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            reqWithTxData.execute(sharedDomainSource)
+        }
+
+        // 5. When a document has both KeyBoundMdocCredential and KeylessMdocCredential, key-bound is preferred
+        UtopiaMovieTicket.getDocumentType().createMdocCredentialWithSampleData(
+            document = sharedDomainDoc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "shared_domain"
+        )
+        val preferredMatch = reqKeylessMdocAllowed.execute(sharedDomainSource)
+        assertTrue(
+            preferredMatch.useCases.single().solutions.single().matches.single().credential is KeyBoundMdocCredential
+        )
+
+        // 6. mDL docType rejects nonKeyBoundSupported = true
+        assertFailsWith<IllegalArgumentException> {
+            buildDeviceRequest(sessionTranscript = transcript) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    docRequestInfo = DocRequestInfo(nonKeyBoundSupported = true)
+                )
             }
         }
     }

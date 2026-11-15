@@ -64,7 +64,7 @@ class MdocCredentialTest {
 
         // Create first MdocCredential with this key
         val docType = "org.iso.18013.5.1.mDL"
-        val (originalCredentials, openid4vciKeyAttestation) = MdocCredential.createBatch(
+        val (originalCredentials, openid4vciKeyAttestation) = KeyBoundMdocCredential.createBatch(
             numberOfCredentials = 2,
             document = document,
             domain = "domain",

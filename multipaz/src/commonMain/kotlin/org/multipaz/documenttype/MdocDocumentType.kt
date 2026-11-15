@@ -22,11 +22,13 @@ import org.multipaz.cbor.DataItem
  * Class containing the metadata of an ISO mdoc Document Type.
  *
  * @property docType the ISO mdoc doc type e.g. `org.iso.18013.5.1.mDL`.
+ * @property keyBound whether credentials of this document type are bound to a device key.
  * @property namespaces the namespaces of the doc type.
  * @property supportsPortraitImageEquivalence if not null, indicates portrait image equivalence is supported.
  */
 class MdocDocumentType private constructor(
     val docType: String,
+    val keyBound: Boolean,
     val namespaces: Map<String, MdocNamespace>,
     val supportsPortraitImageEquivalence: MdocPortraitEquivalenceData? = null,
 ) {
@@ -34,11 +36,13 @@ class MdocDocumentType private constructor(
      * Builder class for class [MdocDocumentType].
      *
      * @param docType the docType of the ISO mdoc Document Type.
+     * @property keyBound whether credentials of this document type are bound to a device key.
      * @property namespaces the mutable map of namespaces being built.
      * @property supportsPortraitImageEquivalence if not null, indicates portrait image equivalence is supported.
      */
     data class Builder(
         val docType: String,
+        var keyBound: Boolean = true,
         internal val namespaces: MutableMap<String, MdocNamespace.Builder> = mutableMapOf(),
         var supportsPortraitImageEquivalence: MdocPortraitEquivalenceData? = null,
     ) {
@@ -144,6 +148,7 @@ class MdocDocumentType private constructor(
         fun build() =
             MdocDocumentType(
                 docType = docType,
+                keyBound = keyBound,
                 namespaces = namespaces.map { Pair(it.key, it.value.build()) }.toMap(),
                 supportsPortraitImageEquivalence = supportsPortraitImageEquivalence,
             )

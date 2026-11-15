@@ -22,6 +22,7 @@ import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
 import org.multipaz.eventlogger.EventPresentmentData
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
@@ -44,6 +45,7 @@ import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.securearea.buildPreloadedKeyUnlockDataProvider
@@ -326,7 +328,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
         source.resolveTrust(requester)
     }
 
-    val credentialsPresented = mutableListOf<SecureAreaBoundCredential>()
+    val credentialsPresented = mutableListOf<Credential>()
     lateinit var eventData: EventPresentmentData
 
     val includeDocRequestIds = deviceRequest.version.mdocVersionCompareTo("1.1") >= 0
@@ -495,6 +497,39 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                     val otherDocument = OtherDocument(
                         docFormat = "dc+sd-jwt",
                         data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate()),
+                        docRequestIds = listOf(docRequest.docRequestId),
+                    )
+                    docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
+                        addEncryptedDocuments(
+                            encryptionParameters = encryptionParameters,
+                            docRequestIds = listOf(docRequest.docRequestId)
+                        ) {
+                            addOtherDocument(otherDocument)
+                        }
+                    } ?: addOtherDocument(otherDocument)
+                }
+                is KeylessSdJwtVcCredential -> {
+                    check(match.transactionData.isEmpty()) {
+                        "Transaction data is not supported for keyless SD-JWT credentials"
+                    }
+                    val sdJwtVc = SdJwt.fromCompactSerialization(match.credential.issuerProvidedData.decodeToString())
+                    val pathsToDisclose = match.claims.map { (requestedClaim, _) ->
+                        requestedClaim as MdocRequestedClaim
+                        check(requestedClaim.namespaceName == "_") {
+                            "Expected _ for namespace, got ${requestedClaim.namespaceName}"
+                        }
+                        val path = docRequest.docRequestInfo?.dataElementIdentifierMapping?.get(
+                            requestedClaim.dataElementName
+                        )
+                        check(path != null) {
+                            "No path for data element ${requestedClaim.dataElementName}"
+                        }
+                        path
+                    }
+                    val filteredSdJwtVc = sdJwtVc.filter(pathsToDisclose)
+                    val otherDocument = OtherDocument(
+                        docFormat = "dc+sd-jwt",
+                        data = ByteString(filteredSdJwtVc.compactSerialization.encodeToByteArray().zlibDeflate()),
                         docRequestIds = listOf(docRequest.docRequestId),
                     )
                     docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
@@ -731,7 +766,7 @@ internal suspend fun canSatisfyChv1(
     presentmentSource: PresentmentSource,
     faceMatchingMode: FaceMatchingMode
 ): Boolean {
-    if (cred !is MdocCredential) {
+    if (cred !is KeyBoundMdocCredential) {
         return false
     }
     if (faceMatchingMode == FaceMatchingMode.NEVER) {

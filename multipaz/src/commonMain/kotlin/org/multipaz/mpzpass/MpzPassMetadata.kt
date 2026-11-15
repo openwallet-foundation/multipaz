@@ -15,6 +15,7 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.MdocPortraitEquivalenceData
 import org.multipaz.documenttype.fromDataItem
 import org.multipaz.documenttype.toDataItem
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
@@ -114,7 +115,10 @@ data class MpzPassMetadata(
         if (mdocCred != null &&
             (isoMdocClaimsMetadata.isNotEmpty() || isoMdocPortraitEquivalenceData != null)
         ) {
-            builder.addMdocDocumentType(mdocCred.docType)
+            builder.addMdocDocumentType(
+                mdocDocType = mdocCred.docType,
+                keyBound = mdocCred is KeyBoundMdocCredential
+            )
             builder.setSupportsPortraitImageEquivalence(isoMdocPortraitEquivalenceData)
             for ((namespace, elements) in isoMdocClaimsMetadata) {
                 for ((dataElementName, claimMeta) in elements) {

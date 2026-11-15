@@ -126,7 +126,8 @@ fun DocumentStoreScreen(
                             mpzPass = mpzPass,
                             isoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE,
                             sdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE,
-                            keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS
+                            keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS,
+                            keylessIsoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_KEYLESS
                         )
                         showToast("Imported pass '${doc.displayName ?: doc.identifier}' successfully")
                     } catch (e: Exception) {

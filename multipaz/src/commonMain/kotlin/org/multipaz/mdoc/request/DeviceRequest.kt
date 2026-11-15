@@ -46,8 +46,11 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
+import org.multipaz.mdoc.credential.KeyBoundMdocCredential
+import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
+import org.multipaz.mdoc.response.allowsKeyless
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
@@ -69,6 +72,7 @@ import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.generateAllPaths
@@ -520,6 +524,9 @@ data class DeviceRequest private constructor(
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
             }
+            require(!(docType == "org.iso.18013.5.1.mDL" && docRequestInfo?.nonKeyBoundSupported == true)) {
+                "nonKeyBoundSupported cannot be true for org.iso.18013.5.1.mDL"
+            }
             val docRequestInfoDataItem = docRequestInfo?.toDataItem()?.takeIf { it.asMap.isNotEmpty() }
             val effectiveDocRequestInfo = if (docRequestInfoDataItem != null) docRequestInfo else null
             val itemsRequest = buildCborMap {
@@ -573,6 +580,9 @@ data class DeviceRequest private constructor(
         ): Builder {
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
+            }
+            require(!(docType == "org.iso.18013.5.1.mDL" && docRequestInfo?.nonKeyBoundSupported == true)) {
+                "nonKeyBoundSupported cannot be true for org.iso.18013.5.1.mDL"
             }
             val docRequestInfoDataItem = docRequestInfo?.toDataItem()?.takeIf { it.asMap.isNotEmpty() }
             val effectiveDocRequestInfo = if (docRequestInfoDataItem != null) docRequestInfo else null
@@ -925,6 +935,10 @@ data class DeviceRequest private constructor(
         return PresentmentData(useCases)
     }
 
+    private fun DocRequest.hasTransactionData(): Boolean =
+        nameSpaces.containsKey(ISO_18013_TRANSACTION_DATA_NAMESPACE) ||
+            !docRequestInfo?.transactionData?.data.isNullOrEmpty()
+
     private suspend fun findMatchesForDocRequest(
         docRequest: DocRequest,
         presentmentSource: PresentmentSource,
@@ -932,21 +946,39 @@ data class DeviceRequest private constructor(
         requesterIdentities: List<RequesterIdentity>,
         getFaceMatchingMode: suspend (Credential) -> FaceMatchingMode,
     ): DocRequestResult {
+        val allowKeyless = docRequest.allowsKeyless(this) &&
+            docRequest.docRequestInfo?.zkRequest?.zkRequired != true &&
+            docRequest.docRequestInfo?.docFormat != "mso_mdoc_zk" &&
+            !docRequest.hasTransactionData()
         // Find credentials matching the requested DocType
         val candidates = mutableListOf<Credential>()
         for (documentId in presentmentSource.documentStore.listDocumentIds()) {
             val document = presentmentSource.documentStore.lookupDocument(documentId) ?: continue
             val docFormat = docRequest.docRequestInfo?.docFormat ?: "mso_mdoc"
+            val certifiedCreds = document.getCertifiedCredentials()
             val credential = when (docFormat) {
                 "mso_mdoc" -> {
-                    document.getCertifiedCredentials().find {
-                        it is MdocCredential && it.docType == docRequest.docType
+                    certifiedCreds.find {
+                        it is KeyBoundMdocCredential && it.docType == docRequest.docType
+                    } ?: if (allowKeyless && docRequest.docType != "org.iso.18013.5.1.mDL") {
+                        certifiedCreds.find {
+                            it is KeylessMdocCredential && it.docType == docRequest.docType
+                        }
+                    } else {
+                        null
                     }
                 }
                 "dc+sd-jwt" -> {
-                    document.getCertifiedCredentials().find {
+                    certifiedCreds.find {
                         it is KeyBoundSdJwtVcCredential &&
                             (it.vct == docRequest.docType || it.otherVcts.contains(docRequest.docType))
+                    } ?: if (allowKeyless) {
+                        certifiedCreds.find {
+                            it is KeylessSdJwtVcCredential &&
+                                (it.vct == docRequest.docType || it.otherVcts.contains(docRequest.docType))
+                        }
+                    } else {
+                        null
                     }
                 }
                 else -> null
@@ -1000,7 +1032,7 @@ data class DeviceRequest private constructor(
     ): RequestedClaim? {
         return when (cred) {
             is MdocCredential -> reqClaim
-            is KeyBoundSdJwtVcCredential -> {
+            is SdJwtVcCredential -> {
                 if (reqClaim.namespaceName != "_") {
                     null
                 } else {
@@ -1181,10 +1213,18 @@ data class DeviceRequest private constructor(
                 return ClaimMatchResult(null, reason)
             }
 
+            val requireHolderBinding = !(
+                docRequest.allowsKeyless(this) &&
+                    docRequest.docRequestInfo?.zkRequest?.zkRequired != true &&
+                    docRequest.docRequestInfo?.docFormat != "mso_mdoc_zk" &&
+                    selectedTransactions.isEmpty()
+                )
             val selectedCred = presentmentSource.selectCredential(
                 document = cred.document,
                 requestedClaims = requestedClaimsRemapped,
-                keyAgreementPossible = keyAgreementPossible
+                keyAgreementPossible = keyAgreementPossible,
+                credential = cred,
+                requireHolderBinding = requireHolderBinding,
             )
             if (selectedCred != null) {
                 val faceMatchingMode = getFaceMatchingMode(selectedCred)
@@ -1323,10 +1363,18 @@ data class DeviceRequest private constructor(
 
             if (!didNotMatch) {
                 // Success! Select the credential with these specific claims
+                val requireHolderBinding = !(
+                    docRequest.allowsKeyless(this) &&
+                        docRequest.docRequestInfo?.zkRequest?.zkRequired != true &&
+                        docRequest.docRequestInfo?.docFormat != "mso_mdoc_zk" &&
+                        selectedTransactions.isEmpty()
+                    )
                 val selectedCred = presentmentSource.selectCredential(
                     document = cred.document,
                     requestedClaims = requestedClaimsRemapped,
-                    keyAgreementPossible = keyAgreementPossible
+                    keyAgreementPossible = keyAgreementPossible,
+                    credential = cred,
+                    requireHolderBinding = requireHolderBinding,
                 )
                 if (selectedCred != null) {
                     val faceMatchingMode = getFaceMatchingMode(selectedCred)
@@ -1441,7 +1489,7 @@ data class DeviceRequest private constructor(
     fun toDcql(): JsonObject = buildJsonObject {
         putJsonArray("credentials") {
             docRequests.forEachIndexed { index, docRequest ->
-                addDcqlCredentialRequest(docRequest, "cred${index}")
+                addDcqlCredentialRequest(docRequest, "cred${index}", docRequest.allowsKeyless(this@DeviceRequest))
             }
         }
         if (deviceRequestInfo?.useCases?.isNotEmpty() == true) {
@@ -1465,7 +1513,11 @@ data class DeviceRequest private constructor(
     }
 }
 
-private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, credId: String) {
+private fun JsonArrayBuilder.addDcqlCredentialRequest(
+    docRequest: DocRequest,
+    credId: String,
+    allowsKeyless: Boolean,
+) {
     addJsonObject {
         put("id", credId)
         val docFormat = docRequest.docRequestInfo?.docFormat
@@ -1474,9 +1526,15 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
                 put("format", "mso_mdoc_zk")
             } else {
                 put("format", "mso_mdoc")
+                if (allowsKeyless) {
+                    put("require_cryptographic_holder_binding", false)
+                }
             }
         } else if (docFormat == "dc+sd-jwt") {
             put("format", "dc+sd-jwt")
+            if (allowsKeyless) {
+                put("require_cryptographic_holder_binding", false)
+            }
         }
         when (docFormat) {
             null, "mso_mdoc", "mso_mdoc_zk" -> {
@@ -1985,7 +2043,8 @@ internal fun deviceRequestAddQueries(
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()
             || credQuery.issuerIdentifiers.isNotEmpty()
-            || credQuery.multiple) {
+            || credQuery.multiple
+            || !credQuery.requireCryptographicHolderBinding) {
             DocRequestInfo(
                 uniqueDocSetRequired = if (credQuery.multiple) false else null,
                 alternativeDataElements = alternativeDataElements,
@@ -1993,7 +2052,12 @@ internal fun deviceRequestAddQueries(
                 docFormat = if (credQuery.format == "dc+sd-jwt") "dc+sd-jwt" else null,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
                 transactionData = docTransactions,
-                issuerIdentifiers = credQuery.issuerIdentifiers
+                issuerIdentifiers = credQuery.issuerIdentifiers,
+                nonKeyBoundSupported = if (!credQuery.requireCryptographicHolderBinding && zkRequest?.zkRequired != true) {
+                    true
+                } else {
+                    null
+                },
             )
         } else {
             null

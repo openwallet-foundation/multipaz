@@ -31,7 +31,7 @@ import kotlin.time.Instant
  * @property expectedUpdate the point in time the MSO is expected to be updated, if available.
  * @property digestAlgorithm the digest algorithm used for the value digests.
  * @property valueDigests the value digests, use [org.multipaz.mdoc.issuersigned.IssuerNamespaces.getValueDigests] to set.
- * @property deviceKey the public part of the key the MSO is bound to.
+ * @property deviceKey the public part of the key the MSO is bound to, or `null` for a non-key-bound mdoc.
  * @property deviceKeyAuthorizedNamespaces namespaces the mdoc is authorized to returned device signed data elements for.
  * @property deviceKeyAuthorizedDataElements data elements for which the mdoc is authorized to return data elements for.
  * @property deviceKeyInfo additional information about the device key.
@@ -46,12 +46,26 @@ data class MobileSecurityObject(
     val expectedUpdate: Instant?,
     val digestAlgorithm: Algorithm,
     val valueDigests: Map<String, Map<Long, ByteString>>,
-    val deviceKey: EcPublicKey,
+    val deviceKey: EcPublicKey?,
     val deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
     val deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     val deviceKeyInfo: Map<Long, DataItem> = emptyMap(),
     val revocationStatus: RevocationStatus? = null
 ) {
+    init {
+        if (deviceKey == null) {
+            require(docType != "org.iso.18013.5.1.mDL") {
+                "deviceKeyInfo is mandatory for org.iso.18013.5.1.mDL"
+            }
+            require(
+                deviceKeyAuthorizedNamespaces.isEmpty() &&
+                    deviceKeyAuthorizedDataElements.isEmpty() &&
+                    deviceKeyInfo.isEmpty()
+            ) {
+                "deviceKeyAuthorizedNamespaces, deviceKeyAuthorizedDataElements, and deviceKeyInfo must be empty when deviceKey is null"
+            }
+        }
+    }
 
     /**
      * Generates CBOR compliant with the CDDL for `MobileSecurityObject` according to ISO 18013-5.
@@ -90,30 +104,32 @@ data class MobileSecurityObject(
                 }
             }
         }
-        putCborMap("deviceKeyInfo") {
-            put("deviceKey", deviceKey.toCoseKey().toDataItem())
-            if (deviceKeyAuthorizedNamespaces.isNotEmpty() || deviceKeyAuthorizedDataElements.isNotEmpty()) {
-                putCborMap("keyAuthorizations") {
-                    if (deviceKeyAuthorizedNamespaces.isNotEmpty()) {
-                        putCborArray("nameSpaces") {
-                            deviceKeyAuthorizedNamespaces.forEach { add(it) }
+        if (deviceKey != null) {
+            putCborMap("deviceKeyInfo") {
+                put("deviceKey", deviceKey.toCoseKey().toDataItem())
+                if (deviceKeyAuthorizedNamespaces.isNotEmpty() || deviceKeyAuthorizedDataElements.isNotEmpty()) {
+                    putCborMap("keyAuthorizations") {
+                        if (deviceKeyAuthorizedNamespaces.isNotEmpty()) {
+                            putCborArray("nameSpaces") {
+                                deviceKeyAuthorizedNamespaces.forEach { add(it) }
+                            }
                         }
-                    }
-                    if (deviceKeyAuthorizedDataElements.isNotEmpty()) {
-                        putCborMap("dataElements") {
-                            deviceKeyAuthorizedDataElements.forEach { (namespace, dataElementList) ->
-                                putCborArray(namespace) {
-                                    dataElementList.forEach { add(it) }
+                        if (deviceKeyAuthorizedDataElements.isNotEmpty()) {
+                            putCborMap("dataElements") {
+                                deviceKeyAuthorizedDataElements.forEach { (namespace, dataElementList) ->
+                                    putCborArray(namespace) {
+                                        dataElementList.forEach { add(it) }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            if (deviceKeyInfo.isNotEmpty()) {
-                putCborMap("keyInfo") {
-                    deviceKeyInfo.forEach { (key, value) ->
-                        put(key.toDataItem(), value)
+                if (deviceKeyInfo.isNotEmpty()) {
+                    putCborMap("keyInfo") {
+                        deviceKeyInfo.forEach { (key, value) ->
+                            put(key.toDataItem(), value)
+                        }
                     }
                 }
             }
@@ -160,6 +176,9 @@ data class MobileSecurityObject(
 
         if (docType.isEmpty()) {
             addError("MSO docType cannot be empty")
+        }
+        if (docType == "org.iso.18013.5.1.mDL" && deviceKey == null) {
+            addError("MobileSecurityObject for mDL (org.iso.18013.5.1.mDL) missing required 'deviceKeyInfo'")
         }
 
         // Validity info checks
@@ -259,7 +278,6 @@ data class MobileSecurityObject(
                 "digestAlgorithm",
                 "docType",
                 "valueDigests",
-                "deviceKeyInfo",
                 "validityInfo"
             )
             for (key in requiredKeys) {
@@ -323,12 +341,12 @@ data class MobileSecurityObject(
                 valueDigests.put(namespace.asTstr, innerMap)
             }
 
-            val dkInfo = dataItem["deviceKeyInfo"]
-            val deviceKey = dkInfo["deviceKey"].asCoseKey.ecPublicKey
+            val dkInfo = dataItem.getOrNull("deviceKeyInfo")
+            val deviceKey = dkInfo?.get("deviceKey")?.asCoseKey?.ecPublicKey
 
             val deviceKeyAuthorizedNamespaces = mutableListOf<String>()
             val deviceKeyAuthorizedDataElements = mutableMapOf<String, List<String>>()
-            dkInfo.getOrNull("keyAuthorizations")?.let { keyAuthorizationsMap ->
+            dkInfo?.getOrNull("keyAuthorizations")?.let { keyAuthorizationsMap ->
                 keyAuthorizationsMap.getOrNull("nameSpaces")?.let { namespaces ->
                     namespaces.asArray.forEach { deviceKeyAuthorizedNamespaces.add(it.asTstr) }
                 }
@@ -339,7 +357,7 @@ data class MobileSecurityObject(
                 }
             }
             val deviceKeyInfo = mutableMapOf<Long, DataItem>()
-            dkInfo.getOrNull("keyInfo")?.let { keyInfoMap ->
+            dkInfo?.getOrNull("keyInfo")?.let { keyInfoMap ->
                 keyInfoMap.asMap.forEach { (key, value) ->
                     deviceKeyInfo.put(key.asNumber, value)
                 }

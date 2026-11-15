@@ -48,9 +48,11 @@ internal class CredentialLoader(
         val credential = createCredentialFunction.invoke(document)
         credential._identifier = identifier
         credential.deserialize(dataItem)
-        if (credential.credentialType != credentialType) {
+        if (credential.credentialType != credentialType &&
+            !(credentialType == "MdocCredential" && credential.credentialType == "KeyBoundMdocCredential")
+        ) {
             throw IllegalStateException(
-                "Inconsistent credential type: '$credentialType' vs '${credential.credentialType}")
+                "Inconsistent credential type: '$credentialType' vs '${credential.credentialType}'")
         }
         return credential
     }

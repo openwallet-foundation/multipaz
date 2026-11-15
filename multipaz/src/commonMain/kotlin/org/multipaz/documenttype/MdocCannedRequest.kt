@@ -23,6 +23,7 @@ import kotlin.collections.iterator
  * @param portraitEquivalenceRequest if not `null`, request portrait equivalence data elements.
  * @param namespacesToRequest the namespaces to request.
  * @param portraitEquivalenceData if not `null`, information about portrait image equivalence support for the doctype.
+ * @param keyBound `true` if the document type uses cryptographic holder binding, `false` if keyless.
  */
 data class MdocCannedRequest(
     val docType: String,
@@ -30,6 +31,7 @@ data class MdocCannedRequest(
     val portraitEquivalenceRequest: PortraitEquivalenceRequest?,
     val namespacesToRequest: List<MdocNamespaceRequest>,
     val portraitEquivalenceData: MdocPortraitEquivalenceData? = null,
+    val keyBound: Boolean = true,
 ) {
     /**
      * Generates DCQL for the request.
@@ -46,6 +48,9 @@ data class MdocCannedRequest(
                     put("format", JsonPrimitive("mso_mdoc_zk"))
                 } else {
                     put("format", JsonPrimitive("mso_mdoc"))
+                    if (!keyBound) {
+                        put("require_cryptographic_holder_binding", JsonPrimitive(false))
+                    }
                 }
                 putJsonObject("meta") {
                     put("doctype_value", JsonPrimitive(docType))

@@ -169,7 +169,7 @@ class MdocPresentmentTest {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: mDL
                               claims:
                                 claim:
@@ -188,7 +188,7 @@ class MdocPresentmentTest {
                             displayName: Encrypted Document Receiver
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: mDL
                               claims:
                                 claim:

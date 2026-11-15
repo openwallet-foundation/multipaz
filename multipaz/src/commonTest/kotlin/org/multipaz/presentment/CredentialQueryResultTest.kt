@@ -141,7 +141,7 @@ class CredentialQueryResultTest {
                   matches:
                     match:
                       credential:
-                        type: MdocCredential
+                        type: KeyBoundMdocCredential
                         docId: my-mDL
                         claims:
                           claim:
@@ -157,7 +157,7 @@ class CredentialQueryResultTest {
                   matches:
                     match:
                       credential:
-                        type: MdocCredential
+                        type: KeyBoundMdocCredential
                         docId: my-photoID
                         claims:
                           claim:
@@ -486,7 +486,7 @@ class CredentialQueryResultTest {
                             displayName: null
                           match:
                             credential:
-                              type: MdocCredential
+                              type: KeyBoundMdocCredential
                               docId: my-mDL
                               claims:
                                 claim:
