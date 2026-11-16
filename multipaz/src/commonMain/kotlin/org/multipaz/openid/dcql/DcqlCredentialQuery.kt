@@ -25,7 +25,7 @@ import org.multipaz.verification.VerifiedPresentation
  * @property multiple whether multiple credentials may be returned for this query.
  * @property claims a list of claims being requested.
  * @property claimSets a list of claim sets.
- * @property requireCryptographicHolderBinding whether cryptographic holder binding is required.
+ * @property keyBindingRequired whether cryptographic key binding is required.
  */
 data class DcqlCredentialQuery(
     val id: String,
@@ -44,7 +44,7 @@ data class DcqlCredentialQuery(
     val claimSets: List<DcqlClaimSet>,
 
     internal val claimIdToClaim: Map<String, RequestedClaim>,
-    val requireCryptographicHolderBinding: Boolean = true,
+    val keyBindingRequired: Boolean = true,
 ) {
     /**
      * Verifies that [presentation] matches this credential query's format, type (`vct` or `docType`),
@@ -59,9 +59,9 @@ data class DcqlCredentialQuery(
         presentation: VerifiedPresentation,
         documentTypeRepository: DocumentTypeRepository? = null,
     ) {
-        if (requireCryptographicHolderBinding && !presentation.holderBound) {
+        if (keyBindingRequired && !presentation.keyBound) {
             throw IllegalStateException(
-                "Cryptographic holder binding is required for query '$id', but presentation is not holder-bound"
+                "Key binding is required for query '$id', but presentation is not key-bound"
             )
         }
         val candidateClaims = when (format) {
@@ -91,8 +91,8 @@ data class DcqlCredentialQuery(
                         "Presented mdoc docType '${mdocPresentation.docType}' does not match requested docType '$mdocDocType' for query '$id'"
                     )
                 }
-                if (mdocPresentation.docType == "org.iso.18013.5.1.mDL" && !mdocPresentation.holderBound) {
-                    throw IllegalStateException("mDL presentation must always be holder-bound")
+                if (mdocPresentation.docType == "org.iso.18013.5.1.mDL" && !mdocPresentation.keyBound) {
+                    throw IllegalStateException("mDL presentation must always be key-bound")
                 }
                 presentation.issuerSignedClaims + presentation.deviceSignedClaims
             }

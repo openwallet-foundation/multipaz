@@ -28,7 +28,7 @@ import kotlin.time.Instant
  * @property revocationStatus the revocation status, if present.
  * @property docRequestIds optional list of `DocRequest` indices in `DeviceRequest.docRequests`
  *   that this presentation responds to when ISO/IEC 18013-5 is in use, or `null` if not specified.
- * @property holderBound true if the presentation was cryptographically bound to a holder key
+ * @property keyBound true if the presentation was cryptographically bound to a key
  *   (or verified via a Zero-Knowledge Proof), false if keyless.
  */
 sealed class VerifiedPresentation() {
@@ -44,5 +44,5 @@ sealed class VerifiedPresentation() {
     abstract val transactionData: List<TransactionData<*>>
     abstract val revocationStatus: RevocationStatus?
     abstract val docRequestIds: List<Int>?
-    abstract val holderBound: Boolean
+    abstract val keyBound: Boolean
 }

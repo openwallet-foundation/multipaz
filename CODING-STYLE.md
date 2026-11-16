@@ -18,6 +18,18 @@ with the following changes
   particular, call `delay(10.milliseconds)` and `withTimeout(5.seconds)` rather than
   `delay(10)` or `withTimeout(5000)`.
 
+- Use **`keyBound`**, **`keyBindingRequired`**, **`KeyBound*`**, and **`Keyless*`** (e.g.
+  `KeyBoundMdocCredential`, `KeylessSdJwtVcCredential`, `MdocDocumentType.keyBound`,
+  `VerifiedPresentation.keyBound`, and `keyBindingRequired: Boolean = true`) when referring to
+  whether a credential or presentation is cryptographically bound to a private key. Avoid terms
+  such as `"holder binding"`, `holderBound`, `requireHolderBinding`,
+  `requireCryptographicHolderBinding`, or `deviceBound` / `deviceBindingRequired` in APIs,
+  parameters, properties, and KDoc—traditionally the *holder* refers to the human subject of the
+  credential, whereas ISO mdoc `deviceSigned` and SD-JWT `kb+jwt` prove possession of a key.
+  Reserve protocol-specific names strictly for wire-format serialization keys or direct wire
+  structures (such as `"require_cryptographic_holder_binding"` in serialized DCQL JSON or
+  `DocRequestInfo.nonKeyBoundSupported` in ISO/IEC 18013-5).
+
 ## Exception Handling
 
 - **Never catch `Throwable`:** `Throwable` is the root of the hierarchy and includes fatal

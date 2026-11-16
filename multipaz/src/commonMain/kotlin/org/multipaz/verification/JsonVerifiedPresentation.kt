@@ -30,5 +30,5 @@ data class JsonVerifiedPresentation(
     override val transactionData: List<TransactionData<*>>,
     override val revocationStatus: RevocationStatus? = null,
     override val docRequestIds: List<Int>? = null,
-    override val holderBound: Boolean = true,
+    override val keyBound: Boolean = true,
 ): VerifiedPresentation()

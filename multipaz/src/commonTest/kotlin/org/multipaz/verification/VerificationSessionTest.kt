@@ -691,7 +691,7 @@ class VerificationSessionTest {
     }
 
     @Test
-    fun testSdJwtHolderBindingValidityAndAudienceChecks() = runTest {
+    fun testSdJwtKeyBindingValidityAndAudienceChecks() = runTest {
         setup()
         val now = Clock.System.now()
         val holderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -1195,7 +1195,7 @@ class VerificationSessionTest {
         )
         assertEquals(1, presentations.size)
         val mdoc = assertIs<MdocVerifiedPresentation>(presentations[0])
-        assertFalse(mdoc.holderBound)
+        assertFalse(mdoc.keyBound)
         assertEquals(UtopiaMovieTicket.MOVIE_TICKET_DOCTYPE, mdoc.docType)
         assertTrue(mdoc.deviceSignedClaims.isEmpty())
 
@@ -1220,7 +1220,7 @@ class VerificationSessionTest {
         )
         assertEquals(1, presentations.size)
         val ticket = assertIs<JsonVerifiedPresentation>(presentations[0])
-        assertFalse(ticket.holderBound)
+        assertFalse(ticket.keyBound)
         assertEquals(UtopiaMovieTicket.MOVIE_TICKET_VCT, ticket.vct)
         assertTrue(ticket.deviceSignedClaims.isEmpty())
 
@@ -1404,7 +1404,7 @@ class VerificationSessionTest {
     }
 
     @Test
-    fun testKeylessHolderBindingEnforcementAndMdocAntiStripping() = runTest {
+    fun testKeylessKeyBindingEnforcementAndMdocAntiStripping() = runTest {
         setup()
         val now = Clock.System.now()
         val nonce = "test-nonce-keyless-enforcement"
@@ -1466,7 +1466,7 @@ class VerificationSessionTest {
             vpRequest = buildSdJwtRequest(""", "require_cryptographic_holder_binding": false"""),
             mdocSessionTranscript = null,
         ).verify(atTime = now)
-        assertFalse(verifiedKeylessSdJwt.single().holderBound)
+        assertFalse(verifiedKeylessSdJwt.single().keyBound)
 
         // 2. Keyless mdoc must be rejected when require_cryptographic_holder_binding is omitted or true
         val keylessMdocDoc = harness.documentStore.listDocumentIds()
@@ -1542,7 +1542,7 @@ class VerificationSessionTest {
             ),
             mdocSessionTranscript = sessionTranscript,
         ).verify(atTime = now)
-        assertFalse(verifiedKeylessMdoc.single().holderBound)
+        assertFalse(verifiedKeylessMdoc.single().keyBound)
 
         // 3. Anti-stripping: a key-bound mdoc (MSO contains deviceKeyInfo) with deviceSigned stripped
         //    must be rejected EVEN when require_cryptographic_holder_binding is false!
@@ -1715,7 +1715,7 @@ class VerificationSessionTest {
                 record.verifyNonce(nonce)
                 val verified = record.verify(documentTypeRepository = harness.documentTypeRepository)
                 assertEquals(1, verified.size)
-                assertTrue(verified.single().holderBound)
+                assertTrue(verified.single().keyBound)
                 assertEquals(nonEcDsKey.publicKey, verified.single().documentSignerCertChain!!.certificates.first().publicKey)
                 if (expectedFormatMdoc) {
                     assertIs<MdocVerifiedPresentation>(verified.single())
@@ -1748,7 +1748,7 @@ class VerificationSessionTest {
                 record.verifyNonce(nonce)
                 val verified = record.verify(documentTypeRepository = harness.documentTypeRepository)
                 assertEquals(1, verified.size)
-                assertTrue(verified.single().holderBound)
+                assertTrue(verified.single().keyBound)
                 assertEquals(nonEcDsKey.publicKey, verified.single().documentSignerCertChain!!.certificates.first().publicKey)
                 if (expectedFormatMdoc) {
                     assertIs<MdocVerifiedPresentation>(verified.single())
@@ -1792,7 +1792,7 @@ class VerificationSessionTest {
             )
             val proximityVerified = proximityRecord.verify(documentTypeRepository = harness.documentTypeRepository)
             val mdocVerified = assertIs<MdocVerifiedPresentation>(proximityVerified.single())
-            assertTrue(mdocVerified.holderBound)
+            assertTrue(mdocVerified.keyBound)
             assertEquals(nonEcDsKey.publicKey, mdocVerified.documentSignerCertChain.certificates.first().publicKey)
         }
     }

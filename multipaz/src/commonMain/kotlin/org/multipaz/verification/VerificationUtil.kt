@@ -124,6 +124,7 @@ object VerificationUtil {
      * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
      * @param deviceRequestVersion the version to use or `null` to automatically determine which
      *   version to use.
+     * @param keyBindingRequired whether cryptographic key binding is required.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -141,7 +142,7 @@ object VerificationUtil {
         docRequestOtherInfo: Map<String, DataItem> = emptyMap(),
         issuerIdentifiers: List<ByteString> = emptyList(),
         deviceRequestVersion: String? = null,
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequest(
@@ -160,7 +161,7 @@ object VerificationUtil {
                 docRequestOtherInfo = docRequestOtherInfo,
                 issuerIdentifiers = issuerIdentifiers,
                 deviceRequestVersion = deviceRequestVersion,
-                requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                keyBindingRequired = keyBindingRequired,
             )
         }
         return buildJsonObject {
@@ -352,7 +353,7 @@ object VerificationUtil {
         docRequestOtherInfo: Map<String, DataItem>,
         issuerIdentifiers: List<ByteString> = emptyList(),
         deviceRequestVersion: String? = null,
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -379,7 +380,7 @@ object VerificationUtil {
                             claims = claims,
                             zkSystemSpecs = zkSystemSpecs,
                             issuerIdentifiers = issuerIdentifiers,
-                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                            keyBindingRequired = keyBindingRequired,
                         ),
                         jsonTransactionData = jsonTransactionData
                     )
@@ -461,7 +462,7 @@ object VerificationUtil {
                                 transactionData = cborTransactionData,
                                 otherInfo = docRequestOtherInfo,
                                 issuerIdentifiers = issuerIdentifiers,
-                                nonKeyBoundSupported = if (!requireCryptographicHolderBinding && zkRequest == null) {
+                                nonKeyBoundSupported = if (!keyBindingRequired && zkRequest == null) {
                                     true
                                 } else {
                                     null
@@ -521,6 +522,7 @@ object VerificationUtil {
      * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
      * @param deviceRequestVersion the version to use or `null` to automatically determine which
      *   version to use.
+     * @param keyBindingRequired whether cryptographic key binding is required.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -536,7 +538,7 @@ object VerificationUtil {
         cborTransactionData: TransactionsInfo? = null,
         issuerIdentifiers: List<ByteString> = emptyList(),
         deviceRequestVersion: String? = null,
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -577,7 +579,7 @@ object VerificationUtil {
                                 docRequestOtherInfo = emptyMap(),
                                 issuerIdentifiers = issuerIdentifiers,
                                 deviceRequestVersion = deviceRequestVersion,
-                                requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                                keyBindingRequired = keyBindingRequired,
                             )["data"] as JsonObject
                         )
                     }
@@ -603,7 +605,7 @@ object VerificationUtil {
                                     vct = vct,
                                     claims = claims,
                                     issuerIdentifiers = issuerIdentifiers,
-                                    requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                                    keyBindingRequired = keyBindingRequired,
                                 ),
                                 jsonTransactionData = jsonTransactionData
                             )
@@ -623,7 +625,7 @@ object VerificationUtil {
         claims: List<MdocRequestedClaim>,
         zkSystemSpecs: List<ZkSystemSpec>,
         issuerIdentifiers: List<ByteString> = emptyList(),
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
@@ -632,7 +634,7 @@ object VerificationUtil {
                     put("format", JsonPrimitive("mso_mdoc_zk"))
                 } else {
                     put("format", JsonPrimitive("mso_mdoc"))
-                    if (!requireCryptographicHolderBinding) {
+                    if (!keyBindingRequired) {
                         put("require_cryptographic_holder_binding", JsonPrimitive(false))
                     }
                 }
@@ -683,13 +685,13 @@ object VerificationUtil {
         vct: List<String>,
         claims: List<JsonRequestedClaim>,
         issuerIdentifiers: List<ByteString> = emptyList(),
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
                 put("id", JsonPrimitive("cred1"))
                 put("format", JsonPrimitive("dc+sd-jwt"))
-                if (!requireCryptographicHolderBinding) {
+                if (!keyBindingRequired) {
                     put("require_cryptographic_holder_binding", JsonPrimitive(false))
                 }
                 putJsonObject("meta") {
@@ -1020,7 +1022,7 @@ object VerificationUtil {
                             identifier = credId,
                             now = now,
                             expectedAudience = expectedAudience,
-                            requireCryptographicHolderBinding = credQueryData.requireCryptographicHolderBinding,
+                            keyBindingRequired = credQueryData.keyBindingRequired,
                         ) as JsonVerifiedPresentation
                         val matchesVct = sdjwtVerifiedPresentation.vct in credQueryData.vct ||
                             (documentTypeRepository != null &&
@@ -1044,13 +1046,13 @@ object VerificationUtil {
                             zkSystemRepository = if (credQueryData.zkRequested) zkSystemRepository else null,
                             transactionData = transactionData,
                             vpTokenIdentifier = credId,
-                            requireHolderBinding = credQueryData.requireCryptographicHolderBinding,
+                            keyBindingRequired = credQueryData.keyBindingRequired,
                         )
                         check(mdocVerifiedPresentations.size == 1)
                         val mdocPresentation = mdocVerifiedPresentations.single() as MdocVerifiedPresentation
-                        if (credQueryData.requireCryptographicHolderBinding && !mdocPresentation.holderBound) {
+                        if (credQueryData.keyBindingRequired && !mdocPresentation.keyBound) {
                             throw IllegalStateException(
-                                "Cryptographic holder binding is required for query '$credId', but mdoc presentation is not holder-bound"
+                                "Key binding is required for query '$credId', but mdoc presentation is not key-bound"
                             )
                         }
                         if (!credQueryData.zkRequested && mdocPresentation.zkpUsed) {
@@ -1099,7 +1101,7 @@ object VerificationUtil {
      * @param identifier optional VP token credential query identifier.
      * @param now the time at which to evaluate credential and KB-JWT validity.
      * @param expectedAudience the expected KB-JWT `aud` claim value.
-     * @param requireCryptographicHolderBinding whether a Key Binding JWT is required even if the
+     * @param keyBindingRequired whether a Key Binding JWT is required even if the
      *  credential does not contain a `cnf` claim.
      * @param docRequestIds optional list of `DocRequest` indices satisfied by this presentation.
      * @return a [VerifiedPresentation] instance.
@@ -1112,7 +1114,7 @@ object VerificationUtil {
         identifier: String? = null,
         now: Instant = Clock.System.now(),
         expectedAudience: String?,
-        requireCryptographicHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
         docRequestIds: List<Int>? = null,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
@@ -1126,9 +1128,9 @@ object VerificationUtil {
             if (sdJwt.jwtBody.containsKey("cnf")) {
                 throw IllegalStateException("`cnf` claim present in SD-JWT, but no Key Binding JWT was provided")
             }
-            if (requireCryptographicHolderBinding) {
+            if (keyBindingRequired) {
                 throw IllegalStateException(
-                    "Cryptographic holder binding is required, but no Key Binding JWT was provided"
+                    "Key binding is required, but no Key Binding JWT was provided"
                 )
             }
         }
@@ -1229,7 +1231,7 @@ object VerificationUtil {
             transactionData = transactionData,
             revocationStatus = sdJwt.revocationStatus,
             docRequestIds = docRequestIds,
-            holderBound = sdJwtKb != null,
+            keyBound = sdJwtKb != null,
         )
     }
 
@@ -1310,7 +1312,7 @@ object VerificationUtil {
         zkSystemRepository: ZkSystemRepository?,
         transactionData: List<TransactionData<*>>,
         vpTokenIdentifier: String,
-        requireHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ): List<VerifiedPresentation> {
         val deviceResponse = DeviceResponse.fromDataItem(deviceResponse)
         if (deviceResponse.status != DeviceResponse.STATUS_OK) {
@@ -1322,7 +1324,7 @@ object VerificationUtil {
             sessionTranscript = sessionTranscript,
             transactionData = transactionData,
             atTime = now,
-            requireHolderBinding = requireHolderBinding,
+            keyBindingRequired = keyBindingRequired,
         )
         return createVerifiedPresentationList(
             now = now,
@@ -1419,7 +1421,7 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
     ): Boolean {
         val req = request.docRequests[reqIndex]
-        if (!presentation.holderBound && !req.allowsKeyless(request)) {
+        if (!presentation.keyBound && !req.allowsKeyless(request)) {
             return false
         }
         val docFormat = req.docRequestInfo?.docFormat ?: "mso_mdoc"
@@ -1478,7 +1480,7 @@ object VerificationUtil {
                 if (presentation !is MdocVerifiedPresentation || presentation.docType != req.docType) {
                     return false
                 }
-                if (!presentation.holderBound && presentation.docType == "org.iso.18013.5.1.mDL") {
+                if (!presentation.keyBound && presentation.docType == "org.iso.18013.5.1.mDL") {
                     return false
                 }
                 val zkRequest = req.docRequestInfo?.zkRequest
@@ -1610,7 +1612,7 @@ object VerificationUtil {
                     transactionData = document.transactionData,
                     revocationStatus = document.mso.revocationStatus,
                     docRequestIds = document.docRequestIds,
-                    holderBound = document.deviceAuth != null,
+                    keyBound = document.deviceAuth != null,
                 )
             )
         }
@@ -1756,7 +1758,7 @@ object VerificationUtil {
                     transactionData = document.transactionData,
                     now = now,
                     expectedAudience = document.expectedAudience,
-                    requireCryptographicHolderBinding = document.holderBindingRequired,
+                    keyBindingRequired = document.keyBindingRequired,
                     docRequestIds = document.docRequestIds,
                 )
             )

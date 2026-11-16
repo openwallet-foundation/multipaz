@@ -1775,7 +1775,7 @@ class DeviceResponseTest {
                 transactionData = emptyList(),
                 now = euPidTimeSigned,
                 expectedAudience = null,
-                requireCryptographicHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertEquals("SD-JWT is not valid anymore", error.message)
@@ -1888,7 +1888,7 @@ class DeviceResponseTest {
                 transactionData = emptyList(),
                 now = euPidTimeSigned,
                 expectedAudience = null,
-                requireCryptographicHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertEquals("SD-JWT is not yet valid", error.message)
@@ -1917,7 +1917,7 @@ class DeviceResponseTest {
                 transactionData = emptyList(),
                 now = euPidTimeSigned,
                 expectedAudience = null,
-                requireCryptographicHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertEquals("SD-JWT is not valid anymore", error.message)
@@ -1946,7 +1946,7 @@ class DeviceResponseTest {
                 transactionData = emptyList(),
                 now = euPidTimeSigned,
                 expectedAudience = null,
-                requireCryptographicHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertEquals("SD-JWT is not yet valid", error.message)
@@ -2488,7 +2488,7 @@ class DeviceResponseTest {
                 transactionData = emptyList(),
                 now = euPidTimeSigned,
                 expectedAudience = null,
-                requireCryptographicHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertEquals("SD-JWT is not valid anymore", exactExpError.message)
@@ -3938,19 +3938,19 @@ class DeviceResponseTest {
         val rawDocItem = Cbor.decode(encoded)["documents"][0]
         assertFalse(rawDocItem.hasKey("deviceSigned"))
 
-        // 1. Default standalone verify() requires holder binding -> rejects keyless mdoc
+        // 1. Default standalone verify() requires key binding -> rejects keyless mdoc
         val parsedDefault = DeviceResponse.fromDataItem(Cbor.decode(encoded))
         assertFailsWith<IllegalStateException> {
             parsedDefault.verify(sessionTranscript = sessionTranscript, atTime = mdlTimeValidityBegin)
         }
 
-        // 2. Standalone verifySingleDoc(requireHolderBinding = false) succeeds and deviceAuth is null
+        // 2. Standalone verifySingleDoc(keyBindingRequired = false) succeeds and deviceAuth is null
         val parsedAllowKeyless = DeviceResponse.fromDataItem(Cbor.decode(encoded))
         parsedAllowKeyless.verifySingleDoc(
             sessionTranscript = sessionTranscript,
             transactionData = emptyList(),
             atTime = mdlTimeValidityBegin,
-            requireHolderBinding = false
+            keyBindingRequired = false
         )
         assertNull(parsedAllowKeyless.documents.single().deviceAuth)
 
@@ -4076,7 +4076,7 @@ class DeviceResponseTest {
         assertNull(decryptedPt.documents.single().deviceAuth)
 
         // 6. Anti-stripping security check: stripping deviceSigned from a key-bound MSO MUST fail
-        // even when requireHolderBinding = false / nonKeyBoundSupported = true!
+        // even when keyBindingRequired = false / nonKeyBoundSupported = true!
         val validKeyBoundDoc = verifiedKeyBoundPhotoIdResp.documents.single()
         val strippedDeviceSignedCbor = buildCborMap {
             put("version", "1.1")
@@ -4098,7 +4098,7 @@ class DeviceResponseTest {
                 sessionTranscript = sessionTranscript,
                 transactionData = emptyList(),
                 atTime = photoIdTimeValidityBegin,
-                requireHolderBinding = false
+                keyBindingRequired = false
             )
         }
         assertFailsWith<IllegalStateException> {
@@ -4144,7 +4144,7 @@ class DeviceResponseTest {
         val decompressedJwt = response.otherDocuments.single().data.toByteArray().zlibInflate().decodeToString()
         assertTrue(decompressedJwt.endsWith("~"))
 
-        // 1. Default standalone verify() requires holder binding -> rejects keyless SD-JWT
+        // 1. Default standalone verify() requires key binding -> rejects keyless SD-JWT
         assertFailsWith<IllegalStateException> {
             DeviceResponse.fromDataItem(Cbor.decode(encoded)).verify(
                 sessionTranscript = sessionTranscript,
@@ -4152,14 +4152,14 @@ class DeviceResponseTest {
             )
         }
 
-        // 2. Standalone OtherDocument.verify(requireHolderBinding = false) succeeds
+        // 2. Standalone OtherDocument.verify(keyBindingRequired = false) succeeds
         val parsedAllowKeyless = DeviceResponse.fromDataItem(Cbor.decode(encoded))
         parsedAllowKeyless.otherDocuments.single().verify(
             sessionTranscript = sessionTranscript,
             eReaderKey = null,
             transactionData = emptyList(),
             atTime = mdlTimeValidityBegin,
-            requireHolderBinding = false
+            keyBindingRequired = false
         )
         assertEquals(1, parsedAllowKeyless.otherDocuments.size)
 
@@ -4210,7 +4210,7 @@ class DeviceResponseTest {
         assertEquals(1, parsedWithReq.otherDocuments.size)
 
         // 5. Anti-stripping security check: key-bound SD-JWT (with cnf) stripped of its KB-JWT MUST fail
-        // even when requireHolderBinding = false or nonKeyBoundSupported = true!
+        // even when keyBindingRequired = false or nonKeyBoundSupported = true!
         val keyBoundSdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
         val strippedPresentation = keyBoundSdJwt.filter { _, _ -> true }.compactSerialization
         assertTrue(strippedPresentation.endsWith("~"))
@@ -4230,7 +4230,7 @@ class DeviceResponseTest {
                 eReaderKey = null,
                 transactionData = emptyList(),
                 atTime = euPidTimeValidityBegin,
-                requireHolderBinding = false
+                keyBindingRequired = false
             )
         }
         val euPidReqNonKeyBound = buildDeviceRequest(

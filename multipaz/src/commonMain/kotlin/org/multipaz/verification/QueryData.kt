@@ -46,7 +46,7 @@ sealed class QueryData {
                     "dc+sd-jwt" -> {
                         val vctArray = meta["vct_values"] as? JsonArray
                             ?: throw IllegalArgumentException("'meta.vct_values' is missing or invalid in credential query '$id'")
-                        val requireCryptographicHolderBinding =
+                        val keyBindingRequired =
                             (credential["require_cryptographic_holder_binding"] as? JsonPrimitive)?.booleanOrNull ?: true
                         SdJwtQueryData(
                             id = id,
@@ -55,7 +55,7 @@ sealed class QueryData {
                                 (it as? JsonPrimitive)?.content
                                     ?: throw IllegalArgumentException("'meta.vct_values' is not an array of string in credential query '$id'")
                             },
-                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                            keyBindingRequired = keyBindingRequired,
                         )
                     }
                     "mso_mdoc", "mso_mdoc_zk" -> {
@@ -90,7 +90,7 @@ sealed class QueryData {
                         } else {
                             emptyList()
                         }
-                        val requireCryptographicHolderBinding = if (isZk) {
+                        val keyBindingRequired = if (isZk) {
                             true
                         } else {
                             (credential["require_cryptographic_holder_binding"] as? JsonPrimitive)?.booleanOrNull ?: true
@@ -103,7 +103,7 @@ sealed class QueryData {
                             zkRequested = isZk,
                             zkRequired = isZk,
                             zkSystemSpecIds = zkSystemSpecIds,
-                            requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                            keyBindingRequired = keyBindingRequired,
                         )
                     }
                     else -> throw IllegalArgumentException("'format' value '$format' is invalid in credential query '$id'")
@@ -141,7 +141,7 @@ sealed class QueryData {
                     zkRequested = zkRequest != null,
                     zkRequired = zkRequest?.zkRequired == true,
                     zkSystemSpecIds = zkRequest?.systemSpecs?.map { it.id },
-                    requireCryptographicHolderBinding = !(docRequest.allowsKeyless(deviceRequest) && zkRequest == null),
+                    keyBindingRequired = !(docRequest.allowsKeyless(deviceRequest) && zkRequest == null),
                 )
             }
         }

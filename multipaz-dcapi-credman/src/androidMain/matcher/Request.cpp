@@ -480,7 +480,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
             mdocDocType = docType;
         }
 
-        bool requireCryptographicHolderBinding = isVersion10 || !nonKeyBoundSupported || zkRequired;
+        bool keyBindingRequired = isVersion10 || !nonKeyBoundSupported || zkRequired;
 
         credentialQueries.push_back(DcqlCredentialQuery(
                 credId,
@@ -493,7 +493,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 claimSets,
                 isVersion10,
                 multiple,
-                requireCryptographicHolderBinding,
+                keyBindingRequired,
                 hasTransactionData
         ));
     }

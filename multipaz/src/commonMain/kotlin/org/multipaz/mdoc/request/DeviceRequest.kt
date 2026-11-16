@@ -1275,7 +1275,7 @@ data class DeviceRequest private constructor(
                 return ClaimMatchResult(null, "no compatible ZK system for required ZK proof")
             }
 
-            val requireHolderBinding = !(
+            val keyBindingRequired = !(
                 docRequest.allowsKeyless(this) &&
                     !zkRequired &&
                     selectedTransactions.isEmpty()
@@ -1285,7 +1285,7 @@ data class DeviceRequest private constructor(
                 requestedClaims = requestedClaimsRemapped,
                 keyAgreementPossible = keyAgreementPossible,
                 credential = cred,
-                requireHolderBinding = requireHolderBinding,
+                keyBindingRequired = keyBindingRequired,
             )
             if (selectedCred != null) {
                 val faceMatchingMode = getFaceMatchingMode(selectedCred)
@@ -1449,7 +1449,7 @@ data class DeviceRequest private constructor(
                     continue
                 }
                 // Success! Select the credential with these specific claims
-                val requireHolderBinding = !(
+                val keyBindingRequired = !(
                     docRequest.allowsKeyless(this) &&
                         !zkRequired &&
                         selectedTransactions.isEmpty()
@@ -1459,7 +1459,7 @@ data class DeviceRequest private constructor(
                     requestedClaims = requestedClaimsRemapped,
                     keyAgreementPossible = keyAgreementPossible,
                     credential = cred,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                 )
                 if (selectedCred != null) {
                     val faceMatchingMode = getFaceMatchingMode(selectedCred)
@@ -2198,7 +2198,7 @@ internal fun deviceRequestAddQueries(
             || dataElementIdentifierMapping.isNotEmpty()
             || credQuery.issuerIdentifiers.isNotEmpty()
             || credQuery.multiple
-            || !credQuery.requireCryptographicHolderBinding) {
+            || !credQuery.keyBindingRequired) {
             DocRequestInfo(
                 uniqueDocSetRequired = if (credQuery.multiple) false else null,
                 alternativeDataElements = alternativeDataElements,
@@ -2207,7 +2207,7 @@ internal fun deviceRequestAddQueries(
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
                 transactionData = docTransactions,
                 issuerIdentifiers = credQuery.issuerIdentifiers,
-                nonKeyBoundSupported = if (!credQuery.requireCryptographicHolderBinding && zkRequest?.zkRequired != true) {
+                nonKeyBoundSupported = if (!credQuery.keyBindingRequired && zkRequest?.zkRequired != true) {
                     true
                 } else {
                     null

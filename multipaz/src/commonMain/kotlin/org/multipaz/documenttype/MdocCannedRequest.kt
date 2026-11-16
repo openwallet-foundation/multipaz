@@ -23,7 +23,7 @@ import kotlin.collections.iterator
  * @param portraitEquivalenceRequest if not `null`, request portrait equivalence data elements.
  * @param namespacesToRequest the namespaces to request.
  * @param portraitEquivalenceData if not `null`, information about portrait image equivalence support for the doctype.
- * @param keyBound `true` if the document type uses cryptographic holder binding, `false` if keyless.
+ * @param keyBound `true` if the document type uses cryptographic key binding, `false` if keyless.
  */
 data class MdocCannedRequest(
     val docType: String,

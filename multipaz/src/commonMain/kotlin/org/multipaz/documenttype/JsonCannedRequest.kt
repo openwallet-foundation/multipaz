@@ -17,7 +17,7 @@ import kotlin.collections.iterator
  *
  * @param vct the verifiable credential type.
  * @param claimsToRequest the claims to request.
- * @param keyBound `true` if the document type uses cryptographic holder binding, `false` if keyless.
+ * @param keyBound `true` if the document type uses cryptographic key binding, `false` if keyless.
  */
 data class JsonCannedRequest(
     val vct: String,

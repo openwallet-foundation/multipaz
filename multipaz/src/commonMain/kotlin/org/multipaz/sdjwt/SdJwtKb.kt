@@ -88,10 +88,10 @@ class SdJwtKb private constructor(
         if (typHeader != "kb+jwt") {
             throw IllegalStateException("KB-JWT header 'typ' must be 'kb+jwt', got '$typHeader'")
         }
-        val holderKey = sdJwt.kbKey
-            ?: throw IllegalStateException("SD-JWT does not contain a holder binding key in 'cnf'")
+        val kbKey = sdJwt.kbKey
+            ?: throw IllegalStateException("SD-JWT does not contain a key-binding key in 'cnf'")
         try {
-            JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", holderKey)
+            JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", kbKey)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw SignatureVerificationException("Error validating KB signature", e)
