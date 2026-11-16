@@ -25,6 +25,7 @@ import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.encapsulateInDo53
 import org.multipaz.mdoc.transport.extractFromDo53
 import org.multipaz.nfc.AlternativeCarrierRecord
+import org.multipaz.nfc.CollisionResolutionRecord
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
@@ -42,6 +43,7 @@ import org.multipaz.util.UUID
 import org.multipaz.util.getUInt16
 import org.multipaz.util.toHex
 import kotlin.math.min
+import kotlin.random.Random
 
 private const val TAG = "mdocReaderNfcHandover"
 
@@ -79,21 +81,76 @@ data class MdocReaderNfcHandoverResult(
 )
 
 /**
+ * Specifies which NFC engagement technologies an mdoc reader should attempt during handover.
+ */
+enum class MdocReaderNfcEngagementType {
+    /**
+     * Prefer NFC Concurrent Channel Engagement (CCE) from ISO/IEC 18013-5 Second Edition,
+     * falling back to NFC Connection Handover (Static or Negotiated Handover from
+     * ISO/IEC 18013-5:2021) if the remote tag does not support NFC CCE.
+     */
+    NFC_CCE_AND_NFC_CONNECTION_HANDOVER,
+
+    /**
+     * Only attempt NFC Concurrent Channel Engagement (CCE) from ISO/IEC 18013-5 Second Edition;
+     * do not fall back to NFC Connection Handover.
+     */
+    NFC_CCE_ONLY,
+
+    /**
+     * Only attempt NFC Connection Handover (Static or Negotiated Handover from
+     * ISO/IEC 18013-5:2021); do not attempt NFC CCE.
+     */
+    NFC_CONNECTION_HANDOVER_ONLY,
+}
+
+/**
  * Options for when performing handover as a mdoc reader.
  *
- * @property useCce if `true`, will attempt to use NFC Concurrent Channel Engagement (CCE) from ISO/IEC 18013-5 Second Edition.
- * @property eReaderKeyCurve the curve to use when generating the ephemeral reader key for CCE if [eReaderKey] is `null`.
- * @property eReaderKey optional explicit ephemeral reader private key to include in `ReaderEngagement` during CCE handover.
- * @property readerEngagement optional [ReaderEngagement] to include as an `"mdocreader"` auxiliary data record in
- *   NFC Negotiated Handover `HandoverRequest` messages (ISO/IEC 18013-5 Second Edition clause 9.4.3). When `null`
- *   (the default), the `"mdocreader"` record is omitted.
+ * @property engagementType which NFC engagement technologies to attempt during handover.
+ * @property cceEReaderKeyCurve the curve to use when generating the ephemeral reader key for CCE if
+ *   [cceEReaderKey] is `null`.
+ * @property cceEReaderKey optional explicit ephemeral reader private key to include in
+ *   `ReaderEngagement` during CCE handover.
+ * @property readerEngagement optional [ReaderEngagement] to send in NFC CCE (`CCEHandoverRequest`,
+ *   ISO/IEC 18013-5 Second Edition clause 9.5.4) and/or as an `"mdocreader"` auxiliary data record
+ *   in NFC Negotiated Handover `HandoverRequest` messages (ISO/IEC 18013-5 Second Edition clause
+ *   9.4). Its [ReaderEngagement.connectionMethods] (`DeviceRetrievalMethods` field) must be empty;
+ *   for NFC CCE, any secondary connection methods offered in `negotiatedHandoverConnectionMethods`
+ *   are merged in automatically if applicable. If [ReaderEngagement.eReaderKey] is non-null and
+ *   NFC CCE is enabled, [cceEReaderKey] must also be provided with a matching public key.
+ * @property random the [Random] instance used when generating random handover values (such as the
+ *   16-bit random number in the NFC Negotiated Handover [CollisionResolutionRecord]), defaulting to
+ *   [Crypto.secureRandom].
  */
 data class MdocReaderNfcHandoverOptions(
-    val useCce: Boolean = false,
-    val eReaderKeyCurve: EcCurve = EcCurve.P256,
-    val eReaderKey: EcPrivateKey? = null,
+    val engagementType: MdocReaderNfcEngagementType =
+        MdocReaderNfcEngagementType.NFC_CCE_AND_NFC_CONNECTION_HANDOVER,
+    val cceEReaderKeyCurve: EcCurve = EcCurve.P256,
+    val cceEReaderKey: EcPrivateKey? = null,
     val readerEngagement: ReaderEngagement? = null,
-)
+    val random: Random = Crypto.secureRandom,
+) {
+    init {
+        if (readerEngagement != null) {
+            require(readerEngagement.connectionMethods.isEmpty()) {
+                "DeviceRetrievalMethods (connectionMethods) must be absent in readerEngagement"
+            }
+            if (readerEngagement.eReaderKey != null) {
+                if (engagementType != MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY) {
+                    require(cceEReaderKey != null) {
+                        "cceEReaderKey must be provided when readerEngagement.eReaderKey is set and NFC CCE is enabled"
+                    }
+                }
+                if (cceEReaderKey != null) {
+                    require(readerEngagement.eReaderKey == cceEReaderKey.publicKey) {
+                        "readerEngagement.eReaderKey must match cceEReaderKey.publicKey"
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * Perform NFC Engagement as a mdoc reader.
@@ -102,7 +159,8 @@ data class MdocReaderNfcHandoverOptions(
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
  * negotiated handover or CCE.
  * @param options a [MdocReaderNfcHandoverOptions]
- * @return a [MdocReaderNfcHandoverResult] if the handover was successful or `null` if the tag isn't an NDEF tag.
+ * @return a [MdocReaderNfcHandoverResult] if the handover was successful or `null` if the tag does
+ *   not support the requested engagement technology.
  * @throws Throwable if an error occurs during handover.
  */
 suspend fun mdocReaderNfcHandover(
@@ -111,7 +169,7 @@ suspend fun mdocReaderNfcHandover(
     options: MdocReaderNfcHandoverOptions = MdocReaderNfcHandoverOptions()
 ): MdocReaderNfcHandoverResult? {
     // First try Concurrent Channel Engagement (CCE), if requested...
-    if (options.useCce) {
+    if (options.engagementType != MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY) {
         val selectApplicationResponse = try {
             tag.selectApplication(
                 applicationId = Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID,
@@ -119,9 +177,22 @@ suspend fun mdocReaderNfcHandover(
                 le = 0x100,
             )
         } catch (e: NfcCommandFailedException) {
-            if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND) {
-                Logger.i(TAG, "Selecting NFC CCE AID returned FILE_NOT_FOUND")
+            if (options.engagementType == MdocReaderNfcEngagementType.NFC_CCE_ONLY) {
+                if (e.status == Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND ||
+                    e.status == Nfc.RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED
+                ) {
+                    Logger.i(
+                        TAG,
+                        "NFC CCE application selection failed with 0x${e.status.toString(16)} in NFC_CCE_ONLY mode, continuing scanning"
+                    )
+                    return null
+                }
+                throw e
             }
+            Logger.i(
+                TAG,
+                "Selecting NFC CCE AID failed with 0x${e.status.toString(16)}, falling back to NFC Connection Handover"
+            )
             null
         }
         if (selectApplicationResponse != null) {
@@ -219,6 +290,7 @@ suspend fun mdocReaderNfcHandover(
     val hrMessage = generateHandoverRequestMessage(
         methods = negotiatedHandoverConnectionMethods,
         readerEngagement = options.readerEngagement,
+        random = options.random,
     )
     val hsMessage = tag.ndefTransact(hrMessage, hspr.wtInt, hspr.nWait)
 
@@ -288,12 +360,15 @@ private suspend fun mdocReaderNfcCceHandover(
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
     options: MdocReaderNfcHandoverOptions,
 ): MdocReaderNfcHandoverResult {
-    val eReaderKey = options.eReaderKey ?: Crypto.createEcPrivateKey(options.eReaderKeyCurve)
+    val eReaderKey = options.cceEReaderKey ?: Crypto.createEcPrivateKey(options.cceEReaderKeyCurve)
     // Per ISO/IEC 18013-5 Second Edition clauses 9.5.1 and 11.2.1, NfcOptions are never sent in CCEHandoverRequest
     // because NFC is already the active CCE engagement and primary transport channel.
     val cceSecondaryMethods = negotiatedHandoverConnectionMethods.filterNot { it is MdocConnectionMethod.Nfc }
 
-    val readerEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
+    val readerEngagement = options.readerEngagement?.withCceDetails(
+        cceEReaderKey = eReaderKey.publicKey,
+        cceSecondaryMethods = cceSecondaryMethods,
+    ) ?: buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
         for (method in cceSecondaryMethods) {
             addConnectionMethod(method)
         }
@@ -349,6 +424,7 @@ private suspend fun mdocReaderNfcCceHandover(
 private fun generateHandoverRequestMessage(
     methods: List<MdocConnectionMethod>,
     readerEngagement: ReaderEngagement? = null,
+    random: Random = Crypto.secureRandom,
 ): NdefMessage {
     val auxiliaryReferences = if (readerEngagement != null) listOf("mdocreader") else emptyList()
     val ndefBundles = MdocConnectionMethod.encodeNdefHandoverCarriers(
@@ -363,9 +439,10 @@ private fun generateHandoverRequestMessage(
         carrierAndAuxiliaryRecords.addAll(ndefRecords.auxiliaryRecords)
         alternativeCarrierRecords.add(ndefRecords.alternativeCarrierRecord.generateNdefRecord())
     }
+    val collisionResolutionRecord = CollisionResolutionRecord.create(random).generateNdefRecord()
     val handoverRequestRecord = HandoverRequestRecord(
         version = 0x15,
-        embeddedMessage = NdefMessage(alternativeCarrierRecords)
+        embeddedMessage = NdefMessage(listOf(collisionResolutionRecord) + alternativeCarrierRecords)
     )
     val headerRecords = buildList {
         add(handoverRequestRecord.generateNdefRecord())

@@ -5,25 +5,34 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocNfcHandoverType
 import org.multipaz.mdoc.engagement.buildReaderEngagement
+import org.multipaz.nfc.AlternativeCarrierRecord
+import org.multipaz.nfc.CollisionResolutionRecord
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.NdefMessage
+import org.multipaz.nfc.NdefRecord
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcCommandFailedException
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.ResponseApdu
+import org.multipaz.nfc.ServiceParameterRecord
+import org.multipaz.nfc.ServiceSelectRecord
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
+import org.multipaz.util.toHex
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -139,6 +148,9 @@ class MdocNfcEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = getConnectionMethods(),
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            ),
         )
         assertNotNull(handoverResult)
         assertEquals(staticHandoverConnectionMethods, handoverResult.connectionMethods)
@@ -187,6 +199,10 @@ class MdocNfcEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = negotiatedHandoverConnectionMethods,
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                random = Random(42),
+            ),
         )
         assertNotNull(handoverResult)
         assertEquals(1, handoverResult.connectionMethods.size)
@@ -215,7 +231,7 @@ class MdocNfcEngagementHelperTest {
                 ResponseApdu(status=36864, payload=ByteString(size=2 hex=0006))
                 CommandApdu(cla=0, ins=176, p1=0, p2=2, payload=ByteString(size=0), le=6)
                 ResponseApdu(status=36864, payload=ByteString(size=6 hex=d10201546500))
-                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=111 hex=006d910215487215910204616301013000510206616301036e6663001a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107b66eef55ee782ea2514bb6a1c42ad5b35c11010369736f2e6f72673a31383031333a6e66636e666301), le=0)
+                CommandApdu(cla=0, ins=214, p1=0, p2=0, payload=ByteString(size=118 hex=007491021c487215910202637239ef110204616301013000510206616301036e6663001a2015016170706c69636174696f6e2f766e642e626c7565746f6f74682e6c652e6f6f6230021c021107b66eef55ee782ea2514bb6a1c42ad5b35c11010369736f2e6f72673a31383031333a6e66636e666301), le=0)
                 ResponseApdu(status=36864, payload=ByteString(size=0))
                 CommandApdu(cla=0, ins=176, p1=0, p2=0, payload=ByteString(size=0), le=2)
                 ResponseApdu(status=36864, payload=ByteString(size=2 hex=00c2))
@@ -259,6 +275,9 @@ class MdocNfcEngagementHelperTest {
             val result = mdocReaderNfcHandover(
                 tag = tag,
                 negotiatedHandoverConnectionMethods = staticHandoverConnectionMethods,
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                ),
             )
         }
         assertEquals("Error selecting file, status 6f00", e.message)
@@ -299,6 +318,9 @@ class MdocNfcEngagementHelperTest {
             mdocReaderNfcHandover(
                 tag = tag,
                 negotiatedHandoverConnectionMethods = connectionMethods,
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                ),
             )
         }
         assertEquals("UUIDs for both BLE modes are not the same", e.message)
@@ -340,6 +362,9 @@ class MdocNfcEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = getConnectionMethods(),
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            ),
         )
         assertNotNull(handoverResult)
         assertEquals(methods, handoverResult.connectionMethods)
@@ -392,6 +417,9 @@ class MdocNfcEngagementHelperTest {
         val handoverResult1 = mdocReaderNfcHandover(
             tag = tag1,
             negotiatedHandoverConnectionMethods = readerOffered,
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            ),
         )
         assertNotNull(handoverResult1)
         assertEquals(listOf(bleL2capCc), handoverResult1.connectionMethods)
@@ -411,6 +439,9 @@ class MdocNfcEngagementHelperTest {
         val handoverResult2 = mdocReaderNfcHandover(
             tag = tag2,
             negotiatedHandoverConnectionMethods = readerOffered,
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            ),
         )
         assertNotNull(handoverResult2)
         assertEquals(listOf(bleCc), handoverResult2.connectionMethods)
@@ -442,7 +473,10 @@ class MdocNfcEngagementHelperTest {
         val handoverResult3 = mdocReaderNfcHandover(
             tag = tag3,
             negotiatedHandoverConnectionMethods = readerOffered,
-            options = MdocReaderNfcHandoverOptions(readerEngagement = readerEngagement),
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                readerEngagement = readerEngagement,
+            ),
         )
         assertNotNull(handoverResult3)
         assertEquals(
@@ -627,5 +661,130 @@ class MdocNfcEngagementHelperTest {
         val secondLengthBytes = tag.readBinary(0, 2)
         assertEquals(1, handoverCompleteCalls)
         assertContentEquals(firstLengthBytes, secondLengthBytes)
+    }
+
+    @Test
+    fun testCollisionResolutionRecordEncodingAndLenientMdocHandling() = runTest {
+        // 1. Wire-format verification against NFC Forum CH 1.5 Section 7.3 & ISO 18013-5 Annex D ("91020263720102")
+        val cr = CollisionResolutionRecord(0x0102)
+        val crNdef = cr.generateNdefRecord()
+        assertEquals(NdefRecord.Tnf.WELL_KNOWN, crNdef.tnf)
+        assertEquals(Nfc.RTD_COLLISION_RESOLUTION, crNdef.type)
+        assertEquals("0102", crNdef.payload.toByteArray().toHex())
+        assertEquals(cr, CollisionResolutionRecord.fromNdefRecord(crNdef))
+
+        val acNdef = AlternativeCarrierRecord(
+            cps = AlternativeCarrierRecord.CPS_ACTIVE,
+            carrierDataReference = "0",
+        ).generateNdefRecord()
+        val hrWithCr = HandoverRequestRecord(
+            version = 0x15,
+            embeddedMessage = NdefMessage(listOf(crNdef, acNdef)),
+        ).generateNdefRecord()
+        assertTrue(
+            hrWithCr.payload.toByteArray().toHex().startsWith("1591020263720102"),
+            "Expected Hr payload to start with version 0x15 + 'cr' record 91020263720102"
+        )
+
+        // Bounds and malformed payload checks
+        assertFailsWith<IllegalArgumentException> { CollisionResolutionRecord(-1) }
+        assertFailsWith<IllegalArgumentException> { CollisionResolutionRecord(0x10000) }
+        assertNull(CollisionResolutionRecord.fromNdefRecord(acNdef))
+        assertFailsWith<IllegalArgumentException> {
+            CollisionResolutionRecord.fromNdefRecord(
+                NdefRecord(
+                    tnf = NdefRecord.Tnf.WELL_KNOWN,
+                    type = Nfc.RTD_COLLISION_RESOLUTION,
+                    payload = ByteString(byteArrayOf(0x01)),
+                )
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CollisionResolutionRecord.fromNdefRecord(
+                NdefRecord(
+                    tnf = NdefRecord.Tnf.WELL_KNOWN,
+                    type = Nfc.RTD_COLLISION_RESOLUTION,
+                    payload = ByteString(byteArrayOf(0x01, 0x02, 0x03)),
+                )
+            )
+        }
+
+        // 2. Verify mdocReaderNfcHandover emits CollisionResolutionRecord as first embedded record in Hr
+        val expectedSeededCr = CollisionResolutionRecord.create(Random(12345))
+        var capturedHrRecord: HandoverRequestRecord? = null
+        val engagementHelper = MdocNfcEngagementHelper(
+            eDeviceKey = getEDeviceKeyPub(),
+            onHandoverComplete = { _, _, handover ->
+                val hrMessage = NdefMessage.fromEncoded(handover.asArray[1].asBstr)
+                capturedHrRecord = HandoverRequestRecord.fromNdefRecord(hrMessage.records.first())
+            },
+            onError = { error -> fail("Unexpected error: $error") },
+            negotiatedHandoverPicker = { methods -> methods.first() },
+        )
+        val handoverResult = mdocReaderNfcHandover(
+            tag = LoopbackIsoTag(engagementHelper),
+            negotiatedHandoverConnectionMethods = getConnectionMethods(),
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                random = Random(12345),
+            ),
+        )
+        assertNotNull(handoverResult)
+        val hrEmbedded = assertNotNull(capturedHrRecord).embeddedMessage.records
+        assertTrue(hrEmbedded.size >= 2)
+        assertEquals(expectedSeededCr, CollisionResolutionRecord.fromNdefRecord(hrEmbedded.first()))
+        assertNotNull(AlternativeCarrierRecord.fromNdefRecord(hrEmbedded[1]))
+
+        // 3. Verify MdocNfcEngagementHelper leniently accepts Hr messages with missing, misplaced,
+        //    duplicated, or malformed "cr" records (logging a warning rather than failing)
+        val nfcBundle = MdocConnectionMethod.encodeNdefHandoverCarriers(
+            methods = listOf(MdocConnectionMethod.Nfc(4096, 4096)),
+            handoverType = MdocNfcHandoverType.NEGOTIATED_HR,
+        ).single()
+        val acRec = nfcBundle.alternativeCarrierRecord.generateNdefRecord()
+        val malformedCrRec = NdefRecord(
+            tnf = NdefRecord.Tnf.WELL_KNOWN,
+            type = Nfc.RTD_COLLISION_RESOLUTION,
+            payload = ByteString(byteArrayOf(0x42)),
+        )
+        for (embeddedList in listOf(
+            listOf(acRec),                       // missing "cr"
+            listOf(acRec, crNdef),               // "cr" not first
+            listOf(crNdef, crNdef, acRec),       // duplicate "cr"
+            listOf(malformedCrRec, acRec),       // malformed 1-byte "cr"
+        )) {
+            var completed = false
+            val lenientHelper = MdocNfcEngagementHelper(
+                eDeviceKey = getEDeviceKeyPub(),
+                onHandoverComplete = { cms, _, _ ->
+                    completed = true
+                    assertEquals(1, cms.size)
+                },
+                onError = { error -> fail("Expected lenient acceptance, got $error") },
+                negotiatedHandoverPicker = { methods -> methods.first() },
+            )
+            val tag = LoopbackIsoTag(lenientHelper)
+            tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
+            tag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)
+            val ccFile = tag.readBinary(0, 15)
+            val ndefFileId = ((ccFile[9].toInt() and 0xff) shl 8) or (ccFile[10].toInt() and 0xff)
+            tag.selectFile(ndefFileId)
+            val initialMsg = tag.ndefReadMessage()
+            val hspr = initialMsg.records.mapNotNull { ServiceParameterRecord.fromNdefRecord(it) }.single()
+            tag.ndefTransact(
+                NdefMessage(listOf(ServiceSelectRecord(Nfc.SERVICE_NAME_CONNECTION_HANDOVER).toNdefRecord())),
+                hspr.wtInt,
+                hspr.nWait,
+            )
+            val customHrMsg = NdefMessage(
+                listOf(
+                    HandoverRequestRecord(version = 0x15, embeddedMessage = NdefMessage(embeddedList)).generateNdefRecord(),
+                    nfcBundle.carrierRecord,
+                )
+            )
+            val hsMsg = tag.ndefTransact(customHrMsg, hspr.wtInt, hspr.nWait)
+            assertTrue(completed)
+            assertTrue(hsMsg.records.isNotEmpty())
+        }
     }
 }

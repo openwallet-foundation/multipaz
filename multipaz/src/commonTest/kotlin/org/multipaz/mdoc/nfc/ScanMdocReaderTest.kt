@@ -5,13 +5,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.MdocEngagementType
+import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
+import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
@@ -20,6 +26,7 @@ import org.multipaz.mdoc.transport.NfcCceTransportMdoc
 import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
 import org.multipaz.nfc.CommandApdu
+import org.multipaz.nfc.NdefMessage
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.NfcScanOptions
@@ -248,7 +255,66 @@ class ScanMdocReaderTest {
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
+            if (command.ins == Nfc.INS_SELECT &&
+                command.p1 == Nfc.INS_SELECT_P1_APPLICATION &&
+                command.payload != Nfc.NDEF_APPLICATION_ID
+            ) {
+                return ResponseApdu(status = Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+            }
             return engagementHelper.processApdu(command)
+        }
+    }
+
+    /**
+     * Loopback [NfcIsoTag] that emulates OS HCE AID routing across optional CCE and NDEF helpers,
+     * recording every `SELECT APPLICATION` AID attempted by the reader.
+     */
+    private class AidRoutingLoopbackIsoTag(
+        private val cceHelper: MdocNfcCceEngagementHelper? = null,
+        private val ndefHelper: MdocNfcEngagementHelper? = null,
+    ) : NfcIsoTag() {
+        val selectedAids = mutableListOf<ByteString>()
+        private var activeAid: ByteString? = null
+        var closed: Boolean = false
+            private set
+
+        override val maxTransceiveLength: Int = 65536
+
+        override suspend fun close() {
+            closed = true
+        }
+
+        override suspend fun updateDialogMessage(message: String) {}
+
+        override suspend fun transceive(command: CommandApdu): ResponseApdu {
+            if (command.ins == Nfc.INS_SELECT && command.p1 == Nfc.INS_SELECT_P1_APPLICATION) {
+                selectedAids.add(command.payload)
+                return when (command.payload) {
+                    Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID -> if (cceHelper != null) {
+                        activeAid = command.payload
+                        cceHelper.processApdu(command)
+                    } else {
+                        activeAid = null
+                        ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+                    }
+                    Nfc.NDEF_APPLICATION_ID -> if (ndefHelper != null) {
+                        activeAid = command.payload
+                        ndefHelper.processApdu(command)
+                    } else {
+                        activeAid = null
+                        ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+                    }
+                    else -> {
+                        activeAid = null
+                        ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+                    }
+                }
+            }
+            return when (activeAid) {
+                Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID -> cceHelper!!.processApdu(command)
+                Nfc.NDEF_APPLICATION_ID -> ndefHelper!!.processApdu(command)
+                else -> ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+            }
         }
     }
 
@@ -505,7 +571,7 @@ class ScanMdocReaderTest {
         val customResult = reader.scanMdocReader(
             message = "Hold near mdoc",
             options = MdocTransportOptions(),
-            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(),
             transportFactory = factory,
             selectConnectionMethod = { fail("Single method should not invoke selectConnectionMethod") },
             negotiatedHandoverConnectionMethods = listOf(bleCc),
@@ -577,7 +643,7 @@ class ScanMdocReaderTest {
         val outcome = reader.scanMdocReader(
             message = "Keep holding phone near reader",
             options = MdocTransportOptions(),
-            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(),
             transportFactory = FakeMdocTransportFactory(),
             selectConnectionMethod = { methods -> methods.first() },
             negotiatedHandoverConnectionMethods = emptyList(),
@@ -645,7 +711,7 @@ class ScanMdocReaderTest {
             reader.scanMdocReader<String>(
                 message = "Keep holding phone near reader",
                 options = MdocTransportOptions(),
-                handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
+                handoverOptions = MdocReaderNfcHandoverOptions(),
                 transportFactory = FakeMdocTransportFactory(),
                 selectConnectionMethod = { methods -> methods.first() },
                 negotiatedHandoverConnectionMethods = emptyList(),
@@ -766,7 +832,7 @@ class ScanMdocReaderTest {
         val customResult = reader.scanMdocReader(
             message = "Hold near mdoc",
             options = MdocTransportOptions(bleUseL2CAP = true),
-            handoverOptions = MdocReaderNfcHandoverOptions(useCce = true),
+            handoverOptions = MdocReaderNfcHandoverOptions(),
             transportFactory = factory,
             selectConnectionMethod = { fail("Single method should not invoke selectConnectionMethod") },
             negotiatedHandoverConnectionMethods = listOf(directL2capCentral, gattCentral),
@@ -782,5 +848,278 @@ class ScanMdocReaderTest {
         // Verify the single warmed-up dual-mode central transport was reused rather than closed & recreated!
         assertEquals(1, factory.createdFakeTransports.size)
         assertFalse(factory.createdFakeTransports.single().closed)
+    }
+
+    @Test
+    fun engagementTypeMatrix_prefersCceOrFallsBackOrRestrictsToSingleTechnology() = runTest {
+        val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
+        val bleCc = createBleCentralClientMethod(bleUuid)
+        val nfcMethod = createNfcMethod()
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).publicKey
+
+        fun makeCceHelper() = MdocNfcCceEngagementHelper(
+            eDeviceKey = eDeviceKey,
+            onHandoverComplete = { _, _, _, _ -> },
+            onMessageReceived = {},
+            onError = { error -> fail("Unexpected CCE error: $error") },
+            handoverPicker = { methods -> methods.firstOrNull() },
+        )
+
+        fun makeNdefNegotiatedHelper() = MdocNfcEngagementHelper(
+            eDeviceKey = eDeviceKey,
+            onHandoverComplete = { _, _, _ -> },
+            onError = { error -> fail("Unexpected NDEF error: $error") },
+            negotiatedHandoverPicker = { methods -> methods.first() },
+        )
+
+        // 1. Default handoverOptions (NFC_CCE_AND_NFC_CONNECTION_HANDOVER) on dual CCE+NDEF mdoc -> prefers CCE
+        val dualTag1 = AidRoutingLoopbackIsoTag(
+            cceHelper = makeCceHelper(),
+            ndefHelper = makeNdefNegotiatedHelper(),
+        )
+        val res1 = FakeNfcTagReader(listOf(dualTag1)).scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc),
+            context = coroutineContext,
+        )
+        assertNotNull(res1)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, res1.type)
+        assertEquals(listOf(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID), dualTag1.selectedAids)
+
+        // 2. NFC_CCE_AND_NFC_CONNECTION_HANDOVER on NDEF-only mdoc -> tries CCE (6A82), falls back to NDEF
+        val ndefOnlyTag = AidRoutingLoopbackIsoTag(
+            cceHelper = null,
+            ndefHelper = makeNdefNegotiatedHelper(),
+        )
+        val res2 = FakeNfcTagReader(listOf(ndefOnlyTag)).scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_AND_NFC_CONNECTION_HANDOVER
+            ),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc),
+            context = coroutineContext,
+        )
+        assertNotNull(res2)
+        assertEquals(MdocHandoverType.NEGOTIATED_HANDOVER, res2.type)
+        assertEquals(
+            listOf(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID, Nfc.NDEF_APPLICATION_ID),
+            ndefOnlyTag.selectedAids
+        )
+
+        // 3. NFC_CCE_ONLY ignores NDEF-only tag (without touching NDEF AID), skips warming up NfcTransportMdocReader,
+        // and succeeds when a CCE tag is tapped next
+        val skippedNdefTag = AidRoutingLoopbackIsoTag(
+            cceHelper = null,
+            ndefHelper = makeNdefNegotiatedHelper(),
+        )
+        val cceOnlyTag = AidRoutingLoopbackIsoTag(
+            cceHelper = makeCceHelper(),
+            ndefHelper = null,
+        )
+        val cceOnlyFactory = FakeMdocTransportFactory()
+        val cceOnlyReader = FakeNfcTagReader(listOf(skippedNdefTag, cceOnlyTag))
+        val res3 = cceOnlyReader.scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY
+            ),
+            transportFactory = cceOnlyFactory,
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc, nfcMethod),
+            context = coroutineContext,
+        )
+        assertNotNull(res3)
+        assertEquals(MdocHandoverType.CCE_HANDOVER, res3.type)
+        assertEquals(2, cceOnlyReader.tagsPresentedCount)
+        assertEquals(listOf(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID), skippedNdefTag.selectedAids)
+        assertEquals(listOf(Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID), cceOnlyTag.selectedAids)
+        assertTrue(cceOnlyFactory.createdTransports.none { it is NfcTransportMdocReader })
+
+        // 4. NFC_CONNECTION_HANDOVER_ONLY on dual CCE+NDEF mdoc -> skips CCE AID completely and uses NDEF
+        val dualTag2 = AidRoutingLoopbackIsoTag(
+            cceHelper = makeCceHelper(),
+            ndefHelper = makeNdefNegotiatedHelper(),
+        )
+        val res4 = FakeNfcTagReader(listOf(dualTag2)).scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            ),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc),
+            context = coroutineContext,
+        )
+        assertNotNull(res4)
+        assertEquals(MdocHandoverType.NEGOTIATED_HANDOVER, res4.type)
+        assertEquals(listOf(Nfc.NDEF_APPLICATION_ID), dualTag2.selectedAids)
+    }
+
+    @Test
+    fun cceEReaderKeyAndCurveAndReaderEngagementMerging() = runTest {
+        val bleUuid = UUID.fromString("b3d52ac4-a1b6-4b51-a22e-78ee55ef6eb6")
+        val bleCc = createBleCentralClientMethod(bleUuid)
+        val nfcMethod = createNfcMethod()
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256).publicKey
+        val p384ReaderKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val otherP384Key = Crypto.createEcPrivateKey(EcCurve.P384)
+
+        // 1. Validation: readerEngagement.connectionMethods must be absent
+        val reWithMethods = buildReaderEngagement(eReaderKey = p384ReaderKey.publicKey) {
+            addConnectionMethod(bleCc)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MdocReaderNfcHandoverOptions(
+                cceEReaderKey = p384ReaderKey,
+                readerEngagement = reWithMethods,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                readerEngagement = reWithMethods,
+            )
+        }
+
+        // 2. Validation: readerEngagement.eReaderKey requires matching cceEReaderKey when CCE is enabled
+        val reWithKeyAndOtherInfo = buildReaderEngagement(eReaderKey = p384ReaderKey.publicKey) {
+            addOtherInfo(3L, Tstr("rfu-val"))
+            addOtherInfo(-7L, 42L.toDataItem())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY,
+                readerEngagement = reWithKeyAndOtherInfo,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_AND_NFC_CONNECTION_HANDOVER,
+                cceEReaderKey = otherP384Key,
+                readerEngagement = reWithKeyAndOtherInfo,
+            )
+        }
+        // Allowed without cceEReaderKey when NFC_CONNECTION_HANDOVER_ONLY
+        MdocReaderNfcHandoverOptions(
+            engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+            readerEngagement = reWithKeyAndOtherInfo,
+        )
+
+        // 3. NFC CCE with BLE + Nfc offered and readerEngagement provided:
+        //    Merges BLE secondary method into ReaderEngagement, strips Nfc, preserves eReaderKey & otherInfo
+        val cceBleTag = AidRoutingLoopbackIsoTag(
+            cceHelper = MdocNfcCceEngagementHelper(
+                eDeviceKey = eDeviceKey,
+                onHandoverComplete = { _, _, _, _ -> },
+                onMessageReceived = {},
+                onError = { error -> fail("Unexpected error: $error") },
+                handoverPicker = { methods ->
+                    assertEquals(listOf(bleCc), methods)
+                    methods.single()
+                },
+            )
+        )
+        val cceBleResult = FakeNfcTagReader(listOf(cceBleTag)).scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY,
+                cceEReaderKey = p384ReaderKey,
+                readerEngagement = reWithKeyAndOtherInfo,
+            ),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc, nfcMethod),
+            context = coroutineContext,
+        )
+        assertNotNull(cceBleResult)
+        assertEquals(p384ReaderKey, cceBleResult.eReaderKey)
+        val sentCceBleReItem = cceBleResult.handover.asArray[1].asTaggedEncodedCbor[0]
+        val parsedCceBleRe = ReaderEngagement.fromDataItem(sentCceBleReItem, MdocEngagementType.CCE_REQUEST)
+        assertEquals(p384ReaderKey.publicKey, parsedCceBleRe.eReaderKey)
+        assertEquals(listOf(bleCc), parsedCceBleRe.connectionMethods)
+        assertEquals(reWithKeyAndOtherInfo.otherInfo, parsedCceBleRe.otherInfo)
+
+        // 4. NFC CCE NFC-only (only MdocConnectionMethod.Nfc passed -> stripped):
+        //    DeviceRetrievalMethods (key 2) remains absent in wire ReaderEngagement while otherInfo is preserved;
+        //    also tests readerEngagement without eReaderKey + cceEReaderKeyCurve = EcCurve.P384
+        val reOnlyOtherInfo = buildReaderEngagement {
+            addOtherInfo(-10L, Tstr("custom-ext"))
+        }
+        val cceNfcOnlyTag = AidRoutingLoopbackIsoTag(
+            cceHelper = MdocNfcCceEngagementHelper(
+                eDeviceKey = eDeviceKey,
+                onHandoverComplete = { cm, _, _, _ -> assertNull(cm) },
+                onMessageReceived = {},
+                onError = { error -> fail("Unexpected error: $error") },
+                handoverPicker = { methods ->
+                    assertTrue(methods.isEmpty())
+                    null
+                },
+            )
+        )
+        val cceNfcOnlyResult = mdocReaderNfcHandover(
+            tag = cceNfcOnlyTag,
+            negotiatedHandoverConnectionMethods = listOf(nfcMethod),
+            options = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY,
+                cceEReaderKeyCurve = EcCurve.P384,
+                readerEngagement = reOnlyOtherInfo,
+            ),
+        )
+        assertNotNull(cceNfcOnlyResult)
+        assertEquals(EcCurve.P384, cceNfcOnlyResult.eReaderKey?.curve)
+        val sentCceNfcOnlyReItem = cceNfcOnlyResult.handover.asArray[1].asTaggedEncodedCbor[0]
+        assertFalse(sentCceNfcOnlyReItem.hasKey(2))
+        val parsedCceNfcOnlyRe = ReaderEngagement.fromDataItem(sentCceNfcOnlyReItem, MdocEngagementType.CCE_REQUEST)
+        assertEquals(cceNfcOnlyResult.eReaderKey!!.publicKey, parsedCceNfcOnlyRe.eReaderKey)
+        assertTrue(parsedCceNfcOnlyRe.connectionMethods.isEmpty())
+        assertEquals(reOnlyOtherInfo.otherInfo, parsedCceNfcOnlyRe.otherInfo)
+
+        // 5. NFC_CCE_AND_NFC_CONNECTION_HANDOVER fallback to NDEF Negotiated Handover with readerEngagement:
+        //    "mdocreader" record has DeviceRetrievalMethods (key 2) absent and otherInfo preserved
+        val ndefFallbackTag = AidRoutingLoopbackIsoTag(
+            cceHelper = null,
+            ndefHelper = MdocNfcEngagementHelper(
+                eDeviceKey = eDeviceKey,
+                onHandoverComplete = { _, _, _ -> },
+                onError = { error -> fail("Unexpected NDEF error: $error") },
+                negotiatedHandoverPicker = { methods -> methods.first() },
+            )
+        )
+        val ndefFallbackResult = FakeNfcTagReader(listOf(ndefFallbackTag)).scanMdocReader(
+            message = null,
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CCE_AND_NFC_CONNECTION_HANDOVER,
+                cceEReaderKey = p384ReaderKey,
+                readerEngagement = reWithKeyAndOtherInfo,
+            ),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { it.firstOrNull() },
+            negotiatedHandoverConnectionMethods = listOf(bleCc),
+            context = coroutineContext,
+        )
+        assertNotNull(ndefFallbackResult)
+        assertEquals(MdocHandoverType.NEGOTIATED_HANDOVER, ndefFallbackResult.type)
+        val hrMessage = NdefMessage.fromEncoded(ndefFallbackResult.handover.asArray[1].asBstr)
+        val mdocReaderRecord = hrMessage.records.single {
+            it.type.decodeToString() == Nfc.EXTERNAL_TYPE_ISO_18013_5_READER_ENGAGEMENT &&
+                it.id.decodeToString() == "mdocreader"
+        }
+        val ndefReDataItem = Cbor.decode(mdocReaderRecord.payload.toByteArray())
+        assertFalse(ndefReDataItem.hasKey(2))
+        val parsedNdefRe = ReaderEngagement.fromDataItem(ndefReDataItem)
+        assertEquals(p384ReaderKey.publicKey, parsedNdefRe.eReaderKey)
+        assertTrue(parsedNdefRe.connectionMethods.isEmpty())
+        assertEquals(reWithKeyAndOtherInfo.otherInfo, parsedNdefRe.otherInfo)
     }
 }

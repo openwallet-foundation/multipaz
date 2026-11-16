@@ -3,6 +3,8 @@ package org.multipaz.mdoc.engagement
 import kotlinx.coroutines.test.runTest
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.TestVectors
@@ -203,6 +205,70 @@ class DeviceEngagementTest {
             nfcOnlyReaderEngagement,
             ReaderEngagement.fromDataItem(nfcOnlyReaderEngagement.toDataItem())
         )
+    }
+
+    @Test
+    fun testOtherInfoInDeviceAndReaderEngagement() = runTest {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256).publicKey
+
+        // 1. DeviceEngagement: positive RFU (3, 4, 7) and negative private (-1, -42) keys round-trip
+        val deviceEngagement = buildDeviceEngagement(eDeviceKey = key) {
+            addOtherInfo(3L, Tstr("rfu-3"))
+            addOtherInfo(4L, 123L.toDataItem())
+            addOtherInfo(7L, Simple.TRUE)
+            addOtherInfo(-1L, Tstr("ext-neg-1"))
+            addOtherInfo(-42L, 99L.toDataItem())
+        }
+        assertEquals(
+            mapOf(
+                3L to Tstr("rfu-3"),
+                4L to 123L.toDataItem(),
+                7L to Simple.TRUE,
+                -1L to Tstr("ext-neg-1"),
+                -42L to 99L.toDataItem(),
+            ),
+            deviceEngagement.otherInfo
+        )
+        assertEquals(
+            deviceEngagement,
+            DeviceEngagement.fromDataItem(Cbor.decode(Cbor.encode(deviceEngagement.toDataItem())))
+        )
+        for (reservedKey in listOf(0L, 1L, 2L, 5L, 6L)) {
+            assertFailsWith<IllegalArgumentException> {
+                buildDeviceEngagement(eDeviceKey = key) {
+                    addOtherInfo(reservedKey, Simple.TRUE)
+                }
+            }
+        }
+
+        // 2. ReaderEngagement: positive RFU (3, 10) and negative private (-1, -99) keys round-trip
+        val readerEngagement = buildReaderEngagement(eReaderKey = key) {
+            addOtherInfo(3L, Tstr("reader-rfu-3"))
+            addOtherInfo(10L, 456L.toDataItem())
+            addOtherInfo(-1L, Tstr("reader-ext-1"))
+            addOtherInfo(-99L, Simple.FALSE)
+        }
+        assertEquals("1.1", readerEngagement.version)
+        assertEquals(
+            mapOf(
+                3L to Tstr("reader-rfu-3"),
+                10L to 456L.toDataItem(),
+                -1L to Tstr("reader-ext-1"),
+                -99L to Simple.FALSE,
+            ),
+            readerEngagement.otherInfo
+        )
+        assertEquals(
+            readerEngagement,
+            ReaderEngagement.fromDataItem(Cbor.decode(Cbor.encode(readerEngagement.toDataItem())))
+        )
+        for (reservedKey in listOf(0L, 1L, 2L)) {
+            assertFailsWith<IllegalArgumentException> {
+                buildReaderEngagement(eReaderKey = key) {
+                    addOtherInfo(reservedKey, Simple.TRUE)
+                }
+            }
+        }
     }
 
 }

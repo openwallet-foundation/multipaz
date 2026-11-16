@@ -4,10 +4,12 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborInt
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
@@ -26,6 +28,8 @@ import org.multipaz.mdoc.role.MdocRole
  * @property eReaderKey the ephemeral session encryption key for the mdoc reader, if present.
  * @property eReaderKeyBytes the exact bytes of the [eReaderKey] as encoded by the mdoc reader, including the #6.24 tag, if present.
  * @property connectionMethods the Device Retrieval methods in the engagement, if any.
+ * @property otherInfo additional RFU or private extension entries in the `ReaderEngagement` map
+ *   (`* uint => RFU, * nint => Ext`), keyed by CBOR integer key (keys `0`, `1`, and `2` are reserved).
  */
 @ConsistentCopyVisibility
 data class ReaderEngagement private constructor(
@@ -33,7 +37,39 @@ data class ReaderEngagement private constructor(
     val eReaderKey: EcPublicKey?,
     val eReaderKeyBytes: ByteString?,
     val connectionMethods: List<MdocConnectionMethod>,
+    val otherInfo: Map<Long, DataItem> = emptyMap(),
 ) {
+    init {
+        for (key in otherInfo.keys) {
+            require(key !in 0L..2L) {
+                "Key $key is reserved in ReaderEngagement"
+            }
+        }
+    }
+
+    internal fun withCceDetails(
+        cceEReaderKey: EcPublicKey,
+        cceSecondaryMethods: List<MdocConnectionMethod>,
+    ): ReaderEngagement {
+        require(connectionMethods.isEmpty()) {
+            "DeviceRetrievalMethods (connectionMethods) must be absent in readerEngagement"
+        }
+        val effectiveEReaderKey = eReaderKey ?: cceEReaderKey
+        val effectiveEReaderKeyBytes = if (eReaderKey != null && eReaderKeyBytes != null) {
+            eReaderKeyBytes
+        } else {
+            encodeEReaderKeyBytes(effectiveEReaderKey)
+        }
+        val effectiveVersion = if (version >= "1.1") version else "1.1"
+        return ReaderEngagement(
+            version = effectiveVersion,
+            eReaderKey = effectiveEReaderKey,
+            eReaderKeyBytes = effectiveEReaderKeyBytes,
+            connectionMethods = cceSecondaryMethods.toList(),
+            otherInfo = otherInfo,
+        )
+    }
+
     /**
      * Generates CBOR compliant with the CDDL for `ReaderEngagement` according to ISO/IEC 18013-5
      * using [MdocEngagementType.READER_QR].
@@ -67,7 +103,11 @@ data class ReaderEngagement private constructor(
             if (eReaderKey != null) {
                 putCborArray(1) {
                     add(1) // cipher suite
-                    addTaggedEncodedCbor(Cbor.encode(this@ReaderEngagement.eReaderKey.toCoseKey().toDataItem()))
+                    if (this@ReaderEngagement.eReaderKeyBytes != null) {
+                        add(Cbor.decode(this@ReaderEngagement.eReaderKeyBytes.toByteArray()))
+                    } else {
+                        addTaggedEncodedCbor(Cbor.encode(this@ReaderEngagement.eReaderKey.toCoseKey().toDataItem()))
+                    }
                 }
             }
             if (encodedMethods.isNotEmpty()) {
@@ -75,10 +115,22 @@ data class ReaderEngagement private constructor(
                     encodedMethods.forEach { add(it) }
                 }
             }
+            otherInfo.forEach { (key, value) ->
+                put(key.toDataItem(), value)
+            }
         }
     }
 
     companion object {
+        private fun encodeEReaderKeyBytes(eReaderKey: EcPublicKey): ByteString =
+            ByteString(
+                Cbor.encode(
+                    Tagged(
+                        Tagged.ENCODED_CBOR,
+                        Bstr(Cbor.encode(eReaderKey.toCoseKey().toDataItem()))
+                    )
+                )
+            )
         /**
          * Computes the `ReaderQrHandover` (`bstr` SHA-256 digest of `ReaderEngagementBytes`, i.e.,
          * `#6.24(bstr .cbor ReaderEngagement)`) according to ISO/IEC 18013-5 Second Edition
@@ -182,11 +234,23 @@ data class ReaderEngagement private constructor(
                     }
                 }
             }
+            val otherInfo = buildMap {
+                for ((keyItem, valueItem) in dataItem.asMap) {
+                    require(keyItem is CborInt) {
+                        "Expected integer keys in ReaderEngagement, got $keyItem"
+                    }
+                    val key = keyItem.asNumber
+                    if (key !in 0L..2L) {
+                        put(key, valueItem)
+                    }
+                }
+            }
             return ReaderEngagement(
                 version = version,
                 eReaderKey = eReaderKey,
                 eReaderKeyBytes = eReaderKeyBytes,
-                connectionMethods = connectionMethods
+                connectionMethods = connectionMethods,
+                otherInfo = otherInfo,
             )
         }
     }
@@ -202,6 +266,7 @@ data class ReaderEngagement private constructor(
         val version: String? = null
     ) {
         private val connectionMethods = mutableListOf<MdocConnectionMethod>()
+        private val otherInfo = mutableMapOf<Long, DataItem>()
 
         /**
          * Adds a [MdocConnectionMethod] to the reader engagement being built.
@@ -215,31 +280,41 @@ data class ReaderEngagement private constructor(
         }
 
         /**
+         * Adds an additional RFU (`uint` >= 3) or private extension (`nint` < 0) entry to the
+         * reader engagement being built.
+         *
+         * @param key the CBOR integer key (must not be `0`, `1`, or `2`).
+         * @param value the CBOR [DataItem] value.
+         * @return the builder.
+         */
+        fun addOtherInfo(key: Long, value: DataItem): Builder {
+            require(key !in 0L..2L) {
+                "Key $key is reserved in ReaderEngagement"
+            }
+            otherInfo[key] = value
+            return this
+        }
+
+        /**
          * Builds the [ReaderEngagement].
          *
          * @return the [ReaderEngagement].
          */
         fun build(): ReaderEngagement {
-            val versionToUse = version ?: if (eReaderKey != null || connectionMethods.isNotEmpty()) {
+            val versionToUse = version ?: if (
+                eReaderKey != null || connectionMethods.isNotEmpty() || otherInfo.isNotEmpty()
+            ) {
                 "1.1"
             } else {
                 "1.0"
             }
-            val eReaderKeyBytes = eReaderKey?.let {
-                ByteString(
-                    Cbor.encode(
-                        Tagged(
-                            Tagged.ENCODED_CBOR,
-                            Bstr(Cbor.encode(it.toCoseKey().toDataItem()))
-                        )
-                    )
-                )
-            }
+            val eReaderKeyBytes = eReaderKey?.let { encodeEReaderKeyBytes(it) }
             return ReaderEngagement(
                 version = versionToUse,
                 eReaderKey = eReaderKey,
                 eReaderKeyBytes = eReaderKeyBytes,
-                connectionMethods = connectionMethods.toList()
+                connectionMethods = connectionMethods.toList(),
+                otherInfo = otherInfo.toMap(),
             )
         }
     }

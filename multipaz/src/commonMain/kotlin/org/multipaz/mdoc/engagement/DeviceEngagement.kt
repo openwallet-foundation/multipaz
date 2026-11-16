@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborInt
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
@@ -31,6 +32,9 @@ import org.multipaz.util.Logger
  * @property connectionMethods the Device Retrieval methods in the engagement, if any.
  * @property originInfos the origin infos in the engagement, if any.
  * @property capabilities the capabilities available, along with their values.
+ * @property otherInfo additional RFU or private extension entries in the `DeviceEngagement` map
+ *   (`* uint => RFU, * nint => Ext`), keyed by CBOR integer key (keys `0`, `1`, `2`, `5`, and `6`
+ *   are reserved).
  */
 @ConsistentCopyVisibility
 data class DeviceEngagement private constructor(
@@ -39,13 +43,19 @@ data class DeviceEngagement private constructor(
     val eDeviceKeyBytes: ByteString,
     val connectionMethods: List<MdocConnectionMethod>,
     val originInfos: List<OriginInfo>,
-    val capabilities: Map<Capability, DataItem>
+    val capabilities: Map<Capability, DataItem>,
+    val otherInfo: Map<Long, DataItem> = emptyMap(),
 ) {
 
     init {
         if (originInfos.isNotEmpty() || capabilities.isNotEmpty()) {
             check(version >= "1.1") {
                 "DeviceEngagement version must be 1.1 or higher when originInfos or capabilities are non-empty"
+            }
+        }
+        for (key in otherInfo.keys) {
+            require(key !in RESERVED_KEYS) {
+                "Key $key is reserved in DeviceEngagement"
             }
         }
     }
@@ -110,11 +120,15 @@ data class DeviceEngagement private constructor(
                     }
                 }
             }
+            otherInfo.forEach { (key, value) ->
+                put(key.toDataItem(), value)
+            }
         }
     }
 
     companion object {
         private const val TAG = "DeviceEngagement"
+        private val RESERVED_KEYS = setOf(0L, 1L, 2L, 5L, 6L)
 
         /**
          * Parses CBOR compliant with the CDDL for `DeviceEngagement` according to ISO 18013-5.
@@ -190,13 +204,25 @@ data class DeviceEngagement private constructor(
                     }
                 }
             }
+            val otherInfo = buildMap {
+                for ((keyItem, valueItem) in dataItem.asMap) {
+                    require(keyItem is CborInt) {
+                        "Expected integer keys in DeviceEngagement, got $keyItem"
+                    }
+                    val key = keyItem.asNumber
+                    if (key !in RESERVED_KEYS) {
+                        put(key, valueItem)
+                    }
+                }
+            }
             return DeviceEngagement(
                 version = version,
                 eDeviceKey = eDeviceKey,
                 eDeviceKeyBytes = eDeviceKeyBytes,
                 connectionMethods = connectionMethods,
                 originInfos = originInfos,
-                capabilities = capabilities
+                capabilities = capabilities,
+                otherInfo = otherInfo,
             )
         }
     }
@@ -214,6 +240,7 @@ data class DeviceEngagement private constructor(
         private val connectionMethods = mutableListOf<MdocConnectionMethod>()
         private val originInfos = mutableListOf<OriginInfo>()
         private val capabilities = mutableMapOf<Capability, DataItem>()
+        private val otherInfo = mutableMapOf<Long, DataItem>()
 
         /**
          * Adds a [MdocConnectionMethod] to the device engagement being built.
@@ -250,6 +277,22 @@ data class DeviceEngagement private constructor(
         }
 
         /**
+         * Adds an additional RFU (`uint`) or private extension (`nint` < 0) entry to the
+         * device engagement being built.
+         *
+         * @param key the CBOR integer key (must not be `0`, `1`, `2`, `5`, or `6`).
+         * @param value the CBOR [DataItem] value.
+         * @return the builder.
+         */
+        fun addOtherInfo(key: Long, value: DataItem): Builder {
+            require(key !in RESERVED_KEYS) {
+                "Key $key is reserved in DeviceEngagement"
+            }
+            otherInfo[key] = value
+            return this
+        }
+
+        /**
          * Builds the [DeviceEngagement].
          *
          * @return the [DeviceEngagement].
@@ -274,7 +317,8 @@ data class DeviceEngagement private constructor(
                 ),
                 connectionMethods = connectionMethods.toList(),
                 originInfos = originInfos,
-                capabilities = capabilities
+                capabilities = capabilities,
+                otherInfo = otherInfo.toMap(),
             )
         }
     }

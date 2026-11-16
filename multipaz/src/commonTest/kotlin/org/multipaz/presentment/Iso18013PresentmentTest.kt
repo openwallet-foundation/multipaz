@@ -180,7 +180,7 @@ class Iso18013PresentmentTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
@@ -320,7 +320,7 @@ class Iso18013PresentmentTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
 
@@ -455,7 +455,7 @@ class Iso18013PresentmentTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKeyEngagement)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKeyEngagement)
         )
         assertNotNull(handoverResult)
 
@@ -556,7 +556,7 @@ class Iso18013PresentmentTest {
         currentEngagementHelper = engagementHelper1
 
         val tag1 = LoopbackIsoTag(engagementHelper1)
-        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey1))
+        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey1))
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -603,7 +603,7 @@ class Iso18013PresentmentTest {
         currentEngagementHelper = engagementHelper2
 
         val tag2 = LoopbackIsoTag(engagementHelper2)
-        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
+        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey2))
 
         val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
         mdocReaderTransport2.open(buildDeviceEngagement(eReaderKey2.publicKey) {}.eDeviceKeyBytes)
@@ -683,7 +683,7 @@ class Iso18013PresentmentTest {
         currentEngagementHelper = engagementHelper1
 
         val tag1 = LoopbackIsoTag(engagementHelper1)
-        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey1))
+        mdocReaderNfcHandover(tag1, emptyList(), MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey1))
 
         mdocTransport = NfcCceTransportMdoc(
             sendMessageViaNfc = { message ->
@@ -735,7 +735,7 @@ class Iso18013PresentmentTest {
         currentEngagementHelper = engagementHelper2
 
         val tag2 = LoopbackIsoTag(engagementHelper2)
-        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey2))
+        mdocReaderNfcHandover(tag2, emptyList(), MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey2))
 
         val mdocReaderTransport2 = NfcCceTransportMdocReader(tag2, null)
         mdocReaderTransport2.open(buildDeviceEngagement(eReaderKey2.publicKey) {}.eDeviceKeyBytes)
