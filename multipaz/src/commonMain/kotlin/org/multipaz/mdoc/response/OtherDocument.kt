@@ -47,7 +47,7 @@ data class OtherDocument(
     lateinit var transactionData: List<TransactionData<*>>
 
     private var _expectedAudience: String? = null
-    private var _holderBindingRequired: Boolean = true
+    private var _keyBindingRequired: Boolean = true
 
     /**
      * The expected audience value that was verified against the Key Binding JWT's `aud` claim,
@@ -57,12 +57,12 @@ data class OtherDocument(
     val expectedAudience: String?
         get() = _expectedAudience
 
-    internal val holderBindingRequired: Boolean
-        get() = _holderBindingRequired
+    internal val keyBindingRequired: Boolean
+        get() = _keyBindingRequired
 
     internal fun clearVerificationState() {
         _expectedAudience = null
-        _holderBindingRequired = true
+        _keyBindingRequired = true
     }
 
     internal suspend fun parseSdJwtPresentation(): Pair<SdJwt, SdJwtKb?> {
@@ -90,17 +90,17 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        requireHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) {
         _expectedAudience = null
-        _holderBindingRequired = requireHolderBinding
+        _keyBindingRequired = keyBindingRequired
         when (docFormat) {
             "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
                 atTime = atTime,
-                requireHolderBinding = requireHolderBinding,
+                keyBindingRequired = keyBindingRequired,
             )
             else -> throw IllegalStateException("Unsupported OtherDocument format '$docFormat'")
         }
@@ -111,7 +111,7 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
-        requireHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) {
         val (sdJwt, sdJwtKb) = parseSdJwtPresentation()
 
@@ -149,7 +149,7 @@ data class OtherDocument(
             if (sdJwt.kbKey != null || sdJwt.jwtBody.containsKey("cnf")) {
                 throw IllegalStateException("Key-bound SD-JWT VC presented without Key Binding JWT")
             }
-            if (requireHolderBinding) {
+            if (keyBindingRequired) {
                 throw IllegalStateException("Keyless SD-JWT VC is not permitted when nonKeyBoundSupported is not true")
             }
             if (transactionData.isNotEmpty()) {

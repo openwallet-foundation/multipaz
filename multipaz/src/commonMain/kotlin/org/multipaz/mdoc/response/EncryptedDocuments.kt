@@ -163,7 +163,7 @@ data class EncryptedDocuments internal constructor(
                 } else {
                     emptyList()
                 }
-                val requireHolderBinding = deviceRequest == null ||
+                val keyBindingRequired = deviceRequest == null ||
                     matchedReqIds.isEmpty() ||
                     matchedReqIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 val transactionData = if (index < transactionDataList.size) {
@@ -186,7 +186,7 @@ data class EncryptedDocuments internal constructor(
                     eReaderKey = null,
                     transactionData = transactionData,
                     atTime = atTime,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -300,7 +300,7 @@ data class EncryptedDocuments internal constructor(
                         )
                     }
                 }
-                val requireHolderBinding = deviceRequest == null ||
+                val keyBindingRequired = deviceRequest == null ||
                     matchedReqIds.isEmpty() ||
                     matchedReqIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 val transactionData = if (index < transactionDataList.size) {
@@ -315,7 +315,7 @@ data class EncryptedDocuments internal constructor(
                     eReaderKey = null,
                     transactionData = transactionData,
                     atTime = atTime,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

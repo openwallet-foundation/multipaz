@@ -38,5 +38,5 @@ data class MdocVerifiedPresentation(
     override val revocationStatus: RevocationStatus? = null,
     val zkSystemSpecId: String? = null,
     override val docRequestIds: List<Int>? = null,
-    override val holderBound: Boolean = true,
+    override val keyBound: Boolean = true,
 ): VerifiedPresentation()

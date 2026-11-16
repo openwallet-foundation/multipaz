@@ -2540,7 +2540,7 @@ class DeviceRequestTest {
         val transcript = buildCborArray { add("test") }
 
         // 1. Without nonKeyBoundSupported = true, keyless credentials MUST NOT match even when sharing a domain
-        val reqHolderBoundOnly = buildDeviceRequest(
+        val reqKeyBoundOnly = buildDeviceRequest(
             sessionTranscript = transcript,
             deviceRequestInfo = singleDocUseCaseInfo()
         ) {
@@ -2550,7 +2550,7 @@ class DeviceRequestTest {
             )
         }
         assertFailsWith<Iso18015ResponseException> {
-            reqHolderBoundOnly.execute(sharedDomainSource)
+            reqKeyBoundOnly.execute(sharedDomainSource)
         }
 
         // 2. With nonKeyBoundSupported = true, keyless mdoc and keyless SD-JWT match

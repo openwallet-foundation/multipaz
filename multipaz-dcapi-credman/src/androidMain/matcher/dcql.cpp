@@ -126,13 +126,13 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
         }
 
         bool multiple = cJSON_IsTrue(cJSON_GetObjectItem(credential, "multiple"));
-        bool requireCryptographicHolderBinding = true;
+        bool keyBindingRequired = true;
         cJSON* rchbItem = cJSON_GetObjectItem(credential, "require_cryptographic_holder_binding");
         if (rchbItem != nullptr && cJSON_IsFalse(rchbItem)) {
-            requireCryptographicHolderBinding = false;
+            keyBindingRequired = false;
         }
         if (format == "mso_mdoc_zk") {
-            requireCryptographicHolderBinding = true;
+            keyBindingRequired = true;
         }
         bool hasTransactionData = false;
         for (const auto& rc : requestedClaims) {
@@ -153,7 +153,7 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
                 claimSets,
                 false,
                 multiple,
-                requireCryptographicHolderBinding,
+                keyBindingRequired,
                 hasTransactionData
         ));
     }
@@ -263,7 +263,7 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
 
     std::map<std::string, QueryResponse> credentialQueryIdToResponse;
     for (auto& query: dcqlCredentialQueries) {
-        bool allowKeyless = !query.requireCryptographicHolderBinding &&
+        bool allowKeyless = !query.keyBindingRequired &&
             query.format != "mso_mdoc_zk" &&
             !query.hasTransactionData;
         std::vector<Credential*> credsSatifyingMeta;

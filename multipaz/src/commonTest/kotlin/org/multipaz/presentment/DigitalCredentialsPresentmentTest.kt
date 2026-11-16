@@ -384,14 +384,14 @@ class DigitalCredentialsPresentmentTest {
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
             credential: Credential?,
-            requireHolderBinding: Boolean,
+            keyBindingRequired: Boolean,
         ): Credential? =
             delegate.selectCredential(
                 document,
                 requestedClaims,
                 keyAgreementPossible,
                 credential,
-                requireHolderBinding,
+                keyBindingRequired,
             )
     }
 

@@ -160,7 +160,7 @@ class MdocDocument(
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
         rejectIfValidUntilAfterNotAfter: Boolean = false,
-        requireHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain = issuerCertChain
@@ -235,7 +235,7 @@ class MdocDocument(
             throw IllegalStateException("MSO is not valid anymore")
         }
 
-        // Check DeviceAuth / Holder Binding
+        // Check DeviceAuth / Key Binding
         val msoDeviceKey = mso.deviceKey
         if (docType == "org.iso.18013.5.1.mDL" && msoDeviceKey == null) {
             throw IllegalStateException("mDL (org.iso.18013.5.1.mDL) must be key-bound and contain deviceKeyInfo in MSO")
@@ -247,7 +247,7 @@ class MdocDocument(
             throw IllegalStateException("Keyless mdoc (MSO has no deviceKeyInfo) must not include deviceSigned")
         }
         if (deviceAuth == null) {
-            if (requireHolderBinding) {
+            if (keyBindingRequired) {
                 throw IllegalStateException("Keyless mdoc is not permitted when nonKeyBoundSupported is not true")
             }
             if (transactionData.isNotEmpty()) {

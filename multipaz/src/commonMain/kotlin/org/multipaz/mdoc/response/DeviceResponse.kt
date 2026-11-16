@@ -133,9 +133,9 @@ data class DeviceResponse internal constructor(
             )
         }
         documents_.forEach { document ->
-            val requireHolderBinding: Boolean
+            val keyBindingRequired: Boolean
             val transactionData = if (deviceRequest == null) {
-                requireHolderBinding = true
+                keyBindingRequired = true
                 emptyList()
             } else {
                 val explicitIds = document.docRequestIds
@@ -148,7 +148,7 @@ data class DeviceResponse internal constructor(
                             ?: throw IllegalStateException("Invalid docRequestId $id in MdocDocument")
                         validateMdocAgainstDocRequest(document, id, req, deviceRequest)
                     }
-                    requireHolderBinding = explicitIds.isEmpty() ||
+                    keyBindingRequired = explicitIds.isEmpty() ||
                         explicitIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                     if (documentTypeRepository == null) {
                         emptyList()
@@ -178,7 +178,7 @@ data class DeviceResponse internal constructor(
                             "Document certificate chain does not match requested issuerIdentifiers for docType '${document.docType}'"
                         )
                     }
-                    requireHolderBinding = !deviceRequest.docRequests[docRequestId].allowsKeyless(deviceRequest)
+                    keyBindingRequired = !deviceRequest.docRequests[docRequestId].allowsKeyless(deviceRequest)
                     if (documentTypeRepository == null) {
                         emptyList()
                     } else {
@@ -197,7 +197,7 @@ data class DeviceResponse internal constructor(
                 transactionData = transactionData,
                 atTime = atTime,
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
-                requireHolderBinding = requireHolderBinding,
+                keyBindingRequired = keyBindingRequired,
             )
         }
         if (deviceRequest != null) {
@@ -268,7 +268,7 @@ data class DeviceResponse internal constructor(
                     }
                 }
                 val transactionData: List<TransactionData<*>>
-                val requireHolderBinding = explicitIds.isEmpty() ||
+                val keyBindingRequired = explicitIds.isEmpty() ||
                     explicitIds.any { !deviceRequest.docRequests[it].allowsKeyless(deviceRequest) }
                 if (otherDocument.docFormat == "dc+sd-jwt") {
                     val (sdJwt, sdJwtKb) = otherDocument.parseSdJwtPresentation()
@@ -311,7 +311,7 @@ data class DeviceResponse internal constructor(
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                 )
             } else {
                 val docRequestId = if (deviceRequest == null) {
@@ -327,7 +327,7 @@ data class DeviceResponse internal constructor(
                 if (deviceRequest != null && docRequest == null) {
                     throw IllegalStateException("Cannot resolve DocRequest for otherDocument")
                 }
-                val requireHolderBinding = deviceRequest == null ||
+                val keyBindingRequired = deviceRequest == null ||
                     docRequest == null ||
                     !docRequest.allowsKeyless(deviceRequest)
                 val transactionData = if (docRequest == null || documentTypeRepository == null) {
@@ -345,7 +345,7 @@ data class DeviceResponse internal constructor(
                     eReaderKey = eReaderKey,
                     transactionData = transactionData,
                     atTime = atTime,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                 )
                 if (docRequest != null && otherDocument.docFormat == "dc+sd-jwt") {
                     val (sdJwt, _) = otherDocument.parseSdJwtPresentation()
@@ -372,7 +372,7 @@ data class DeviceResponse internal constructor(
      *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
      *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
      *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
-     * @param requireHolderBinding if true (the default), rejects non-key-bound documents that omit `deviceSigned`.
+     * @param keyBindingRequired if true (the default), rejects non-key-bound documents that omit `deviceSigned`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verifySingleDoc(
@@ -380,7 +380,7 @@ data class DeviceResponse internal constructor(
         transactionData: List<TransactionData<*>>,
         atTime: Instant = Clock.System.now(),
         rejectIfValidUntilAfterNotAfter: Boolean = false,
-        requireHolderBinding: Boolean = true,
+        keyBindingRequired: Boolean = true,
     ) {
         if (otherDocuments.isNotEmpty() || encryptedDocuments.isNotEmpty()) {
             throw IllegalStateException("Not a single-document DeviceResponse")
@@ -393,7 +393,7 @@ data class DeviceResponse internal constructor(
                 transactionData = transactionData,
                 atTime = atTime,
                 rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
-                requireHolderBinding = requireHolderBinding,
+                keyBindingRequired = keyBindingRequired,
             )
         } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
             if (transactionData.isNotEmpty()) {

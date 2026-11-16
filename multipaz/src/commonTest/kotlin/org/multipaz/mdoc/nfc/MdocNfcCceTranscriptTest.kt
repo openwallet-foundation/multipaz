@@ -615,7 +615,7 @@ class MdocNfcCceTranscriptTest {
             requestedClaims: List<RequestedClaim>,
             keyAgreementPossible: List<EcCurve>,
             credential: Credential?,
-            requireHolderBinding: Boolean,
+            keyBindingRequired: Boolean,
         ): Credential? {
             return document.getCertifiedCredentials().firstOrNull()
         }

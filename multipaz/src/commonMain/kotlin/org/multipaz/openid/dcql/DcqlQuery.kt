@@ -146,7 +146,7 @@ data class DcqlQuery(
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
             val txForQuery = transactionDataMap[credentialQuery.id] ?: emptyList()
-            val allowKeyless = !credentialQuery.requireCryptographicHolderBinding &&
+            val allowKeyless = !credentialQuery.keyBindingRequired &&
                 credentialQuery.format != "mso_mdoc_zk" &&
                 txForQuery.isEmpty()
             val credsSatisfyingMeta = when (credentialQuery.format) {
@@ -302,7 +302,7 @@ data class DcqlQuery(
                             requestedClaims = matchingClaimValues.keys.toList(),
                             keyAgreementPossible = effectiveKeyAgreementPossible,
                             credential = cred,
-                            requireHolderBinding = !allowKeyless,
+                            keyBindingRequired = !allowKeyless,
                         )
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -366,7 +366,7 @@ data class DcqlQuery(
                                 requestedClaims = matchingClaimValues.keys.toList(),
                                 keyAgreementPossible = effectiveKeyAgreementPossible,
                                 credential = cred,
-                                requireHolderBinding = !allowKeyless,
+                                keyBindingRequired = !allowKeyless,
                             )
                             if (credential == null) {
                                 throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -660,7 +660,7 @@ data class DcqlQuery(
                 }
 
                 val multiple = c["multiple"]?.jsonPrimitive?.booleanOrNull ?: false
-                val requireCryptographicHolderBinding =
+                val keyBindingRequired =
                     c["require_cryptographic_holder_binding"]?.jsonPrimitive?.booleanOrNull ?: true
                 dcqlCredentialQueries.add(
                     DcqlCredentialQuery(
@@ -674,7 +674,7 @@ data class DcqlQuery(
                         claims = dcqlClaims,
                         claimSets = dcqlClaimSets,
                         claimIdToClaim = dcqlClaimIdToClaim,
-                        requireCryptographicHolderBinding = requireCryptographicHolderBinding,
+                        keyBindingRequired = keyBindingRequired,
                     )
                 )
             }
@@ -720,7 +720,7 @@ private fun DcqlCredentialQuery.toJson(): JsonObject = buildJsonObject {
     if (multiple) {
         put("multiple", true)
     }
-    if (!requireCryptographicHolderBinding) {
+    if (!keyBindingRequired) {
         put("require_cryptographic_holder_binding", false)
     }
     if (issuerIdentifiers.isNotEmpty()) {

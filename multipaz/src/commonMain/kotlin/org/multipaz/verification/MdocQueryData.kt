@@ -10,7 +10,7 @@ import org.multipaz.cbor.annotation.CborSerializable
  * @param zkRequested whether zero-knowledge proof presentation was requested
  * @param zkRequired whether zero-knowledge proof presentation is required
  * @param zkSystemSpecIds allowed ZK system spec identifiers, or `null` if unrestricted
- * @param requireCryptographicHolderBinding whether cryptographic holder binding is required
+ * @param keyBindingRequired whether cryptographic key binding is required
  */
 @CborSerializable
 data class MdocQueryData(
@@ -21,7 +21,7 @@ data class MdocQueryData(
     val zkRequested: Boolean = false,
     val zkRequired: Boolean = false,
     val zkSystemSpecIds: List<String>? = null,
-    val requireCryptographicHolderBinding: Boolean = true,
+    val keyBindingRequired: Boolean = true,
 ): QueryData() {
 
     /**

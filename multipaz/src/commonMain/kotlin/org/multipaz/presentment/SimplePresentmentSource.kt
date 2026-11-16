@@ -135,7 +135,7 @@ class SimplePresentmentSource(
     private suspend fun selectMdocCredential(
         document: Document,
         keyAgreementPossible: List<EcCurve>,
-        requireHolderBinding: Boolean,
+        keyBindingRequired: Boolean,
         now: Instant,
     ): Credential? {
         val sigCred = document.findCredentialOfType<KeyBoundMdocCredential>(domains = domainsMdocSignature, now = now)
@@ -149,7 +149,7 @@ class SimplePresentmentSource(
         if (sigCred != null) {
             return sigCred
         }
-        if (!requireHolderBinding) {
+        if (!keyBindingRequired) {
             return document.findCredentialOfType<KeylessMdocCredential>(domains = domainsKeylessMdoc, now = now)
         }
         return null
@@ -157,13 +157,13 @@ class SimplePresentmentSource(
 
     private suspend fun selectSdJwtCredential(
         document: Document,
-        requireHolderBinding: Boolean,
+        keyBindingRequired: Boolean,
         now: Instant,
     ): Credential? {
         document.findCredentialOfType<KeyBoundSdJwtVcCredential>(domains = domainsKeyBoundSdJwt, now = now)?.let {
             return it
         }
-        if (!requireHolderBinding) {
+        if (!keyBindingRequired) {
             return document.findCredentialOfType<KeylessSdJwtVcCredential>(domains = domainsKeylessSdJwt, now = now)
         }
         return null
@@ -174,7 +174,7 @@ class SimplePresentmentSource(
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
         credential: Credential?,
-        requireHolderBinding: Boolean,
+        keyBindingRequired: Boolean,
     ): Credential? {
         val now = Clock.System.now()
         if (requestedClaims.isNotEmpty()) {
@@ -182,12 +182,12 @@ class SimplePresentmentSource(
                 is MdocRequestedClaim -> selectMdocCredential(
                     document = document,
                     keyAgreementPossible = keyAgreementPossible,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 )
                 is JsonRequestedClaim -> selectSdJwtCredential(
                     document = document,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 )
             }
@@ -197,22 +197,22 @@ class SimplePresentmentSource(
                 is MdocCredential -> selectMdocCredential(
                     document = document,
                     keyAgreementPossible = keyAgreementPossible,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 )
                 is SdJwtVcCredential -> selectSdJwtCredential(
                     document = document,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 )
                 else -> selectMdocCredential(
                     document = document,
                     keyAgreementPossible = keyAgreementPossible,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 ) ?: selectSdJwtCredential(
                     document = document,
-                    requireHolderBinding = requireHolderBinding,
+                    keyBindingRequired = keyBindingRequired,
                     now = now,
                 )
             }
@@ -220,11 +220,11 @@ class SimplePresentmentSource(
         return selectMdocCredential(
             document = document,
             keyAgreementPossible = keyAgreementPossible,
-            requireHolderBinding = requireHolderBinding,
+            keyBindingRequired = keyBindingRequired,
             now = now,
         ) ?: selectSdJwtCredential(
             document = document,
-            requireHolderBinding = requireHolderBinding,
+            keyBindingRequired = keyBindingRequired,
             now = now,
         )
     }
