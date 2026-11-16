@@ -811,8 +811,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             selectConnectionMethod = { null },
             negotiatedHandoverConnectionMethods = emptyList(),
@@ -1072,8 +1071,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             transportFactory = blePair,
             selectConnectionMethod = {
@@ -1387,8 +1385,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -1720,8 +1717,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -2065,8 +2061,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -2393,8 +2388,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(bleUseL2CAP = true),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             transportFactory = blePair,
             selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -2741,8 +2735,7 @@ class MdocNfcCceTranscriptTest {
                 message = null,
                 options = MdocTransportOptions(),
                 handoverOptions = MdocReaderNfcHandoverOptions(
-                    useCce = true,
-                    eReaderKey = eReaderKey,
+                    cceEReaderKey = eReaderKey,
                 ),
                 transportFactory = blePair,
                 selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -3066,8 +3059,7 @@ class MdocNfcCceTranscriptTest {
                 message = null,
                 options = MdocTransportOptions(),
                 handoverOptions = MdocReaderNfcHandoverOptions(
-                    useCce = true,
-                    eReaderKey = eReaderKey,
+                    cceEReaderKey = eReaderKey,
                 ),
                 transportFactory = blePair,
                 selectConnectionMethod = { methods -> methods.firstOrNull() },
@@ -3434,8 +3426,7 @@ class MdocNfcCceTranscriptTest {
                 message = null,
                 options = MdocTransportOptions(),
                 handoverOptions = MdocReaderNfcHandoverOptions(
-                    useCce = true,
-                    eReaderKey = eReaderKey,
+                    cceEReaderKey = eReaderKey,
                 ),
                 selectConnectionMethod = { methods -> methods.firstOrNull() },
                 negotiatedHandoverConnectionMethods = emptyList(),
@@ -3750,8 +3741,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             selectConnectionMethod = { null },
             negotiatedHandoverConnectionMethods = emptyList(),
@@ -4014,8 +4004,7 @@ class MdocNfcCceTranscriptTest {
             message = null,
             options = MdocTransportOptions(),
             handoverOptions = MdocReaderNfcHandoverOptions(
-                useCce = true,
-                eReaderKey = eReaderKey,
+                cceEReaderKey = eReaderKey,
             ),
             selectConnectionMethod = { null },
             negotiatedHandoverConnectionMethods = emptyList(),
@@ -4329,8 +4318,7 @@ class MdocNfcCceTranscriptTest {
                 message = null,
                 options = MdocTransportOptions(),
                 handoverOptions = MdocReaderNfcHandoverOptions(
-                    useCce = true,
-                    eReaderKey = eReaderKey,
+                    cceEReaderKey = eReaderKey,
                 ),
                 transportFactory = blePair,
                 selectConnectionMethod = { methods -> methods.firstOrNull() },

@@ -180,6 +180,13 @@ object Nfc {
     val RTD_ALTERNATIVE_CARRIER = "ac".encodeToByteString()
 
     /**
+     * RTD Collision Resolution type, for use with [Tnf.WELL_KNOWN].
+     *
+     * Reference: NFC Forum Connection Handover Technical Specification Version 1.5 section 7.3.
+     */
+    val RTD_COLLISION_RESOLUTION = "cr".encodeToByteString()
+
+    /**
      * RTD Handover Carrier type, for use with [Tnf.WELL_KNOWN].
      */
     val RTD_HANDOVER_CARRIER = "Hc".encodeToByteString()

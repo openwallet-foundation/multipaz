@@ -80,6 +80,7 @@ import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.ReaderEngagement
 import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.nfc.MdocHandoverType
+import org.multipaz.mdoc.nfc.MdocReaderNfcEngagementType
 import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcScanOptions
@@ -1025,23 +1026,15 @@ fun IsoMdocProximityReadingScreen(
                 item {
                     TextButton(
                         onClick = {
-                            launchNfcScan(MdocReaderNfcHandoverOptions(useCce = false), nfcOnly = false)
-                        },
-                        content = { Text("Request mdoc via NFC") }
-                    )
-                }
-                item {
-                    TextButton(
-                        onClick = {
                             launchNfcScan(
                                 MdocReaderNfcHandoverOptions(
-                                    useCce = true,
-                                    eReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
+                                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_AND_NFC_CONNECTION_HANDOVER,
+                                    cceEReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
                                 ),
                                 nfcOnly = false
                             )
                         },
-                        content = { Text("Request mdoc via NFC CCE") }
+                        content = { Text("Request mdoc via NFC (CCE + Connection Handover)") }
                     )
                 }
                 item {
@@ -1049,13 +1042,40 @@ fun IsoMdocProximityReadingScreen(
                         onClick = {
                             launchNfcScan(
                                 MdocReaderNfcHandoverOptions(
-                                    useCce = true,
-                                    eReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
+                                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                                ),
+                                nfcOnly = false
+                            )
+                        },
+                        content = { Text("Request mdoc via NFC (Connection Handover only)") }
+                    )
+                }
+                item {
+                    TextButton(
+                        onClick = {
+                            launchNfcScan(
+                                MdocReaderNfcHandoverOptions(
+                                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY,
+                                    cceEReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
+                                ),
+                                nfcOnly = false
+                            )
+                        },
+                        content = { Text("Request mdoc via NFC (CCE only)") }
+                    )
+                }
+                item {
+                    TextButton(
+                        onClick = {
+                            launchNfcScan(
+                                MdocReaderNfcHandoverOptions(
+                                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY,
+                                    cceEReaderKeyCurve = app.settingsModel.readerSessionEncryptionCurve.value,
                                 ),
                                 nfcOnly = true
                             )
                         },
-                        content = { Text("Request mdoc via NFC CCE (NFC only)") }
+                        content = { Text("Request mdoc via NFC (CCE only, NFC only)") }
                     )
                 }
 
@@ -1120,6 +1140,38 @@ fun IsoMdocProximityReadingScreen(
                         )
                         Text(
                             text = "Insert polling frames for Observe Mode",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = app.settingsModel.readerBleL2CapEnabled.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerBleL2CapEnabled.value = value
+                            },
+                        )
+                        Text(
+                            text = "Use L2CAP if available",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = app.settingsModel.readerBleL2CapInEngagementEnabled.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerBleL2CapInEngagementEnabled.value = value
+                            },
+                        )
+                        Text(
+                            text = "Use L2CAP in engagement if available",
                         )
                     }
                 }

@@ -7,6 +7,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocNfcHandoverType
 import org.multipaz.nfc.AlternativeCarrierRecord
+import org.multipaz.nfc.CollisionResolutionRecord
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
@@ -255,11 +256,46 @@ class MdocNfcEngagementHelper(
             "Expected Connection Handover version 1.5, got ${byteArrayOf(hrRecord.version.toByte()).toHex()}"
         }
 
+        val embeddedRecords = hrRecord.embeddedMessage.records
+        val crIndices = embeddedRecords.indices.filter { idx ->
+            val rec = embeddedRecords[idx]
+            rec.tnf == NdefRecord.Tnf.WELL_KNOWN && rec.type == Nfc.RTD_COLLISION_RESOLUTION
+        }
+        when {
+            crIndices.isEmpty() -> {
+                Logger.w(
+                    TAG,
+                    "Handover Request Record is missing mandatory Collision Resolution Record (\"cr\")"
+                )
+            }
+            crIndices != listOf(0) -> {
+                Logger.w(
+                    TAG,
+                    "Handover Request Record must contain a single Collision Resolution Record (\"cr\") " +
+                        "as its first embedded record, found at indices $crIndices"
+                )
+            }
+            else -> {
+                try {
+                    CollisionResolutionRecord.fromNdefRecord(embeddedRecords[0])
+                } catch (e: IllegalArgumentException) {
+                    Logger.w(TAG, "Malformed Collision Resolution Record (\"cr\") in Handover Request Record", e)
+                }
+            }
+        }
+
         val tailRecords = message.records.subList(1, message.records.size)
+        if (tailRecords.any { it.tnf == NdefRecord.Tnf.WELL_KNOWN && it.type == Nfc.RTD_COLLISION_RESOLUTION }) {
+            Logger.w(TAG, "Unexpected top-level Collision Resolution Record (\"cr\") outside Handover Request Record")
+        }
         val recordsById = tailRecords.associateBy { it.id.decodeToString() }
         val auxRecordsByCarrierId = mutableMapOf<String, List<NdefRecord>>()
-        for (acRec in hrRecord.embeddedMessage.records) {
-            val parsedAc = AlternativeCarrierRecord.fromNdefRecord(acRec)
+        for (acRec in embeddedRecords) {
+            val parsedAc = try {
+                AlternativeCarrierRecord.fromNdefRecord(acRec)
+            } catch (e: IllegalArgumentException) {
+                throw IllegalStateException("Malformed Alternative Carrier Record in Handover Request Record", e)
+            }
             if (parsedAc != null) {
                 auxRecordsByCarrierId[parsedAc.carrierDataReference] =
                     parsedAc.auxiliaryDataReferences.mapNotNull { recordsById[it] }

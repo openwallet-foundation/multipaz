@@ -36,7 +36,8 @@ private const val TAG = "scanMdocReader"
  *   platforms supports not showing a dialog, use [NfcTagReader.dialogAlwaysShown] to check at
  *   runtime if the platform supports this.
  * @param options the [MdocTransportOptions] used to create new [MdocTransport] instances.
- * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control handover behavior.
+ * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control which engagement
+ *   technologies ([MdocReaderNfcEngagementType]) and CCE / `ReaderEngagement` options to use.
  * @param transportFactory the factory used to create [MdocTransport] instances.
  * @param selectConnectionMethod used to choose a connection method if the remote mdoc is using NFC static handover.
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
@@ -48,7 +49,7 @@ private const val TAG = "scanMdocReader"
 suspend fun NfcTagReader.scanMdocReader(
     message: String?,
     options: MdocTransportOptions,
-    handoverOptions: MdocReaderNfcHandoverOptions,
+    handoverOptions: MdocReaderNfcHandoverOptions = MdocReaderNfcHandoverOptions(),
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
@@ -92,7 +93,8 @@ suspend fun NfcTagReader.scanMdocReader(
  *   platforms support not showing a dialog, use [NfcTagReader.dialogAlwaysShown] to check at
  *   runtime if the platform supports this.
  * @param options the [MdocTransportOptions] used to create new [MdocTransport] instances.
- * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control handover behavior.
+ * @param handoverOptions the [MdocReaderNfcHandoverOptions] used to control which engagement
+ *   technologies ([MdocReaderNfcEngagementType]) and CCE / `ReaderEngagement` options to use.
  * @param transportFactory the factory used to create [MdocTransport] instances.
  * @param selectConnectionMethod used to choose a connection method if the remote mdoc is using NFC static handover.
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
@@ -108,7 +110,7 @@ suspend fun NfcTagReader.scanMdocReader(
 suspend fun <T> NfcTagReader.scanMdocReader(
     message: String?,
     options: MdocTransportOptions,
-    handoverOptions: MdocReaderNfcHandoverOptions,
+    handoverOptions: MdocReaderNfcHandoverOptions = MdocReaderNfcHandoverOptions(),
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
@@ -128,7 +130,9 @@ suspend fun <T> NfcTagReader.scanMdocReader(
 
     try {
         val warmUpMethods = negotiatedHandoverConnectionMethods.filterNot {
-            it is MdocConnectionMethod.Ble && it.isMdocPeripheral && it.uuid == null
+            (it is MdocConnectionMethod.Ble && it.isMdocPeripheral && it.uuid == null) ||
+                (handoverOptions.engagementType == MdocReaderNfcEngagementType.NFC_CCE_ONLY &&
+                    it is MdocConnectionMethod.Nfc)
         }
         val createdTransports = transportFactory.createTransports(
             connectionMethods = warmUpMethods,

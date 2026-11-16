@@ -187,7 +187,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
         assertTrue(handoverResult.connectionMethods.isEmpty())
@@ -346,7 +346,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = methods,
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
@@ -464,7 +464,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
@@ -576,7 +576,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useCce = true, eReaderKey = eReaderKey)
+            options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey)
         )
         assertNotNull(handoverResult)
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
@@ -600,7 +600,7 @@ class MdocNfcCceEngagementHelperTest {
      * 2. If `handoverPicker` attempts to select `DirectL2capPeripheral` without a PSM,
      *    [MdocNfcCceEngagementHelper] rejects it via `onError` (`6F00`).
      * 3. Also verifies that any [MdocConnectionMethod.Nfc] passed to
-     *    `mdocReaderNfcHandover(useCce = true)` is stripped from `CCEHandoverRequest` (Clauses 9.5.1 / 11.2.1).
+     *    [mdocReaderNfcHandover] in CCE mode is stripped from `CCEHandoverRequest` (Clauses 9.5.1 / 11.2.1).
      */
     @Test
     fun testFourModeReaderOfferNfcStrippingAndInvalidSelectRejection() = runTest {
@@ -631,7 +631,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult1 = mdocReaderNfcHandover(
             tag = tag1,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useCce = true)
+            options = MdocReaderNfcHandoverOptions()
         )
         assertNotNull(handoverResult1)
         assertEquals(4, seenMethodsCount)
@@ -655,7 +655,7 @@ class MdocNfcCceEngagementHelperTest {
             mdocReaderNfcHandover(
                 tag = tag2,
                 negotiatedHandoverConnectionMethods = readerMethods,
-                options = MdocReaderNfcHandoverOptions(useCce = true)
+                options = MdocReaderNfcHandoverOptions()
             )
         }
         assertNotNull(invalidSelectError)
@@ -699,7 +699,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = readerMethods,
-            options = MdocReaderNfcHandoverOptions(useCce = true)
+            options = MdocReaderNfcHandoverOptions()
         )
         assertNotNull(handoverResult)
         assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
@@ -750,7 +750,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = methods,
-            options = MdocReaderNfcHandoverOptions(useCce = true)
+            options = MdocReaderNfcHandoverOptions()
         )
         assertNotNull(handoverResult)
         assertEquals(0, tag.closeCount)
@@ -851,7 +851,7 @@ class MdocNfcCceEngagementHelperTest {
         val handoverResult = mdocReaderNfcHandover(
             tag = tag,
             negotiatedHandoverConnectionMethods = emptyList(),
-            options = MdocReaderNfcHandoverOptions(useCce = true)
+            options = MdocReaderNfcHandoverOptions()
         )
         assertNotNull(handoverResult)
         assertEquals(0, tag.closeCount)

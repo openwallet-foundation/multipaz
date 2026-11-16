@@ -508,6 +508,9 @@ class MdocNfcServiceTest {
                 val handoverResult = mdocReaderNfcHandover(
                     tag = tag,
                     negotiatedHandoverConnectionMethods = emptyList(),
+                    options = MdocReaderNfcHandoverOptions(
+                        engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                    ),
                 )
                 assertNotNull(handoverResult)
 
@@ -587,7 +590,10 @@ class MdocNfcServiceTest {
             tag1.service = service1
             service1.start()
 
-            val handover1 = mdocReaderNfcHandover(tag1, emptyList())
+            val ndefOnlyOptions = MdocReaderNfcHandoverOptions(
+                engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+            )
+            val handover1 = mdocReaderNfcHandover(tag1, emptyList(), ndefOnlyOptions)
             assertNotNull(handover1)
             val transport1 = withTimeout(5.seconds) {
                 while (createdTransports.size < 1) {
@@ -608,7 +614,7 @@ class MdocNfcServiceTest {
             service2.start()
 
             try {
-                val handover2 = mdocReaderNfcHandover(tag2, emptyList())
+                val handover2 = mdocReaderNfcHandover(tag2, emptyList(), ndefOnlyOptions)
                 assertNotNull(handover2)
                 val transport2 = withTimeout(5.seconds) {
                     while (createdTransports.size < 2) {
@@ -696,8 +702,11 @@ class MdocNfcServiceTest {
             service.start()
 
             try {
+                val ndefOnlyOptions = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                )
                 // Tap 1
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport1 = withTimeout(5.seconds) {
                     while (createdTransports.size < 1) {
                         delay(10.milliseconds)
@@ -710,7 +719,7 @@ class MdocNfcServiceTest {
                 service.deactivate(NfcDeactivationReason.LINK_LOSS)
 
                 // Tap 2 on the same service instance
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport2 = withTimeout(5.seconds) {
                     while (createdTransports.size < 2) {
                         delay(10.milliseconds)
@@ -725,7 +734,7 @@ class MdocNfcServiceTest {
                 assertEquals(PresentmentModel.State.Connecting, presentmentModel.state.value)
 
                 // Tap 3 mid-hold (SELECT APPLICATION without onDeactivated in between)
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport3 = withTimeout(5.seconds) {
                     while (createdTransports.size < 3) {
                         delay(10.milliseconds)
@@ -814,7 +823,7 @@ class MdocNfcServiceTest {
             val handover1 = mdocReaderNfcHandover(
                 tag = tag1,
                 negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                options = MdocReaderNfcHandoverOptions(useCce = true),
+                options = MdocReaderNfcHandoverOptions(),
             )
             assertNotNull(handover1)
             val transport1 = withTimeout(5.seconds) {
@@ -838,7 +847,7 @@ class MdocNfcServiceTest {
                 val handover2 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover2)
                 val transport2 = withTimeout(5.seconds) {
@@ -861,7 +870,7 @@ class MdocNfcServiceTest {
                 val handover3 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover3)
                 val transport3 = withTimeout(5.seconds) {
@@ -938,7 +947,10 @@ class MdocNfcServiceTest {
             service1.start()
 
             try {
-                assertNotNull(mdocReaderNfcHandover(tag1, listOf(bleMethod)))
+                val ndefOnlyOptions = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                )
+                assertNotNull(mdocReaderNfcHandover(tag1, listOf(bleMethod), ndefOnlyOptions))
                 val transport1 = withTimeout(5.seconds) {
                     while (createdTransports.size < 1) {
                         delay(10.milliseconds)
@@ -949,7 +961,7 @@ class MdocNfcServiceTest {
 
                 // Re-tap on the same service instance after deactivation
                 service1.deactivate(NfcDeactivationReason.LINK_LOSS)
-                assertNotNull(mdocReaderNfcHandover(tag1, listOf(bleMethod)))
+                assertNotNull(mdocReaderNfcHandover(tag1, listOf(bleMethod), ndefOnlyOptions))
                 val transport2 = withTimeout(5.seconds) {
                     while (createdTransports.size < 2) {
                         delay(10.milliseconds)
@@ -1030,8 +1042,11 @@ class MdocNfcServiceTest {
             service.start()
 
             try {
+                val ndefOnlyOptions = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                )
                 // Tap 1 connects and enters Iso18013Presentment (WaitingForReader)
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport1 = withTimeout(5.seconds) {
                     while (createdTransports.size < 1) {
                         delay(10.milliseconds)
@@ -1047,7 +1062,7 @@ class MdocNfcServiceTest {
 
                 // Reader deactivates NFC and taps a second time
                 service.deactivate(NfcDeactivationReason.LINK_LOSS)
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport2 = withTimeout(5.seconds) {
                     while (createdTransports.size < 2) {
                         delay(10.milliseconds)
@@ -1130,7 +1145,7 @@ class MdocNfcServiceTest {
             val handover1 = mdocReaderNfcHandover(
                 tag = tag1,
                 negotiatedHandoverConnectionMethods = emptyList(),
-                options = MdocReaderNfcHandoverOptions(useCce = true),
+                options = MdocReaderNfcHandoverOptions(),
             )
             assertNotNull(handover1)
             withTimeout(5.seconds) {
@@ -1156,7 +1171,7 @@ class MdocNfcServiceTest {
                 val handover2 = mdocReaderNfcHandover(
                     tag = tag2,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover2)
                 val bleTransport = withTimeout(5.seconds) {
@@ -1477,7 +1492,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1522,7 +1537,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -1617,7 +1632,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1654,7 +1669,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("family_name"))
@@ -1768,7 +1783,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"), readerKey = readerKeyA)
@@ -1805,7 +1820,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"), readerKey = readerKeyB)
@@ -1887,7 +1902,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -1927,7 +1942,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("family_name"))
@@ -2102,7 +2117,10 @@ class MdocNfcServiceTest {
                 combinedService.deactivate(NfcDeactivationReason.LINK_LOSS)
 
                 // 2. Tap 1 (NFCv1 NDEF static handover) -> opens cross1 in MdocNdefService
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                val ndefOnlyOptions = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                )
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport1 = withTimeout(5.seconds) {
                     while (createdTransports.size < 1) {
                         delay(10.milliseconds)
@@ -2120,7 +2138,7 @@ class MdocNfcServiceTest {
                     mdocReaderNfcHandover(
                         tag = tag,
                         negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                 )
                 val transport2 = withTimeout(5.seconds) {
@@ -2139,7 +2157,7 @@ class MdocNfcServiceTest {
                 combinedService.deactivate(NfcDeactivationReason.LINK_LOSS)
 
                 // 4. Tap 3 (NFCv1 NDEF static handover) -> supersedes cross2 and opens cross3 in MdocNdefService
-                assertNotNull(mdocReaderNfcHandover(tag, emptyList()))
+                assertNotNull(mdocReaderNfcHandover(tag, emptyList(), ndefOnlyOptions))
                 val transport3 = withTimeout(5.seconds) {
                     while (createdTransports.size < 3) {
                         delay(10.milliseconds)
@@ -2205,7 +2223,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 withTimeout(5.seconds) {
@@ -2228,7 +2246,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -2336,7 +2354,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = listOf(bleMethod),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
                 val bleTransport = withTimeout(5.seconds) {
@@ -2441,7 +2459,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
@@ -2522,7 +2540,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -2551,7 +2569,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -2642,7 +2660,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
 
@@ -2769,7 +2787,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name", "family_name"))
@@ -2856,7 +2874,7 @@ class MdocNfcServiceTest {
                 val handover1 = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover1)
                 val readerSession1 = prepareReaderSession(handover1, listOf("given_name"))
@@ -2923,7 +2941,7 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
-                        options = MdocReaderNfcHandoverOptions(useCce = true),
+                        options = MdocReaderNfcHandoverOptions(),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -3003,7 +3021,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag1,
                     negotiatedHandoverConnectionMethods = emptyList(),
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
                 val readerSession = prepareReaderSession(handover, listOf("given_name"))
@@ -3345,6 +3363,9 @@ class MdocNfcServiceTest {
                     val handover1 = mdocReaderNfcHandover(
                         tag = tag1,
                         negotiatedHandoverConnectionMethods = emptyList(),
+                        options = MdocReaderNfcHandoverOptions(
+                            engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                        ),
                     )
                     assertNotNull(handover1)
                     val completed1 = withTimeout(5.seconds) {
@@ -3407,6 +3428,9 @@ class MdocNfcServiceTest {
                     val handover2 = mdocReaderNfcHandover(
                         tag = tag2,
                         negotiatedHandoverConnectionMethods = emptyList(),
+                        options = MdocReaderNfcHandoverOptions(
+                            engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                        ),
                     )
                     assertNotNull(handover2)
                     val readerSession2 = prepareReaderSession(handover2, listOf("given_name"))
@@ -3448,7 +3472,7 @@ class MdocNfcServiceTest {
             mdocReaderNfcHandover(
                 tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND),
                 negotiatedHandoverConnectionMethods = emptyList(),
-                options = MdocReaderNfcHandoverOptions(useCce = true),
+                options = MdocReaderNfcHandoverOptions(),
             )
         )
 
@@ -3456,7 +3480,7 @@ class MdocNfcServiceTest {
             mdocReaderNfcHandover(
                 tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED),
                 negotiatedHandoverConnectionMethods = emptyList(),
-                options = MdocReaderNfcHandoverOptions(useCce = true),
+                options = MdocReaderNfcHandoverOptions(),
             )
         )
 
@@ -3464,10 +3488,41 @@ class MdocNfcServiceTest {
             mdocReaderNfcHandover(
                 tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS),
                 negotiatedHandoverConnectionMethods = emptyList(),
-                options = MdocReaderNfcHandoverOptions(useCce = false),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                ),
             )
         }
         assertEquals(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS, ex.status)
+
+        assertNull(
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY
+                ),
+            )
+        )
+        assertNull(
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_FUNCTION_NOT_SUPPORTED),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY
+                ),
+            )
+        )
+        val cceEx = assertFailsWith<NfcCommandFailedException> {
+            mdocReaderNfcHandover(
+                tag = tagReturningStatus(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CCE_ONLY
+                ),
+            )
+        }
+        assertEquals(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS, cceEx.status)
     }
 
     /**
@@ -3534,7 +3589,7 @@ class MdocNfcServiceTest {
                 val handover = mdocReaderNfcHandover(
                     tag = tag,
                     negotiatedHandoverConnectionMethods = readerOffers,
-                    options = MdocReaderNfcHandoverOptions(useCce = true),
+                    options = MdocReaderNfcHandoverOptions(),
                 )
                 assertNotNull(handover)
                 assertEquals(1, handover.connectionMethods.size)
