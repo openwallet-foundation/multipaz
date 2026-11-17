@@ -213,6 +213,11 @@ sealed class MdocConnectionMethod {
         abstract val peripheralAddress: BlePeripheralAddress?
 
         /**
+         * Whether Bluetooth Channel Sounding (CS) is advertised as available for this connection method.
+         */
+        abstract val channelSoundingAvailable: Boolean
+
+        /**
          * Whether the mdoc acts as BLE Peripheral (and the mdoc reader acts as BLE Central) in this mode.
          */
         val isMdocPeripheral: Boolean
@@ -259,10 +264,12 @@ sealed class MdocConnectionMethod {
          *
          * @property uuid the 128-bit BLE service UUID advertised by the mdoc, if known.
          * @property peripheralAddress the mdoc's BLE peripheral device address, if known.
+         * @property channelSoundingAvailable whether Bluetooth Channel Sounding is advertised as available.
          */
         data class GattPeripheral(
             override val uuid: UUID? = null,
             override val peripheralAddress: BlePeripheralAddress? = null,
+            override val channelSoundingAvailable: Boolean = false,
         ) : Ble() {
             override fun withUuid(uuid: UUID?): GattPeripheral = copy(uuid = uuid)
 
@@ -270,6 +277,9 @@ sealed class MdocConnectionMethod {
                 append("ble:gatt_peripheral:uuid=$uuid")
                 if (peripheralAddress != null) {
                     append(":addr=$peripheralAddress")
+                }
+                if (channelSoundingAvailable) {
+                    append(":cs=true")
                 }
             }
         }
@@ -279,10 +289,12 @@ sealed class MdocConnectionMethod {
          *
          * @property uuid the 128-bit BLE service UUID advertised by the mdoc reader, if known.
          * @property peripheralAddress the mdoc reader's BLE peripheral device address, if known.
+         * @property channelSoundingAvailable whether Bluetooth Channel Sounding is advertised as available.
          */
         data class GattCentral(
             override val uuid: UUID? = null,
             override val peripheralAddress: BlePeripheralAddress? = null,
+            override val channelSoundingAvailable: Boolean = false,
         ) : Ble() {
             override fun withUuid(uuid: UUID?): GattCentral = copy(uuid = uuid)
 
@@ -290,6 +302,9 @@ sealed class MdocConnectionMethod {
                 append("ble:gatt_central:uuid=$uuid")
                 if (peripheralAddress != null) {
                     append(":addr=$peripheralAddress")
+                }
+                if (channelSoundingAvailable) {
+                    append(":cs=true")
                 }
             }
         }
@@ -300,11 +315,13 @@ sealed class MdocConnectionMethod {
          * @property uuid the 128-bit BLE service UUID advertised by the mdoc, if known.
          * @property psm the L2CAP PSM of the mdoc's L2CAP server, if known.
          * @property peripheralAddress the mdoc's BLE peripheral device address, if known.
+         * @property channelSoundingAvailable whether Bluetooth Channel Sounding is advertised as available.
          */
         data class DirectL2capPeripheral(
             override val uuid: UUID? = null,
             val psm: Int? = null,
             override val peripheralAddress: BlePeripheralAddress? = null,
+            override val channelSoundingAvailable: Boolean = false,
         ) : Ble() {
             override fun withUuid(uuid: UUID?): DirectL2capPeripheral = copy(uuid = uuid)
 
@@ -316,6 +333,9 @@ sealed class MdocConnectionMethod {
                 if (peripheralAddress != null) {
                     append(":addr=$peripheralAddress")
                 }
+                if (channelSoundingAvailable) {
+                    append(":cs=true")
+                }
             }
         }
 
@@ -325,11 +345,13 @@ sealed class MdocConnectionMethod {
          * @property uuid the 128-bit BLE service UUID advertised by the mdoc reader, if known.
          * @property psm the L2CAP PSM of the mdoc reader's L2CAP server, if known.
          * @property peripheralAddress the mdoc reader's BLE peripheral device address, if known.
+         * @property channelSoundingAvailable whether Bluetooth Channel Sounding is advertised as available.
          */
         data class DirectL2capCentral(
             override val uuid: UUID? = null,
             val psm: Int? = null,
             override val peripheralAddress: BlePeripheralAddress? = null,
+            override val channelSoundingAvailable: Boolean = false,
         ) : Ble() {
             override fun withUuid(uuid: UUID?): DirectL2capCentral = copy(uuid = uuid)
 
@@ -340,6 +362,9 @@ sealed class MdocConnectionMethod {
                 }
                 if (peripheralAddress != null) {
                     append(":addr=$peripheralAddress")
+                }
+                if (channelSoundingAvailable) {
+                    append(":cs=true")
                 }
             }
         }
@@ -678,3 +703,14 @@ sealed class MdocConnectionMethod {
         }
     }
 }
+
+/**
+ * Checks whether Bluetooth Channel Sounding (CS) is supported and available on the device.
+ *
+ * Channel Sounding (defined in Bluetooth Core Specification 6.0) enables high-accuracy distance
+ * measurement and ranging between Bluetooth Low Energy devices.
+ *
+ * @return `true` if Channel Sounding is supported, enabled, and ready to use; `false` otherwise.
+ */
+expect suspend fun MdocConnectionMethod.Ble.Companion.isChannelSoundingAvailable(): Boolean
+

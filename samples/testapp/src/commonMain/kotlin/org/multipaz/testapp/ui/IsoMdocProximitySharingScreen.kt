@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,12 +35,14 @@ import org.multipaz.compose.presentment.MdocProximityReaderQrSettings
 import org.multipaz.compose.qrcode.generateQrCode
 import org.multipaz.compose.scrollbar.ColumnWithScrollbar
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.connectionmethod.isChannelSoundingAvailable
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppSettingsModel
+import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -58,6 +62,12 @@ fun IsoMdocProximitySharingScreen(
     val bleEnabledState = rememberBluetoothEnabledState()
     val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
     var disablePlatformImplementation by remember { mutableStateOf(false) }
+    var channelSoundingAvailable by remember { mutableStateOf(false) }
+
+    LaunchedEffect(true) {
+        channelSoundingAvailable = MdocConnectionMethod.Ble.isChannelSoundingAvailable()
+        Logger.i(TAG, "Bluetooth Channel Sounding available: $channelSoundingAvailable")
+    }
 
     val faceMatcherOptions = remember {
         faceMatcherRepository.all.map { it.displayName } + listOf("None")
@@ -107,6 +117,13 @@ fun IsoMdocProximitySharingScreen(
                     disablePlatformImplementation = newValue
                 }
             )
+            Text(
+                text = "Bluetooth Channel Sounding: " +
+                    if (channelSoundingAvailable) "Available" else "Not available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
             MdocProximityQrPresentment(
                 modifier = Modifier,
                 source = presentmentSource,
@@ -132,17 +149,26 @@ fun IsoMdocProximitySharingScreen(
                                 val bleUuid = UUID.randomUUID()
                                 if (settingsModel.presentmentBleCentralClientModeEnabled.value) {
                                     connectionMethods.add(
-                                        MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                                        MdocConnectionMethod.Ble.GattCentral(
+                                            uuid = bleUuid,
+                                            channelSoundingAvailable = channelSoundingAvailable,
+                                        )
                                     )
                                 }
                                 if (settingsModel.presentmentBlePeripheralServerModeEnabled.value) {
                                     if (settingsModel.presentmentBleL2CapInEngagementEnabled.value) {
                                         connectionMethods.add(
-                                            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = bleUuid)
+                                            MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                                                uuid = bleUuid,
+                                                channelSoundingAvailable = channelSoundingAvailable,
+                                            )
                                         )
                                     }
                                     connectionMethods.add(
-                                        MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
+                                        MdocConnectionMethod.Ble.GattPeripheral(
+                                            uuid = bleUuid,
+                                            channelSoundingAvailable = channelSoundingAvailable,
+                                        )
                                     )
                                 }
                                 if (settingsModel.presentmentNfcDataTransferEnabled.value) {

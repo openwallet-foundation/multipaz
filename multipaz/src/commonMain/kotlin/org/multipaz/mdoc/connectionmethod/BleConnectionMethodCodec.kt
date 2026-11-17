@@ -31,10 +31,12 @@ private const val OPTION_KEY_PERIPHERAL_MODE_UUID = 10L
 private const val OPTION_KEY_CENTRAL_MODE_UUID = 11L
 private const val OPTION_KEY_PERIPHERAL_ADDRESS = 20L
 private const val OPTION_KEY_DIRECT_L2CAP_PSM = 21L
+private const val OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE = 42L // NOTE: Not yet allocated
 
 private const val CH_BLE_OPTION_KEY_DIRECT_L2CAP_PSM = 0L
 private const val CH_BLE_OPTION_KEY_GATT = 1L
 private const val CH_BLE_OPTION_KEY_DIRECT_L2CAP = 2L
+private const val CH_BLE_OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE = 42L // NOTE: Not yet allocated
 
 // Bluetooth Assigned Numbers / Core Specification Supplement AD types
 private const val BLE_LE_COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS: UByte = 0x07u
@@ -58,6 +60,7 @@ private class CoalescedBleModes(
     val centralPsm: Int?,
     val mdocPeripheralAddress: BlePeripheralAddress?,
     val mdocCentralAddress: BlePeripheralAddress?,
+    val channelSoundingAvailable: Boolean,
 ) {
     val hasPeripheralMode: Boolean get() = gattPeripheral || directL2capPeripheral
     val hasCentralMode: Boolean get() = gattCentral || directL2capCentral
@@ -83,6 +86,10 @@ private fun coalesceBleModes(bleMethods: List<MdocConnectionMethod.Ble>): Coales
     var centralPsm: Int? = null
     var mdocPeripheralAddress: BlePeripheralAddress? = null
     var mdocCentralAddress: BlePeripheralAddress? = null
+    val channelSoundingAvailable = bleMethods.first().channelSoundingAvailable
+    require(bleMethods.all { it.channelSoundingAvailable == channelSoundingAvailable }) {
+        "Conflicting channelSoundingAvailable values in BLE connection methods"
+    }
 
     for (ble in bleMethods) {
         when (ble) {
@@ -147,6 +154,7 @@ private fun coalesceBleModes(bleMethods: List<MdocConnectionMethod.Ble>): Coales
         centralPsm = centralPsm,
         mdocPeripheralAddress = mdocPeripheralAddress,
         mdocCentralAddress = mdocCentralAddress,
+        channelSoundingAvailable = channelSoundingAvailable,
     )
 }
 
@@ -271,6 +279,9 @@ internal fun encodeBleDeviceRetrievalMethod(
             if (psmToEmit != null) {
                 put(OPTION_KEY_DIRECT_L2CAP_PSM, psmToEmit)
             }
+            if (coalesced.channelSoundingAvailable) {
+                put(OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE, true)
+            }
         }
     }
 }
@@ -284,6 +295,7 @@ private fun buildDecodedBleList(
     centralModeUuid: UUID?,
     wirePsm: Int?,
     wireAddress: BlePeripheralAddress?,
+    channelSoundingAvailable: Boolean,
     senderRole: MdocRole,
 ): List<MdocConnectionMethod.Ble> {
     val mdocPeripheralAddr = if (senderRole == MdocRole.MDOC) wireAddress else null
@@ -298,6 +310,7 @@ private fun buildDecodedBleList(
                     uuid = centralModeUuid,
                     psm = mdocCentralPsm,
                     peripheralAddress = mdocCentralAddr,
+                    channelSoundingAvailable = channelSoundingAvailable,
                 )
             )
         }
@@ -307,6 +320,7 @@ private fun buildDecodedBleList(
                     uuid = peripheralModeUuid,
                     psm = mdocPeripheralPsm,
                     peripheralAddress = mdocPeripheralAddr,
+                    channelSoundingAvailable = channelSoundingAvailable,
                 )
             )
         }
@@ -315,6 +329,7 @@ private fun buildDecodedBleList(
                 MdocConnectionMethod.Ble.GattCentral(
                     uuid = centralModeUuid,
                     peripheralAddress = mdocCentralAddr,
+                    channelSoundingAvailable = channelSoundingAvailable,
                 )
             )
         }
@@ -323,6 +338,7 @@ private fun buildDecodedBleList(
                 MdocConnectionMethod.Ble.GattPeripheral(
                     uuid = peripheralModeUuid,
                     peripheralAddress = mdocPeripheralAddr,
+                    channelSoundingAvailable = channelSoundingAvailable,
                 )
             )
         }
@@ -365,6 +381,7 @@ internal fun decodeBleDeviceRetrievalMethod(
         UUID.fromByteArray(it.asBstr)
     }
     val directL2capPsm = map.getOrNull(OPTION_KEY_DIRECT_L2CAP_PSM)?.asNumber?.toInt()
+    val channelSoundingAvailable = map.getOrNull(OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE)?.asBoolean ?: false
 
     return buildDecodedBleList(
         gattPeripheral = gattPeripheral,
@@ -375,6 +392,7 @@ internal fun decodeBleDeviceRetrievalMethod(
         centralModeUuid = centralModeUuid,
         wirePsm = directL2capPsm,
         wireAddress = peripheralAddress,
+        channelSoundingAvailable = channelSoundingAvailable,
         senderRole = senderRole,
     )
 }
@@ -493,6 +511,7 @@ internal fun encodeBleNdefHandoverCarrier(
     )
 
     val emitChBleOptions = coalesced.hasDirectL2cap ||
+        coalesced.channelSoundingAvailable ||
         (handoverType == MdocNfcHandoverType.NEGOTIATED_HS && hrHadChBleOptions)
     val auxiliaryRecords = mutableListOf<NdefRecord>()
     val effectiveAuxiliaryReferences = if (emitChBleOptions) {
@@ -520,6 +539,9 @@ internal fun encodeBleNdefHandoverCarrier(
                 }
                 put(CH_BLE_OPTION_KEY_GATT, coalesced.hasGatt)
                 put(CH_BLE_OPTION_KEY_DIRECT_L2CAP, coalesced.hasDirectL2cap)
+                if (coalesced.channelSoundingAvailable) {
+                    put(CH_BLE_OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE, true)
+                }
             }
         )
         auxiliaryRecords.add(
@@ -630,6 +652,7 @@ internal fun decodeBleNdefHandoverCarrier(
     val directL2capPeripheral: Boolean
     val directL2capCentral: Boolean
     val psm: Int?
+    val channelSoundingAvailable: Boolean
 
     if (chBleRecord == null) {
         gattPeripheral = oobPeripheral
@@ -637,11 +660,14 @@ internal fun decodeBleNdefHandoverCarrier(
         directL2capPeripheral = false
         directL2capCentral = false
         psm = null
+        channelSoundingAvailable = false
     } else {
         val map = Cbor.decode(chBleRecord.payload.toByteArray())
         val gatt = map[CH_BLE_OPTION_KEY_GATT].asBoolean
         val directL2cap = map[CH_BLE_OPTION_KEY_DIRECT_L2CAP].asBoolean
         psm = map.getOrNull(CH_BLE_OPTION_KEY_DIRECT_L2CAP_PSM)?.asNumber?.toInt()
+        channelSoundingAvailable =
+            map.getOrNull(CH_BLE_OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE)?.asBoolean ?: false
         gattPeripheral = oobPeripheral && gatt
         gattCentral = oobCentral && gatt
         when (senderRole) {
@@ -670,6 +696,7 @@ internal fun decodeBleNdefHandoverCarrier(
         centralModeUuid = if (gattCentral || directL2capCentral) uuid else null,
         wirePsm = psm,
         wireAddress = peripheralAddress,
+        channelSoundingAvailable = channelSoundingAvailable,
         senderRole = senderRole,
     )
 }

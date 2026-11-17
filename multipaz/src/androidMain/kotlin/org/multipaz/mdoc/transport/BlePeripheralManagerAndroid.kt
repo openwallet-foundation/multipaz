@@ -271,6 +271,9 @@ internal class BlePeripheralHalAndroid : BlePeripheralHal {
     @Volatile
     private var l2capServerClosedIntentionally = false
 
+    override val peerBluetoothAddress: String?
+        get() = l2capSocket?.remoteDevice?.address ?: connectedDevice?.address
+
     init {
         if (bluetoothManager.adapter == null) {
             throw IllegalStateException("Bluetooth is not available on this device")

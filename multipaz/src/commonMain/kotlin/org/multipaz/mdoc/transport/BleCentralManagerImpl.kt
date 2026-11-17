@@ -99,6 +99,9 @@ internal class BleCentralManagerImpl(
     private var identCharacteristicUuid: UUID? = null
     private var l2capCharacteristicUuid: UUID? = null
 
+    override val peerBluetoothAddress: String?
+        get() = hal.peerBluetoothAddress
+
     override fun setUuids(
         stateCharacteristicUuid: UUID,
         client2ServerCharacteristicUuid: UUID,

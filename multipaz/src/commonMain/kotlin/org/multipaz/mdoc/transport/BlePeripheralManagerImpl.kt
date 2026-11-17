@@ -42,6 +42,9 @@ internal class BlePeripheralManagerImpl(
     private var l2capCharacteristicUuid: UUID? = null
     private var startL2capServer = false
 
+    override val peerBluetoothAddress: String?
+        get() = hal.peerBluetoothAddress
+
     @Volatile
     private var _negotiatedMtu = -1
     override val negotiatedMtu: Int?

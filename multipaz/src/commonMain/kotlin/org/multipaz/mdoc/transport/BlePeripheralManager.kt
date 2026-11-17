@@ -61,6 +61,10 @@ internal interface BlePeripheralManager {
     // True if connected via L2CAP
     val usingL2cap: Boolean
 
+    // The peer Bluetooth MAC address if available (e.g. on Android)
+    val peerBluetoothAddress: String?
+        get() = null
+
     val negotiatedMtu: Int?
         get() = null
 

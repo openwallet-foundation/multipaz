@@ -24,6 +24,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,6 +47,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
+import org.multipaz.mdoc.connectionmethod.isChannelSoundingAvailable
 import org.multipaz.mdoc.nfc.scanMdocReader
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -200,6 +202,12 @@ fun IsoMdocProximityReadingScreen(
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
     val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
+    var channelSoundingAvailable by remember { mutableStateOf(false) }
+
+    LaunchedEffect(true) {
+        channelSoundingAvailable = MdocConnectionMethod.Ble.isChannelSoundingAvailable()
+        Logger.i(TAG, "Bluetooth Channel Sounding available: $channelSoundingAvailable")
+    }
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
     val readerShowQrScanner = remember { mutableStateOf(false) }
     val readerQrUriToShow = remember { mutableStateOf<String?>(null) }
@@ -671,6 +679,15 @@ fun IsoMdocProximityReadingScreen(
                     )
                 }
                 item {
+                    Text(
+                        text = "Bluetooth Channel Sounding: " +
+                            if (channelSoundingAvailable) "Available" else "Not available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                item {
                     TextButton(
                         onClick = {
                             readerShowQrScanner.value = true
@@ -687,16 +704,25 @@ fun IsoMdocProximityReadingScreen(
                             if (app.settingsModel.readerBleCentralClientModeEnabled.value) {
                                 if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
                                     connectionMethods.add(
-                                        MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid)
+                                        MdocConnectionMethod.Ble.DirectL2capCentral(
+                                            uuid = bleUuid,
+                                            channelSoundingAvailable = channelSoundingAvailable,
+                                        )
                                     )
                                 }
                                 connectionMethods.add(
-                                    MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                                    MdocConnectionMethod.Ble.GattCentral(
+                                        uuid = bleUuid,
+                                        channelSoundingAvailable = channelSoundingAvailable,
+                                    )
                                 )
                             }
                             if (app.settingsModel.readerBlePeripheralServerModeEnabled.value) {
                                 connectionMethods.add(
-                                    MdocConnectionMethod.Ble.GattPeripheral(uuid = bleUuid)
+                                    MdocConnectionMethod.Ble.GattPeripheral(
+                                        uuid = bleUuid,
+                                        channelSoundingAvailable = channelSoundingAvailable,
+                                    )
                                 )
                             }
                             if (connectionMethods.isEmpty()) {
@@ -871,21 +897,31 @@ fun IsoMdocProximityReadingScreen(
                                 if (app.settingsModel.readerBleCentralClientModeEnabled.value) {
                                     if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
                                         negotiatedHandoverConnectionMethods.add(
-                                            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid)
+                                            MdocConnectionMethod.Ble.DirectL2capCentral(
+                                                uuid = bleUuid,
+                                                channelSoundingAvailable = channelSoundingAvailable,
+                                            )
                                         )
                                     }
                                     negotiatedHandoverConnectionMethods.add(
-                                        MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid)
+                                        MdocConnectionMethod.Ble.GattCentral(
+                                            uuid = bleUuid,
+                                            channelSoundingAvailable = channelSoundingAvailable,
+                                        )
                                     )
                                 }
                                 if (app.settingsModel.readerBlePeripheralServerModeEnabled.value) {
                                     if (app.settingsModel.readerBleL2CapInEngagementEnabled.value) {
                                         negotiatedHandoverConnectionMethods.add(
-                                            MdocConnectionMethod.Ble.DirectL2capPeripheral()
+                                            MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                                                channelSoundingAvailable = channelSoundingAvailable,
+                                            )
                                         )
                                     }
                                     negotiatedHandoverConnectionMethods.add(
-                                        MdocConnectionMethod.Ble.GattPeripheral()
+                                        MdocConnectionMethod.Ble.GattPeripheral(
+                                            channelSoundingAvailable = channelSoundingAvailable,
+                                        )
                                     )
                                 }
                                 if (app.settingsModel.readerNfcDataTransferEnabled.value) {

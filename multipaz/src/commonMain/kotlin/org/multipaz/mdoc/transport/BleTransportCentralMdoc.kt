@@ -36,6 +36,7 @@ internal class BleTransportCentralMdoc(
     private val uuid: UUID,
     private val psm: Int?,
     private val peripheralAddress: BlePeripheralAddress? = null,
+    private val channelSoundingAvailable: Boolean = false,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportCentralMdoc"
@@ -47,6 +48,8 @@ internal class BleTransportCentralMdoc(
     private val mutex = Mutex()
     @Volatile
     private var currentJob: Job? = null
+    @Volatile
+    private var channelSoundingJob: Job? = null
 
     private val _state = MutableStateFlow<State>(State.IDLE)
     override val state: StateFlow<State> = _state.asStateFlow()
@@ -57,11 +60,13 @@ internal class BleTransportCentralMdoc(
                 uuid = uuid,
                 psm = psm,
                 peripheralAddress = peripheralAddress,
+                channelSoundingAvailable = channelSoundingAvailable,
             )
         } else {
             MdocConnectionMethod.Ble.GattCentral(
                 uuid = uuid,
                 peripheralAddress = peripheralAddress,
+                channelSoundingAvailable = channelSoundingAvailable,
             )
         }
 
@@ -193,6 +198,14 @@ internal class BleTransportCentralMdoc(
                 }
                 _connectingTime = Clock.System.now() - timeConnectingStarted!!
                 mutex.withLock { _state.value = State.CONNECTED }
+                if (channelSoundingAvailable) {
+                    val peerAddress = centralManager.peerBluetoothAddress
+                    if (peerAddress != null) {
+                        channelSoundingJob = transportScope.launch {
+                            startBluetoothChannelSounding(peerAddress, asInitiator = false)
+                        }
+                    }
+                }
             }
         } catch (error: Exception) {
             timeConnectingStarted?.let { _connectingTime = Clock.System.now() - it }
@@ -293,12 +306,14 @@ internal class BleTransportCentralMdoc(
             return
         }
         Logger.w(TAG, "Failing transport with error", error)
+        channelSoundingJob?.cancel()
         centralManager.close()
         _state.value = State.FAILED
     }
 
     private fun closeWithoutDelay() {
         check(mutex.isLocked) { "closeWithoutDelay called without holding lock" }
+        channelSoundingJob?.cancel()
         centralManager.close()
         _state.value = State.CLOSED
     }

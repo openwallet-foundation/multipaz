@@ -21,6 +21,8 @@
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- For Channel Sounding / Ranging -->
+    <uses-permission android:name="android.permission.RANGING" />
     <!-- Request legacy Bluetooth permissions on older devices. -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

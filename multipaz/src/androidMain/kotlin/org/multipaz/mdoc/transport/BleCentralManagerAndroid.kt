@@ -84,6 +84,9 @@ internal class BleCentralHalAndroid : BleCentralHal {
     private var l2capSocket: BluetoothSocket? = null
     private var l2capConnectJob: Job? = null
 
+    override val peerBluetoothAddress: String?
+        get() = l2capSocket?.remoteDevice?.address ?: device?.address
+
     init {
         if (bluetoothManager.adapter == null) {
             throw IllegalStateException("Bluetooth is not available on this device")
