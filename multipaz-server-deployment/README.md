@@ -199,3 +199,23 @@ and must be removed at very least in the container environment.
 | `MODE` | `proxy`                 | `proxy` for nginx routing, `direct` for port-only access to individual services |
 | `ADMIN_PASS` | `multipaz`        | default is only used for localhost deployment, otherwise it must be specified
 
+### Optional OpenID4VCI Notifications
+
+The issuer supports the optional [OpenID4VCI Section 11 notification endpoint](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
+Support is disabled by default. To enable it in the server bundle, add
+`-e EXTRA_PARAMS="-param notification_endpoint_enabled=true"` to the container run
+command and use an HTTPS `BASE_URL`. For a standalone issuer, pass
+`-param notification_endpoint_enabled=true` with an HTTPS `base_url`.
+
+When enabled with an HTTPS issuer URL, issuer metadata advertises
+`notification_endpoint`, and credential responses include a `notification_id`,
+including responses to credential refresh requests.
+
+The holder sends notifications only when both the endpoint and a notification ID
+are provided. It reports `credential_accepted` after successful credential storage,
+`credential_failure` on issuance-processing failures, and `credential_deleted` when
+user action prevents issuance from completing. Deleting previously stored
+credentials does not trigger a notification.
+
+Notification delivery is best-effort: failures do not invalidate credentials
+already obtained, and the issuer never requires a notification to complete issuance.
