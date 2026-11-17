@@ -17,6 +17,7 @@ import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.mdoc.connectionmethod.BleAddressType
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
@@ -31,6 +32,8 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -116,6 +119,8 @@ class AndroidEmulatorBleRetryTest {
     private suspend fun runAndroidCentralAgainstHciPeripheral(
         useL2cap: Boolean,
         centralClientMode: Boolean = false,
+        usePeripheralAddress: Boolean = false,
+        directL2capInEngagement: Boolean = false,
         faultConfig: BleHciFaultConfig = BleHciFaultConfig(),
         centralConfig: BleCentralConfig = BleCentralConfig(
             scanRestartTimeout = 700.milliseconds,
@@ -126,10 +131,15 @@ class AndroidEmulatorBleRetryTest {
         ),
     ): Pair<MdocTransportStats, MdocTransportStats> = coroutineScope {
         val serviceUuid = UUID.randomUUID()
-        val connectionMethod = if (centralClientMode) {
-            MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid)
-        } else {
-            MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
+        val initialPeripheralMethod = when {
+            centralClientMode && directL2capInEngagement ->
+                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = serviceUuid)
+            centralClientMode ->
+                MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid)
+            directL2capInEngagement ->
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = serviceUuid)
+            else ->
+                MdocConnectionMethod.Ble.GattPeripheral(uuid = serviceUuid)
         }
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use {
             buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes
@@ -139,21 +149,37 @@ class AndroidEmulatorBleRetryTest {
         val androidFactory = AndroidMdocTransportFactory(centralConfig = centralConfig)
 
         val hciPeripheral = hciFactory.createTransport(
-            connectionMethod = connectionMethod,
+            connectionMethod = initialPeripheralMethod,
             role = if (centralClientMode) MdocRole.MDOC_READER else MdocRole.MDOC,
-            options = MdocTransportOptions(bleUseL2CAP = useL2cap),
+            options = MdocTransportOptions(
+                bleUseL2CAP = useL2cap,
+                bleExportPeripheralAddress = usePeripheralAddress,
+            ),
         )
-        val androidCentral = androidFactory.createTransport(
-            connectionMethod = connectionMethod,
-            role = if (centralClientMode) MdocRole.MDOC else MdocRole.MDOC_READER,
-            options = MdocTransportOptions(bleUseL2CAP = useL2cap),
-        )
+        var androidCentral: MdocTransport? = null
 
         val requestPayload = ByteArray(1024) { (it and 0xFF).toByte() }
         val responsePayload = ByteArray(2048) { ((it * 7) and 0xFF).toByte() }
 
         try {
             hciPeripheral.advertise()
+            val advertisedMethod = hciPeripheral.connectionMethod as MdocConnectionMethod.Ble
+            if (usePeripheralAddress) {
+                val addr = assertNotNull(advertisedMethod.peripheralAddress)
+                assertEquals(BleAddressType.RANDOM, addr.addressType)
+            } else {
+                assertNull(advertisedMethod.peripheralAddress)
+            }
+            val createdAndroidCentral = androidFactory.createTransport(
+                connectionMethod = advertisedMethod,
+                role = if (centralClientMode) MdocRole.MDOC else MdocRole.MDOC_READER,
+                options = MdocTransportOptions(
+                    bleUseL2CAP = useL2cap,
+                    bleUsePeripheralAddress = usePeripheralAddress,
+                ),
+            )
+            androidCentral = createdAndroidCentral
+
             val peripheralJob = async(Dispatchers.Default) {
                 hciPeripheral.open(eSenderKey)
                 if (centralClientMode) {
@@ -167,22 +193,22 @@ class AndroidEmulatorBleRetryTest {
                 }
             }
             val centralJob = async(Dispatchers.Default) {
-                androidCentral.open(eSenderKey)
+                createdAndroidCentral.open(eSenderKey)
                 if (centralClientMode) {
-                    val req = androidCentral.waitForMessage()
+                    val req = createdAndroidCentral.waitForMessage()
                     assertContentEquals(requestPayload, req)
-                    androidCentral.sendMessage(responsePayload)
+                    createdAndroidCentral.sendMessage(responsePayload)
                 } else {
-                    androidCentral.sendMessage(requestPayload)
-                    val rsp = androidCentral.waitForMessage()
+                    createdAndroidCentral.sendMessage(requestPayload)
+                    val rsp = createdAndroidCentral.waitForMessage()
                     assertContentEquals(responsePayload, rsp)
                 }
             }
             peripheralJob.await()
             centralJob.await()
-            Pair(androidCentral.stats, hciPeripheral.stats)
+            Pair(createdAndroidCentral.stats, hciPeripheral.stats)
         } finally {
-            androidCentral.close()
+            androidCentral?.close()
             hciPeripheral.close()
         }
     }
@@ -335,6 +361,56 @@ class AndroidEmulatorBleRetryTest {
             )
             assertEquals(false, peripheralStats.bleUsingL2cap)
             assertEquals(false, centralStats.bleUsingL2cap)
+        }
+    }
+
+    @Test
+    fun androidCentralWithPeripheralAddressSkipsScanOverGatt() = runBlocking {
+        Assume.assumeTrue(
+            "BluetoothAdapter.getRemoteLeDevice requires Android API 33+",
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        )
+        withTimeout(60.seconds) {
+            for (centralClientMode in listOf(false, true)) {
+                val (centralStats, peripheralStats) = runAndroidCentralAgainstHciPeripheral(
+                    useL2cap = false,
+                    centralClientMode = centralClientMode,
+                    usePeripheralAddress = true,
+                    directL2capInEngagement = false,
+                )
+                assertNull(centralStats.bleScanningTime)
+                assertEquals(true, centralStats.bleUsedPeripheralAddress)
+                assertNull(peripheralStats.bleUsedPeripheralAddress)
+                assertEquals(0, centralStats.bleNumScanRestarts ?: 0)
+                assertEquals(false, centralStats.bleUsingL2cap)
+                assertEquals(false, peripheralStats.bleUsingL2cap)
+            }
+        }
+    }
+
+    @Test
+    fun androidCentralWithPeripheralAddressSkipsScanOverDirectL2cap() = runBlocking {
+        Assume.assumeTrue(
+            "BluetoothAdapter.getRemoteLeDevice requires Android API 33+",
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        )
+        withTimeout(60.seconds) {
+            for (centralClientMode in listOf(false, true)) {
+                val (centralStats, peripheralStats) = runAndroidCentralAgainstHciPeripheral(
+                    useL2cap = true,
+                    centralClientMode = centralClientMode,
+                    usePeripheralAddress = true,
+                    directL2capInEngagement = true,
+                )
+                assertNull(centralStats.bleScanningTime)
+                assertEquals(true, centralStats.bleUsedPeripheralAddress)
+                assertNull(peripheralStats.bleUsedPeripheralAddress)
+                assertEquals(0, centralStats.bleNumScanRestarts ?: 0)
+                assertEquals(true, centralStats.bleL2capPsmInEngagement)
+                assertEquals(true, peripheralStats.bleL2capPsmInEngagement)
+                assertEquals(true, centralStats.bleUsingL2cap)
+                assertEquals(true, peripheralStats.bleUsingL2cap)
+            }
         }
     }
 }

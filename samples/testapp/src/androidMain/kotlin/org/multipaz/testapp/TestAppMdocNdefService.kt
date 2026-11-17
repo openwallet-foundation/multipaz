@@ -47,6 +47,8 @@ class TestAppMdocNdefService : MdocNdefService() {
             bleDirectL2capEnabled = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value,
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
+                bleExportPeripheralAddress = app.settingsModel.presentmentBleExportPeripheralAddress.value,
+                bleUsePeripheralAddress = app.settingsModel.presentmentBleUsePeripheralAddress.value,
             ),
         )
     }

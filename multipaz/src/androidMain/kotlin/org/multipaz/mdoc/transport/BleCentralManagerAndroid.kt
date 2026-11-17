@@ -24,7 +24,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
+import org.multipaz.mdoc.connectionmethod.BleAddressType
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.fromJavaUuid
@@ -72,6 +75,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
     private lateinit var callback: BleCentralHal.Callback
     private val bluetoothManager = applicationContext.getSystemService(BluetoothManager::class.java)
     private var device: BluetoothDevice? = null
+    private var configuredViaPeripheralAddress = false
     private var gatt: BluetoothGatt? = null
     private var service: BluetoothGattService? = null
     private var targetServiceUuid: UUID? = null
@@ -106,6 +110,9 @@ internal class BleCentralHalAndroid : BleCentralHal {
     override val isConnected: Boolean
         get() = gatt != null
 
+    override val requiresPeripheralConnectionBeforeL2cap: Boolean
+        get() = configuredViaPeripheralAddress
+
     override fun setCallback(callback: BleCentralHal.Callback) {
         this.callback = callback
     }
@@ -113,6 +120,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
     private val scanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             Logger.d(TAG, "onScanResult: callbackType=$callbackType result=$result")
+            configuredViaPeripheralAddress = false
             device = result.device
             callback.onPeripheralDiscovered()
         }
@@ -263,6 +271,26 @@ internal class BleCentralHalAndroid : BleCentralHal {
 
     override fun waitForPowerOn() {
         callback.onPowerOn(null)
+    }
+
+    override fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return setPeripheralAddressTiramisu(peripheralAddress)
+        }
+        return false
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private fun setPeripheralAddressTiramisu(peripheralAddress: BlePeripheralAddress): Boolean {
+        val adapter = bluetoothManager.adapter ?: return false
+        val macString = formatAndroidBluetoothAddress(peripheralAddress.address)
+        val androidAddressType = when (peripheralAddress.addressType) {
+            BleAddressType.PUBLIC -> BluetoothDevice.ADDRESS_TYPE_PUBLIC
+            BleAddressType.RANDOM -> BluetoothDevice.ADDRESS_TYPE_RANDOM
+        }
+        device = adapter.getRemoteLeDevice(macString, androidAddressType)
+        configuredViaPeripheralAddress = true
+        return true
     }
 
     override fun startScan(serviceUuid: UUID) {
@@ -526,6 +554,7 @@ internal class BleCentralHalAndroid : BleCentralHal {
         gatt?.close()
         gatt = null
         device = null
+        configuredViaPeripheralAddress = false
         l2capConnectJob?.cancel()
         l2capConnectJob = null
         l2capSocket?.let {
@@ -545,4 +574,17 @@ internal class BleCentralHalAndroid : BleCentralHal {
         }
         l2capSocket = null
     }
+}
+
+internal fun formatAndroidBluetoothAddress(address: ByteString): String {
+    require(address.size == 6) { "Expected 6-byte Bluetooth address, got ${address.size}" }
+    val hexDigits = "0123456789ABCDEF"
+    val sb = StringBuilder(17)
+    for (i in 0 until 6) {
+        if (i > 0) sb.append(':')
+        val b = address[i].toInt() and 0xFF
+        sb.append(hexDigits[b ushr 4])
+        sb.append(hexDigits[b and 0x0F])
+    }
+    return sb.toString()
 }

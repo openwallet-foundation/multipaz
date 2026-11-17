@@ -55,6 +55,8 @@ private class JvmTestAppMdocNdefService : MdocNdefService() {
             bleDirectL2capEnabled = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value,
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
+                bleExportPeripheralAddress = app.settingsModel.presentmentBleExportPeripheralAddress.value,
+                bleUsePeripheralAddress = app.settingsModel.presentmentBleUsePeripheralAddress.value,
             ),
             transportFactory = TestAppConfiguration.mdocTransportFactory,
         )
@@ -85,6 +87,8 @@ private class JvmTestAppMdocNfcCceService : MdocNfcCceService() {
             bleDirectL2capEnabled = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value,
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
+                bleExportPeripheralAddress = app.settingsModel.presentmentBleExportPeripheralAddress.value,
+                bleUsePeripheralAddress = app.settingsModel.presentmentBleUsePeripheralAddress.value,
             ),
             transportFactory = TestAppConfiguration.mdocTransportFactory,
         )

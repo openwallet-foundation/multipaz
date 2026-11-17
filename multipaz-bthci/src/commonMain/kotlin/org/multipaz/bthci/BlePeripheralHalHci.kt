@@ -9,6 +9,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.io.IOException
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.mdoc.connectionmethod.BleAddressType
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.transport.BlePeripheralHal
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -86,6 +89,12 @@ class BlePeripheralHalHci(
     private var publishedPsm: Int = DEFAULT_DYNAMIC_L2CAP_PSM
 
     @Volatile
+    private var _peripheralAddress: BlePeripheralAddress? = null
+
+    override val peripheralAddress: BlePeripheralAddress?
+        get() = _peripheralAddress
+
+    @Volatile
     private var activeL2capChannel: HciBleL2capChannel? = null
 
     private val attributes = mutableListOf<GattAttribute>()
@@ -156,6 +165,18 @@ class BlePeripheralHalHci(
                         }
                     )
                     hci.initializeController(randomAddressBytes)
+                    val addr = hci.randomAddress!!
+                    _peripheralAddress = BlePeripheralAddress(
+                        address = ByteString(
+                            addr[5],
+                            addr[4],
+                            addr[3],
+                            addr[2],
+                            addr[1],
+                            addr[0],
+                        ),
+                        addressType = BleAddressType.RANDOM,
+                    )
                     engine = hci
                 }
                 if (!closed) {

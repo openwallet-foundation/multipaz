@@ -157,6 +157,10 @@ fun IsoMdocProximitySharingScreen(
                                         availableConnectionMethods = connectionMethods,
                                         createTransportOptions = MdocTransportOptions(
                                             bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                                            bleExportPeripheralAddress =
+                                                settingsModel.presentmentBleExportPeripheralAddress.value,
+                                            bleUsePeripheralAddress =
+                                                settingsModel.presentmentBleUsePeripheralAddress.value,
                                         )
                                     )
                                 )
@@ -172,6 +176,10 @@ fun IsoMdocProximitySharingScreen(
                                             settingsModel.presentmentBleL2CapInEngagementEnabled.value,
                                         createTransportOptions = MdocTransportOptions(
                                             bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                                            bleExportPeripheralAddress =
+                                                settingsModel.presentmentBleExportPeripheralAddress.value,
+                                            bleUsePeripheralAddress =
+                                                settingsModel.presentmentBleUsePeripheralAddress.value,
                                         ),
                                     )
                                 )

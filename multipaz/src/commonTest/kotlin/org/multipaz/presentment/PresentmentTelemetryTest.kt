@@ -38,6 +38,7 @@ class PresentmentTelemetryTest {
             bleConnectingTime = 340.milliseconds,
             bleUsingL2cap = false,
             bleL2capPsmInEngagement = false,
+            bleUsedPeripheralAddress = true,
             bleNegotiatedMtu = 515,
             bleMtuInferredFromWrite = true,
             bleNumScanRestarts = 1,
@@ -82,6 +83,7 @@ class PresentmentTelemetryTest {
         )
         val cborItem = minimalStats.toDataItem()
         assertFalse(cborItem.hasKey("bleUsingL2cap"))
+        assertFalse(cborItem.hasKey("bleUsedPeripheralAddress"))
         assertFalse(cborItem.hasKey("bleNumScanRestarts"))
         assertFalse(cborItem.hasKey("nfcHybridNumSentViaNfc"))
         assertFalse(cborItem.hasKey("nfcDisconnectedDuringTransaction"))
@@ -91,6 +93,7 @@ class PresentmentTelemetryTest {
         assertNull(decoded.bleScanningTime)
         assertNull(decoded.bleConnectingTime)
         assertNull(decoded.bleUsingL2cap)
+        assertNull(decoded.bleUsedPeripheralAddress)
         assertNull(decoded.bleNumScanRestarts)
         assertNull(decoded.bleNumGattConnectRetries)
         assertNull(decoded.bleNumMtuRequestRetries)

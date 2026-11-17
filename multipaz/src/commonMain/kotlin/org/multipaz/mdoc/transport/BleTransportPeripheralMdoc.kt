@@ -23,6 +23,7 @@ import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -35,6 +36,7 @@ internal class BleTransportPeripheralMdoc(
     private val uuid: UUID,
     private val gattEnabled: Boolean = true,
     private val directL2capEnabled: Boolean = false,
+    private val configuredPeripheralAddress: BlePeripheralAddress? = null,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdoc"
@@ -49,16 +51,40 @@ internal class BleTransportPeripheralMdoc(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     override val connectionMethods: List<MdocConnectionMethod>
-        get() = buildList {
-            val psm = if (directL2capEnabled) peripheralManager.l2capPsm else null
-            if (psm != null) {
-                add(MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = psm))
+        get() {
+            val addr = if (options.bleExportPeripheralAddress) {
+                peripheralManager.peripheralAddress ?: configuredPeripheralAddress
+            } else {
+                null
             }
-            if (gattEnabled) {
-                add(MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid))
-            }
-            if (isEmpty()) {
-                add(MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = null))
+            return buildList {
+                val psm = if (directL2capEnabled) peripheralManager.l2capPsm else null
+                if (psm != null) {
+                    add(
+                        MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                            uuid = uuid,
+                            psm = psm,
+                            peripheralAddress = addr,
+                        )
+                    )
+                }
+                if (gattEnabled) {
+                    add(
+                        MdocConnectionMethod.Ble.GattPeripheral(
+                            uuid = uuid,
+                            peripheralAddress = addr,
+                        )
+                    )
+                }
+                if (isEmpty()) {
+                    add(
+                        MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                            uuid = uuid,
+                            psm = null,
+                            peripheralAddress = addr,
+                        )
+                    )
+                }
             }
         }
 

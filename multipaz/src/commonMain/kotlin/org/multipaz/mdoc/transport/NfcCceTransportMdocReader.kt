@@ -99,6 +99,7 @@ class NfcCceTransportMdocReader(
                 bleConnectingTime = secondaryStats?.bleConnectingTime,
                 bleUsingL2cap = secondaryStats?.bleUsingL2cap,
                 bleL2capPsmInEngagement = secondaryStats?.bleL2capPsmInEngagement,
+                bleUsedPeripheralAddress = secondaryStats?.bleUsedPeripheralAddress,
                 bleNegotiatedMtu = secondaryStats?.bleNegotiatedMtu,
                 bleMtuInferredFromWrite = secondaryStats?.bleMtuInferredFromWrite,
                 bleNumScanRestarts = secondaryStats?.bleNumScanRestarts,

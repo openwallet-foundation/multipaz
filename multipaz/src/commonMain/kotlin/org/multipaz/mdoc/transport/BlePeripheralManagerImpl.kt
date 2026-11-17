@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.toHex
@@ -64,6 +65,9 @@ internal class BlePeripheralManagerImpl(
     private val _warnings = MutableStateFlow<List<TransportWarning>>(emptyList())
     override val warnings: List<TransportWarning>
         get() = _warnings.value
+
+    override val peripheralAddress: BlePeripheralAddress?
+        get() = hal.peripheralAddress
 
     private fun addWarning(warning: TransportWarning) {
         _warnings.update { it + warning }

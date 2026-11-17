@@ -7,7 +7,11 @@ public struct MdocProximityReaderQrSettings {
     public init(
         preferredConnectionMethodOrder: [String] = [],
         bleDirectL2capEnabled: Bool = true,
-        createTransportOptions: MdocTransportOptions = MdocTransportOptions(bleUseL2CAP: false)
+        createTransportOptions: MdocTransportOptions = MdocTransportOptions(
+            bleUseL2CAP: false,
+            bleExportPeripheralAddress: true,
+            bleUsePeripheralAddress: true
+        )
     ) {
         self.preferredConnectionMethodOrder = preferredConnectionMethodOrder
         self.bleDirectL2capEnabled = bleDirectL2capEnabled

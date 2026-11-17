@@ -342,6 +342,10 @@ fun IsoMdocProximityReadingScreen(
                                 insertSequenceNumbers = false,
                                 bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                 bleDirectL2capEnabled = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
+                                bleExportPeripheralAddress =
+                                    app.settingsModel.readerBleExportPeripheralAddress.value,
+                                bleUsePeripheralAddress =
+                                    app.settingsModel.readerBleUsePeripheralAddress.value,
                                 showToast = showToast,
                                 readerTransport = readerTransport,
                                 readerMostRecentTransportStats = readerMostRecentTransportStats,
@@ -715,6 +719,10 @@ fun IsoMdocProximityReadingScreen(
                                         transportFactory = TestAppConfiguration.mdocTransportFactory,
                                         options = MdocTransportOptions(
                                             bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                            bleExportPeripheralAddress =
+                                                app.settingsModel.readerBleExportPeripheralAddress.value,
+                                            bleUsePeripheralAddress =
+                                                app.settingsModel.readerBleUsePeripheralAddress.value,
                                         ),
                                     )
                                     val readerEngagement = buildReaderEngagement(
@@ -904,6 +912,10 @@ fun IsoMdocProximityReadingScreen(
                                 },
                                 options = MdocTransportOptions(
                                     bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                    bleExportPeripheralAddress =
+                                        app.settingsModel.readerBleExportPeripheralAddress.value,
+                                    bleUsePeripheralAddress =
+                                        app.settingsModel.readerBleUsePeripheralAddress.value,
                                 ),
                                 transportFactory = TestAppConfiguration.mdocTransportFactory,
                                 selectConnectionMethod = { connectionMethods ->
@@ -933,6 +945,10 @@ fun IsoMdocProximityReadingScreen(
                                         insertSequenceNumbers = scanResult.type == MdocHandoverType.CCE_HANDOVER,
                                         bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                         bleDirectL2capEnabled = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
+                                        bleExportPeripheralAddress =
+                                            app.settingsModel.readerBleExportPeripheralAddress.value,
+                                        bleUsePeripheralAddress =
+                                            app.settingsModel.readerBleUsePeripheralAddress.value,
                                         showToast = showToast,
                                         readerTransport = readerTransport,
                                         readerMostRecentTransportStats = readerMostRecentTransportStats,
@@ -1181,6 +1197,38 @@ fun IsoMdocProximityReadingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
+                            checked = app.settingsModel.readerBleExportPeripheralAddress.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerBleExportPeripheralAddress.value = value
+                            },
+                        )
+                        Text(
+                            text = "Export BLE peripheral address if available",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = app.settingsModel.readerBleUsePeripheralAddress.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.readerBleUsePeripheralAddress.value = value
+                            },
+                        )
+                        Text(
+                            text = "Connect using BLE peripheral address if available",
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
                             checked =  app.settingsModel.readerAllowMultipleRequests.collectAsState().value,
                             onCheckedChange = { value ->
                                 app.settingsModel.readerAllowMultipleRequests.value = value
@@ -1206,6 +1254,8 @@ private suspend fun doReaderFlow(
     insertSequenceNumbers: Boolean,
     bleUseL2CAP: Boolean,
     bleDirectL2capEnabled: Boolean,
+    bleExportPeripheralAddress: Boolean,
+    bleUsePeripheralAddress: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerMostRecentTransportStats: MutableState<MdocTransportStats?>,
@@ -1258,6 +1308,8 @@ private suspend fun doReaderFlow(
             MdocRole.MDOC_READER,
             MdocTransportOptions(
                 bleUseL2CAP = bleUseL2CAP,
+                bleExportPeripheralAddress = bleExportPeripheralAddress,
+                bleUsePeripheralAddress = bleUsePeripheralAddress,
             )
         )
         if (transport is NfcTransportMdocReader) {

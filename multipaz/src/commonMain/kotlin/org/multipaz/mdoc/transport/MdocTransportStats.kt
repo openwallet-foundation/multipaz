@@ -85,6 +85,7 @@ data class TransportWarning(
  * @property bleConnectingTime time spent establishing the BLE connection after scanning completes, if applicable.
  * @property bleUsingL2cap `true` if BLE L2CAP was used for data transfer, or `null` if not a BLE transport.
  * @property bleL2capPsmInEngagement `true` if L2CAP PSM was advertised in engagement rather than via GATT characteristic, or `null` if not a BLE transport.
+ * @property bleUsedPeripheralAddress `true` if acting as a BLE central and connected directly using the peer's peripheral address without scanning, `false` if acting as a BLE central and scanned for the service UUID, or `null` if not acting as a BLE central.
  * @property bleNegotiatedMtu negotiated BLE GATT ATT MTU, if GATT was used.
  * @property bleMtuInferredFromWrite `true` if [bleNegotiatedMtu] was inferred from an incoming GATT write rather than `onMtuChanged`, or `null` if not a BLE transport.
  * @property bleNumScanRestarts number of times BLE scanning timed out or failed and restarted, or `null` if not acting as a BLE central.
@@ -116,6 +117,7 @@ data class MdocTransportStats(
     val bleConnectingTime: Duration? = null,
     val bleUsingL2cap: Boolean? = null,
     val bleL2capPsmInEngagement: Boolean? = null,
+    val bleUsedPeripheralAddress: Boolean? = null,
     val bleNegotiatedMtu: Int? = null,
     val bleMtuInferredFromWrite: Boolean? = null,
     val bleNumScanRestarts: Int? = null,

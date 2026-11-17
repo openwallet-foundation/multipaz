@@ -2,6 +2,7 @@ package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.channels.Channel
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.util.UUID
 
 internal interface BleCentralManager {
@@ -31,6 +32,8 @@ internal interface BleCentralManager {
     )
 
     suspend fun waitForPowerOn()
+
+    fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean = false
 
     suspend fun waitForPeripheralWithUuid(uuid: UUID)
 

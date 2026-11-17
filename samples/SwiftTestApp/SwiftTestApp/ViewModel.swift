@@ -59,6 +59,9 @@ class ViewModel {
     var provisioningSupport: ProvisioningSupport!
     var faceMatcherRepository: FaceMatcherRepository!
     var selectedFaceMatcher: String = "facenet"
+    var bleUseL2CAP: Bool = false
+    var bleExportPeripheralAddress: Bool = true
+    var bleUsePeripheralAddress: Bool = true
 
     let promptModel = Platform.shared.promptModel
     

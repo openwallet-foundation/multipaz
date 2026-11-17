@@ -26,6 +26,19 @@ struct Iso18013ProximityPresentmentScreen: View {
                                 }
                                 .padding(.horizontal)
 
+                                VStack(spacing: 12) {
+                                    Toggle("Use L2CAP if available", isOn: $viewModel.bleUseL2CAP)
+                                    Toggle(
+                                        "Export BLE peripheral address if available",
+                                        isOn: $viewModel.bleExportPeripheralAddress
+                                    )
+                                    Toggle(
+                                        "Connect using BLE peripheral address if available",
+                                        isOn: $viewModel.bleUsePeripheralAddress
+                                    )
+                                }
+                                .padding(.horizontal)
+
                                 Button("Share mdoc using QR code") {
                                     let bleUuid = UUID.companion.randomUUID(random: KotlinRandom.companion)
                                     let connectionMethods: [MdocConnectionMethod] = [
@@ -42,7 +55,9 @@ struct Iso18013ProximityPresentmentScreen: View {
                                     let settings = MdocProximityQrSettings(
                                         availableConnectionMethods: connectionMethods,
                                         createTransportOptions: MdocTransportOptions(
-                                            bleUseL2CAP: false
+                                            bleUseL2CAP: viewModel.bleUseL2CAP,
+                                            bleExportPeripheralAddress: viewModel.bleExportPeripheralAddress,
+                                            bleUsePeripheralAddress: viewModel.bleUsePeripheralAddress
                                         )
                                     )
                                     generateQrCode(settings)
@@ -59,7 +74,9 @@ struct Iso18013ProximityPresentmentScreen: View {
                                         ],
                                         bleDirectL2capEnabled: true,
                                         createTransportOptions: MdocTransportOptions(
-                                            bleUseL2CAP: false
+                                            bleUseL2CAP: viewModel.bleUseL2CAP,
+                                            bleExportPeripheralAddress: viewModel.bleExportPeripheralAddress,
+                                            bleUsePeripheralAddress: viewModel.bleUsePeripheralAddress
                                         )
                                     )
                                     scanReaderQrCode(settings)

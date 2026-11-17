@@ -2,6 +2,7 @@ package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.channels.Channel
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.util.UUID
 
 internal interface BlePeripheralManager {
@@ -53,6 +54,9 @@ internal interface BlePeripheralManager {
     // to [setUuids] isn't `null`.
     //
     val l2capPsm: Int?
+
+    val peripheralAddress: BlePeripheralAddress?
+        get() = null
 
     // True if connected via L2CAP
     val usingL2cap: Boolean

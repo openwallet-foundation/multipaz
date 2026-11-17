@@ -19,6 +19,7 @@ import kotlinx.io.bytestring.buildByteString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SecretKey
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.appendByteArray
@@ -693,6 +694,9 @@ internal class BleCentralManagerImpl(
         }
     }
 
+    override fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean =
+        hal.setPeripheralAddress(peripheralAddress)
+
     override suspend fun waitForPeripheralWithUuid(uuid: UUID) {
         // Some OS Bluetooth stacks (for example Android) have built-in protection against
         // applications scanning too frequently. On Android, the stack will simply not report
@@ -1119,7 +1123,9 @@ internal class BleCentralManagerImpl(
             while (true) {
                 try {
                     numTries++
-                    if (requireL2capPeripheralConnectedFirst && !hal.isConnected) {
+                    if ((requireL2capPeripheralConnectedFirst || hal.requiresPeripheralConnectionBeforeL2cap) &&
+                        !hal.isConnected
+                    ) {
                         connectToPeripheral()
                     }
                     val connected = if (l2capConnectTimeout != null) {

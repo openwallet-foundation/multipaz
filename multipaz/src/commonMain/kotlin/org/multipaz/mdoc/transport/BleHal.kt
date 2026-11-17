@@ -2,6 +2,7 @@ package org.multipaz.mdoc.transport
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.IOException
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.UUID
@@ -104,11 +105,35 @@ interface BleCentralHal {
      */
     val isConnected: Boolean
 
+    /**
+     * Whether [connectL2cap] requires an active BLE peripheral connection ([connectToPeripheral])
+     * to be established first even when [BleCentralConfig.requireL2capPeripheralConnectedFirst] is
+     * `false` (for example on Android when [setPeripheralAddress] is used without scanning, because
+     * `BluetoothSocket.connect()` does not forward `BluetoothDevice` random address type unless an
+     * LE ACL link or scan-cache entry already exists).
+     */
+    val requiresPeripheralConnectionBeforeL2cap: Boolean
+        get() = false
+
     /** Registers the [Callback] receiver for asynchronous BLE central events. */
     fun setCallback(callback: Callback)
 
     /** Checks or waits for the BLE central radio/stack to power on, reporting via [Callback.onPowerOn]. */
     fun waitForPowerOn()
+
+    /**
+     * Configures the peer peripheral's BLE device address (`BD_ADDR` + address type) learned during
+     * engagement, if supported by the underlying Bluetooth stack.
+     *
+     * When this returns `true`, the HAL has bound to [peripheralAddress] directly and the central
+     * manager skips BLE UUID scanning ([startScan]) and proceeds directly to [connectToPeripheral] or
+     * [connectL2cap]. When this returns `false` (the default, e.g. on platforms that do not support
+     * connecting by raw LE address), the central manager falls back to scanning for the service UUID.
+     *
+     * @param peripheralAddress the peripheral's 6-byte address and address type.
+     * @return `true` if direct address-based connection is supported and configured, `false` otherwise.
+     */
+    fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean = false
 
     /** Starts scanning for peripherals advertising [serviceUuid]. */
     fun startScan(serviceUuid: UUID)
@@ -214,6 +239,13 @@ interface BlePeripheralHal {
         /** Invoked when an unrecoverable asynchronous transport error occurs. */
         fun onError(error: Throwable)
     }
+
+    /**
+     * The BLE peripheral device address (`BD_ADDR` + address type) advertised by this peripheral,
+     * or `null` if not yet initialized or if the underlying Bluetooth stack does not expose it.
+     */
+    val peripheralAddress: BlePeripheralAddress?
+        get() = null
 
     /** Registers the [Callback] receiver for asynchronous BLE peripheral events. */
     fun setCallback(callback: Callback)
@@ -385,7 +417,10 @@ fun createMdocTransports(
 
 private sealed interface CoalescedTransportSpec {
     data class SingleBle(val method: MdocConnectionMethod.Ble, val uuid: UUID) : CoalescedTransportSpec
-    data class DualBlePeripheral(val uuid: UUID) : CoalescedTransportSpec
+    data class DualBlePeripheral(
+        val uuid: UUID,
+        val peripheralAddress: BlePeripheralAddress?,
+    ) : CoalescedTransportSpec
     data class ReadyNonBle(val transport: MdocTransport) : CoalescedTransportSpec
 }
 
@@ -424,8 +459,21 @@ internal fun createMdocTransportsFromManagers(
             consumedIndices = consumedIndices,
         )
         if (partnerIndex != null) {
+            val partner = connectionMethods[partnerIndex] as MdocConnectionMethod.Ble
+            require(
+                connectionMethod.peripheralAddress == null ||
+                    partner.peripheralAddress == null ||
+                    connectionMethod.peripheralAddress == partner.peripheralAddress
+            ) {
+                "Conflicting peripheralAddress values in co-hosted BLE peripheral connection methods"
+            }
             consumedIndices.add(partnerIndex)
-            specs.add(CoalescedTransportSpec.DualBlePeripheral(uuid = uuid))
+            specs.add(
+                CoalescedTransportSpec.DualBlePeripheral(
+                    uuid = uuid,
+                    peripheralAddress = connectionMethod.peripheralAddress ?: partner.peripheralAddress,
+                )
+            )
         } else {
             if (connectionMethod is MdocConnectionMethod.Ble.DirectL2capCentral && role == MdocRole.MDOC) {
                 requireNotNull(connectionMethod.psm) {
@@ -454,6 +502,7 @@ internal fun createMdocTransportsFromManagers(
                     uuid = spec.uuid,
                     gattEnabled = true,
                     directL2capEnabled = true,
+                    configuredPeripheralAddress = spec.peripheralAddress,
                 )
                 MdocRole.MDOC_READER -> BleTransportCentralMdocReader(
                     role = role,
@@ -462,6 +511,7 @@ internal fun createMdocTransportsFromManagers(
                     uuid = spec.uuid,
                     gattEnabled = true,
                     directL2capEnabled = true,
+                    configuredPeripheralAddress = spec.peripheralAddress,
                 )
             }
             is CoalescedTransportSpec.SingleBle -> createSingleBleTransportFromManagers(
@@ -521,6 +571,7 @@ private fun createSingleBleTransportFromManagers(
             centralManager = centralManagerFactory(),
             uuid = uuid,
             psm = null,
+            peripheralAddress = connectionMethod.peripheralAddress,
         )
         MdocRole.MDOC_READER -> BleTransportCentralMdocReader(
             role = role,
@@ -529,6 +580,7 @@ private fun createSingleBleTransportFromManagers(
             uuid = uuid,
             gattEnabled = true,
             directL2capEnabled = false,
+            configuredPeripheralAddress = connectionMethod.peripheralAddress,
         )
     }
     is MdocConnectionMethod.Ble.DirectL2capCentral -> when (role) {
@@ -538,6 +590,7 @@ private fun createSingleBleTransportFromManagers(
             centralManager = centralManagerFactory(),
             uuid = uuid,
             psm = connectionMethod.psm!!,
+            peripheralAddress = connectionMethod.peripheralAddress,
         )
         MdocRole.MDOC_READER -> BleTransportCentralMdocReader(
             role = role,
@@ -546,6 +599,7 @@ private fun createSingleBleTransportFromManagers(
             uuid = uuid,
             gattEnabled = false,
             directL2capEnabled = true,
+            configuredPeripheralAddress = connectionMethod.peripheralAddress,
         )
     }
     is MdocConnectionMethod.Ble.GattPeripheral -> when (role) {
@@ -556,6 +610,7 @@ private fun createSingleBleTransportFromManagers(
             uuid = uuid,
             gattEnabled = true,
             directL2capEnabled = false,
+            configuredPeripheralAddress = connectionMethod.peripheralAddress,
         )
         MdocRole.MDOC_READER -> BleTransportPeripheralMdocReader(
             role = role,
@@ -563,6 +618,7 @@ private fun createSingleBleTransportFromManagers(
             centralManager = centralManagerFactory(),
             uuid = uuid,
             psm = null,
+            peripheralAddress = connectionMethod.peripheralAddress,
         )
     }
     is MdocConnectionMethod.Ble.DirectL2capPeripheral -> when (role) {
@@ -573,6 +629,7 @@ private fun createSingleBleTransportFromManagers(
             uuid = uuid,
             gattEnabled = false,
             directL2capEnabled = true,
+            configuredPeripheralAddress = connectionMethod.peripheralAddress,
         )
         MdocRole.MDOC_READER -> BleTransportPeripheralMdocReader(
             role = role,
@@ -580,6 +637,7 @@ private fun createSingleBleTransportFromManagers(
             centralManager = centralManagerFactory(),
             uuid = uuid,
             psm = connectionMethod.psm!!,
+            peripheralAddress = connectionMethod.peripheralAddress,
         )
     }
 }
