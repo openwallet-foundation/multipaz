@@ -30,21 +30,6 @@ jobs:
       id: detekt
       continue-on-error: true
       run: ./gradlew detektMetadataCommonMain -Pdisable.web.targets=true
-    - name: Install Android NDK and CMake
-      run: |
-        SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-        for attempt in 1 2 3; do
-          if (yes || true) | "$SDKMANAGER" "cmake;3.22.1" "ndk;27.0.12077973"; then
-            break
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            echo "Failed to install Android NDK and CMake after 3 attempts" >&2
-            exit 1
-          fi
-          echo "Retrying Android SDK component install (attempt $((attempt + 1))/3)..."
-          rm -rf "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/.temp"
-          sleep 10
-        done
     - name: Build with Gradle
       run: ./gradlew assemble lint -Pdisable.web.targets=true
     - name: Run unit tests

@@ -50,18 +50,7 @@ jobs:
         run: ./gradlew test -Pdisable.web.targets=true
 
       - name: Publish Snapshots
-        run: |
-          for attempt in 1 2 3; do
-            if ./gradlew publishAllPublicationsToCentralSnapshotsRepository -Psnapshot=true; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Snapshot publish failed after 3 attempts" >&2
-              exit 1
-            fi
-            echo "Snapshot publish failed on attempt $attempt/3; retrying in 30s..."
-            sleep 30
-          done
+        run: ./gradlew publishAllPublicationsToCentralSnapshotsRepository -Psnapshot=true
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
