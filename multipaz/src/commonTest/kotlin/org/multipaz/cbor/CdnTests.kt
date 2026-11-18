@@ -454,6 +454,76 @@ class CdnTests {
     }
 
     @Test
+    fun testOpportunisticCoseRawBytesDoNotDecodeAsEmbeddedCbor() {
+        // 0x81 0x18 0x2a is valid CBOR ([42]); raw cryptographic fields in COSE structures
+        // must still format as h'...' rather than << [42] >>.
+        val validCborBytes = Cbor.encode(buildCborArray { add(42) })
+        val protectedHeader = Cbor.encode(
+            buildCborMap {
+                put(1L, -7L)
+                putCborArray(34L) {
+                    add(-16L)
+                    add(validCborBytes)
+                }
+            }
+        )
+        val payload = Cbor.encode(buildCborMap { put("claim", "value") })
+        val taggedSign1 = Tagged(
+            Tagged.COSE_SIGN1,
+            buildCborArray {
+                add(protectedHeader)
+                add(buildCborMap { put(5L, validCborBytes) })
+                add(payload)
+                add(validCborBytes)
+            }
+        )
+        val untaggedMac0 = buildCborArray {
+            add(Cbor.encode(buildCborMap { put(1L, 5L) }))
+            add(buildCborMap {})
+            add(payload)
+            add(validCborBytes)
+        }
+        val ecKey = buildCborMap {
+            put(1L, 2L)
+            put(-1L, 1L)
+            put(-2L, validCborBytes)
+            put(-3L, validCborBytes)
+            put(-4L, validCborBytes)
+        }
+        val symKey = buildCborMap {
+            put(1L, 4L)
+            put(3L, 5L)
+            put(-1L, validCborBytes)
+        }
+
+        val sign1Pretty = Cdn.encode(taggedSign1, CdnGeneratorOptions.Pretty)
+        assertTrue(sign1Pretty.contains("/signature/ h'81182a'"), sign1Pretty)
+        assertTrue(sign1Pretty.contains("h'81182a'"), sign1Pretty)
+        assertFalse(sign1Pretty.contains("<< [\n    42\n  ] >>"), sign1Pretty)
+        assertEquals(taggedSign1, Cdn.parse(sign1Pretty))
+
+        val sign1Unannotated = Cdn.encode(
+            taggedSign1,
+            CdnGeneratorOptions(useEmbeddedCborOpportunistically = true, annotateCoseOpportunistically = false)
+        )
+        assertTrue(sign1Unannotated.endsWith(", h'81182a'])"), sign1Unannotated)
+
+        val mac0Pretty = Cdn.encode(untaggedMac0, CdnGeneratorOptions.Pretty)
+        assertTrue(mac0Pretty.contains("/tag/ h'81182a'"), mac0Pretty)
+        assertEquals(untaggedMac0, Cdn.parse(mac0Pretty))
+
+        val ecKeyPretty = Cdn.encode(ecKey, CdnGeneratorOptions.Pretty)
+        assertTrue(ecKeyPretty.contains("/x/ -2: h'81182a'"), ecKeyPretty)
+        assertTrue(ecKeyPretty.contains("/y/ -3: h'81182a'"), ecKeyPretty)
+        assertTrue(ecKeyPretty.contains("/d/ -4: h'81182a'"), ecKeyPretty)
+        assertEquals(ecKey, Cdn.parse(ecKeyPretty))
+
+        val symKeyPretty = Cdn.encode(symKey, CdnGeneratorOptions.Pretty)
+        assertTrue(symKeyPretty.contains("/k/ -1: h'81182a'"), symKeyPretty)
+        assertEquals(symKey, Cdn.parse(symKeyPretty))
+    }
+
+    @Test
     fun testOpportunisticCoseDisabled() {
         val ecKey = buildCborMap {
             put(1, 2)

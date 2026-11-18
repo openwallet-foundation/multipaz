@@ -1,6 +1,7 @@
 package org.multipaz.bthci
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -606,6 +607,7 @@ class BleHciTransportTest {
         val l2capCreditIndCount = MutableStateFlow(0)
         val centralAttResponsesLock = HciLock()
         val centralAttResponsesToPeripheralGapClient = mutableListOf<ByteArray>()
+        val centralAttResponsesCount = MutableStateFlow(0)
 
         inner class Endpoint(val name: String) : HciPacketIo {
             lateinit var peer: Endpoint
@@ -1138,9 +1140,11 @@ class BleHciTransportTest {
                             BleHciConstants.ATT_OP_READ_BY_TYPE_RSP,
                             BleHciConstants.ATT_OP_ERROR_RSP -> {
                                 if (faultConfig.injectPeripheralGapClientRequestsOnConnect) {
-                                    centralAttResponsesLock.withLock {
+                                    val updatedCount = centralAttResponsesLock.withLock {
                                         centralAttResponsesToPeripheralGapClient.add(completedPdu)
+                                        centralAttResponsesToPeripheralGapClient.size
                                     }
+                                    centralAttResponsesCount.value = updatedCount
                                     pendingAclFragments.clear()
                                     return
                                 }
@@ -2887,7 +2891,9 @@ class BleHciTransportTest {
 
                 val parsedDe = DeviceEngagement.fromDataItem(deviceEngagement)
                 coroutineScope {
-                    val readerOpen = async { readerTransport.open(parsedDe.eDeviceKeyBytes) }
+                    val readerOpen = async(start = CoroutineStart.UNDISPATCHED) {
+                        readerTransport.open(parsedDe.eDeviceKeyBytes)
+                    }
                     val mdocOpen = async { createdMdocTransport.open(parsedDe.eDeviceKeyBytes) }
                     readerOpen.await()
                     mdocOpen.await()
@@ -3065,7 +3071,7 @@ class BleHciTransportTest {
             try {
                 reader.advertise()
                 coroutineScope {
-                    val readerOpen = async { reader.open(eSenderKey) }
+                    val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                     val mdocOpen = async { mdoc.open(eSenderKey) }
                     readerOpen.await()
                     mdocOpen.await()
@@ -3404,7 +3410,7 @@ class BleHciTransportTest {
             try {
                 reader.advertise()
                 coroutineScope {
-                    val readerOpen = async { reader.open(eSenderKey) }
+                    val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                     val mdocOpen = async { mdoc.open(eSenderKey) }
                     readerOpen.await()
                     mdocOpen.await()
@@ -3478,7 +3484,7 @@ class BleHciTransportTest {
 
             try {
                 reader.advertise()
-                val readerOpenJob = launch {
+                val readerOpenJob = launch(start = CoroutineStart.UNDISPATCHED) {
                     try {
                         reader.open(wrongSenderKey)
                     } catch (_: Throwable) {
@@ -3538,7 +3544,7 @@ class BleHciTransportTest {
             try {
                 reader.advertise()
                 coroutineScope {
-                    val readerOpen = async { reader.open(eSenderKey) }
+                    val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                     val mdocOpen = async { mdoc.open(eSenderKey) }
                     readerOpen.await()
                     mdocOpen.await()
@@ -3621,7 +3627,7 @@ class BleHciTransportTest {
                 try {
                     reader.advertise()
                     coroutineScope {
-                        val readerOpen = async { reader.open(eSenderKey) }
+                        val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                         val mdocOpen = async { mdoc.open(eSenderKey) }
                         readerOpen.await()
                         mdocOpen.await()
@@ -3659,7 +3665,7 @@ class BleHciTransportTest {
                 try {
                     reader.advertise()
                     coroutineScope {
-                        val readerOpen = async { reader.open(eSenderKey) }
+                        val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                         val mdocOpen = async { mdoc.open(eSenderKey) }
                         readerOpen.await()
                         mdocOpen.await()
@@ -3724,7 +3730,7 @@ class BleHciTransportTest {
                 try {
                     reader.advertise()
                     coroutineScope {
-                        val readerOpen = async { reader.open(eSenderKey) }
+                        val readerOpen = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                         val mdocOpen = async { mdoc.open(eSenderKey) }
                         readerOpen.await()
                         mdocOpen.await()
@@ -3742,6 +3748,9 @@ class BleHciTransportTest {
                     assertEquals(0, stats.bleNumMtuRequestRetries)
                     assertEquals(0, stats.bleNumServiceDiscoveryRetries)
 
+                    withTimeout(5.seconds) {
+                        bus.centralAttResponsesCount.first { it >= 3 }
+                    }
                     val gapResponses = bus.centralAttResponsesLock.withLock {
                         bus.centralAttResponsesToPeripheralGapClient.map { it.toHex() }
                     }
@@ -4378,7 +4387,7 @@ class BleHciTransportTest {
                 try {
                     reader.advertise()
                     coroutineScope {
-                        val r = async { reader.open(eSenderKey) }
+                        val r = async(start = CoroutineStart.UNDISPATCHED) { reader.open(eSenderKey) }
                         val m = async { mdoc.open(eSenderKey) }
                         r.await()
                         m.await()
@@ -4471,6 +4480,9 @@ class BleHciTransportTest {
 
             var holderTelemetry: PresentmentTelemetry? = null
             coroutineScope {
+                val readerOpenJob = async(start = CoroutineStart.UNDISPATCHED) {
+                    readerTransport.open(readerEngagement.eReaderKeyBytes!!)
+                }
                 val holderJob = launch {
                     Iso18013ReaderQrPresentment(
                         uri = qrUri,
@@ -4484,7 +4496,7 @@ class BleHciTransportTest {
                     )
                 }
 
-                readerTransport.open(readerEngagement.eReaderKeyBytes!!)
+                readerOpenJob.await()
                 assertEquals(expectedUsingL2cap, readerTransport.stats.bleUsingL2cap)
                 assertEquals(expectedReaderPsmInEngagement, readerTransport.stats.bleL2capPsmInEngagement)
                 val firstMessage = readerTransport.waitForMessage()

@@ -2363,6 +2363,10 @@ class DigitalCredentialsPresentmentTest {
             "\"random\": h'...',",
             normalizeMdocResponseCdn("\"random\": << 10(h'2ba86224fbb8692180862f0b7d75') >>,")
         )
+        assertEquals(
+            "0: h'...'\n}",
+            normalizeMdocResponseCdn("0: << [\n  42\n] >>\n}")
+        )
     }
 
     // Signs an OpenID4VP 1.0 request with one signature per client ID, all with certificates for DNS_NAME, and
@@ -2864,7 +2868,7 @@ private fun normalizeMdocResponseCdn(cdn: String): String {
     return cdn
         .replace(Regex("""cert'''[\s\S]*?'''"""), "cert'''...'''")
         .replace(Regex("""(-16,\s+)h'[0-9a-fA-F]+'"""), "$1h'...'")
-        .replace(Regex("""0: h'[0-9a-fA-F]+'"""), "0: h'...'")
+        .replace(Regex("""0: (h'[0-9a-fA-F]+'|<<[\s\S]*?>>(?=\s*[,}]))"""), "0: h'...'")
         .replace(Regex("""/x/ -2: h'[0-9a-fA-F]+'"""), "/x/ -2: h'...'")
         .replace(Regex("""/y/ -3: h'[0-9a-fA-F]+'"""), "/y/ -3: h'...'")
         .replace(Regex("""dt'[0-9T:Z-]+'"""), "dt'...'")

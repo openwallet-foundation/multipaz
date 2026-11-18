@@ -83,6 +83,7 @@ class NfcCceTransportMdoc(
     override suspend fun advertise() {}
 
     private var transport: MdocTransport? = null
+    private var transportReady = false
     private var transportMessageBacklog = mutableListOf<ByteString>()
     private var transportListenMessageJob: Job? = null
 
@@ -158,6 +159,7 @@ class NfcCceTransportMdoc(
             if (isNfcOnly) {
                 mutex.withLock {
                     receivedMessagesBySeq.clear()
+                    maxReceivedSeq = -1
                 }
             }
         }
@@ -188,25 +190,38 @@ class NfcCceTransportMdoc(
      * @param transport the negotiated transport which connected.
      */
     suspend fun setTransport(transport: MdocTransport) {
-        val backlog = mutex.withLock {
+        val accepted = mutex.withLock {
             if (_state.value == State.CLOSED || _state.value == State.FAILED) {
-                null
+                false
             } else {
                 this.transport = transport
-                val list = transportMessageBacklog.map { it.toByteArray() }
-                transportMessageBacklog.clear()
-                list
+                true
             }
         }
-        if (backlog == null) {
+        if (!accepted) {
             transport.close()
             return
         }
-        Logger.i(TAG, "Connected to transport, sending backlog of ${backlog.size} messages")
-        backlog.forEachIndexed { idx, message ->
-            transport.sendMessage(message)
-            Logger.i(TAG, "Sending message over Transport of length ${message.size} (backlog index $idx)")
-            numSentViaTransport += 1
+        while (true) {
+            val backlog = mutex.withLock {
+                if (_state.value == State.CLOSED || _state.value == State.FAILED) {
+                    return
+                }
+                if (transportMessageBacklog.isEmpty()) {
+                    transportReady = true
+                    null
+                } else {
+                    val list = transportMessageBacklog.map { it.toByteArray() }
+                    transportMessageBacklog.clear()
+                    list
+                }
+            } ?: break
+            Logger.i(TAG, "Connected to transport, sending backlog of ${backlog.size} messages")
+            backlog.forEachIndexed { idx, message ->
+                transport.sendMessage(message)
+                Logger.i(TAG, "Sending message over Transport of length ${message.size} (backlog index $idx)")
+                numSentViaTransport += 1
+            }
         }
 
         val listenJob = CoroutineScope(Dispatchers.Default).launch {
@@ -224,6 +239,7 @@ class NfcCceTransportMdoc(
         val shouldClose = mutex.withLock {
             if (_state.value == State.CLOSED || _state.value == State.FAILED) {
                 this.transport = null
+                transportReady = false
                 true
             } else {
                 transportListenMessageJob = listenJob
@@ -247,6 +263,7 @@ class NfcCceTransportMdoc(
     private val writingQueue = Channel<ByteString>(Channel.UNLIMITED)
     private val incomingMessages = Channel<ByteString>(Channel.UNLIMITED)
     private val receivedMessagesBySeq = mutableMapOf<Int, ByteString>()
+    private var maxReceivedSeq: Int = -1
     private var incomingMessagesNumViaNfc = 0
     private var incomingMessagesNumViaTransport = 0
     private var incomingMessagesNumConveyed = 0
@@ -339,10 +356,13 @@ class NfcCceTransportMdoc(
                 disconnectNfcReceived = true
             }
             if (info.seq != null) {
+                if (info.seq > maxReceivedSeq) {
+                    maxReceivedSeq = info.seq
+                }
                 // Confirm receipt of any queued messages with a lower sequence number (Clause 9.5.5 Note 1)
                 transportMessageBacklog.removeAll { queued ->
                     val queuedSeq = parseCceSessionMessageInfo(queued).seq
-                    queuedSeq != null && queuedSeq < info.seq
+                    queuedSeq != null && queuedSeq < maxReceivedSeq
                 }
                 val existing = receivedMessagesBySeq[info.seq]
                 if (existing != null) {
@@ -408,11 +428,16 @@ class NfcCceTransportMdoc(
     override suspend fun sendMessage(message: ByteArray) {
         isResponsePending = false
         lastRetapMessage = null
-        mutex.withLock {
-            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
-        }
         val messageBs = ByteString(message)
         val info = parseCceSessionMessageInfo(messageBs)
+        val activeTransport = mutex.withLock {
+            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
+            val readyTransport = if (transportReady) transport else null
+            if (readyTransport == null && (info.seq == null || info.seq > maxReceivedSeq)) {
+                transportMessageBacklog.add(messageBs)
+            }
+            readyTransport
+        }
         val canSendViaNfc = !disconnectNfcSent && !disconnectNfcReceived
         if (info.disconnectNfc) {
             disconnectNfcSent = true
@@ -440,7 +465,9 @@ class NfcCceTransportMdoc(
                         Logger.i(TAG, "Successfully sent message over NFC after re-tap of length ${messageBs.size}")
                         numSentViaNfc += 1
                     } else {
-                        val e = MdocTransportException("Error sending on NFC after re-tap and no non-NFC transport is expected")
+                        val e = MdocTransportException(
+                            "Error sending on NFC after re-tap and no non-NFC transport is expected"
+                        )
                         mutex.withLock {
                             failTransport(e)
                         }
@@ -449,20 +476,15 @@ class NfcCceTransportMdoc(
                 }
             }
         } else {
-            Logger.i(TAG, "Not sending message of length ${messageBs.size} over NFC because disconnectNfc was sent or received")
+            Logger.i(
+                TAG,
+                "Not sending message of length ${messageBs.size} over NFC because disconnectNfc was sent or received"
+            )
         }
 
-        val toSend = mutex.withLock {
-            if (transport == null) {
-                transportMessageBacklog.add(messageBs)
-                null
-            } else {
-                message
-            }
-        }
-        toSend?.let {
-            transport?.sendMessage(it)
-            Logger.i(TAG, "Sending message over Transport of length ${toSend.size}")
+        if (activeTransport != null) {
+            activeTransport.sendMessage(message)
+            Logger.i(TAG, "Sending message over Transport of length ${message.size}")
             numSentViaTransport += 1
         }
     }
@@ -512,6 +534,7 @@ class NfcCceTransportMdoc(
                 it.close()
             }
             transport = null
+            transportReady = false
             if (_state.value != State.FAILED) {
                 _state.value = State.CLOSED
             }

@@ -31,9 +31,9 @@ jobs:
       continue-on-error: true
       run: ./gradlew detektMetadataCommonMain -Pdisable.web.targets=true
     - name: Build with Gradle
-      run: ./gradlew build -x test -Pdisable.web.targets=true
+      run: ./gradlew assemble lint -Pdisable.web.targets=true
     - name: Run unit tests
-      run: ./gradlew test -Pdisable.web.targets=true
+      run: ./gradlew check -x lint -x detektMetadataCommonMain -Pdisable.web.targets=true
     - name: Enable KVM
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -48,9 +48,11 @@ jobs:
         arch: x86_64
         emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -netsim-args --hci-port=6402
         script: |
-          ./gradlew connectedCheck -Pdisable.web.targets=true
+          EXIT_CODE=0
+          ./gradlew connectedCheck -Pdisable.web.targets=true || EXIT_CODE=$?
           mkdir -p build/reports/logcat
           adb logcat -d > build/reports/logcat/logcat.txt || touch build/reports/logcat/logcat.txt
+          exit $EXIT_CODE
     - name: Upload Logcat Output
       if: always()
       uses: actions/upload-artifact@v4

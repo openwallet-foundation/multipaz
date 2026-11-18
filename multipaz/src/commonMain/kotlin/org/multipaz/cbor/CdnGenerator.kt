@@ -16,14 +16,23 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
         sb: StringBuilder,
         indent: Int,
         item: DataItem,
-        isCoseHeaderMap: Boolean = false
+        isCoseHeaderMap: Boolean = false,
+        suppressEmbeddedCbor: Boolean = false,
+        isTaggedCoseArray: Boolean = false,
     ) {
         val pretty = options.prettyPrint
         val indentStr = if (pretty) " ".repeat(indent) else ""
 
         if (item is RawCbor) {
             val decoded = Cbor.decode(item.encodedCbor)
-            generateItem(sb, indent, decoded, isCoseHeaderMap)
+            generateItem(
+                sb = sb,
+                indent = indent,
+                item = decoded,
+                isCoseHeaderMap = isCoseHeaderMap,
+                suppressEmbeddedCbor = suppressEmbeddedCbor,
+                isTaggedCoseArray = isTaggedCoseArray,
+            )
             return
         }
 
@@ -50,7 +59,7 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
             }
         }
 
-        if (item is Bstr && options.useEmbeddedCborOpportunistically) {
+        if (item is Bstr && options.useEmbeddedCborOpportunistically && !suppressEmbeddedCbor) {
             try {
                 val embedded = Cbor.decode(item.value)
                 if (embedded !is Bstr) {
@@ -153,7 +162,17 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                             }
                         }
                         val isHeaderElem = coseStructure != null && (idx == 0 || idx == 1)
-                        generateItem(sb, indent, elem, isCoseHeaderMap = isHeaderElem)
+                        val suppressChildEmbeddedCbor = when {
+                            coseStructure != null || isTaggedCoseArray -> idx == 3
+                            else -> suppressEmbeddedCbor
+                        }
+                        generateItem(
+                            sb = sb,
+                            indent = indent,
+                            item = elem,
+                            isCoseHeaderMap = isHeaderElem,
+                            suppressEmbeddedCbor = suppressChildEmbeddedCbor,
+                        )
                     }
                     sb.append("]")
                 } else {
@@ -175,7 +194,17 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                             }
                         }
                         val isHeaderElem = coseStructure != null && (idx == 0 || idx == 1)
-                        generateItem(sb, childIndent, elem, isCoseHeaderMap = isHeaderElem)
+                        val suppressChildEmbeddedCbor = when {
+                            coseStructure != null || isTaggedCoseArray -> idx == 3
+                            else -> suppressEmbeddedCbor
+                        }
+                        generateItem(
+                            sb = sb,
+                            indent = childIndent,
+                            item = elem,
+                            isCoseHeaderMap = isHeaderElem,
+                            suppressEmbeddedCbor = suppressChildEmbeddedCbor,
+                        )
                         if (++count < arrayItems.size) {
                             sb.append(",")
                         }
@@ -195,7 +224,9 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                 val openBrace = if (isIndef) "{_ " else "{"
 
                 val isCoseKeyMap = options.annotateCoseOpportunistically && isCoseKey(mapObj)
-                val isCoseHeaderMapToUse = options.annotateCoseOpportunistically && !isCoseKeyMap && (isCoseHeaderMap || (indent == 0 && isCoseHeaderMap(mapObj)))
+                val isCoseHeaderMapToUse = options.annotateCoseOpportunistically &&
+                    !isCoseKeyMap &&
+                    (isCoseHeaderMap || (indent == 0 && isCoseHeaderMap(mapObj)))
                 val ktyVal = if (isCoseKeyMap) getKtyValue(mapObj) else null
 
                 if (!pretty || mapEntries.isEmpty()) {
@@ -209,12 +240,17 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                             isCoseHeaderMapToUse && keyInt != null -> getCoseHeaderLabelComment(keyInt)
                             else -> null
                         }
+                        val suppressValueEmbeddedCbor = when {
+                            isCoseKeyMap && keyInt != null -> keyInt in COSE_KEY_RAW_BSTR_LABELS
+                            isCoseHeaderMapToUse && keyInt != null -> keyInt in COSE_HEADER_RAW_BSTR_LABELS
+                            else -> false
+                        }
                         if (labelComment != null) {
                             sb.append("/").append(labelComment).append("/ ")
                         }
                         generateItem(sb, indent, key)
                         sb.append(": ")
-                        generateItem(sb, indent, value)
+                        generateItem(sb, indent, value, suppressEmbeddedCbor = suppressValueEmbeddedCbor)
                         val valDesc = if (labelComment != null) getCoseValueDescription(labelComment, value) else null
                         if (valDesc != null) {
                             sb.append(" # ").append(valDesc)
@@ -235,12 +271,17 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                             isCoseHeaderMapToUse && keyInt != null -> getCoseHeaderLabelComment(keyInt)
                             else -> null
                         }
+                        val suppressValueEmbeddedCbor = when {
+                            isCoseKeyMap && keyInt != null -> keyInt in COSE_KEY_RAW_BSTR_LABELS
+                            isCoseHeaderMapToUse && keyInt != null -> keyInt in COSE_HEADER_RAW_BSTR_LABELS
+                            else -> false
+                        }
                         if (labelComment != null) {
                             sb.append("/").append(labelComment).append("/ ")
                         }
                         generateItem(sb, childIndent, key)
                         sb.append(": ")
-                        generateItem(sb, childIndent, value)
+                        generateItem(sb, childIndent, value, suppressEmbeddedCbor = suppressValueEmbeddedCbor)
                         val isLast = (++count == mapEntries.size)
                         if (!isLast) {
                             sb.append(",")
@@ -272,8 +313,19 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                     }
                 }
 
-                if (options.annotateCoseOpportunistically && (tagNum == Tagged.COSE_SIGN1 || tagNum == Tagged.COSE_MAC0) && tagged.taggedItem is CborArray) {
-                    val coseStructure = if (tagNum == Tagged.COSE_SIGN1) CoseStructureType.COSE_SIGN1 else CoseStructureType.COSE_MAC0
+                val isTaggedCoseSign1OrMac0 =
+                    (tagNum == Tagged.COSE_SIGN1 || tagNum == Tagged.COSE_MAC0) &&
+                        tagged.taggedItem is CborArray &&
+                        (tagged.taggedItem as CborArray).items.size == 4
+                if (options.annotateCoseOpportunistically &&
+                    (tagNum == Tagged.COSE_SIGN1 || tagNum == Tagged.COSE_MAC0) &&
+                    tagged.taggedItem is CborArray
+                ) {
+                    val coseStructure = if (tagNum == Tagged.COSE_SIGN1) {
+                        CoseStructureType.COSE_SIGN1
+                    } else {
+                        CoseStructureType.COSE_MAC0
+                    }
                     sb.append(tagNum).append("(")
                     generateCoseArray(sb, indent, tagged.taggedItem as CborArray, coseStructure)
                     sb.append(")")
@@ -281,7 +333,14 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                 }
 
                 sb.append(tagNum).append("(")
-                generateItem(sb, indent, tagged.taggedItem, isCoseHeaderMap)
+                generateItem(
+                    sb = sb,
+                    indent = indent,
+                    item = tagged.taggedItem,
+                    isCoseHeaderMap = isCoseHeaderMap,
+                    suppressEmbeddedCbor = suppressEmbeddedCbor,
+                    isTaggedCoseArray = isTaggedCoseSign1OrMac0,
+                )
                 sb.append(")")
             }
 
@@ -327,7 +386,13 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                     sb.append("/").append(elementComment).append("/ ")
                 }
                 val isHeaderElem = (idx == 0 || idx == 1)
-                generateItem(sb, indent, elem, isCoseHeaderMap = isHeaderElem)
+                generateItem(
+                    sb = sb,
+                    indent = indent,
+                    item = elem,
+                    isCoseHeaderMap = isHeaderElem,
+                    suppressEmbeddedCbor = idx == 3,
+                )
             }
             sb.append("]")
         } else {
@@ -343,7 +408,13 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
                     sb.append("/").append(elementComment).append("/ ")
                 }
                 val isHeaderElem = (idx == 0 || idx == 1)
-                generateItem(sb, childIndent, elem, isCoseHeaderMap = isHeaderElem)
+                generateItem(
+                    sb = sb,
+                    indent = childIndent,
+                    item = elem,
+                    isCoseHeaderMap = isHeaderElem,
+                    suppressEmbeddedCbor = idx == 3,
+                )
                 if (++count < arrayItems.size) {
                     sb.append(",")
                 }
@@ -594,8 +665,10 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
     }
 
     companion object {
-        private val COSE_HEADER_LABELS = setOf(1L, 2L, 3L, 4L, 5L, 6L, 33L)
+        private val COSE_HEADER_LABELS = setOf(1L, 2L, 3L, 4L, 5L, 6L, 33L, 34L)
+        private val COSE_HEADER_RAW_BSTR_LABELS = setOf(4L, 5L, 6L, 33L, 34L)
         private val COSE_KEY_PARAM_LABELS = setOf(2L, 3L, 4L, 5L, -1L, -2L, -3L, -4L)
+        private val COSE_KEY_RAW_BSTR_LABELS = setOf(2L, 5L, -1L, -2L, -3L, -4L)
         private val COSE_MAC_ALGORITHM_IDS = setOf(4L, 5L, 6L, 7L, 14L, 15L, 25L, 26L)
     }
 }
