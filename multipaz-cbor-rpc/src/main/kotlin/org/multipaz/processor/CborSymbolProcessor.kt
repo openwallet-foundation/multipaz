@@ -7,12 +7,16 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.ClassKind
+import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Modifier
+import java.io.File
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.graphhash.Composite
@@ -489,11 +493,369 @@ class CborSymbolProcessor(
                 .decode(this))
         }
 
+        /**
+         * Extracts trimmed default value expressions for each primary constructor parameter of
+         * [classSimpleName] from Kotlin source text starting at (or just before) the class
+         * declaration.
+         *
+         * Returns `null` if the primary constructor parameter list could not be located in
+         * [sourceFromClassStart], or a list aligned 1-to-1 with the primary constructor's
+         * parameters where each element is the parameter's trimmed default expression (with
+         * outer whitespace and comments stripped) or `null` if the parameter has no default.
+         */
+        internal fun extractConstructorDefaultExpressions(
+            sourceFromClassStart: String,
+            classSimpleName: String,
+        ): List<String?>? {
+            val scanner = KotlinSourceScanner(sourceFromClassStart)
+
+            // 1. Find `class <classSimpleName>` at top level.
+            var parenDepth = 0
+            var braceDepth = 0
+            var bracketDepth = 0
+            var foundClass = false
+            while (scanner.pos < scanner.length) {
+                scanner.skipTrivia()
+                if (scanner.pos >= scanner.length) break
+                if (parenDepth == 0 && braceDepth == 0 && bracketDepth == 0) {
+                    val ident = scanner.readIdentifier()
+                    if (ident != null) {
+                        if (ident == "class") {
+                            scanner.skipTrivia()
+                            val name = scanner.readIdentifier()
+                            if (name == classSimpleName) {
+                                foundClass = true
+                                break
+                            }
+                        }
+                        continue
+                    }
+                }
+                if (scanner.skipLiteralOrBacktick()) continue
+                when (scanner.text[scanner.pos]) {
+                    '(' -> parenDepth++
+                    ')' -> if (parenDepth > 0) parenDepth--
+                    '{' -> braceDepth++
+                    '}' -> if (braceDepth > 0) braceDepth--
+                    '[' -> bracketDepth++
+                    ']' -> if (bracketDepth > 0) bracketDepth--
+                }
+                scanner.pos++
+            }
+            if (!foundClass) return null
+
+            // 2. Skip optional `<TypeParams>`, annotations, and modifiers to find primary constructor `(`.
+            scanner.skipTrivia()
+            if (scanner.pos < scanner.length && scanner.text[scanner.pos] == '<') {
+                scanner.skipBalanced('<', '>')
+            }
+            while (scanner.pos < scanner.length) {
+                scanner.skipTrivia()
+                if (scanner.pos >= scanner.length) return null
+                val ch = scanner.text[scanner.pos]
+                if (ch == '(') {
+                    break
+                }
+                if (ch == '{' || ch == ':') {
+                    return emptyList()
+                }
+                if (ch == '@') {
+                    scanner.pos++
+                    while (scanner.pos < scanner.length) {
+                        scanner.skipTrivia()
+                        if (scanner.readIdentifier() != null) {
+                            scanner.skipTrivia()
+                            if (scanner.pos < scanner.length &&
+                                (scanner.text[scanner.pos] == ':' || scanner.text[scanner.pos] == '.')
+                            ) {
+                                scanner.pos++
+                                continue
+                            }
+                        }
+                        break
+                    }
+                    scanner.skipTrivia()
+                    if (scanner.pos < scanner.length && scanner.text[scanner.pos] == '<') {
+                        scanner.skipBalanced('<', '>')
+                        scanner.skipTrivia()
+                    }
+                    if (scanner.pos < scanner.length && scanner.text[scanner.pos] == '(') {
+                        scanner.skipBalanced('(', ')')
+                    }
+                    continue
+                }
+                if (scanner.readIdentifier() != null) continue
+                scanner.pos++
+            }
+            if (scanner.pos >= scanner.length || scanner.text[scanner.pos] != '(') return null
+
+            // 3. Split primary constructor `(...)` into top-level parameter segments.
+            scanner.pos++ // consume '('
+            val segments = mutableListOf<String>()
+            var segStart = scanner.pos
+            parenDepth = 0
+            braceDepth = 0
+            bracketDepth = 0
+            while (scanner.pos < scanner.length) {
+                scanner.skipTrivia()
+                if (scanner.pos >= scanner.length) return null
+                if (scanner.skipLiteralOrBacktick()) continue
+                val ch = scanner.text[scanner.pos]
+                if (parenDepth == 0 && braceDepth == 0 && bracketDepth == 0) {
+                    if (ch == '<' && scanner.trySkipTypeArguments()) {
+                        continue
+                    }
+                    if (ch == ',') {
+                        segments.add(scanner.text.substring(segStart, scanner.pos))
+                        scanner.pos++
+                        segStart = scanner.pos
+                        continue
+                    } else if (ch == ')') {
+                        val tail = scanner.text.substring(segStart, scanner.pos)
+                        if (trimOuterTrivia(tail).isNotEmpty()) {
+                            segments.add(tail)
+                        }
+                        break
+                    }
+                }
+                when (ch) {
+                    '(' -> parenDepth++
+                    ')' -> if (parenDepth > 0) parenDepth--
+                    '{' -> braceDepth++
+                    '}' -> if (braceDepth > 0) braceDepth--
+                    '[' -> bracketDepth++
+                    ']' -> if (bracketDepth > 0) bracketDepth--
+                }
+                scanner.pos++
+            }
+
+            return segments.map { extractDefaultFromParameterSegment(it) }
+        }
+
+        private fun extractDefaultFromParameterSegment(segment: String): String? {
+            val scanner = KotlinSourceScanner(segment)
+            var parenDepth = 0
+            var braceDepth = 0
+            var bracketDepth = 0
+            while (scanner.pos < scanner.length) {
+                scanner.skipTrivia()
+                if (scanner.pos >= scanner.length) break
+                if (scanner.skipLiteralOrBacktick()) continue
+                val ch = scanner.text[scanner.pos]
+                if (parenDepth == 0 && braceDepth == 0 && bracketDepth == 0) {
+                    if (ch == '<' && scanner.trySkipTypeArguments()) {
+                        continue
+                    }
+                    if (ch == '=') {
+                        val prev = if (scanner.pos > 0) scanner.text[scanner.pos - 1] else ' '
+                        val next = if (scanner.pos + 1 < scanner.length) scanner.text[scanner.pos + 1] else ' '
+                        if (next != '=' && prev != '!' && prev != '<' && prev != '>' && prev != '=') {
+                            return trimOuterTrivia(segment.substring(scanner.pos + 1))
+                        }
+                    }
+                }
+                when (ch) {
+                    '(' -> parenDepth++
+                    ')' -> if (parenDepth > 0) parenDepth--
+                    '{' -> braceDepth++
+                    '}' -> if (braceDepth > 0) braceDepth--
+                    '[' -> bracketDepth++
+                    ']' -> if (bracketDepth > 0) bracketDepth--
+                }
+                scanner.pos++
+            }
+            return null
+        }
+
+        private fun trimOuterTrivia(text: String): String {
+            val scanner = KotlinSourceScanner(text)
+            var firstStart = -1
+            var lastEnd = -1
+            while (scanner.pos < scanner.length) {
+                scanner.skipTrivia()
+                if (scanner.pos >= scanner.length) break
+                if (firstStart == -1) {
+                    firstStart = scanner.pos
+                }
+                if (scanner.skipLiteralOrBacktick()) {
+                    lastEnd = scanner.pos
+                } else {
+                    scanner.pos++
+                    lastEnd = scanner.pos
+                }
+            }
+            return if (firstStart == -1) "" else text.substring(firstStart, lastEnd)
+        }
+
+        private class KotlinSourceScanner(val text: String) {
+            var pos: Int = 0
+            val length: Int get() = text.length
+
+            fun skipTrivia() {
+                while (pos < length) {
+                    val c = text[pos]
+                    if (c.isWhitespace()) {
+                        pos++
+                    } else if (c == '/' && pos + 1 < length && text[pos + 1] == '/') {
+                        pos += 2
+                        while (pos < length && text[pos] != '\n') pos++
+                    } else if (c == '/' && pos + 1 < length && text[pos + 1] == '*') {
+                        pos += 2
+                        var depth = 1
+                        while (pos < length && depth > 0) {
+                            if (pos + 1 < length && text[pos] == '/' && text[pos + 1] == '*') {
+                                depth++
+                                pos += 2
+                            } else if (pos + 1 < length && text[pos] == '*' && text[pos + 1] == '/') {
+                                depth--
+                                pos += 2
+                            } else {
+                                pos++
+                            }
+                        }
+                    } else {
+                        break
+                    }
+                }
+            }
+
+            fun skipLiteralOrBacktick(): Boolean {
+                if (pos >= length) return false
+                if (text.startsWith("\"\"\"", pos)) {
+                    pos += 3
+                    while (pos < length) {
+                        if (text.startsWith("\"\"\"", pos)) {
+                            pos += 3
+                            while (pos < length && text[pos] == '"') pos++
+                            break
+                        }
+                        pos++
+                    }
+                    return true
+                }
+                val c = text[pos]
+                if (c == '"') {
+                    pos++
+                    while (pos < length) {
+                        val ch = text[pos]
+                        if (ch == '\\') {
+                            pos += 2
+                        } else if (ch == '$' && pos + 1 < length && text[pos + 1] == '{') {
+                            pos += 2
+                            var braceDepth = 1
+                            while (pos < length && braceDepth > 0) {
+                                skipTrivia()
+                                if (pos >= length) break
+                                if (skipLiteralOrBacktick()) continue
+                                when (text[pos]) {
+                                    '{' -> { braceDepth++; pos++ }
+                                    '}' -> { braceDepth--; pos++ }
+                                    else -> pos++
+                                }
+                            }
+                        } else if (ch == '"') {
+                            pos++
+                            break
+                        } else {
+                            pos++
+                        }
+                    }
+                    return true
+                }
+                if (c == '\'') {
+                    pos++
+                    while (pos < length) {
+                        if (text[pos] == '\\') {
+                            pos += 2
+                        } else if (text[pos] == '\'') {
+                            pos++
+                            break
+                        } else {
+                            pos++
+                        }
+                    }
+                    return true
+                }
+                if (c == '`') {
+                    pos++
+                    while (pos < length && text[pos] != '`') pos++
+                    if (pos < length) pos++
+                    return true
+                }
+                return false
+            }
+
+            fun readIdentifier(): String? {
+                if (pos >= length) return null
+                if (text[pos] == '`') {
+                    val start = pos + 1
+                    pos++
+                    while (pos < length && text[pos] != '`') pos++
+                    val ident = text.substring(start, pos)
+                    if (pos < length) pos++
+                    return ident
+                }
+                if (!text[pos].isJavaIdentifierStart()) return null
+                val start = pos
+                pos++
+                while (pos < length && text[pos].isJavaIdentifierPart()) pos++
+                return text.substring(start, pos)
+            }
+
+            fun skipBalanced(open: Char, close: Char) {
+                if (pos >= length || text[pos] != open) return
+                pos++
+                var depth = 1
+                while (pos < length && depth > 0) {
+                    skipTrivia()
+                    if (pos >= length) break
+                    if (skipLiteralOrBacktick()) continue
+                    val ch = text[pos]
+                    if (ch == open) {
+                        depth++
+                    } else if (ch == close) {
+                        depth--
+                    }
+                    pos++
+                }
+            }
+
+            fun trySkipTypeArguments(): Boolean {
+                if (pos >= length || text[pos] != '<') return false
+                val savedPos = pos
+                pos++
+                var depth = 1
+                while (pos < length && depth > 0) {
+                    skipTrivia()
+                    if (pos >= length) break
+                    val ch = text[pos]
+                    when {
+                        ch == '<' -> { depth++; pos++ }
+                        ch == '>' -> { depth--; pos++ }
+                        ch == '-' && pos + 1 < length && text[pos + 1] == '>' -> pos += 2
+                        ch == ',' || ch == '.' || ch == '?' || ch == '*' || ch == '@' -> pos++
+                        ch == '(' -> skipBalanced('(', ')')
+                        ch.isJavaIdentifierStart() || ch == '`' -> { readIdentifier() }
+                        else -> {
+                            pos = savedPos
+                            return false
+                        }
+                    }
+                }
+                if (depth != 0) {
+                    pos = savedPos
+                    return false
+                }
+                return true
+            }
+        }
+
     }
 
     private lateinit var resolver: Resolver
     private lateinit var schemaTypeInfoCache: MutableMap<String, SchemaTypeInfo>
     private lateinit var compilationUnitClassMap: MutableMap<String, KSClassDeclaration>
+    private lateinit var fileLinesCache: MutableMap<String, List<String>>
 
     /**
      * Processor main entry point.
@@ -553,6 +915,7 @@ class CborSymbolProcessor(
             thisCompilationUnitClasses.associateBy { it.qualifiedName!!.asString() }
                 .toMutableMap()
         schemaTypeInfoCache = mutableMapOf()
+        fileLinesCache = mutableMapOf()
         val schemaIds = computeShemaIds()
 
         for ((superclass, subclasses) in allSealedSubclasses) {
@@ -705,7 +1068,17 @@ class CborSymbolProcessor(
             val deserializer = deserializerName(classDeclaration, true)
 
             block("${modifier}fun $deserializer($dataItem: DataItem): $baseName") {
-                val constructorParameters = mutableListOf<String>()
+                val constructorParamsByName = primaryConstructorParamsByName(classDeclaration)
+                val serializableProperties = mutableListOf<SerializableProperty>()
+                val hasNullableWithDefault = constructorParamsByName.values.any {
+                    it.hasDefault && it.type.resolve().isMarkedNullable
+                }
+                val defaultExpressionsByName = if (hasNullableWithDefault) {
+                    getConstructorDefaultExpressionsByName(classDeclaration)
+                } else {
+                    emptyMap()
+                }
+
                 classDeclaration.getAllProperties().forEach { property ->
                     if (!property.hasBackingField) {
                         return@forEach
@@ -717,40 +1090,108 @@ class CborSymbolProcessor(
                     if (fieldName == "cause" && type.declaration.qualifiedName?.asString() == "kotlin.Throwable") {
                         return@forEach
                     }
-                    val name = varName(fieldName)
-                    // Always use field names (and require constructor to use them as parameter
-                    // names!), because the order of parameters in the constructor sometimes have
-                    // to differ from the order of the fields (esp. when using inheritance).
-                    constructorParameters.add("$fieldName = $name")
-                    if (findAnnotation(property, ANNOTATION_MERGE) != null) {
-                        if (type.declaration.qualifiedName!!.asString() == "kotlin.collections.Map") {
-                            line("val $name = mutableMapOf<${typeArguments(this, type)}>()")
-                            addDeserializedMapValues(this, "$name.", dataItem, type, fieldNameSet)
+                    val param = constructorParamsByName[fieldName]
+                    val isMergedMap = findAnnotation(property, ANNOTATION_MERGE) != null
+                    if (type.isMarkedNullable && param != null && param.hasDefault) {
+                        val defaultExpr = defaultExpressionsByName[fieldName]
+                        if (defaultExpr != null && defaultExpr != "null") {
+                            logger.error(
+                                "Nullable property '$fieldName' in @$ANNOTATION_SERIALIZABLE class " +
+                                    "cannot have a non-null default value ($defaultExpr); " +
+                                    "make the property non-nullable or default to null",
+                                param
+                            )
+                        }
+                    }
+                    val hasNonNullDefault = !type.isMarkedNullable && !isMergedMap && param?.hasDefault == true
+                    serializableProperties.add(
+                        SerializableProperty(
+                            property = property,
+                            fieldName = fieldName,
+                            type = type,
+                            isMergedMap = isMergedMap,
+                            hasNonNullDefault = hasNonNullDefault,
+                        )
+                    )
+                }
+
+                val varNameByField = mutableMapOf<String, String>()
+                val defaultedProps = serializableProperties.filter { it.hasNonNullDefault }
+                val nonDefaultedProps = if (defaultedProps.isEmpty()) {
+                    serializableProperties
+                } else {
+                    serializableProperties.filter { !it.hasNonNullDefault }
+                }
+
+                for (prop in nonDefaultedProps) {
+                    val name = varName(prop.fieldName)
+                    varNameByField[prop.fieldName] = name
+                    if (prop.isMergedMap) {
+                        if (prop.type.declaration.qualifiedName!!.asString() == "kotlin.collections.Map") {
+                            line("val $name = mutableMapOf<${typeArguments(this, prop.type)}>()")
+                            addDeserializedMapValues(this, "$name.", dataItem, prop.type, fieldNameSet)
                         }
                     } else {
-                        val item = "$dataItem[\"$fieldName\"]"
-                        if (type.isMarkedNullable) {
+                        val item = "$dataItem[\"${prop.fieldName}\"]"
+                        if (prop.type.isMarkedNullable) {
                             block(
-                                "val $name = if ($dataItem.hasKey(\"$fieldName\"))",
+                                "val $name = if ($dataItem.hasKey(\"${prop.fieldName}\"))",
                                 hasBlockAfter = true
                             ) {
-                                line(deserializeValue(this, item, type))
+                                line(deserializeValue(this, item, prop.type))
                             }
                             block("else", hasBlockBefore = true) {
                                 line("null")
                             }
                         } else {
-                            line("val $name = ${deserializeValue(this, item, type)}")
+                            line("val $name = ${deserializeValue(this, item, prop.type)}")
                         }
                     }
                 }
+
+                if (defaultedProps.isNotEmpty()) {
+                    val defaultsVar = varName("defaults")
+                    val getDefaultsFun = varName("getDefaults")
+                    line("var $defaultsVar: $baseName? = null")
+                    block("fun $getDefaultsFun(): $baseName") {
+                        if (nonDefaultedProps.isEmpty()) {
+                            line("return $defaultsVar ?: $baseName().also { $defaultsVar = it }")
+                        } else {
+                            line("return $defaultsVar ?: $baseName(")
+                            withIndent {
+                                nonDefaultedProps.forEach { prop ->
+                                    line("${prop.fieldName} = ${varNameByField[prop.fieldName]},")
+                                }
+                            }
+                            line(").also { $defaultsVar = it }")
+                        }
+                    }
+                    for (prop in defaultedProps) {
+                        val name = varName(prop.fieldName)
+                        varNameByField[prop.fieldName] = name
+                        val item = "$dataItem[\"${prop.fieldName}\"]"
+                        block(
+                            "val $name = if ($dataItem.hasKey(\"${prop.fieldName}\"))",
+                            hasBlockAfter = true
+                        ) {
+                            line(deserializeValue(this, item, prop.type))
+                        }
+                        block("else", hasBlockBefore = true) {
+                            line("$getDefaultsFun().${prop.fieldName}")
+                        }
+                    }
+                }
+
                 if (classDeclaration.classKind == ClassKind.OBJECT) {
                     line ("return $baseName")
                 } else {
+                    // Always use field names (and require constructor to use them as parameter
+                    // names!), because the order of parameters in the constructor sometimes have
+                    // to differ from the order of the fields (esp. when using inheritance).
                     line("return $baseName(")
                     withIndent {
-                        constructorParameters.forEach { parameter ->
-                            line("$parameter,")
+                        serializableProperties.forEach { prop ->
+                            line("${prop.fieldName} = ${varNameByField[prop.fieldName]},")
                         }
                     }
                     line(")")
@@ -1002,6 +1443,7 @@ class CborSymbolProcessor(
         } else {
             // Otherwise schema is determined by the collection of properties. No need to consider
             // superclasses specially, as getAllProperties() returns superclass properties too.
+            val constructorParamsByName = primaryConstructorParamsByName(clazz)
             for (property in clazz.getAllProperties()) {
                 if (!property.hasBackingField) {
                     continue
@@ -1035,7 +1477,8 @@ class CborSymbolProcessor(
                         }
                     }
                 }
-                edges.add(createEdge(name, type, stableClass))
+                val hasNonNullDefault = !type.isMarkedNullable && constructorParamsByName[name]?.hasDefault == true
+                edges.add(createEdge(name, type, stableClass, hasNonNullDefault))
             }
         }
         val typeInfo = SchemaTypeInfo(Composite(edges.toList(), extra), schemaHash, schemaId)
@@ -1043,13 +1486,73 @@ class CborSymbolProcessor(
         return typeInfo
     }
 
+    private fun primaryConstructorParamsByName(
+        clazz: KSClassDeclaration
+    ): Map<String, KSValueParameter> {
+        val params = clazz.primaryConstructor?.parameters ?: return emptyMap()
+        return buildMap {
+            for (param in params) {
+                val name = param.name?.asString() ?: continue
+                put(name, param)
+            }
+        }
+    }
+
+    private fun getConstructorDefaultExpressionsByName(
+        clazz: KSClassDeclaration
+    ): Map<String, String?> {
+        val params = clazz.primaryConstructor?.parameters ?: return emptyMap()
+        val location = clazz.location as? FileLocation ?: return emptyMap()
+        val file = File(location.filePath)
+        if (!file.exists()) {
+            return emptyMap()
+        }
+        val lines = fileLinesCache.getOrPut(location.filePath) { file.readLines() }
+        val startLineIndex = (location.lineNumber - 1).coerceAtLeast(0)
+        if (startLineIndex >= lines.size) {
+            return emptyMap()
+        }
+        val sourceFromClassStart = buildString {
+            for (i in startLineIndex until lines.size) {
+                append(lines[i])
+                append('\n')
+            }
+        }
+        val expressions = extractConstructorDefaultExpressions(
+            sourceFromClassStart = sourceFromClassStart,
+            classSimpleName = clazz.simpleName.asString(),
+        ) ?: return emptyMap()
+        if (expressions.size != params.size) {
+            return emptyMap()
+        }
+        return buildMap {
+            for (i in params.indices) {
+                val name = params[i].name?.asString() ?: continue
+                put(name, expressions[i])
+            }
+        }
+    }
+
+    private data class SerializableProperty(
+        val property: KSPropertyDeclaration,
+        val fieldName: String,
+        val type: KSType,
+        val isMergedMap: Boolean,
+        val hasNonNullDefault: Boolean,
+    )
+
     private fun createEdge(
         name: String,
         type: KSType,
-        stableOwnerClass: KSClassDeclaration?
+        stableOwnerClass: KSClassDeclaration?,
+        hasDefault: Boolean = false
     ): Edge {
         val typeName = type.declaration.qualifiedName!!.asString()
-        val edgeKind = if (type.isMarkedNullable) EdgeKind.OPTIONAL else EdgeKind.REQUIRED
+        val edgeKind = when {
+            type.isMarkedNullable -> EdgeKind.OPTIONAL
+            hasDefault -> EdgeKind.DEFAULT
+            else -> EdgeKind.REQUIRED
+        }
         val target = schemaTypeInfoCache[typeName]
         val compositeType = compilationUnitClassMap[typeName]
         return if (target != null) {

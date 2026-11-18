@@ -62,3 +62,12 @@ to indicate that it contains additional key-value pairs that should
 be added to the object serialization. Only a single such field may be
 defined in any given class and it must be of type `Map`.
 
+### Backwards compatibility and default values
+
+Backwards compatibility is preserved when adding either:
+ - a nullable field (missing keys deserialize to `null`, and `null` values are omitted when serializing), or
+ - a non-nullable constructor field with a default value (always written when serializing, and falls back to its Kotlin default value when absent during deserialization).
+
+Nullable fields may only use `null` as a default value; specifying a non-null default on a nullable field is rejected at compile time because `null` is represented by omitting the key from the CBOR map.
+
+

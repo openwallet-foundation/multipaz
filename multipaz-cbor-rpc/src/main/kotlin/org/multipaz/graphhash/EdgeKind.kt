@@ -10,4 +10,5 @@ enum class EdgeKind(
     REQUIRED(ByteString((0xF0).toByte())),
     OPTIONAL(ByteString((0xF1).toByte())),
     ALTERNATIVE(ByteString((0xF2).toByte())),
+    DEFAULT(ByteString((0xF3).toByte())),
 }

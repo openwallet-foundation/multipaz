@@ -25,18 +25,20 @@ class GraphHashTest {
                 ImmediateEdge("foo", EdgeKind.REQUIRED, Leaf("FOO")),
                 ImmediateEdge("bar", EdgeKind.OPTIONAL, Leaf("BAR")),
                 ImmediateEdge("buz", EdgeKind.ALTERNATIVE, Leaf("BUZ")),
+                ImmediateEdge("def", EdgeKind.DEFAULT, Leaf("DEF")),
             ),
             extra = "zzz".encodeToByteString()
         )
         val hash = graphHasher.hash(composite).decodeToString()
-        Assert.assertEquals("hash3", hash)
-        Assert.assertEquals(4, capturedSequences.size)
+        Assert.assertEquals("hash4", hash)
+        Assert.assertEquals(5, capturedSequences.size)
         Assert.assertEquals("<01>[BAR]", capturedSequences[0])
         Assert.assertEquals("<01>[BUZ]", capturedSequences[1])
-        Assert.assertEquals("<01>[FOO]", capturedSequences[2])
+        Assert.assertEquals("<01>[DEF]", capturedSequences[2])
+        Assert.assertEquals("<01>[FOO]", capturedSequences[3])
         Assert.assertEquals(
-            "<02>[zzz][bar]<00><f1>[hash0][buz]<00><f2>[hash1][foo]<00><f0>[hash2]",
-            capturedSequences[3]
+            "<02>[zzz][bar]<00><f1>[hash0][buz]<00><f2>[hash1][def]<00><f3>[hash2][foo]<00><f0>[hash3]",
+            capturedSequences[4]
         )
     }
 

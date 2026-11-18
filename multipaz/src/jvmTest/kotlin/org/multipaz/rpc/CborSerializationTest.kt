@@ -11,7 +11,10 @@ import org.multipaz.util.fromBase64Url
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -230,6 +233,76 @@ data class DurationCollectionsContainer(
 ) {
     companion object
 }
+
+@CborSerializable(
+    schemaHash = "PCCEmQrXB9a9OS8siKqg15d_4DRHL3kZPualVTeGgvc"
+)
+data class SingleDefaultString(val a: String = "default") {
+    companion object
+}
+
+@CborSerializable
+data class DefaultCompatV1(
+    val bar: Int,
+) {
+    companion object
+}
+
+@CborSerializable
+data class DefaultCompatNullableV2(
+    val bar: Int,
+    val baz: Int? = null,
+) {
+    companion object
+}
+
+@CborSerializable
+data class DefaultCompatV2(
+    val bar: Int,
+    val baz: Int = 4,
+    val label: String = "hello",
+    val items: List<String> = listOf("x", "y"),
+    val optionalNote: String? = null,
+) {
+    companion object
+}
+
+@CborSerializable
+data class DefaultBeforeRequired(
+    val baz: Int = 7,
+    val bar: Int,
+) {
+    companion object
+}
+
+@CborSerializable
+data class AllDefaultsData(
+    val a: Int = 10,
+    val b: Boolean = true,
+) {
+    companion object
+}
+
+internal var defaultEvalCounter = 0
+
+@CborSerializable
+internal data class LazyDefaultTracker(
+    val bar: Int,
+    val baz: Int = ++defaultEvalCounter,
+    val qux: Int = defaultEvalCounter * 10,
+) {
+    companion object
+}
+
+@CborSerializable
+sealed class SealedDefaultEvent {
+    companion object
+}
+
+data class SealedDefaultEventItem(
+    val id: String,
+    val retries: Int = 3,
+) : SealedDefaultEvent()
 
 class CborSerializationTest {
     @Test
@@ -494,5 +567,118 @@ class CborSerializationTest {
         assertFailsWith<IllegalArgumentException> {
             DurationContainer.fromDataItem(wrongTypeMap)
         }
+    }
+
+    @Test
+    fun defaultValues_backwardsAndForwardsCompatibility() {
+        // v1 serialized before baz/label/items/optionalNote existed
+        val v1 = DefaultCompatV1(bar = 42)
+        val upgraded = DefaultCompatV2.fromCbor(v1.toCbor())
+        assertEquals(
+            DefaultCompatV2(
+                bar = 42,
+                baz = 4,
+                label = "hello",
+                items = listOf("x", "y"),
+                optionalNote = null,
+            ),
+            upgraded
+        )
+
+        // Defaulted non-null fields are always written to CBOR; null fields are omitted
+        val serializedV2 = upgraded.toDataItem()
+        assertTrue(serializedV2.hasKey("bar"))
+        assertTrue(serializedV2.hasKey("baz"))
+        assertTrue(serializedV2.hasKey("label"))
+        assertTrue(serializedV2.hasKey("items"))
+        assertFalse(serializedV2.hasKey("optionalNote"))
+
+        // Forwards compatibility: v1 can still read payloads written by v2
+        assertEquals(v1, DefaultCompatV1.fromCbor(upgraded.toCbor()))
+
+        // Partial presence: some defaulted fields present, others missing
+        val partialMap = buildCborMap {
+            put("bar", 99)
+            put("baz", 123)
+        }
+        assertEquals(
+            DefaultCompatV2(
+                bar = 99,
+                baz = 123,
+                label = "hello",
+                items = listOf("x", "y"),
+                optionalNote = null,
+            ),
+            DefaultCompatV2.fromDataItem(partialMap)
+        )
+    }
+
+    @Test
+    fun defaultValues_migratingNullableFieldToDefaultedNonNull() {
+        val v2WithNull = DefaultCompatNullableV2(bar = 7, baz = null)
+        assertEquals(4, DefaultCompatV2.fromCbor(v2WithNull.toCbor()).baz)
+
+        val v2WithValue = DefaultCompatNullableV2(bar = 7, baz = 55)
+        assertEquals(55, DefaultCompatV2.fromCbor(v2WithValue.toCbor()).baz)
+    }
+
+    @Test
+    fun defaultValues_orderingAndAllDefaults() {
+        val onlyBar = buildCborMap {
+            put("bar", 15)
+        }
+        assertEquals(
+            DefaultBeforeRequired(baz = 7, bar = 15),
+            DefaultBeforeRequired.fromDataItem(onlyBar)
+        )
+
+        val emptyMap = buildCborMap {}
+        assertEquals(
+            AllDefaultsData(a = 10, b = true),
+            AllDefaultsData.fromDataItem(emptyMap)
+        )
+    }
+
+    @Test
+    fun defaultValues_lazyEvaluationOnlyWhenMissing() {
+        defaultEvalCounter = 0
+
+        // All fields present -> default constructor is never invoked
+        val fullMap = buildCborMap {
+            put("bar", 1)
+            put("baz", 20)
+            put("qux", 30)
+        }
+        assertEquals(LazyDefaultTracker(bar = 1, baz = 20, qux = 30), LazyDefaultTracker.fromDataItem(fullMap))
+        assertEquals(0, defaultEvalCounter)
+
+        // Multiple defaulted fields missing -> default constructor invoked once
+        val missingBoth = buildCborMap {
+            put("bar", 2)
+        }
+        assertEquals(LazyDefaultTracker(bar = 2, baz = 1, qux = 10), LazyDefaultTracker.fromDataItem(missingBoth))
+        assertEquals(1, defaultEvalCounter)
+    }
+
+    @Test
+    fun defaultValues_sealedHierarchy() {
+        val legacySealedMap = buildCborMap {
+            put("type", "Item")
+            put("id", "evt-1")
+        }
+        assertEquals(
+            SealedDefaultEventItem(id = "evt-1", retries = 3),
+            SealedDefaultEvent.fromDataItem(legacySealedMap)
+        )
+    }
+
+    @Test
+    fun defaultValues_schemaHashDistinguishesDefaultFromRequiredAndOptional() {
+        assertEquals(
+            ByteString("PCCEmQrXB9a9OS8siKqg15d_4DRHL3kZPualVTeGgvc".fromBase64Url()),
+            SingleDefaultString.cborSchemaId
+        )
+        assertNotEquals(SingleString.cborSchemaId, SingleDefaultString.cborSchemaId)
+        assertNotEquals(SingleNullableString.cborSchemaId, SingleDefaultString.cborSchemaId)
     }
 }
