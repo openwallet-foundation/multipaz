@@ -417,6 +417,20 @@ object TestAppUtils {
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
+                    PhotoID.getDocumentType(),
+                    "Erika",
+                    "Erika's Photo ID (ZKP-friendly)",
+                    Res.drawable.photo_id_card_art,
+                    zkFriendly = true
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
                     EUPersonalID.getDocumentType(),
                     "Erika",
                     "Erika's EU PID",
