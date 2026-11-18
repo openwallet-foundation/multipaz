@@ -43,19 +43,27 @@ class DocumentModelTest {
         val doc3 = store.createDocument(displayName = "Doc 3")
 
         val model = DocumentModel.create(store, null)
-        val initialOrder = listOf(doc1.identifier, doc2.identifier, doc3.identifier)
-        assertEquals(initialOrder, model.documentOrder)
+        try {
+            val initialOrder = listOf(doc1.identifier, doc2.identifier, doc3.identifier)
+            assertEquals(initialOrder, model.documentOrder)
 
-        // Reorder documents
-        val newOrder = listOf(doc3.identifier, doc1.identifier, doc2.identifier)
-        model.setDocumentOrder(newOrder)
+            // Reorder documents
+            val newOrder = listOf(doc3.identifier, doc1.identifier, doc2.identifier)
+            model.setDocumentOrder(newOrder)
 
-        assertEquals(newOrder, model.documentOrder)
-        assertEquals(newOrder, model.documentInfos.value.map { it.document.identifier })
+            assertEquals(newOrder, model.documentOrder)
+            assertEquals(newOrder, model.documentInfos.value.map { it.document.identifier })
 
-        // Check persistence in new DocumentModel instance
-        val model2 = DocumentModel.create(store, null)
-        assertEquals(newOrder, model2.documentOrder)
+            // Check persistence in new DocumentModel instance
+            val model2 = DocumentModel.create(store, null)
+            try {
+                assertEquals(newOrder, model2.documentOrder)
+            } finally {
+                model2.close()
+            }
+        } finally {
+            model.close()
+        }
     }
 
     @Test
@@ -66,11 +74,14 @@ class DocumentModelTest {
         val doc3 = store.createDocument(displayName = "Doc 3")
 
         val model = DocumentModel.create(store, null)
-
-        // Setting order for a subset moves specified doc to front, preserving relative order of rest
-        model.setDocumentOrder(listOf(doc2.identifier))
-        val expected = listOf(doc2.identifier, doc1.identifier, doc3.identifier)
-        assertEquals(expected, model.documentOrder)
+        try {
+            // Setting order for a subset moves specified doc to front, preserving relative order of rest
+            model.setDocumentOrder(listOf(doc2.identifier))
+            val expected = listOf(doc2.identifier, doc1.identifier, doc3.identifier)
+            assertEquals(expected, model.documentOrder)
+        } finally {
+            model.close()
+        }
     }
 
     @Test
@@ -81,11 +92,14 @@ class DocumentModelTest {
         val doc3 = store.createDocument(displayName = "Doc 3")
 
         val model = DocumentModel.create(store, null)
-
-        // Duplicates and unknown IDs handled gracefully
-        model.setDocumentOrder(listOf("unknown_id", doc2.identifier, doc2.identifier, doc1.identifier))
-        val expected = listOf(doc2.identifier, doc1.identifier, doc3.identifier)
-        assertEquals(expected, model.documentOrder)
+        try {
+            // Duplicates and unknown IDs handled gracefully
+            model.setDocumentOrder(listOf("unknown_id", doc2.identifier, doc2.identifier, doc1.identifier))
+            val expected = listOf(doc2.identifier, doc1.identifier, doc3.identifier)
+            assertEquals(expected, model.documentOrder)
+        } finally {
+            model.close()
+        }
     }
 
     @Test
@@ -96,21 +110,24 @@ class DocumentModelTest {
         val doc3 = store.createDocument(displayName = "Doc 3")
 
         val model = DocumentModel.create(store, null)
-        val docInfo3 = model.documentInfos.value.find { it.document.identifier == doc3.identifier }!!
+        try {
+            val docInfo3 = model.documentInfos.value.find { it.document.identifier == doc3.identifier }!!
 
-        // Move doc3 to position 0
-        model.setDocumentPosition(docInfo3, 0)
-        assertEquals(listOf(doc3.identifier, doc1.identifier, doc2.identifier), model.documentOrder)
+            // Move doc3 to position 0
+            model.setDocumentPosition(docInfo3, 0)
+            assertEquals(listOf(doc3.identifier, doc1.identifier, doc2.identifier), model.documentOrder)
 
-        // Move doc3 to position 2
-        model.setDocumentPosition(docInfo3, 2)
-        assertEquals(listOf(doc1.identifier, doc2.identifier, doc3.identifier), model.documentOrder)
+            // Move doc3 to position 2
+            model.setDocumentPosition(docInfo3, 2)
+            assertEquals(listOf(doc1.identifier, doc2.identifier, doc3.identifier), model.documentOrder)
 
-        // Invalid position throws
-        assertFailsWith<IllegalArgumentException> {
-            model.setDocumentPosition(docInfo3, 5)
+            // Invalid position throws
+            assertFailsWith<IllegalArgumentException> {
+                model.setDocumentPosition(docInfo3, 5)
+            }
+        } finally {
+            model.close()
         }
-        model.close()
     }
 
     @Test
@@ -176,9 +193,11 @@ class DocumentModelTest {
 
             cred.increaseUsageCount()
 
-            withTimeout(2.seconds) {
-                model.documentInfos.first { infos ->
-                    infos.singleOrNull()?.badges?.singleOrNull()?.text == "Uses: 1"
+            withContext(Dispatchers.Default) {
+                withTimeout(5.seconds) {
+                    model.documentInfos.first { infos ->
+                        infos.singleOrNull()?.badges?.singleOrNull()?.text == "Uses: 1"
+                    }
                 }
             }
             assertEquals(keyInfoCallsBefore, getKeyInfoCalls)

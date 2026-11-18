@@ -855,6 +855,9 @@ class BleCentralHalHci(
                     deferred.await()
                 } ?: throw IOException("Timed out waiting for L2CAP LE Credit Based Connection RSP")
                 if (closed || l2capAttemptEpoch.get() != attemptEpoch) {
+                    if (activeL2capChannel === channel) {
+                        activeL2capChannel = null
+                    }
                     channel.disconnectAndClose()
                     return@enqueue
                 }
@@ -1058,7 +1061,11 @@ class BleCentralHalHci(
             )
         }
         if (notifyDisconnected && !closed) {
-            callback.onDisconnected()
+            enqueue {
+                if (!closed && !shuttingDown) {
+                    callback.onDisconnected()
+                }
+            }
         }
     }
 
@@ -1377,44 +1384,49 @@ class BleCentralHalHci(
                     val peerMps = u16le(pdu, 8)
                     val initialCredits = u16le(pdu, 10)
                     val result = u16le(pdu, 12)
-                    var localCid = BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT
-                    val deferred = pendingL2capLock.withLock {
-                        if (pendingL2capIdentifier == identifier) {
-                            localCid = pendingL2capScid
-                            pendingL2capDeferred
-                        } else {
-                            null
+                    val hci = engine
+                    var deferredToComplete: CompletableDeferred<HciBleL2capChannel>? = null
+                    var channelToComplete: HciBleL2capChannel? = null
+                    var errorToComplete: Throwable? = null
+                    pendingL2capLock.withLock {
+                        if (!closed && pendingL2capIdentifier == identifier) {
+                            val deferred = pendingL2capDeferred
+                            if (deferred != null && !deferred.isCompleted) {
+                                deferredToComplete = deferred
+                                if (result == 0x0000 && hci != null) {
+                                    if (dcid < BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT ||
+                                        peerMtu < 23 ||
+                                        peerMps < 23
+                                    ) {
+                                        errorToComplete = IOException(
+                                            "Invalid L2CAP LE Credit Based Connection RSP parameters " +
+                                                "(dcid=0x${dcid.toString(16)}, mtu=$peerMtu, mps=$peerMps)"
+                                        )
+                                    } else {
+                                        val ch = HciBleL2capChannel(
+                                            engine = hci,
+                                            connectionHandle = handle,
+                                            localCid = pendingL2capScid,
+                                            peerCid = dcid,
+                                            peerMtu = peerMtu,
+                                            peerMps = peerMps,
+                                            initialPeerCredits = initialCredits
+                                        )
+                                        activeL2capChannel = ch
+                                        channelToComplete = ch
+                                    }
+                                } else {
+                                    errorToComplete = IOException(
+                                        "L2CAP LE Credit Based Connection refused (result=0x${result.toString(16)})"
+                                    )
+                                }
+                            }
                         }
                     }
-                    if (deferred != null) {
-                        val hci = engine
-                        if (result == 0x0000 && hci != null) {
-                            if (dcid < BleHciConstants.L2CAP_DYNAMIC_CID_DEFAULT || peerMtu < 23 || peerMps < 23) {
-                                deferred.completeExceptionally(
-                                    IOException(
-                                        "Invalid L2CAP LE Credit Based Connection RSP parameters " +
-                                            "(dcid=0x${dcid.toString(16)}, mtu=$peerMtu, mps=$peerMps)"
-                                    )
-                                )
-                            } else {
-                                val ch = HciBleL2capChannel(
-                                    engine = hci,
-                                    connectionHandle = handle,
-                                    localCid = localCid,
-                                    peerCid = dcid,
-                                    peerMtu = peerMtu,
-                                    peerMps = peerMps,
-                                    initialPeerCredits = initialCredits
-                                )
-                                deferred.complete(ch)
-                            }
-                        } else {
-                            deferred.completeExceptionally(
-                                IOException(
-                                    "L2CAP LE Credit Based Connection refused (result=0x${result.toString(16)})"
-                                )
-                            )
-                        }
+                    if (channelToComplete != null) {
+                        deferredToComplete?.complete(channelToComplete!!)
+                    } else if (errorToComplete != null) {
+                        deferredToComplete?.completeExceptionally(errorToComplete!!)
                     }
                 }
             }

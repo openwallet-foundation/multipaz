@@ -120,8 +120,9 @@ class DeviceResponseGeneratorTest {
         exceptions["ns2"] = mutableListOf("bar2")
 
         // Create two authentication keys... one for mdoc ECDSA authentication and one for MAC authentication.
-        val nowSeconds = Clock.System.now().epochSeconds
-        timeSigned = Instant.fromEpochSeconds(nowSeconds)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val nowSeconds = now.epochSeconds
+        timeSigned = now
         timeValidityBegin = Instant.fromEpochSeconds(nowSeconds + 3600)
         timeValidityEnd = Instant.fromEpochSeconds(nowSeconds + 10 * 86400)
         mdocCredentialSign = KeyBoundMdocCredential.create(
@@ -148,7 +149,7 @@ class DeviceResponseGeneratorTest {
         assertFalse(mdocCredentialMac.isCertified)
 
         // Generate an MSO and issuer-signed data for these authentication keys.
-        val validFrom = Clock.System.now().truncateToWholeSeconds()
+        val validFrom = now
         val validUntil = Instant.fromEpochMilliseconds(
             validFrom.toEpochMilliseconds() + 5L * 365 * 24 * 60 * 60 * 1000
         )

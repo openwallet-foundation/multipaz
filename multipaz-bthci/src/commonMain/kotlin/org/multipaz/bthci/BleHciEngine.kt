@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.IOException
 import org.multipaz.crypto.Crypto
@@ -519,7 +521,9 @@ internal class BleHciEngine(
                     throw IOException("BLE connection handle 0x${connectionHandle.toString(16)} disconnected")
                 }
                 try {
-                    packetIo.writePacket(aclPacket)
+                    withContext(NonCancellable) {
+                        packetIo.writePacket(aclPacket)
+                    }
                 } catch (e: Exception) {
                     releaseAclCredits(1)
                     throw e

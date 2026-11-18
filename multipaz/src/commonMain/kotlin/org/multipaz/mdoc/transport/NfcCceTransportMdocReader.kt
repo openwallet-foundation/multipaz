@@ -152,6 +152,7 @@ class NfcCceTransportMdocReader(
     private val writingQueue = Channel<ByteString>(Channel.UNLIMITED)
     private val incomingMessages = Channel<ByteString>(Channel.UNLIMITED)
     private val receivedMessagesBySeq = mutableMapOf<Int, ByteString>()
+    private var maxReceivedSeq: Int = -1
 
     // Counts how many messages was sent via NFC
     private var sentMessagesNumViaNfc: Int = 0
@@ -174,6 +175,7 @@ class NfcCceTransportMdocReader(
     private var nfcNotAvailable = false
 
     private var negotiatedTransportOpenJob: Job? = null
+    private var negotiatedTransportReady = false
     private val negotiatedTransportPendingOutgoingMessages = mutableListOf<ByteString>()
 
     private suspend fun conveyMessage(message: ByteString, fromNfc: Boolean) {
@@ -184,10 +186,13 @@ class NfcCceTransportMdocReader(
                 nfcNotAvailable = true
             }
             if (info.seq != null) {
+                if (info.seq > maxReceivedSeq) {
+                    maxReceivedSeq = info.seq
+                }
                 // Confirm receipt of any queued messages with a lower sequence number (Clause 9.5.5 Note 1)
                 negotiatedTransportPendingOutgoingMessages.removeAll { queued ->
                     val queuedSeq = parseCceSessionMessageInfo(queued).seq
-                    queuedSeq != null && queuedSeq < info.seq
+                    queuedSeq != null && queuedSeq < maxReceivedSeq
                 }
                 val existing = receivedMessagesBySeq[info.seq]
                 if (existing != null) {
@@ -267,19 +272,32 @@ class NfcCceTransportMdocReader(
                 try {
                     negotiatedTransport.open(eSenderKeyBytes)
                     negotiatedTransportOpenJob = null
-                    val pendingMessages = mutex.withLock {
-                        val list = negotiatedTransportPendingOutgoingMessages.toList()
-                        negotiatedTransportPendingOutgoingMessages.clear()
-                        list
-                    }
-                    Logger.i(
-                        TAG, "Connected to negotiated transport, sending " +
-                                "${pendingMessages.size} pending messages"
-                    )
-                    pendingMessages.forEachIndexed { idx, message ->
-                        negotiatedTransport.sendMessage(message.toByteArray())
-                        Logger.i(TAG, "Sending message over Transport of length ${message.size} (backlog index $idx)")
-                        numSentViaTransport += 1
+                    while (true) {
+                        val pendingMessages = mutex.withLock {
+                            if (_state.value == State.CLOSED || _state.value == State.FAILED) {
+                                return@launch
+                            }
+                            if (negotiatedTransportPendingOutgoingMessages.isEmpty()) {
+                                negotiatedTransportReady = true
+                                null
+                            } else {
+                                val list = negotiatedTransportPendingOutgoingMessages.toList()
+                                negotiatedTransportPendingOutgoingMessages.clear()
+                                list
+                            }
+                        } ?: break
+                        Logger.i(
+                            TAG, "Connected to negotiated transport, sending " +
+                                    "${pendingMessages.size} pending messages"
+                        )
+                        pendingMessages.forEachIndexed { idx, message ->
+                            negotiatedTransport.sendMessage(message.toByteArray())
+                            Logger.i(
+                                TAG,
+                                "Sending message over Transport of length ${message.size} (backlog index $idx)"
+                            )
+                            numSentViaTransport += 1
+                        }
                     }
 
                     while (true) {
@@ -287,7 +305,9 @@ class NfcCceTransportMdocReader(
                         Logger.i(TAG, "Received message over Transport of length ${message.size}")
                         conveyMessage(ByteString(message), false)
                     }
-                } catch (e: Throwable) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     mutex.withLock {
                         failTransport(e)
                     }
@@ -338,11 +358,23 @@ class NfcCceTransportMdocReader(
     }
 
     override suspend fun sendMessage(message: ByteArray) {
-        mutex.withLock {
-            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
-        }
         val messageBs = ByteString(message)
         val info = parseCceSessionMessageInfo(messageBs)
+        val sendDirectlyOnTransport = mutex.withLock {
+            check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
+            if (negotiatedTransport != null) {
+                if (negotiatedTransportReady) {
+                    true
+                } else {
+                    if (info.seq == null || info.seq > maxReceivedSeq) {
+                        negotiatedTransportPendingOutgoingMessages.add(messageBs)
+                    }
+                    false
+                }
+            } else {
+                false
+            }
+        }
         val canSendViaNfc = !nfcNotAvailable && !disconnectNfcSent && !disconnectNfcReceived
         if (info.disconnectNfc) {
             disconnectNfcSent = true
@@ -351,22 +383,18 @@ class NfcCceTransportMdocReader(
             writingQueue.send(messageBs)
         }
 
-        if (negotiatedTransport != null) {
-            if (negotiatedTransport.state.value == State.CONNECTED) {
-                try {
-                    negotiatedTransport.sendMessage(message)
-                    Logger.i(TAG, "Sending message over Transport of length ${message.size}")
-                    numSentViaTransport += 1
-                } catch (e: Throwable) {
-                    mutex.withLock {
-                        failTransport(e)
-                    }
-                    throw e
-                }
-            } else {
+        if (sendDirectlyOnTransport && negotiatedTransport != null) {
+            try {
+                negotiatedTransport.sendMessage(message)
+                Logger.i(TAG, "Sending message over Transport of length ${message.size}")
+                numSentViaTransport += 1
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 mutex.withLock {
-                    negotiatedTransportPendingOutgoingMessages.add(messageBs)
+                    failTransport(e)
                 }
+                throw e
             }
         }
         if (message.isNotEmpty()) {
@@ -421,6 +449,7 @@ class NfcCceTransportMdocReader(
             incomingMessages.close()
             negotiatedTransportOpenJob?.cancel()
             negotiatedTransportOpenJob = null
+            negotiatedTransportReady = false
             negotiatedTransport?.close()
             _state.value = State.CLOSED
         }

@@ -30,10 +30,25 @@ jobs:
       id: detekt
       continue-on-error: true
       run: ./gradlew detektMetadataCommonMain -Pdisable.web.targets=true
+    - name: Install Android NDK and CMake
+      run: |
+        SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+        for attempt in 1 2 3; do
+          if (yes || true) | "$SDKMANAGER" "cmake;3.22.1" "ndk;27.0.12077973"; then
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            echo "Failed to install Android NDK and CMake after 3 attempts" >&2
+            exit 1
+          fi
+          echo "Retrying Android SDK component install (attempt $((attempt + 1))/3)..."
+          rm -rf "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/.temp"
+          sleep 10
+        done
     - name: Build with Gradle
-      run: ./gradlew build -x test -Pdisable.web.targets=true
+      run: ./gradlew assemble lint -Pdisable.web.targets=true
     - name: Run unit tests
-      run: ./gradlew test -Pdisable.web.targets=true
+      run: ./gradlew check -x lint -x detektMetadataCommonMain -Pdisable.web.targets=true
     - name: Enable KVM
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -48,9 +63,11 @@ jobs:
         arch: x86_64
         emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -netsim-args --hci-port=6402
         script: |
-          ./gradlew connectedCheck -Pdisable.web.targets=true
+          EXIT_CODE=0
+          ./gradlew connectedCheck -Pdisable.web.targets=true || EXIT_CODE=$?
           mkdir -p build/reports/logcat
           adb logcat -d > build/reports/logcat/logcat.txt || touch build/reports/logcat/logcat.txt
+          exit $EXIT_CODE
     - name: Upload Logcat Output
       if: always()
       uses: actions/upload-artifact@v4
