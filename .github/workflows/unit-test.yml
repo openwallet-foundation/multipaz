@@ -58,7 +58,7 @@ jobs:
         name: android-logcat
         path: build/reports/logcat/logcat.txt
     - name: Fail if Detekt failed
-      if: steps.detekt.outcome == 'failure'
+      if: ${{ !cancelled() && steps.detekt.outcome == 'failure' }}
       run: |
         echo "Detekt found violations. Please ensure doc coverage."
         exit 1
