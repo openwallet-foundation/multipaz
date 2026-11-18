@@ -39,6 +39,8 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import kotlinx.io.IOException
+import org.multipaz.mdoc.connectionmethod.BleAddressType
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocEngagementType
 import org.multipaz.mdoc.transport.BleCentralConfig
@@ -599,6 +601,8 @@ class BleHciTransportTest {
         private var charDiscoveryAttemptCount = 0
         private var charReadAttemptCount = 0
         private var cccdWriteAttemptCount = 0
+        private val busStateLock = HciLock()
+        val scanEnableCount = HciAtomicInt(0)
         val l2capCreditIndCount = MutableStateFlow(0)
         val centralAttResponsesLock = HciLock()
         val centralAttResponsesToPeripheralGapClient = mutableListOf<ByteArray>()
@@ -618,6 +622,12 @@ class BleHciTransportTest {
 
             @Volatile
             var scanEnabled = false
+
+            @Volatile
+            var initiatingPeerAddrType: Int = -1
+
+            @Volatile
+            var initiatingPeerAddr: ByteArray? = null
 
             @Volatile
             var closed = false
@@ -770,9 +780,25 @@ class BleHciTransportTest {
                     BleHciConstants.HCI_OP_LE_SET_EVENT_MASK,
                     BleHciConstants.HCI_OP_LE_SET_ADVERTISING_PARAMETERS,
                     BleHciConstants.HCI_OP_LE_SET_SCAN_RESPONSE_DATA,
-                    BleHciConstants.HCI_OP_LE_SET_SCAN_PARAMETERS,
-                    BleHciConstants.HCI_OP_LE_CREATE_CONNECTION_CANCEL -> {
+                    BleHciConstants.HCI_OP_LE_SET_SCAN_PARAMETERS -> {
                         sendCommandComplete(opcode)
+                    }
+                    BleHciConstants.HCI_OP_LE_CREATE_CONNECTION_CANCEL -> {
+                        val wasInitiating = busStateLock.withLock {
+                            val active = initiatingPeerAddr != null
+                            initiatingPeerAddr = null
+                            initiatingPeerAddrType = -1
+                            active
+                        }
+                        sendCommandComplete(opcode)
+                        if (wasInitiating) {
+                            emitLeConnectionComplete(
+                                role = 0x00,
+                                peerAddrType = 0x00,
+                                peerAddr = ByteArray(6),
+                                status = 0x02,
+                            )
+                        }
                     }
                     BleHciConstants.HCI_OP_LE_READ_BUFFER_SIZE -> {
                         val ret = ByteArray(4)
@@ -806,10 +832,11 @@ class BleHciTransportTest {
                         sendCommandComplete(opcode)
                     }
                     BleHciConstants.HCI_OP_LE_SET_ADVERTISE_ENABLE -> {
-                        advEnabled = params.isNotEmpty() && params[0].toInt() != 0
+                        val enabled = params.isNotEmpty() && params[0].toInt() != 0
                         sendCommandComplete(opcode)
                         val disconnectReason = pendingMidHandshakeDisconnectReason
-                        if (advEnabled && disconnectReason >= 0) {
+                        if (enabled && disconnectReason >= 0) {
+                            advEnabled = true
                             pendingMidHandshakeDisconnectReason = -1
                             val disconnParams = ByteArray(4)
                             disconnParams[0] = 0x00
@@ -822,37 +849,91 @@ class BleHciTransportTest {
                                 evPkt
                             )
                             peer.rxQueue.trySend(evPkt)
-                        } else if (advEnabled && peer.scanEnabled && scanAttemptCount > faultConfig.dropScanAttempts) {
-                            emitAdvertisingReportTo(peer)
+                        } else {
+                            busStateLock.withLock {
+                                advEnabled = enabled
+                                if (!enabled) return@withLock
+                                val peerInitAddr = peer.initiatingPeerAddr
+                                if (peerInitAddr != null &&
+                                    peer.initiatingPeerAddrType == 0x01 &&
+                                    (peerInitAddr contentEquals randomAddr)
+                                ) {
+                                    peer.initiatingPeerAddr = null
+                                    peer.initiatingPeerAddrType = -1
+                                    connectionAttemptCount++
+                                    if (connectionAttemptCount <= faultConfig.failConnectionAttempts) {
+                                        peer.emitLeConnectionComplete(
+                                            role = 0x00,
+                                            peerAddrType = 0x01,
+                                            peerAddr = randomAddr,
+                                            status = 0x3E,
+                                        )
+                                    } else {
+                                        advEnabled = false
+                                        peer.emitLeConnectionComplete(
+                                            role = 0x00,
+                                            peerAddrType = 0x01,
+                                            peerAddr = randomAddr,
+                                        )
+                                        emitLeConnectionComplete(
+                                            role = 0x01,
+                                            peerAddrType = 0x01,
+                                            peerAddr = peer.randomAddr,
+                                        )
+                                    }
+                                } else if (peer.scanEnabled && scanAttemptCount > faultConfig.dropScanAttempts) {
+                                    emitAdvertisingReportTo(peer)
+                                }
+                            }
                         }
                     }
                     BleHciConstants.HCI_OP_LE_SET_SCAN_ENABLE -> {
-                        scanEnabled = params.isNotEmpty() && params[0].toInt() != 0
+                        val enabled = params.isNotEmpty() && params[0].toInt() != 0
+                        if (enabled) {
+                            scanEnableCount.incrementAndGet()
+                        }
                         sendCommandComplete(opcode)
-                        if (scanEnabled) {
-                            scanAttemptCount++
-                            if (peer.advEnabled && scanAttemptCount > faultConfig.dropScanAttempts) {
-                                peer.emitAdvertisingReportTo(this)
+                        busStateLock.withLock {
+                            scanEnabled = enabled
+                            if (enabled) {
+                                scanAttemptCount++
+                                if (peer.advEnabled && scanAttemptCount > faultConfig.dropScanAttempts) {
+                                    peer.emitAdvertisingReportTo(this)
+                                }
                             }
                         }
                     }
                     BleHciConstants.HCI_OP_LE_CREATE_CONNECTION -> {
                         sendCommandStatus(opcode, 0x00)
-                        scanEnabled = false
-                        connectionAttemptCount++
-                        if (connectionAttemptCount <= faultConfig.failConnectionAttempts) {
-                            // Simulate CONNECT_IND handshake failing over the air (status = 0x3E);
-                            // Peripheral never receives CONNECT_IND and remains advertising.
-                            emitLeConnectionComplete(
-                                role = 0x00,
-                                peerAddrType = 0x01,
-                                peerAddr = peer.randomAddr,
-                                status = 0x3E
-                            )
-                        } else {
-                            peer.advEnabled = false
-                            emitLeConnectionComplete(role = 0x00, peerAddrType = 0x01, peerAddr = peer.randomAddr)
-                            peer.emitLeConnectionComplete(role = 0x01, peerAddrType = 0x01, peerAddr = randomAddr)
+                        val targetAddrType = if (params.size >= 6) params[5].toInt() and 0xFF else 0
+                        val targetAddr = if (params.size >= 12) params.copyOfRange(6, 12) else ByteArray(6)
+                        busStateLock.withLock {
+                            scanEnabled = false
+                            if (peer.advEnabled &&
+                                targetAddrType == 0x01 &&
+                                (targetAddr contentEquals peer.randomAddr)
+                            ) {
+                                initiatingPeerAddr = null
+                                initiatingPeerAddrType = -1
+                                connectionAttemptCount++
+                                if (connectionAttemptCount <= faultConfig.failConnectionAttempts) {
+                                    // Simulate CONNECT_IND handshake failing over the air (status = 0x3E);
+                                    // Peripheral never receives CONNECT_IND and remains advertising.
+                                    emitLeConnectionComplete(
+                                        role = 0x00,
+                                        peerAddrType = 0x01,
+                                        peerAddr = peer.randomAddr,
+                                        status = 0x3E
+                                    )
+                                } else {
+                                    peer.advEnabled = false
+                                    emitLeConnectionComplete(role = 0x00, peerAddrType = 0x01, peerAddr = peer.randomAddr)
+                                    peer.emitLeConnectionComplete(role = 0x01, peerAddrType = 0x01, peerAddr = randomAddr)
+                                }
+                            } else {
+                                initiatingPeerAddrType = targetAddrType
+                                initiatingPeerAddr = targetAddr
+                            }
                         }
                     }
                     BleHciConstants.HCI_OP_DISCONNECT -> {
@@ -1663,10 +1744,21 @@ class BleHciTransportTest {
         assertEquals(MdocTransport.State.IDLE, tDual.state.value)
         assertEquals(listOf<MdocConnectionMethod>(cmCentral), tDual.connectionMethods)
         tDual.advertise()
+        val advertisedAddr = (tDual.connectionMethod as MdocConnectionMethod.Ble).peripheralAddress
+        assertNotNull(advertisedAddr)
+        assertEquals(BleAddressType.RANDOM, advertisedAddr.addressType)
+        assertEquals(0xC0, advertisedAddr.address[0].toInt() and 0xC0)
         assertEquals(
             listOf<MdocConnectionMethod>(
-                MdocConnectionMethod.Ble.DirectL2capCentral(uuid = uuid, psm = 0x80),
-                cmCentral,
+                MdocConnectionMethod.Ble.DirectL2capCentral(
+                    uuid = uuid,
+                    psm = 0x80,
+                    peripheralAddress = advertisedAddr,
+                ),
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = uuid,
+                    peripheralAddress = advertisedAddr,
+                ),
             ),
             tDual.connectionMethods
         )
@@ -4732,6 +4824,214 @@ class BleHciTransportTest {
                         ),
                     )
                 } finally {
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifies that [BlePeripheralHalHci] populates [MdocConnectionMethod.Ble.peripheralAddress]
+     * from its configured static random LE address (`HCI_LE_Set_Random_Address`) and that
+     * [BleCentralHalHci] uses [BleCentralHal.setPeripheralAddress] to connect directly via
+     * `HCI_LE_Create_Connection` (`0x200d`) without enabling BLE scanning (`HCI_LE_Set_Scan_Enable`
+     * `0x200c`) across GATT, Direct L2CAP, and central-first initiating orderings.
+     */
+    @Test
+    fun peripheralAddressSkipsBleScanAcrossGattAndDirectL2cap() = runTest {
+        withContext(Dispatchers.Default) {
+            val serviceUuid = UUID.randomUUID()
+            val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256).use {
+                buildDeviceEngagement(it.publicKey) {}.eDeviceKeyBytes
+            }
+            // HCI little-endian static random address: LSB = 0x10 .. MSB = 0xC6 (top two bits = 11)
+            val peripheralHciRandomAddr = byteArrayOf(0x10, 0x20, 0x30, 0x40, 0x50, 0xC6.toByte())
+            val centralHciRandomAddr = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0xDD.toByte(), 0xEE.toByte(), 0xD1.toByte())
+            val expectedPeripheralAddress = BlePeripheralAddress(
+                address = ByteString(0xC6.toByte(), 0x50, 0x40, 0x30, 0x20, 0x10),
+                addressType = BleAddressType.RANDOM,
+            )
+
+            // 1. GATT Central Client Mode (reader is peripheral, mdoc is central) — zero BLE scans
+            run {
+                val bus = VirtualHciBus()
+                val readerFactory = BtHciMdocTransportFactory(
+                    randomAddress = peripheralHciRandomAddr,
+                    packetIoFactory = { bus.peripheralIo },
+                )
+                val mdocFactory = BtHciMdocTransportFactory(
+                    randomAddress = centralHciRandomAddr,
+                    packetIoFactory = { bus.centralIo },
+                )
+                val readerTransport = readerFactory.createTransport(
+                    connectionMethod = MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(bleUseL2CAP = false),
+                )
+                var mdocTransport: MdocTransport? = null
+                try {
+                    readerTransport.advertise()
+                    val advertisedCm = readerTransport.connectionMethod as MdocConnectionMethod.Ble.GattCentral
+                    assertEquals(expectedPeripheralAddress, advertisedCm.peripheralAddress)
+
+                    // Round-trip through ReaderEngagement CBOR to verify BleOptions key 20 wire encoding
+                    val reBytes = Cbor.encode(
+                        buildReaderEngagement(
+                            eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256).use { it.publicKey },
+                            version = "1.1",
+                        ) {
+                            addConnectionMethod(advertisedCm)
+                        }.toDataItem(MdocEngagementType.READER_QR)
+                    )
+                    val decodedCm = ReaderEngagement.fromDataItem(
+                        Cbor.decode(reBytes),
+                        MdocEngagementType.READER_QR,
+                    ).connectionMethods.single() as MdocConnectionMethod.Ble.GattCentral
+                    assertEquals(expectedPeripheralAddress, decodedCm.peripheralAddress)
+
+                    mdocTransport = mdocFactory.createTransport(
+                        connectionMethod = decodedCm,
+                        role = MdocRole.MDOC,
+                        options = MdocTransportOptions(bleUseL2CAP = false),
+                    )
+                    coroutineScope {
+                        val readerOpen = async { readerTransport.open(eSenderKey) }
+                        val mdocOpen = async { mdocTransport.open(eSenderKey) }
+                        readerOpen.await()
+                        mdocOpen.await()
+                    }
+                    assertEquals(0, bus.scanEnableCount.get())
+                    assertNull(mdocTransport.scanningTime)
+                    assertNull(mdocTransport.stats.bleScanningTime)
+                    assertEquals(true, mdocTransport.stats.bleUsedPeripheralAddress)
+                    assertNull(readerTransport.stats.bleUsedPeripheralAddress)
+                    assertEquals(false, mdocTransport.stats.bleUsingL2cap)
+
+                    val req = byteArrayOf(1, 2, 3, 4, 5)
+                    val rsp = byteArrayOf(9, 8, 7, 6)
+                    coroutineScope {
+                        val r = async { readerTransport.waitForMessage() }
+                        mdocTransport.sendMessage(req)
+                        assertContentEquals(req, r.await())
+                    }
+                    coroutineScope {
+                        val r = async { mdocTransport.waitForMessage() }
+                        readerTransport.sendMessage(rsp)
+                        assertContentEquals(rsp, r.await())
+                    }
+                } finally {
+                    mdocTransport?.close()
+                    readerTransport.close()
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 2. Direct L2CAP Peripheral Mode (mdoc is peripheral, reader is central, central opens BEFORE peripheral advertises)
+            run {
+                val bus = VirtualHciBus()
+                val mdocFactory = BtHciMdocTransportFactory(
+                    randomAddress = peripheralHciRandomAddr,
+                    packetIoFactory = { bus.peripheralIo },
+                )
+                val readerFactory = BtHciMdocTransportFactory(
+                    randomAddress = centralHciRandomAddr,
+                    packetIoFactory = { bus.centralIo },
+                )
+                val mdocTransport = mdocFactory.createTransport(
+                    connectionMethod = MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = serviceUuid),
+                    role = MdocRole.MDOC,
+                    options = MdocTransportOptions(bleUseL2CAP = true),
+                )
+                // Reader already knows peripheralAddress + PSM 0x80 and starts open() BEFORE mdoc starts advertising!
+                val readerTransport = readerFactory.createTransport(
+                    connectionMethod = MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                        uuid = serviceUuid,
+                        psm = 0x80,
+                        peripheralAddress = expectedPeripheralAddress,
+                    ),
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(bleUseL2CAP = true),
+                )
+                try {
+                    coroutineScope {
+                        val readerOpen = async { readerTransport.open(eSenderKey) }
+                        delay(20.milliseconds)
+                        val mdocOpen = async { mdocTransport.open(eSenderKey) }
+                        readerOpen.await()
+                        mdocOpen.await()
+                    }
+                    assertEquals(
+                        MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                            uuid = serviceUuid,
+                            psm = 0x80,
+                            peripheralAddress = expectedPeripheralAddress,
+                        ),
+                        mdocTransport.connectionMethod,
+                    )
+                    assertEquals(0, bus.scanEnableCount.get())
+                    assertNull(readerTransport.scanningTime)
+                    assertEquals(true, readerTransport.stats.bleUsedPeripheralAddress)
+                    assertNull(mdocTransport.stats.bleUsedPeripheralAddress)
+                    assertEquals(true, readerTransport.stats.bleUsingL2cap)
+                    assertEquals(true, mdocTransport.stats.bleUsingL2cap)
+
+                    val payload = Random(77).nextBytes(8192)
+                    coroutineScope {
+                        val recv = async { mdocTransport.waitForMessage() }
+                        readerTransport.sendMessage(payload)
+                        assertContentEquals(payload, recv.await())
+                    }
+                } finally {
+                    readerTransport.close()
+                    mdocTransport.close()
+                    bus.centralIo.close()
+                    bus.peripheralIo.close()
+                }
+            }
+
+            // 3. bleExportPeripheralAddress = false and bleUsePeripheralAddress = false fall back to UUID scanning
+            run {
+                val bus = VirtualHciBus()
+                val readerFactory = BtHciMdocTransportFactory(
+                    randomAddress = peripheralHciRandomAddr,
+                    packetIoFactory = { bus.peripheralIo },
+                )
+                val mdocFactory = BtHciMdocTransportFactory(
+                    randomAddress = centralHciRandomAddr,
+                    packetIoFactory = { bus.centralIo },
+                )
+                val unexportedReader = readerFactory.createTransport(
+                    connectionMethod = MdocConnectionMethod.Ble.GattCentral(uuid = serviceUuid),
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(bleExportPeripheralAddress = false),
+                )
+                unexportedReader.advertise()
+                assertNull((unexportedReader.connectionMethod as MdocConnectionMethod.Ble).peripheralAddress)
+
+                // Even if peripheralAddress is supplied on the wire, bleUsePeripheralAddress = false forces scanning
+                val mdocTransport = mdocFactory.createTransport(
+                    connectionMethod = MdocConnectionMethod.Ble.GattCentral(
+                        uuid = serviceUuid,
+                        peripheralAddress = expectedPeripheralAddress,
+                    ),
+                    role = MdocRole.MDOC,
+                    options = MdocTransportOptions(bleUsePeripheralAddress = false),
+                )
+                try {
+                    coroutineScope {
+                        val readerOpen = async { unexportedReader.open(eSenderKey) }
+                        val mdocOpen = async { mdocTransport.open(eSenderKey) }
+                        readerOpen.await()
+                        mdocOpen.await()
+                    }
+                    assertEquals(1, bus.scanEnableCount.get())
+                    assertNotNull(mdocTransport.scanningTime)
+                    assertEquals(false, mdocTransport.stats.bleUsedPeripheralAddress)
+                } finally {
+                    mdocTransport.close()
+                    unexportedReader.close()
                     bus.centralIo.close()
                     bus.peripheralIo.close()
                 }

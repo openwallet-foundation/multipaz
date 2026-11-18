@@ -18,6 +18,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.mdoc.connectionmethod.BleAddressType
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
@@ -1011,6 +1013,221 @@ class BleTransportTest {
         readerTransport.close()
     }
 
+    @Test
+    fun peripheralAddressPropagatedFromPeripheralHalAndSkipsCentralScanWhenSupported() = runTest {
+        val peripheralAddr = BlePeripheralAddress(
+            address = ByteString(0xC6.toByte(), 0x50, 0x40, 0x30, 0x20, 0x10),
+            addressType = BleAddressType.RANDOM,
+        )
+
+        // 1. Peripheral HAL advertises peripheralAddress onto single and coalesced dual-mode transports.
+        val mdocTransports = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = testUuid),
+                MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid),
+            ),
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(bleUseL2CAP = true),
+            centralManagerFactory = { FakeBleCentralManager() },
+            peripheralManagerFactory = {
+                FakeBlePeripheralManager(
+                    publishedL2capPsm = 0x80,
+                    advertisedPeripheralAddress = peripheralAddr,
+                    autoConnectGattClient = false,
+                )
+            },
+            nonBleTransportFactory = { error("unexpected") },
+        )
+        val mdocPeripheral = mdocTransports.single()
+        assertEquals(
+            listOf<MdocConnectionMethod>(MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid)),
+            mdocPeripheral.connectionMethods,
+        )
+        mdocPeripheral.advertise()
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                    uuid = testUuid,
+                    psm = 0x80,
+                    peripheralAddress = peripheralAddr,
+                ),
+                MdocConnectionMethod.Ble.GattPeripheral(
+                    uuid = testUuid,
+                    peripheralAddress = peripheralAddr,
+                ),
+            ),
+            mdocPeripheral.connectionMethods,
+        )
+        assertNull(mdocPeripheral.stats.bleUsedPeripheralAddress)
+        mdocPeripheral.close()
+
+        // Disabling bleExportPeripheralAddress omits peripheralAddress from advertised connectionMethods.
+        val unexportedPeripheral = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = testUuid),
+                MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid),
+            ),
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(
+                bleUseL2CAP = true,
+                bleExportPeripheralAddress = false,
+            ),
+            centralManagerFactory = { FakeBleCentralManager() },
+            peripheralManagerFactory = {
+                FakeBlePeripheralManager(
+                    publishedL2capPsm = 0x80,
+                    advertisedPeripheralAddress = peripheralAddr,
+                    autoConnectGattClient = false,
+                )
+            },
+            nonBleTransportFactory = { error("unexpected") },
+        ).single()
+        unexportedPeripheral.advertise()
+        assertEquals(
+            listOf<MdocConnectionMethod>(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = testUuid, psm = 0x80),
+                MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid),
+            ),
+            unexportedPeripheral.connectionMethods,
+        )
+        unexportedPeripheral.close()
+
+        // Conflicting peripheralAddress values on co-hosted peripheral modes must be rejected.
+        val otherAddr = BlePeripheralAddress(
+            address = ByteString(0xD2.toByte(), 0x11, 0x22, 0x33, 0x44, 0x55),
+            addressType = BleAddressType.RANDOM,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            createMdocTransportsFromManagers(
+                connectionMethods = listOf(
+                    MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = testUuid, peripheralAddress = peripheralAddr),
+                    MdocConnectionMethod.Ble.GattPeripheral(uuid = testUuid, peripheralAddress = otherAddr),
+                ),
+                role = MdocRole.MDOC,
+                options = MdocTransportOptions(),
+                centralManagerFactory = { FakeBleCentralManager() },
+                peripheralManagerFactory = { FakeBlePeripheralManager() },
+                nonBleTransportFactory = { error("unexpected") },
+            )
+        }
+
+        // 2. Central HAL supporting setPeripheralAddress skips UUID scanning for both GATT and Direct L2CAP.
+        val centralGattManager = FakeBleCentralManager(
+            autoDiscoverPeripheral = false, // would hang if startScan were called!
+            expectedIdent = senderIdent,
+            supportsPeripheralAddress = true,
+        )
+        val centralMdoc = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = testUuid,
+                    peripheralAddress = peripheralAddr,
+                )
+            ),
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            centralManagerFactory = { centralGattManager },
+            peripheralManagerFactory = { error("unexpected") },
+            nonBleTransportFactory = { error("unexpected") },
+        ).single()
+        assertEquals(
+            MdocConnectionMethod.Ble.GattCentral(uuid = testUuid, peripheralAddress = peripheralAddr),
+            centralMdoc.connectionMethod,
+        )
+        centralMdoc.open(senderKey)
+        assertEquals(MdocTransport.State.CONNECTED, centralMdoc.state.value)
+        assertEquals(0, centralGattManager.startScanCalls)
+        assertEquals(peripheralAddr, centralGattManager.configuredPeripheralAddress)
+        assertNull(centralMdoc.scanningTime)
+        assertEquals(true, centralMdoc.stats.bleUsedPeripheralAddress)
+        assertEquals(1, centralGattManager.connectToPeripheralCalls)
+        centralMdoc.close()
+
+        // Disabling bleUsePeripheralAddress forces UUID scanning even when peripheralAddress is present.
+        val forcedScanManager = FakeBleCentralManager(
+            autoDiscoverPeripheral = true,
+            expectedIdent = senderIdent,
+            supportsPeripheralAddress = true,
+        )
+        val forcedScanCentral = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = testUuid,
+                    peripheralAddress = peripheralAddr,
+                )
+            ),
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(bleUsePeripheralAddress = false),
+            centralManagerFactory = { forcedScanManager },
+            peripheralManagerFactory = { error("unexpected") },
+            nonBleTransportFactory = { error("unexpected") },
+        ).single()
+        forcedScanCentral.open(senderKey)
+        assertEquals(MdocTransport.State.CONNECTED, forcedScanCentral.state.value)
+        assertEquals(1, forcedScanManager.startScanCalls)
+        assertNull(forcedScanManager.configuredPeripheralAddress)
+        assertNotNull(forcedScanCentral.scanningTime)
+        assertEquals(false, forcedScanCentral.stats.bleUsedPeripheralAddress)
+        forcedScanCentral.close()
+
+        val readerDirectL2capManager = FakeBleCentralManager(
+            autoDiscoverPeripheral = false, // would hang if startScan were called!
+            supportsPeripheralAddress = true,
+            requiresPeripheralConnectionBeforeL2cap = true, // matches BleCentralHalAndroid after setPeripheralAddress
+        )
+        val readerDirectL2cap = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                    uuid = testUuid,
+                    psm = 0x80,
+                    peripheralAddress = peripheralAddr,
+                )
+            ),
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(),
+            centralManagerFactory = { readerDirectL2capManager },
+            peripheralManagerFactory = { error("unexpected") },
+            nonBleTransportFactory = { error("unexpected") },
+        ).single()
+        readerDirectL2cap.open(senderKey)
+        assertEquals(MdocTransport.State.CONNECTED, readerDirectL2cap.state.value)
+        assertEquals(0, readerDirectL2capManager.startScanCalls)
+        assertEquals(peripheralAddr, readerDirectL2capManager.configuredPeripheralAddress)
+        assertNull(readerDirectL2cap.scanningTime)
+        assertEquals(true, readerDirectL2cap.stats.bleUsedPeripheralAddress)
+        assertEquals(1, readerDirectL2capManager.connectToPeripheralCalls)
+        assertEquals(0, readerDirectL2capManager.discoverServicesCalls)
+        assertEquals(listOf(0x80), readerDirectL2capManager.connectedL2capPsms)
+        readerDirectL2cap.close()
+
+        // 3. Central HAL returning false from setPeripheralAddress (e.g. iOS / Android < API 33) falls back to UUID scan.
+        val fallbackManager = FakeBleCentralManager(
+            autoDiscoverPeripheral = true,
+            expectedIdent = senderIdent,
+            supportsPeripheralAddress = false,
+        )
+        val fallbackCentral = createMdocTransportsFromManagers(
+            connectionMethods = listOf(
+                MdocConnectionMethod.Ble.GattCentral(
+                    uuid = testUuid,
+                    peripheralAddress = peripheralAddr,
+                )
+            ),
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            centralManagerFactory = { fallbackManager },
+            peripheralManagerFactory = { error("unexpected") },
+            nonBleTransportFactory = { error("unexpected") },
+        ).single()
+        fallbackCentral.open(senderKey)
+        assertEquals(MdocTransport.State.CONNECTED, fallbackCentral.state.value)
+        assertEquals(1, fallbackManager.startScanCalls)
+        assertNull(fallbackManager.configuredPeripheralAddress)
+        assertNotNull(fallbackCentral.scanningTime)
+        assertEquals(false, fallbackCentral.stats.bleUsedPeripheralAddress)
+        fallbackCentral.close()
+    }
+
     /**
      * Wraps a real [BlePeripheralManagerImpl] with a [FakeBlePeripheralHal] so tests can exercise the
      * full [BlePeripheralManagerImpl] state machine while inspecting recorded HAL calls and injecting
@@ -1033,6 +1250,7 @@ class BleTransportTest {
         autoPowerOn: Boolean = true,
         powerOnError: Throwable? = null,
         publishedL2capPsm: Int = 128,
+        advertisedPeripheralAddress: BlePeripheralAddress? = null,
         autoConnectGattClient: Boolean = true,
         autoConnectL2capClient: Boolean = false,
         failSendMessage: Throwable? = null,
@@ -1040,6 +1258,7 @@ class BleTransportTest {
             autoPowerOn = autoPowerOn,
             powerOnError = powerOnError,
             publishedL2capPsm = publishedL2capPsm,
+            advertisedPeripheralAddress = advertisedPeripheralAddress,
             autoConnectGattClient = autoConnectGattClient,
             autoConnectL2capClient = autoConnectL2capClient,
             failSendMessage = failSendMessage,
@@ -1089,11 +1308,14 @@ class BleTransportTest {
         private val autoPowerOn: Boolean = true,
         private val powerOnError: Throwable? = null,
         private val publishedL2capPsm: Int = 128,
+        private val advertisedPeripheralAddress: BlePeripheralAddress? = null,
         private val autoConnectGattClient: Boolean = true,
         private val autoConnectL2capClient: Boolean = false,
         private val failSendMessage: Throwable? = null,
     ) : BlePeripheralHal {
         lateinit var halCallback: BlePeripheralHal.Callback
+        override var peripheralAddress: BlePeripheralAddress? = null
+            private set
         var waitForPowerOnCalls = 0
         var advertiseServiceCalls = 0
         var closeCalls = 0
@@ -1117,6 +1339,7 @@ class BleTransportTest {
             if (powerOnError != null) {
                 halCallback.onPowerOn(powerOnError)
             } else if (autoPowerOn) {
+                peripheralAddress = advertisedPeripheralAddress
                 halCallback.onPowerOn(null)
             }
         }
@@ -1210,11 +1433,15 @@ class BleTransportTest {
         scanError: Throwable? = null,
         expectedIdent: ByteArray = ByteArray(16),
         remoteL2capPsm: Int? = null,
+        supportsPeripheralAddress: Boolean = false,
+        requiresPeripheralConnectionBeforeL2cap: Boolean = false,
         private val hal: FakeBleCentralHal = FakeBleCentralHal(
             autoDiscoverPeripheral = autoDiscoverPeripheral,
             scanError = scanError,
             expectedIdent = expectedIdent,
             remoteL2capPsm = remoteL2capPsm,
+            supportsPeripheralAddress = supportsPeripheralAddress,
+            requiresPeripheralConnectionBeforeL2cap = requiresPeripheralConnectionBeforeL2cap,
         ),
         private val impl: BleCentralManagerImpl = BleCentralManagerImpl(
             hal = hal,
@@ -1223,6 +1450,8 @@ class BleTransportTest {
         )
     ) : BleCentralManager by impl {
         val closeCalls: Int get() = hal.closeCalls
+        val startScanCalls: Int get() = hal.startScanCalls
+        val configuredPeripheralAddress: BlePeripheralAddress? get() = hal.configuredPeripheralAddress
         val connectToPeripheralCalls: Int get() = hal.connectToPeripheralCalls
         val requestMtuCalls: Int get() = hal.requestMtuCalls
         val discoverServicesCalls: Int get() = hal.discoverServicesCalls
@@ -1258,11 +1487,15 @@ class BleTransportTest {
         private val scanError: Throwable? = null,
         private val expectedIdent: ByteArray = ByteArray(16),
         private val remoteL2capPsm: Int? = null,
+        private val supportsPeripheralAddress: Boolean = false,
+        override val requiresPeripheralConnectionBeforeL2cap: Boolean = false,
     ) : BleCentralHal {
         lateinit var halCallback: BleCentralHal.Callback
         override var isConnected: Boolean = false
 
         var closeCalls = 0
+        var startScanCalls = 0
+        var configuredPeripheralAddress: BlePeripheralAddress? = null
         var connectToPeripheralCalls = 0
         var requestMtuCalls = 0
         var discoverServicesCalls = 0
@@ -1287,7 +1520,16 @@ class BleTransportTest {
             halCallback.onPowerOn(null)
         }
 
+        override fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean {
+            if (!supportsPeripheralAddress) {
+                return false
+            }
+            configuredPeripheralAddress = peripheralAddress
+            return true
+        }
+
         override fun startScan(serviceUuid: UUID) {
+            startScanCalls += 1
             if (scanError != null) {
                 halCallback.onScanFailed(scanError)
             } else if (autoDiscoverPeripheral) {

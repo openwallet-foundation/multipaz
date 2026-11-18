@@ -474,7 +474,14 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                             pendingPreAdvertisedTransport = secondaryTransport
                             val advertisedBle =
                                 secondaryTransport.connectionMethod as? MdocConnectionMethod.Ble.DirectL2capPeripheral
-                            methodToAdvertise.copy(psm = advertisedBle?.psm)
+                            methodToAdvertise.copy(
+                                psm = advertisedBle?.psm,
+                                peripheralAddress = if (settings.transportOptions.bleExportPeripheralAddress) {
+                                    advertisedBle?.peripheralAddress ?: methodToAdvertise.peripheralAddress
+                                } else {
+                                    null
+                                },
+                            )
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             try {

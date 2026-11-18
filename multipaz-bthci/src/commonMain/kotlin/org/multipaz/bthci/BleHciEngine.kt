@@ -252,6 +252,10 @@ internal class BleHciEngine(
         private set
 
     @Volatile
+    var randomAddress: ByteArray? = null
+        private set
+
+    @Volatile
     var totalNumLeAclDataPackets: Int = 8
         private set
 
@@ -397,6 +401,7 @@ internal class BleHciEngine(
         }
         val randAddrRsp = sendCommand(BleHciConstants.HCI_OP_LE_SET_RANDOM_ADDRESS, randomAddr)
         checkCommandStatus("HCI_LE_Set_Random_Address", randAddrRsp)
+        this.randomAddress = randomAddr
     }
 
     suspend fun sendCommand(

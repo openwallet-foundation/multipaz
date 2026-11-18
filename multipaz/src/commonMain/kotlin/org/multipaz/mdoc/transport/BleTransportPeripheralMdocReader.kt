@@ -22,6 +22,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Instant
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
@@ -34,6 +35,7 @@ internal class BleTransportPeripheralMdocReader(
     private val centralManager: BleCentralManager,
     private val uuid: UUID,
     private val psm: Int?,
+    private val peripheralAddress: BlePeripheralAddress? = null,
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdocReader"
@@ -51,9 +53,16 @@ internal class BleTransportPeripheralMdocReader(
 
     override val connectionMethod: MdocConnectionMethod
         get() = if (psm != null) {
-            MdocConnectionMethod.Ble.DirectL2capPeripheral(uuid = uuid, psm = psm)
+            MdocConnectionMethod.Ble.DirectL2capPeripheral(
+                uuid = uuid,
+                psm = psm,
+                peripheralAddress = peripheralAddress,
+            )
         } else {
-            MdocConnectionMethod.Ble.GattPeripheral(uuid = uuid)
+            MdocConnectionMethod.Ble.GattPeripheral(
+                uuid = uuid,
+                peripheralAddress = peripheralAddress,
+            )
         }
 
     init {
@@ -97,6 +106,7 @@ internal class BleTransportPeripheralMdocReader(
         get() = _scanningTime
 
     private var _connectingTime: Duration? = null
+    private var _usedPeripheralAddress: Boolean = false
     private var _bytesSent: Long = 0
     private var _bytesReceived: Long = 0
     private var _numMessagesSent: Int = 0
@@ -115,6 +125,7 @@ internal class BleTransportPeripheralMdocReader(
             bleConnectingTime = _connectingTime,
             bleUsingL2cap = centralManager.usingL2cap,
             bleL2capPsmInEngagement = useDirectL2cap,
+            bleUsedPeripheralAddress = _usedPeripheralAddress,
             bleNegotiatedMtu = centralManager.negotiatedMtu,
             bleMtuInferredFromWrite = false,
             bleNumScanRestarts = centralManager.numScanRestarts,
@@ -134,18 +145,28 @@ internal class BleTransportPeripheralMdocReader(
         var timeConnectingStarted: Instant? = null
         try {
             coroutineScope {
-                mutex.withLock {
+                val skipScan = mutex.withLock {
                     check(_state.value == State.IDLE) { "Expected state IDLE, got ${_state.value}" }
-                    _state.value = State.SCANNING
+                    val directAddrConfigured = options.bleUsePeripheralAddress &&
+                        peripheralAddress != null &&
+                        centralManager.setPeripheralAddress(peripheralAddress)
+                    _usedPeripheralAddress = directAddrConfigured
+                    _state.value = if (directAddrConfigured) State.CONNECTING else State.SCANNING
                     currentJob = coroutineContext[Job]
+                    directAddrConfigured
                 }
                 centralManager.waitForPowerOn()
-                timeScanningStarted = Clock.System.now()
-                centralManager.waitForPeripheralWithUuid(uuid)
-                val nowAfterScan = Clock.System.now()
-                _scanningTime = nowAfterScan - timeScanningStarted!!
-                timeConnectingStarted = nowAfterScan
-                mutex.withLock { _state.value = State.CONNECTING }
+                if (skipScan) {
+                    Logger.i(TAG, "Skipping BLE scan and connecting directly to $peripheralAddress")
+                    timeConnectingStarted = Clock.System.now()
+                } else {
+                    timeScanningStarted = Clock.System.now()
+                    centralManager.waitForPeripheralWithUuid(uuid)
+                    val nowAfterScan = Clock.System.now()
+                    _scanningTime = nowAfterScan - timeScanningStarted!!
+                    timeConnectingStarted = nowAfterScan
+                    mutex.withLock { _state.value = State.CONNECTING }
+                }
                 if (useDirectL2cap) {
                     // If the PSM is known at engagement-time we can bypass the entire GATT server
                     // and just connect directly.

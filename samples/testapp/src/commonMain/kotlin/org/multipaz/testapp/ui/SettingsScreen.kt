@@ -267,6 +267,20 @@ fun SettingsScreen(
                 onCheckedChange = { app.settingsModel.presentmentBleL2CapInEngagementEnabled.value = it },
             )
         }
+        item {
+            SettingToggle(
+                title = "Export BLE peripheral address if available",
+                isChecked = app.settingsModel.presentmentBleExportPeripheralAddress.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentBleExportPeripheralAddress.value = it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Connect using BLE peripheral address if available",
+                isChecked = app.settingsModel.presentmentBleUsePeripheralAddress.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentBleUsePeripheralAddress.value = it },
+            )
+        }
 
         item {
             HorizontalDivider(
@@ -331,6 +345,20 @@ fun SettingsScreen(
                 title = "Use L2CAP in engagement if available",
                 isChecked = app.settingsModel.readerBleL2CapInEngagementEnabled.collectAsState().value,
                 onCheckedChange = { app.settingsModel.readerBleL2CapInEngagementEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Export BLE peripheral address if available",
+                isChecked = app.settingsModel.readerBleExportPeripheralAddress.collectAsState().value,
+                onCheckedChange = { app.settingsModel.readerBleExportPeripheralAddress.value = it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Connect using BLE peripheral address if available",
+                isChecked = app.settingsModel.readerBleUsePeripheralAddress.collectAsState().value,
+                onCheckedChange = { app.settingsModel.readerBleUsePeripheralAddress.value = it },
             )
         }
         item {

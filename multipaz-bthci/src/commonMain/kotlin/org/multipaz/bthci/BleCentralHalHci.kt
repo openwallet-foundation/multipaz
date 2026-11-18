@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.IOException
+import org.multipaz.mdoc.connectionmethod.BlePeripheralAddress
 import org.multipaz.mdoc.transport.BleCentralHal
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -210,6 +211,19 @@ class BleCentralHalHci(
                 }
             }
         }
+    }
+
+    override fun setPeripheralAddress(peripheralAddress: BlePeripheralAddress): Boolean {
+        discoveredPeerAddrType = peripheralAddress.addressType.code
+        discoveredPeerAddr = byteArrayOf(
+            peripheralAddress.address[5],
+            peripheralAddress.address[4],
+            peripheralAddress.address[3],
+            peripheralAddress.address[2],
+            peripheralAddress.address[1],
+            peripheralAddress.address[0],
+        )
+        return true
     }
 
     override fun startScan(serviceUuid: UUID) {

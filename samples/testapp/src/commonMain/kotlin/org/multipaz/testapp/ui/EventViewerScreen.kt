@@ -842,6 +842,9 @@ private fun EventViewerVerification(
                                 if (isNfcHybrid) {
                                     append(" (${stats.nfcHybridNumReceivedFirstOnNfc} NFC, ${stats.nfcHybridNumReceivedFirstOnTransport} transport)")
                                 }
+                                if (stats.bleUsedPeripheralAddress != null) {
+                                    append("\nBLE used peripheral address: ${stats.bleUsedPeripheralAddress}")
+                                }
                                 if (stats.warnings.isNotEmpty()) {
                                     append("\nWarnings: ${stats.warnings.joinToString(", ") { it.code.name }}")
                                 }

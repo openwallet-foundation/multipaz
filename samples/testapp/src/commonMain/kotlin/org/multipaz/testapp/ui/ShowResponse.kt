@@ -261,6 +261,9 @@ private suspend fun parseResponse(
                     ValueText("${stats.nfcDisconnectedDuringTransaction}")
                 ))
             }
+            if (stats.bleUsedPeripheralAddress != null) {
+                lines.add(Line("BLE used peripheral address", ValueText("${stats.bleUsedPeripheralAddress}")))
+            }
             if (stats.bleNegotiatedMtu != null) {
                 lines.add(Line("BLE negotiated MTU", ValueText("${stats.bleNegotiatedMtu}")))
             }
