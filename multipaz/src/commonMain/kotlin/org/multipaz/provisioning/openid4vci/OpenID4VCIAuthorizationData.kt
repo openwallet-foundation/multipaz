@@ -8,7 +8,7 @@ import org.multipaz.cbor.annotation.CborSerializable
  * This data enables the client to fetch more credentials from the issuing server. This object
  * is serialized and written to the disk, so be careful changing its schema!
  */
-@CborSerializable(schemaHash = "tSadM4JcWvdA3nqneHBRndJAVEbWdmRFofbJYGqORLA")
+@CborSerializable(schemaHash = "VBO7GTMNMnvyjzagStEoNXOI6LikKjXH1QPBv-OXt8o")
 internal class OpenID4VCIAuthorizationData(
     val issuerUri: String,
     var configurationId: String,

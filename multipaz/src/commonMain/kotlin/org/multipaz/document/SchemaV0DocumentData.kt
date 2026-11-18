@@ -9,7 +9,7 @@ import org.multipaz.cbor.annotation.CborSerializable
  */
 @CborSerializable
 internal data class SchemaV0DocumentData(
-    val provisioned: Boolean = false,
+    val provisioned: Boolean,
     val displayName: String? = null,
     val typeDisplayName: String? = null,
     val cardArt: ByteString? = null,

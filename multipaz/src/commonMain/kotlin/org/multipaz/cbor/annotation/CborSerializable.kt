@@ -5,7 +5,15 @@ package org.multipaz.cbor.annotation
  *
  * CBOR serializer uses a CBOR map that maps Kotlin field names to serialized field values.
  *
- * Fields with value `null` are not written to the serialized map.
+ * Fields with value `null` are not written to the serialized map, and missing keys for nullable
+ * fields deserialize to `null`. Consequently, nullable constructor properties may only specify
+ * `null` as a default value (any non-null default value on a nullable property is rejected at
+ * compile time).
+ *
+ * Non-nullable constructor properties with default values are always written to the serialized
+ * map, and fall back to their Kotlin default value when absent during deserialization. This
+ * preserves backwards compatibility when adding new non-nullable fields with default values to
+ * an existing serializable class.
  *
  * The following field types are allowed:
  *  - primitive: `Int`, `Long`, `Float`, `Double`, `String`, `Boolean`

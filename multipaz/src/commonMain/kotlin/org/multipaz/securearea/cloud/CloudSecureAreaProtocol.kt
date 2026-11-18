@@ -80,7 +80,7 @@ data class CloudBatchCreatedKeys(
 @RpcException
 @CborSerializable
 class CloudWrongPassphraseException(
-    override val message: String? = "Wrong passphrase supplied"
+    override val message: String = "Wrong passphrase supplied"
 ) : Exception(message) {
     companion object
 }
@@ -95,7 +95,7 @@ class CloudWrongPassphraseException(
 @CborSerializable
 class CloudTooManyPassphraseAttemptsException(
     val waitDuration: Duration,
-    override val message: String? = "Too many passphrase attempts"
+    override val message: String = "Too many passphrase attempts"
 ) : Exception(message) {
     companion object
 }
