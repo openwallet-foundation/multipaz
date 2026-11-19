@@ -27,7 +27,11 @@ import org.junit.Test
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.nfc.NdefRecord
+import org.multipaz.nfc.Nfc
 import org.multipaz.util.UUID
+import org.multipaz.util.fromHex
+import kotlinx.io.bytestring.encodeToByteString
 
 class MdocConnectionMethodTest {
     @Test
@@ -51,6 +55,29 @@ class MdocConnectionMethodTest {
         val ndefRecord = cm.toNdefRecord(listOf(), MdocRole.MDOC, false)!!.first
         val decodedNfc = MdocConnectionMethodNfc.fromNdefRecord(ndefRecord, MdocRole.MDOC)!!
         assertEquals(cm, decodedNfc)
+
+        // Reader (Handover Request) NFC carrier record emits only version byte 0x01
+        val readerRecord = cm.toNdefRecord(listOf(), MdocRole.MDOC_READER, false)!!.first
+        assertEquals("01", readerRecord.payload.toHexString())
+        assertEquals(
+            MdocConnectionMethodNfc(0xffff, 0x10000),
+            MdocConnectionMethodNfc.fromNdefRecord(readerRecord, MdocRole.MDOC_READER)
+        )
+        // Version-only payload is rejected when sender role is MDOC (Handover Select)
+        assertNull(MdocConnectionMethodNfc.fromNdefRecord(readerRecord, MdocRole.MDOC))
+        // Legacy reader payload with lengths is still accepted for compatibility
+        assertEquals(
+            cm,
+            MdocConnectionMethodNfc.fromNdefRecord(ndefRecord, MdocRole.MDOC_READER)
+        )
+        // Truncated/empty payloads return null cleanly without throwing
+        val truncated = NdefRecord(
+            NdefRecord.Tnf.EXTERNAL_TYPE,
+            Nfc.EXTERNAL_TYPE_ISO_18013_5_NFC.encodeToByteString(),
+            "nfc".encodeToByteString(),
+            ByteString("010301ff".fromHex())
+        )
+        assertNull(MdocConnectionMethodNfc.fromNdefRecord(truncated, MdocRole.MDOC_READER))
     }
 
     @Test
