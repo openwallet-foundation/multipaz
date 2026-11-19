@@ -16,11 +16,13 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.EcPublicKey
 import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
+import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodBle
 import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod.Companion.combine
 import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod.Companion.disambiguate
 import com.android.identity.mdoc.engagement.EngagementGenerator
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
+import org.multipaz.util.UUID
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.Arrays
@@ -90,6 +92,7 @@ class NfcEngagementHelper private constructor(
     private var negotiatedHandoverState = NEGOTIATED_HANDOVER_STATE_NOT_STARTED
     private var selectedNfcFile: ByteArray? = null
     private var testingDoNotStartTransports = false
+    private var testingUuidGenerator: (() -> UUID)? = null
 
     /**
      * Close all transports currently being listened on.
@@ -115,6 +118,10 @@ class NfcEngagementHelper private constructor(
 
     fun testingDoNotStartTransports() {
         testingDoNotStartTransports = true
+    }
+
+    internal fun testingSetUuidGenerator(uuidGenerator: () -> UUID) {
+        testingUuidGenerator = uuidGenerator
     }
 
     // Used by both static and negotiated handover... safe to be called multiple times.
@@ -326,6 +333,13 @@ class NfcEngagementHelper private constructor(
                 System.arraycopy(message, 0, fileContents, 2, message.size)
                 selectedNfcFile = fileContents
                 negotiatedHandoverState = NEGOTIATED_HANDOVER_STATE_EXPECT_SERVICE_SELECT
+            } else if (handoverSelectMessage != null) {
+                val hsMessage = handoverSelectMessage!!
+                val fileContents = ByteArray(hsMessage.size + 2)
+                fileContents[0] = (hsMessage.size / 256).toByte()
+                fileContents[1] = (hsMessage.size and 0xff).toByte()
+                System.arraycopy(hsMessage, 0, fileContents, 2, hsMessage.size)
+                selectedNfcFile = fileContents
             } else {
                 val cmsFromTransports = setupTransports(
                     staticHandoverConnectionMethods!!
@@ -380,12 +394,18 @@ class NfcEngagementHelper private constructor(
         val offset = (apdu[2].toInt() and 0xff) * 256 + (apdu[3].toInt() and 0xff)
         var size = apdu[4].toInt() and 0xff
         if (size == 0) {
-            // Handle Extended Length encoding
-            if (apdu.size < 7) {
+            if (apdu.size == 5) {
+                // Short encoding: Le = 0x00 means 256 bytes (ISO/IEC 7816-4)
+                size = 0x100
+            } else if (apdu.size >= 7) {
+                // Extended length encoding: 0x00 followed by 2-byte big-endian Le (0x0000 means 65536)
+                size = (apdu[5].toInt() and 0xff) * 256 + (apdu[6].toInt() and 0xff)
+                if (size == 0) {
+                    size = 0x10000
+                }
+            } else {
                 return NfcUtil.STATUS_WORD_FILE_NOT_FOUND
             }
-            size = (apdu[5].toInt() and 0xff) * 256
-            size += apdu[6].toInt() and 0xff
         }
         if (offset >= contents.size) {
             Logger.w(TAG, "handleReadBinary: starting offset $offset beyond file " +
@@ -468,6 +488,9 @@ class NfcEngagementHelper private constructor(
                     updateBinaryData = null
                     handleUpdateBinaryNdefMessage(ndefMessage)
                 }
+            } else if (payload.size < 2) {
+                Logger.w(TAG, "Unexpected payload size ${payload.size} at offset 0")
+                NfcUtil.STATUS_WORD_WRONG_LENGTH
             } else {
                 if (updateBinaryData != null) {
                     Logger.w(TAG,"Got data in single UPDATE_BINARY but we are already active")
@@ -620,11 +643,33 @@ class NfcEngagementHelper private constructor(
 
         // TODO: add a method to the Listener so the application can select which one to use.
         //  For now we just pick the first method.
-        val method = disambiguatedCms[0]
+        var method = disambiguatedCms[0]
+        if (method is MdocConnectionMethodBle &&
+            method.supportsPeripheralServerMode &&
+            method.peripheralServerModeUuid == null
+        ) {
+            // Per ISO/IEC 18013-5 clause 8.3.3.1.1.2 / Second Edition clause 11.1.3, when the
+            // reader offers mdoc peripheral mode without a UUID in Handover Request, the mdoc
+            // generates the UUID and includes it in Handover Select.
+            val generatedUuid = testingUuidGenerator?.invoke() ?: UUID.randomUUID()
+            method = method.copy(peripheralServerModeUuid = generatedUuid)
+        }
         val listWithSelectedConnectionMethod = mutableListOf<MdocConnectionMethod>()
         listWithSelectedConnectionMethod.add(method)
+
+        // Per ISO/IEC 18013-5:2021 clause 8.3.3.1.1.2, omit the BLE UUID in Negotiated Handover
+        // Select when mdoc central client mode is selected (the reader already supplied it in
+        // Handover Request). Keep the UUID on `method` for setupTransports() below.
+        val methodForHandoverSelect = if (method is MdocConnectionMethodBle &&
+            method.supportsCentralClientMode &&
+            !method.supportsPeripheralServerMode
+        ) {
+            method.copy(centralClientModeUuid = null)
+        } else {
+            method
+        }
         val hsMessage = NfcUtil.createNdefMessageHandoverSelect(
-            listWithSelectedConnectionMethod,
+            listOf(methodForHandoverSelect),
             deviceEngagement,
             options
         )

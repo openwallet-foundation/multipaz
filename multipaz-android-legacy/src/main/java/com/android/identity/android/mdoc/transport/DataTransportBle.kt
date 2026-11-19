@@ -85,11 +85,21 @@ abstract class DataTransportBle(
             //
             val payload = ByteBuffer.wrap(record.payload).order(ByteOrder.LITTLE_ENDIAN)
             while (payload.remaining() > 0) {
-                val len = payload.get().toInt()
-                val type = payload.get().toInt()
+                val len = payload.get().toInt() and 0xff
+                if (len == 0) {
+                    continue
+                }
+                if (payload.remaining() < len) {
+                    Logger.w(
+                        TAG,
+                        "Invalid AD field length $len with ${payload.remaining()} bytes remaining"
+                    )
+                    return null
+                }
+                val type = payload.get().toInt() and 0xff
                 if (type == 0x1c && len == 2) {
                     gotLeRole = true
-                    val value = payload.get().toInt()
+                    val value = payload.get().toInt() and 0xff
                     if (value == 0x00) {
                         if (isForHandoverSelect) {
                             peripheral = true
@@ -111,7 +121,7 @@ abstract class DataTransportBle(
                     }
                 } else if (type == 0x07) {
                     val uuidLen = len - 1
-                    if (uuidLen % 16 != 0) {
+                    if (uuidLen == 0 || uuidLen % 16 != 0) {
                         Logger.w(TAG, String.format("UUID len %d is not divisible by 16", uuidLen))
                         return null
                     }

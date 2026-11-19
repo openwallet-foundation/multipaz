@@ -351,13 +351,13 @@ class NfcEnagementHelperTest {
 
         // Check the synthesized ConnectionMethod (from returned OOB data in HS)... we expect
         // only one to be returned and we expect it to be the BLE one and only the Central
-        // Client mode.
+        // Client mode, with the UUID omitted per ISO/IEC 18013-5:2021 clause 8.3.3.1.1.2.
         Assert.assertEquals(1, hs.connectionMethods.size.toLong())
         val cm = hs.connectionMethods[0] as MdocConnectionMethodBle
         Assert.assertFalse(cm.supportsPeripheralServerMode)
         Assert.assertTrue(cm.supportsCentralClientMode)
         Assert.assertNull(cm.peripheralServerModeUuid)
-        Assert.assertEquals(cm.centralClientModeUuid, bleUuid)
+        Assert.assertNull(cm.centralClientModeUuid)
 
         // Checks that the helper returns the correct DE and Handover
         val expectedHandover = Cbor.encode(
