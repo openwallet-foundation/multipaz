@@ -2,6 +2,7 @@ package org.multipaz.openid
 
 import kotlinx.io.bytestring.decodeToString
 import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -32,6 +33,8 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
+import org.multipaz.documenttype.SdJwtTransactionResponse
+import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.webtoken.buildJwt
@@ -446,7 +449,15 @@ object OpenID4VP {
             try {
                 source.documentTypeRepository.parseJsonTransactions(list.map {
                     it.jsonPrimitive.content
-                }).also { requireSingleHashAlgorithmForSdJwtQueries(it, dcqlQuery) }
+                }).also { byCredential ->
+                    requireSingleHashAlgorithmForSdJwtQueries(byCredential, dcqlQuery)
+                    // What a type finds it cannot answer together is refused now, with its reason.
+                    byCredential.values.forEach {
+                        TransactionData.validateTogether(it)
+                        // Types that ask for different Key Binding JWT types cannot share a response.
+                        TransactionData.sdJwtKbType(it)
+                    }
+                }
             } catch (err: IllegalArgumentException) {
                 throw IllegalStateException("Problem processing transaction(s)", err)
             }
@@ -807,6 +818,69 @@ object OpenID4VP {
     }
 
     /**
+     * The Key Binding JWT's own claims (RFC 9901 §4.3) and the transaction data hashes OpenID4VP
+     * puts beside them: no transaction type may set these.
+     */
+    private val RESERVED_KB_JWT_CLAIMS = setOf(
+        "iat", "aud", "nonce", "sd_hash", "transaction_data_hashes", "transaction_data_hashes_alg",
+    )
+
+    /**
+     * Presents [this] SD-JWT with the transaction response in the Key Binding JWT: a plain
+     * SD-JWT+KB when the response carries no disclosures, a Delegated SD-JWT (§5.1.1) when it does.
+     * The OpenID4VP presentment's one place for this. The ISO/IEC 18013-5 path does not use it: it
+     * refuses disclosures, which its reader cannot accept (see `mdocPresentment.kt`).
+     *
+     * @param signingKey private key associated with this SD-JWT.
+     * @param nonce the nonce, obtained from the verifier.
+     * @param audience the audience, obtained from the verifier.
+     * @param creationTime the time the presentation was made.
+     * @param transactionData the transaction data being answered; decides the Key Binding JWT's `typ`.
+     * @param transactionResponse the result of [processTransactions] for [transactionData].
+     * @return the compact serialization of the presentation.
+     * @throws IllegalArgumentException if the transaction types ask for different `typ` values, or
+     *   [signingKey] does not match the key in the `cnf` claim.
+     */
+    @Throws(IllegalArgumentException::class, CancellationException::class)
+    internal suspend fun SdJwt.presentWithTransactions(
+        signingKey: AsymmetricKey,
+        nonce: String,
+        audience: String,
+        creationTime: Instant,
+        transactionData: List<TransactionData<*>>,
+        transactionResponse: SdJwtTransactionResponse,
+    ): String {
+        val type = TransactionData.sdJwtKbType(transactionData)
+        val claims: JsonObjectBuilder.() -> Unit = {
+            if (transactionData.isNotEmpty()) {
+                for ((key, response) in transactionResponse.claims) {
+                    put(key, response)
+                }
+            }
+        }
+        return if (transactionResponse.disclosures.isEmpty()) {
+            present(
+                signingKey = signingKey,
+                nonce = nonce,
+                audience = audience,
+                creationTime = creationTime,
+                type = type,
+                additionalClaimBuilderAction = claims,
+            ).compactSerialization
+        } else {
+            presentWithKbDisclosures(
+                signingKey = signingKey,
+                nonce = nonce,
+                audience = audience,
+                kbDisclosures = transactionResponse.disclosures,
+                type = type,
+                creationTime = creationTime,
+                additionalClaimBuilderAction = claims,
+            )
+        }
+    }
+
+    /**
      * Processes transaction data for the given SD-JWT credential.
      *
      * @param credential credential which transactions are targeting, must be key-bound if any
@@ -814,31 +888,91 @@ object OpenID4VP {
      * @param transactionData transaction data for the credential
      * @param docRequestId index of the specific document request in the context of ISO 18013
      *   presentation
-     * @return additional attributes to add to the SD-JWT+KB body
+     * @return the claims to add to the Key Binding JWT body, and the disclosures that follow it,
+     *   in request order
+     * @throws IllegalStateException if a transaction type sets one of the Key Binding JWT's own
+     *   claims, a claim another type sets, or a value another item of its type sets differently,
+     *   if two items return the same disclosure, or if a type returns disclosures and no type
+     *   overrides [TransactionType.sdJwtKbType] (OpenID4VP only)
+     * @throws IllegalArgumentException if the items ask for different transaction data hash
+     *   algorithms or different Key Binding JWT types
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class, CancellationException::class)
     suspend fun processTransactions(
         credential: SdJwtVcCredential,
         transactionData: List<TransactionData<*>>,
         transactionUserInput: Map<String, TransactionUserInput>,
         docRequestId: Int? = null
-    ): Map<String, JsonElement> {
+    ): SdJwtTransactionResponse {
         val transactionResponse = mutableMapOf<String, JsonElement>()
+        val disclosures = mutableListOf<String>()
+        val disclosingTypes = LinkedHashSet<String>()
+        // Which type set each claim: one type may not overwrite another's, nor the KB-JWT's own.
+        val claimOwners = mutableMapOf<String, TransactionType<*>>()
+        fun claim(name: String, type: TransactionType<*>) {
+            check(name !in RESERVED_KB_JWT_CLAIMS) {
+                "Transaction type '${type.identifier}' cannot set the Key Binding JWT's '$name' claim"
+            }
+            val owner = claimOwners.getOrPut(name) { type }
+            check(owner == type) {
+                "Transaction types '${owner.identifier}' and '${type.identifier}' both set the '$name' claim"
+            }
+        }
         for (data in transactionData) {
-            val responseClaims = data.generateSdJwtResponseClaims(
+            val response = data.generateSdJwtResponse(
                 credential as Credential,
                 transactionUserInput[data.type.identifier],
                 docRequestId
             )
+            for (disclosure in response.disclosures) {
+                // Two items sharing a disclosure would leave its digest twice in the claims and
+                // the disclosure once after the Key Binding JWT, which a verifier rejects.
+                check(disclosure !in disclosures) {
+                    "Items of transaction type '${data.type.identifier}' return the same disclosure twice"
+                }
+                disclosures += disclosure
+                disclosingTypes += data.type.identifier
+            }
+            val responseClaims = response.claims
             if (responseClaims.isNotEmpty()) {
-                transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                if (data.type.nestSdJwtResponseClaims) {
+                    claim(data.type.kbJwtResponseClaimName, data.type)
+                    transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                        for ((name, value) in responseClaims) {
+                            put(name, value)
+                        }
+                    }
+                } else {
+                    // Verbatim, and arrays accumulate across items rather than overwriting: a
+                    // request may carry several items of the same type, and a plain put kept only
+                    // the last — so the user was shown several authorizations and signed one.
+                    // Anything else the items set must agree; one would silently replace the other.
                     for ((name, value) in responseClaims) {
-                        put(name, value)
+                        claim(name, data.type)
+                        val existing = transactionResponse[name]
+                        transactionResponse[name] = when {
+                            existing == null -> value
+                            existing is JsonArray && value is JsonArray -> JsonArray(existing + value)
+                            else -> {
+                                check(existing == value) {
+                                    "Items of transaction type '${data.type.identifier}' set " +
+                                        "different values for '$name'"
+                                }
+                                value
+                            }
+                        }
                     }
                 }
             }
         }
         val isIso18013_5 = transactionData.any { it.protocol == TransactionProtocol.ISO_18013_5 }
         if (!isIso18013_5) {
+            // Refused here, with the hooks named, instead of by the presentation code with SD-JWT
+            // vocabulary: disclosures after the Key Binding JWT need a type other than `kb+jwt`.
+            check(disclosures.isEmpty() || TransactionData.sdJwtKbType(transactionData) != "kb+jwt") {
+                "Transaction type(s) $disclosingTypes return disclosures from generateSdJwtResponse(), " +
+                    "so a type must override sdJwtKbType() to give the Key Binding JWT its own typ"
+            }
             val hashAlgorithm = selectTransactionHashAlgorithm(transactionData)
             if (hashAlgorithm != null) {
                 transactionResponse["transaction_data_hashes_alg"] =
@@ -851,7 +985,7 @@ object OpenID4VP {
                 }
             }
         }
-        return transactionResponse
+        return SdJwtTransactionResponse(claims = transactionResponse, disclosures = disclosures)
     }
 
     private suspend fun openID4VPSdJwt(
@@ -878,33 +1012,31 @@ object OpenID4VP {
                 match.transactionData,
                 match.transactionUserInput
             )
-            filteredSdJwt.present(
-                signingKey = AsymmetricKey.anonymous(
-                    alias = sdjwtVcCredential.alias,
-                    secureArea = sdjwtVcCredential.secureArea,
-                    unlockReason = PresentmentUnlockReason(sdjwtVcCredential),
-                ),
-                nonce = nonce,
-                audience = if (version == Version.DRAFT_29) {
-                    // From B.3.6. Presentation Response:
-                    //
-                    // the aud claim MUST be the value of the Client Identifier, except for requests over the DC API
-                    // where it MUST be the Origin prefixed with origin:, as described in Appendix A.4.
-                    when(responseMode) {
-                        ResponseMode.DIRECT_POST -> clientId
-                        ResponseMode.DC_API -> "origin:$origin"
-                    }
-                } else {
-                    clientId
-                },
-                creationTime = Clock.System.now()
-            ) {
-                if (!match.transactionData.isEmpty()) {
-                    for ((key, response) in transactionResponse) {
-                        put(key, response)
-                    }
+            val signingKey = AsymmetricKey.anonymous(
+                alias = sdjwtVcCredential.alias,
+                secureArea = sdjwtVcCredential.secureArea,
+                unlockReason = PresentmentUnlockReason(sdjwtVcCredential),
+            )
+            val audience = if (version == Version.DRAFT_29) {
+                // From B.3.6. Presentation Response:
+                //
+                // the aud claim MUST be the value of the Client Identifier, except for requests over the DC API
+                // where it MUST be the Origin prefixed with origin:, as described in Appendix A.4.
+                when(responseMode) {
+                    ResponseMode.DIRECT_POST -> clientId
+                    ResponseMode.DC_API -> "origin:$origin"
                 }
-            }.compactSerialization
+            } else {
+                clientId
+            }
+            filteredSdJwt.presentWithTransactions(
+                signingKey = signingKey,
+                nonce = nonce,
+                audience = audience,
+                creationTime = Clock.System.now(),
+                transactionData = match.transactionData,
+                transactionResponse = transactionResponse,
+            )
         } else {
             check(match.transactionData.isEmpty()) {
                 "Transaction data is not supported for keyless SD-JWT credentials"

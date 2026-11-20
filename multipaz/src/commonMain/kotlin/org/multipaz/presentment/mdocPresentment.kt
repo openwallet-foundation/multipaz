@@ -484,6 +484,18 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         docRequestId = docRequest.docRequestId,
                         transactionUserInput = match.transactionUserInput
                     )
+                    // A response with disclosures is a Delegated SD-JWT, and a Key Binding JWT with its
+                    // own typ is its extended key binding; the ISO/IEC 18013-5 reader accepts neither,
+                    // so fail rather than drop them. A type can refuse ISO up front from isApplicable().
+                    check(transactionResponse.disclosures.isEmpty()) {
+                        "Transaction types ${match.transactionData.map { it.type.identifier }.distinct()} " +
+                            "return disclosures, which ISO/IEC 18013-5 does not support"
+                    }
+                    check(TransactionData.sdJwtKbType(match.transactionData) == "kb+jwt") {
+                        "Transaction types ${match.transactionData.map { it.type.identifier }.distinct()} " +
+                            "ask for a Key Binding JWT type other than kb+jwt, which ISO/IEC 18013-5 " +
+                            "does not support"
+                    }
                     val sdJwtKb = filteredSdJwtVc.present(
                         signingKey = AsymmetricKey.AnonymousSecureAreaBased(
                             alias = match.credential.alias,
@@ -496,7 +508,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         creationTime = creationTime
                     ) {
                         if (!match.transactionData.isEmpty()) {
-                            for ((key, response) in transactionResponse) {
+                            for ((key, response) in transactionResponse.claims) {
                                 put(key, response)
                             }
                         }
