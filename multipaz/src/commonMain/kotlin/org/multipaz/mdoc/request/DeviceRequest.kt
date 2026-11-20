@@ -286,8 +286,8 @@ data class DeviceRequest private constructor(
     /**
      * Compares two [DeviceRequest] instances and checks if they are similar in structure,
      * including signing structure (protected headers, unprotected headers, and certificate
-     * chain except for single-use leaf certificate rotation under the same CA), ignoring
-     * session-transcript-dependent signatures.
+     * chain except for single-use leaf certificate rotation and its `x5t` digest under the
+     * same CA), ignoring session-transcript-dependent signatures.
      *
      * This is used to check if two requests from different sessions (either 18013-5 proximity
      * or 18013-7 Annex A or C) are the same.
@@ -318,23 +318,28 @@ data class DeviceRequest private constructor(
         source: PresentmentSource,
     ): Boolean {
         if (!isStructurallyEquivalent(otherDeviceRequest)) {
+            Logger.w(TAG, "DeviceRequest instances are not structurally equivalent")
             return false
         }
         suspend fun checkChainPair(
             chain1: X509CertChain?,
             chain2: X509CertChain?,
+            context: String,
         ): Boolean {
             if (chain1 == chain2) {
                 return true
             }
             if (chain1 == null || chain2 == null) {
+                Logger.w(TAG, "Reader auth certificate chain presence mismatch for $context")
                 return false
             }
             if (chain1.certificates.size > 1) {
                 try {
                     chain1.validate()
                     chain2.validate()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Logger.w(TAG, "Reader auth certificate chain validation failed for $context", e)
                     return false
                 }
             }
@@ -345,19 +350,40 @@ data class DeviceRequest private constructor(
                 Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(certChain = chain2)))
             )
             if ((trust1 != null) != (trust2 != null)) {
+                Logger.w(
+                    TAG,
+                    "Reader trust mismatch for $context (trusted=${trust1 != null} vs ${trust2 != null})"
+                )
                 return false
             }
             if (trust1 != null && trust2 != null && trust1.trustMetadata != trust2.trustMetadata) {
+                Logger.w(
+                    TAG,
+                    "Reader trust metadata mismatch for $context " +
+                        "('${trust1.trustMetadata.displayName}' vs '${trust2.trustMetadata.displayName}')"
+                )
                 return false
             }
             if (chain1.certificates.size <= 1 && trust1 == null) {
+                val subject = chain1.certificates.firstOrNull()?.subject?.name
+                Logger.w(
+                    TAG,
+                    "Reader rotated single-use leaf certificate for $context (subject=$subject) " +
+                        "with a single-certificate x5chain from an untrusted CA; cannot verify " +
+                        "both certificates were issued by the same CA"
+                )
                 return false
             }
             return true
         }
 
         for (i in docRequests.indices) {
-            if (!checkChainPair(docRequests[i].readerAuthCertChain, otherDeviceRequest.docRequests[i].readerAuthCertChain)) {
+            if (!checkChainPair(
+                    docRequests[i].readerAuthCertChain,
+                    otherDeviceRequest.docRequests[i].readerAuthCertChain,
+                    "docRequests[$i]"
+                )
+            ) {
                 return false
             }
         }
@@ -367,7 +393,7 @@ data class DeviceRequest private constructor(
                 ?: readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
             val chain2 = (otherDeviceRequest.readerAuthAll_[i].protectedHeaders[x5chainLabel]
                 ?: otherDeviceRequest.readerAuthAll_[i].unprotectedHeaders[x5chainLabel])?.asX509CertChain
-            if (!checkChainPair(chain1, chain2)) {
+            if (!checkChainPair(chain1, chain2, "readerAuthAll[$i]")) {
                 return false
             }
         }
