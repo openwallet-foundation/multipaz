@@ -1358,7 +1358,10 @@ public final class ConsentTestController {
 ///   - testController: an optional ``ConsentTestController`` used by snapshot tests.
 ///   - onDocumentsInFocus: callback invoked with the list of documents currently in focus as the user changes selections.
 ///   - onConfirm: callback when the user presses the Continue button with the credentials that were selected.
-///   - onCancel: callback when the user presses the Cancel button.
+///   - onCancel: callback when the user presses the Cancel button. It is also called, with nothing drawn,
+///     when `presentmentData` holds transaction data of a type that `TransactionType.requiresRenderer` and
+///     `transactionDataRendererRepository` has no ``TransactionDataRendererSwiftUi`` for it: such data is
+///     never approved with the built-in rendering.
 public struct Consent: View {
     let maxHeight: CGFloat
     let presentmentData: PresentmentData
@@ -1490,6 +1493,25 @@ public struct Consent: View {
     }
 
     public var body: some View {
+        if let missingRenderer = TransactionDataRendererRequirementKt.missingTransactionDataRenderer(
+            transactionData: presentmentData.allTransactionData,
+            repository: transactionDataRendererRepository,
+            isUsable: { KotlinBoolean(bool: $0 is TransactionDataRendererSwiftUi) }
+        ) {
+            Color.clear.onAppear {
+                Logger.shared.w(
+                    tag: "Consent",
+                    msg: "No usable renderer for transaction type '\(missingRenderer)', not showing consent"
+                )
+                onCancel()
+            }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         let requesterDisplayData = buildRequesterDisplayData(
             requester: requester,
             trustedRequesterIdentity: trustedRequesterIdentity
