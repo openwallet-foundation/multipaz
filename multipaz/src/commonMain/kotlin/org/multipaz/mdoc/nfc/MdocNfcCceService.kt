@@ -358,7 +358,11 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                         if (!newDeviceRequest.isSameAuthenticatedReader(currentActiveRequest, settings.source)) {
                                             Logger.dCbor(TAG, "Current active request", currentActiveRequest.toDataItem())
                                             Logger.dCbor(TAG, "New request", newDeviceRequest.toDataItem())
-                                            Logger.w(TAG, "Incoming DeviceRequest is NOT equivalent to active request. Killing old session.")
+                                            Logger.w(
+                                                TAG,
+                                                "Incoming DeviceRequest is NOT equivalent or not from the same " +
+                                                    "authenticated reader as active request. Killing old session."
+                                            )
                                             transactionJob?.cancel()
                                             activeDeviceRequest = null
                                             cceTransport = null
@@ -372,7 +376,10 @@ abstract class MdocNfcCceService : MdocNfcPresentmentService() {
                                             )
                                             return@MdocNfcCceEngagementHelper
                                         } else {
-                                            Logger.i(TAG, "Incoming DeviceRequest IS structurally equivalent to active request.")
+                                            Logger.i(
+                                                TAG,
+                                                "Incoming DeviceRequest IS equivalent and from the same authenticated reader."
+                                            )
                                             activeDeviceRequest = newDeviceRequest
                                         }
                                     } else if (isWaitingForRetapResponse) {

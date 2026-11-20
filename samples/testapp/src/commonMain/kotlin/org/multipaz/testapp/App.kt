@@ -132,6 +132,7 @@ import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
 import org.multipaz.testapp.ui.CertificateScreen
 import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
 import org.multipaz.testapp.ui.ConsentPromptScreen
+import org.multipaz.testapp.ui.createPlatformConsentOptions
 import org.multipaz.testapp.ui.testAppTransactionDataRenderers
 import org.multipaz.testapp.ui.FaceMatcherPromptScreen
 import org.multipaz.testapp.ui.FakeIssuerApprovalScreen
@@ -294,6 +295,9 @@ class App private constructor (val promptModel: PromptModel) {
                         onDocumentsInFocus = onDocumentsInFocus,
                         transactionDataRendererRepository = transactionDataRendererRepository,
                         requesterHistory = requesterHistory,
+                        platformConsentOptions = createPlatformConsentOptions(
+                            showOnBiometricPrompt = settingsModel.presentmentUseEmbeddedBiometricPrompt.value
+                        ),
                     )
                 }
             } else {

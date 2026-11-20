@@ -447,6 +447,14 @@ fun SettingsScreen(
         }
         item {
             SettingToggle(
+                title = "Use EmbeddedBiometricPrompt when available",
+                isChecked = app.settingsModel.presentmentUseEmbeddedBiometricPrompt.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentUseEmbeddedBiometricPrompt.value = it },
+                enabled = (TestAppConfiguration.platform == TestAppPlatform.ANDROID),
+            )
+        }
+        item {
+            SettingToggle(
                 title = "Use app-provided transaction data renderers",
                 isChecked = app.settingsModel.presentmentUseTransactionDataRenderers.collectAsState().value,
                 onCheckedChange = { app.settingsModel.presentmentUseTransactionDataRenderers.value = it },

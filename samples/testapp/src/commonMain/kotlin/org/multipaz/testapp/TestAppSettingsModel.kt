@@ -186,6 +186,7 @@ class TestAppSettingsModel private constructor(
             presentmentNegotiatedHandoverPreferredOrder.value = finalHandoverOrder
         }
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
+        bind(presentmentUseEmbeddedBiometricPrompt, "presentmentUseEmbeddedBiometricPrompt", true)
         bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", false)
         bind(presentmentRequireAuthentication, "presentmentRequireAuthentication", true)
         bind(presentmentPreferSignatureToKeyAgreement, "presentmentPreferSignatureToKeyAgreement", false)
@@ -251,6 +252,7 @@ class TestAppSettingsModel private constructor(
     val presentmentNfcCceOnlyAllowNfc = MutableStateFlow<Boolean>(false)
     val presentmentNegotiatedHandoverPreferredOrder = MutableStateFlow<List<String>>(listOf())
     val presentmentShowConsentPrompt = MutableStateFlow<Boolean>(false)
+    val presentmentUseEmbeddedBiometricPrompt = MutableStateFlow<Boolean>(true)
     val presentmentUseTransactionDataRenderers = MutableStateFlow<Boolean>(false)
     val presentmentRequireAuthentication = MutableStateFlow<Boolean>(false)
     val presentmentPreferSignatureToKeyAgreement = MutableStateFlow<Boolean>(false)

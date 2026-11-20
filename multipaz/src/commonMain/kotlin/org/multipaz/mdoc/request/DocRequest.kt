@@ -66,9 +66,9 @@ data class DocRequest internal constructor(
 
     /**
      * Compares two [DocRequest] instances and checks if they are similar in structure,
-     * including signing structure (protected headers and unprotected header keys), ignoring
-     * session-transcript-dependent signatures and ephemeral differences (such as certificate
-     * chains when the reader uses single-use keys).
+     * including signing structure (protected headers, unprotected headers, and certificate
+     * chain except for single-use leaf certificate rotation and its `x5t` digest under the
+     * same CA), ignoring session-transcript-dependent signatures.
      *
      * @param otherDocRequest the other document request to compare against.
      * @return `true` if structurally equivalent, `false` otherwise.
@@ -193,6 +193,7 @@ internal fun CoseSign1.isReaderAuthStructurallyEquivalent(other: CoseSign1): Boo
     val certChain1 = (protectedHeaders[x5chainLabel] ?: unprotectedHeaders[x5chainLabel])?.asX509CertChain
     val certChain2 = (other.protectedHeaders[x5chainLabel] ?: other.unprotectedHeaders[x5chainLabel])?.asX509CertChain
     if ((certChain1 != null) != (certChain2 != null)) return false
+    var leafRotated = false
     if (certChain1 != null && certChain2 != null) {
         val certs1 = certChain1.certificates
         val certs2 = certChain2.certificates
@@ -207,7 +208,12 @@ internal fun CoseSign1.isReaderAuthStructurallyEquivalent(other: CoseSign1): Boo
             if (leaf1.issuer != leaf2.issuer) return false
             if (leaf1.subject != leaf2.subject) return false
             if (!leaf1.authorityKeyIdentifier.contentEquals(leaf2.authorityKeyIdentifier)) return false
+            leafRotated = true
         }
+    }
+    if (!leafRotated) {
+        if (protectedHeaders[x5tLabel] != other.protectedHeaders[x5tLabel]) return false
+        if (unprotectedHeaders[x5tLabel] != other.unprotectedHeaders[x5tLabel]) return false
     }
     return true
 }

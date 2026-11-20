@@ -2187,6 +2187,298 @@ class DeviceRequestTest {
     }
 
     @Test
+    fun testIsStructurallyEquivalentAndSameReaderWithX5t() = runTest {
+        val transcript1 = buildCborArray { add("Session1") }
+        val transcript2 = buildCborArray { add("Session2") }
+        val validFrom = Clock.System.now()
+        val validUntil = validFrom + 30.days
+
+        val storage = EphemeralStorage()
+        val secureAreaRepository = SecureAreaRepository.Builder().build()
+        val documentStore = buildDocumentStore(storage, secureAreaRepository) {}
+        val documentTypeRepository = DocumentTypeRepository()
+        val trustManager = TrustManager(storage)
+
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(rootKey, Algorithm.ES256),
+            subject = X500Name.fromName("CN=Trusted Reader Root CA"),
+            serial = ASN1Integer(100L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/crl",
+        )
+        trustManager.addX509Cert(
+            certificate = rootCert,
+            metadata = TrustMetadata(displayName = "Trusted Reader"),
+        )
+
+        val trustedSource = SimplePresentmentSource(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            resolveTrustFn = { requester ->
+                for (id in requester.requesterIdentities) {
+                    val res = trustManager.verify(id.certChain.certificates)
+                    if (res.isTrusted) {
+                        return@SimplePresentmentSource TrustedRequesterIdentity(
+                            identity = id,
+                            trustMetadata = res.trustPoints.first().metadata
+                        )
+                    }
+                }
+                null
+            },
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val untrustedSource = SimplePresentmentSource(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+
+        val leafPriv1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert1 = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            readerKey = leafPriv1.publicKey,
+            subject = X500Name.fromName("CN=Reader Linux"),
+            dnsName = null,
+            serial = ASN1Integer(1L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        val leafPriv2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafCert2 = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            readerKey = leafPriv2.publicKey,
+            subject = X500Name.fromName("CN=Reader Linux"),
+            dnsName = null,
+            serial = ASN1Integer(2L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        val otherRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val otherRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(otherRootKey, Algorithm.ES256),
+            subject = X500Name.fromName("CN=Other Reader Root CA"),
+            serial = ASN1Integer(200L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/other-crl",
+        )
+        val otherLeafPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val otherLeafCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(otherRootCert)), otherRootKey),
+            readerKey = otherLeafPriv.publicKey,
+            subject = X500Name.fromName("CN=Other Reader"),
+            dnsName = null,
+            serial = ASN1Integer(3L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        )
+        val attackerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val spoofedLeafPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        val spoofedLeafCert = X509Cert.Builder(
+            publicKey = spoofedLeafPriv.publicKey,
+            signingKey = AsymmetricKey.anonymous(attackerKey, Algorithm.ES256),
+            serialNumber = ASN1Integer(4L),
+            subject = leafCert1.subject,
+            issuer = leafCert1.issuer,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ).setAuthorityKeyIdentifierToCertificate(rootCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(leafCert1, rootCert)), leafPriv1)
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(leafCert2, rootCert)), leafPriv2)
+        val otherReaderKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(otherLeafCert, otherRootCert)),
+            otherLeafPriv
+        )
+        val spoofedReaderKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(spoofedLeafCert, rootCert)),
+            spoofedLeafPriv
+        )
+
+        val twoDocUseCaseInfo = DeviceRequestInfo.fromValues(
+            useCases = listOf(
+                UseCase(
+                    mandatory = true,
+                    documentSets = listOf(DocumentSet(listOf(0)), DocumentSet(listOf(1))),
+                    purposeHints = emptyMap()
+                )
+            )
+        )
+
+        suspend fun buildV11ReaderAuthAllRequest(
+            transcript: DataItem,
+            readerKey: AsymmetricKey.X509Compatible,
+        ): DeviceRequest = buildDeviceRequest(
+            sessionTranscript = transcript,
+            deviceRequestInfo = twoDocUseCaseInfo,
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("portrait" to false, "age_over_21" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    alternativeDataElements = listOf(
+                        AlternativeDataElementSet(
+                            requestedElement = ElementReference(DrivingLicense.MDL_NAMESPACE, "age_over_21"),
+                            alternativeElementSets = listOf(
+                                listOf(ElementReference(DrivingLicense.MDL_NAMESPACE, "age_in_years")),
+                                listOf(ElementReference(DrivingLicense.MDL_NAMESPACE, "birth_date")),
+                            )
+                        )
+                    )
+                )
+            )
+            addDocRequest(
+                docType = PhotoID.PHOTO_ID_DOCTYPE,
+                nameSpaces = mapOf(
+                    PhotoID.ISO_23220_2_NAMESPACE to mapOf("portrait" to false, "age_over_21" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    alternativeDataElements = listOf(
+                        AlternativeDataElementSet(
+                            requestedElement = ElementReference(PhotoID.ISO_23220_2_NAMESPACE, "age_over_21"),
+                            alternativeElementSets = listOf(
+                                listOf(ElementReference(PhotoID.ISO_23220_2_NAMESPACE, "age_in_years")),
+                                listOf(ElementReference(PhotoID.ISO_23220_2_NAMESPACE, "birth_date")),
+                            )
+                        )
+                    )
+                )
+            )
+            addReaderAuthAll(readerKey)
+        }
+
+        // 1. Version 1.1 ReaderAuthAll with x5t in protected headers and rotated single-use leaf certs
+        val reqAll1 = buildV11ReaderAuthAllRequest(transcript1, readerKey1)
+        val reqAll1SameCert = buildV11ReaderAuthAllRequest(transcript2, readerKey1)
+        val reqAll2Rotated = buildV11ReaderAuthAllRequest(transcript2, readerKey2)
+        val reqAllOther = buildV11ReaderAuthAllRequest(transcript2, otherReaderKey)
+        val reqAllSpoofed = buildV11ReaderAuthAllRequest(transcript2, spoofedReaderKey)
+
+        val x5tLabel = Cose.COSE_LABEL_X5T.toCoseLabel
+        assertEquals("1.1", reqAll1.version)
+        assertEquals("1.1", reqAll2Rotated.version)
+        val x5t1 = reqAll1.readerAuthAll.single().protectedHeaders[x5tLabel]
+        val x5t2 = reqAll2Rotated.readerAuthAll.single().protectedHeaders[x5tLabel]
+        assertEquals(leafCert1.toCoseX5t(), x5t1)
+        assertEquals(leafCert2.toCoseX5t(), x5t2)
+        assertNotEquals(x5t1, x5t2)
+
+        assertTrue(reqAll1.isStructurallyEquivalent(reqAll2Rotated))
+        assertTrue(reqAll2Rotated.isStructurallyEquivalent(reqAll1))
+        assertFalse(reqAll1.isStructurallyEquivalent(reqAllOther))
+        assertFalse(reqAllOther.isStructurallyEquivalent(reqAll1))
+
+        assertTrue(reqAll1SameCert.isSameAuthenticatedReader(reqAll1, untrustedSource))
+        assertTrue(reqAll2Rotated.isSameAuthenticatedReader(reqAll1, trustedSource))
+        assertFalse(reqAll2Rotated.isSameAuthenticatedReader(reqAll1, untrustedSource))
+        assertTrue(reqAllSpoofed.isStructurallyEquivalent(reqAll1))
+        assertFalse(reqAllSpoofed.isSameAuthenticatedReader(reqAll1, trustedSource))
+
+        // 2. Version 1.1 per-DocRequest readerAuth with x5t in protected headers and rotated single-use leaf certs
+        val perDocV11Req1 = buildDeviceRequest(
+            sessionTranscript = transcript1,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1,
+            )
+        }
+        val perDocV11Req2 = buildDeviceRequest(
+            sessionTranscript = transcript2,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey2,
+            )
+        }
+        val perDocV11Other = buildDeviceRequest(
+            sessionTranscript = transcript2,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = otherReaderKey,
+            )
+        }
+        assertEquals(leafCert1.toCoseX5t(), perDocV11Req1.docRequests.single().readerAuth!!.protectedHeaders[x5tLabel])
+        assertEquals(leafCert2.toCoseX5t(), perDocV11Req2.docRequests.single().readerAuth!!.protectedHeaders[x5tLabel])
+        assertTrue(perDocV11Req1.isStructurallyEquivalent(perDocV11Req2))
+        assertTrue(perDocV11Req2.isStructurallyEquivalent(perDocV11Req1))
+        assertFalse(perDocV11Req1.isStructurallyEquivalent(perDocV11Other))
+        assertTrue(perDocV11Req2.isSameAuthenticatedReader(perDocV11Req1, trustedSource))
+        assertFalse(perDocV11Req2.isSameAuthenticatedReader(perDocV11Req1, untrustedSource))
+
+        // 3. Mismatched x5t presence in protectedHeaders fails structural equivalence
+        val origAuth = reqAll1.readerAuthAll.single()
+        val authWithoutX5t = origAuth.copy(protectedHeaders = origAuth.protectedHeaders.minus(x5tLabel))
+        val rawReqWithoutX5t = buildCborMap {
+            put("version", reqAll1.version)
+            put("docRequests", reqAll1.toDataItem()["docRequests"])
+            put("deviceRequestInfo", reqAll1.toDataItem()["deviceRequestInfo"])
+            putCborArray("readerAuthAll") {
+                add(authWithoutX5t.toDataItem())
+            }
+        }
+        val reqWithoutX5t = DeviceRequest.fromDataItem(rawReqWithoutX5t)
+        assertFalse(reqAll1.isStructurallyEquivalent(reqWithoutX5t))
+        assertFalse(reqWithoutX5t.isStructurallyEquivalent(reqAll1))
+
+        // 4. Same leaf cert (no rotation) or missing x5chain with differing x5t fails structural equivalence
+        val authSameLeafDifferentX5t = origAuth.copy(
+            protectedHeaders = origAuth.protectedHeaders + (x5tLabel to leafCert2.toCoseX5t())
+        )
+        val rawReqSameLeafDifferentX5t = buildCborMap {
+            put("version", reqAll1.version)
+            put("docRequests", reqAll1.toDataItem()["docRequests"])
+            put("deviceRequestInfo", reqAll1.toDataItem()["deviceRequestInfo"])
+            putCborArray("readerAuthAll") {
+                add(authSameLeafDifferentX5t.toDataItem())
+            }
+        }
+        val reqSameLeafDifferentX5t = DeviceRequest.fromDataItem(rawReqSameLeafDifferentX5t)
+        assertFalse(reqAll1.isStructurallyEquivalent(reqSameLeafDifferentX5t))
+        assertFalse(reqSameLeafDifferentX5t.isStructurallyEquivalent(reqAll1))
+
+        val x5chainLabel = Cose.COSE_LABEL_X5CHAIN.toCoseLabel
+        val authNoChainX5t1 = origAuth.copy(unprotectedHeaders = origAuth.unprotectedHeaders.minus(x5chainLabel))
+        val authNoChainX5t2 = authSameLeafDifferentX5t.copy(
+            unprotectedHeaders = origAuth.unprotectedHeaders.minus(x5chainLabel)
+        )
+        val reqNoChainX5t1 = DeviceRequest.fromDataItem(
+            buildCborMap {
+                put("version", reqAll1.version)
+                put("docRequests", reqAll1.toDataItem()["docRequests"])
+                put("deviceRequestInfo", reqAll1.toDataItem()["deviceRequestInfo"])
+                putCborArray("readerAuthAll") { add(authNoChainX5t1.toDataItem()) }
+            }
+        )
+        val reqNoChainX5t2 = DeviceRequest.fromDataItem(
+            buildCborMap {
+                put("version", reqAll1.version)
+                put("docRequests", reqAll1.toDataItem()["docRequests"])
+                put("deviceRequestInfo", reqAll1.toDataItem()["deviceRequestInfo"])
+                putCborArray("readerAuthAll") { add(authNoChainX5t2.toDataItem()) }
+            }
+        )
+        assertFalse(reqNoChainX5t1.isStructurallyEquivalent(reqNoChainX5t2))
+        assertFalse(reqNoChainX5t2.isStructurallyEquivalent(reqNoChainX5t1))
+    }
+
+    @Test
     fun testSecondEditionUseCasesMandatoryAndVersionValidation() = runTest {
         val transcript = buildCborArray { add("SessionTranscript") }
 
