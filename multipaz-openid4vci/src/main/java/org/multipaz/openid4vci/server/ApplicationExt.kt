@@ -17,6 +17,7 @@ import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
 import org.multipaz.openid4vci.request.finishAuthorization
 import org.multipaz.openid4vci.request.identifierList
+import org.multipaz.openid4vci.request.notification
 import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.openid4vci.request.nonce
 import org.multipaz.openid4vci.request.openid4VpResponse
@@ -50,6 +51,7 @@ fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>)
         post("/challenge") { challenge(call) }
         post("/credential_request") { credentialRequest(call) }
         post("/credential") { credential(call) }
+        post("/notification") { notification(call) }
         get("/finish_authorization") { finishAuthorization(call) }
         post("/nonce") { nonce(call) }
         post("/openid4vp_response") { openid4VpResponse(call) }

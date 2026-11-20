@@ -37,6 +37,9 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
         put("credential_issuer", baseUrl)
         put("credential_endpoint", "$baseUrl/credential")
         put("nonce_endpoint", "$baseUrl/nonce")
+        configuredNotificationEndpoint()?.let {
+            put("notification_endpoint", it)
+        }
         putJsonArray("authorization_servers") {
             add(JsonPrimitive(baseUrl))
         }

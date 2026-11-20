@@ -38,6 +38,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
@@ -181,10 +182,15 @@ suspend fun credential(call: ApplicationCall) {
             index = credentialId.index,
             expiration = minted.expiration
         ))
+        val notificationEndpoint = configuredNotificationEndpoint()
+        val notificationId = notificationEndpoint?.let {
+            Crypto.secureRandom.nextBytes(16).toBase64Url().also(state.notificationIds::add)
+        }
         // Do not extend session expiration
         IssuanceState.updateIssuanceState(id, state, expiration = null)
         val response = buildJsonObject {
             addDisplay(locale, display)
+            notificationId?.let { put("notification_id", it) }
             putJsonArray("credentials") {
                 addJsonObject {
                     put("credential", minted.credential)
@@ -372,12 +378,17 @@ suspend fun credential(call: ApplicationCall) {
         minted.credential
     }
 
+    val notificationEndpoint = configuredNotificationEndpoint()
+    val notificationId = notificationEndpoint?.let {
+        Crypto.secureRandom.nextBytes(16).toBase64Url().also(state.notificationIds::add)
+    }
     // Do not extend session expiration
     IssuanceState.updateIssuanceState(id, state, expiration = null)
 
     val result =
         buildJsonObject {
             addDisplay(locale, display)
+            notificationId?.let { put("notification_id", it) }
             putJsonArray("credentials") {
                 for (credential in credentials) {
                     addJsonObject {

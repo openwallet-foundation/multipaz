@@ -19,7 +19,8 @@ import org.multipaz.securearea.SecureArea
  *   [authorize] method,
  *  - once user is fully authorized, obtain key binding challenge and create device binding
  *   key(s) to which credentials will be bound (this step is not needed for keyless credentials),
- *  - obtain credentials using [obtainCredentials] call.
+ *  - obtain credentials using [obtainCredentials] call,
+ *  - after storing credentials, report the outcome using [notifyCredentialResult].
  */
 interface ProvisioningClient {
     /** Reads provisioning server metadata */
@@ -73,4 +74,11 @@ interface ProvisioningClient {
      *  [CredentialMetadata.keyBindingType].
      */
     suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials
+
+    /**
+     * Notifies the issuer about the result of storing credentials, when supported.
+     *
+     * This is a best-effort operation and must not affect credentials already obtained.
+     */
+    suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {}
 }

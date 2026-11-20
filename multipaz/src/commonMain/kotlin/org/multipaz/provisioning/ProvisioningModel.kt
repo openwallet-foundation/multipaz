@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.buildJsonObject
@@ -37,6 +38,7 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
 import org.multipaz.webtoken.buildJwt
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
@@ -79,6 +81,8 @@ class ProvisioningModel(
     private val authorizationResponseChannel = Channel<AuthorizationResponse>()
 
     private var job: Job? = null
+    @Volatile
+    private var userCancelled = false
 
     val isActive: Boolean get() = job?.isActive ?: false
 
@@ -219,6 +223,7 @@ class ProvisioningModel(
         if (isActive) {
             throw IllegalStateException("Existing job is active")
         }
+        userCancelled = false
         val deferred = CoroutineScope(coroutineContext).async {
             try {
                 mutableState.emit(Initial)
@@ -245,6 +250,9 @@ class ProvisioningModel(
                     documentProvisioningHandler = documentProvisioningHandler,
                     appData = appData,
                     eventLogger = eventLogger,
+                    cancellationNotificationEvent = {
+                        if (userCancelled) CredentialNotificationEvent.DELETED else null
+                    },
                     onRequestingCredentials = {
                         mutableState.emit(RequestingCredentials)
                     }
@@ -311,6 +319,7 @@ class ProvisioningModel(
     fun cancel() {
         job?.let {
             if (it.isActive) {
+                userCancelled = true
                 it.cancel()
             } else {
                 CoroutineScope(Dispatchers.Default).launch {
@@ -425,6 +434,7 @@ private suspend fun requestCredentials(
     documentProvisioningHandler: AbstractDocumentProvisioningHandler,
     appData: ByteString? = null,
     eventLogger: EventLogger?,
+    cancellationNotificationEvent: () -> CredentialNotificationEvent? = { null },
     onRequestingCredentials: suspend () -> Unit = {},
 ): Pair<Document, Int> {
     val issuerMetadata = provisioningClient.getMetadata()
@@ -521,6 +531,11 @@ private suspend fun requestCredentials(
                     display = credentials.display,
                     documentAuthorizationData = provisioningClient.getAuthorizationData()
                 )
+                pendingCredentials = pendingCredentials.filter { it != pendingCredential }
+                notifyCredentialResultBestEffort(
+                    provisioningClient,
+                    CredentialNotificationEvent.ACCEPTED
+                )
 
                 eventLogger?.addEvent(
                     EventProvisioning(
@@ -538,9 +553,6 @@ private suspend fun requestCredentials(
                         )
                     )
                 )
-
-                // Modify pendingCredentials so this now certified credential isn't removed on error
-                pendingCredentials = pendingCredentials.filter { it != pendingCredential }
 
                 numCredentialsFetched += 1
             }
@@ -585,6 +597,10 @@ private suspend fun requestCredentials(
                     display = credentials.display,
                     documentAuthorizationData = provisioningClient.getAuthorizationData()
                 )
+                notifyCredentialResultBestEffort(
+                    provisioningClient,
+                    CredentialNotificationEvent.ACCEPTED
+                )
 
                 eventLogger?.addEvent(
                     EventProvisioning(
@@ -619,6 +635,14 @@ private suspend fun requestCredentials(
         }
     } catch (err: Exception) {
         // Clean-up after failed provisioning and then rethrow - so we also handle CancellationException here
+        val notificationEvent = if (err is CancellationException) {
+            cancellationNotificationEvent()
+        } else {
+            CredentialNotificationEvent.FAILURE
+        }
+        notificationEvent?.let {
+            notifyCredentialResultBestEffort(provisioningClient, it)
+        }
         if (targetDocument == null) {
             // Initial provisioning: failed
             documentProvisioningHandler.cleanupDocumentOnError(document, err)
@@ -630,6 +654,19 @@ private suspend fun requestCredentials(
     }
 
     return Pair(document, numCredentialsFetched)
+}
+
+private suspend fun notifyCredentialResultBestEffort(
+    provisioningClient: ProvisioningClient,
+    event: CredentialNotificationEvent
+) {
+    withContext(NonCancellable) {
+        try {
+            provisioningClient.notifyCredentialResult(event)
+        } catch (err: Exception) {
+            Logger.w(TAG, "Failed to notify issuer of credential result: ${event.value}", err)
+        }
+    }
 }
 
 private suspend fun openidProofOfPossession(
