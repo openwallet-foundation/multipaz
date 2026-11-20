@@ -21,6 +21,7 @@ import org.multipaz.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class LinuxHciSocketPacketIoTest {
     /**
@@ -69,7 +70,7 @@ class LinuxHciSocketPacketIoTest {
 
                     val centralFactory = BtHciMdocTransportFactory(
                         centralConfig = BleCentralConfig(
-                            scanRestartTimeout = 20.milliseconds,
+                            scanRestartTimeout = 3.seconds,
                             postScanDelay = 1.milliseconds,
                             connectRetryDelay = 10.milliseconds,
                             discoverServicesRetryDelay = 10.milliseconds,
