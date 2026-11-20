@@ -25,11 +25,12 @@ using Robolectric Native Graphics) alongside the native iOS SwiftUI
   - [Movie Ticket Verification (SD-JWT VC)](#movie_ticket_sdjwt)
   - [Unverified Proximity Reader Requesting Non-PII (Signed Certificate Not in Trust List)](#unverified_proximity_reader_age_over_21)
   - [Anonymous Proximity Reader Requesting Non-PII (No Reader Certificate)](#anonymous_proximity_reader_age_over_21)
-- **[2. Transactions — Built-In & Custom Transaction Renderers](#02_transactions)** (`02_transactions` — 4 scenarios)
+- **[2. Transactions — Built-In & Custom Transaction Renderers](#02_transactions)** (`02_transactions` — 5 scenarios)
   - [Payment Transaction with Card Claims & Card Switcher](#payment_with_claims)
   - [Payment Confirmation Only (Zero Attribute Claims)](#payment_confirmation_only)
   - [Transit Fare Selection (Custom Interactive Transaction Renderer)](#transit_fare_custom_renderer)
   - [AP2 Payment Mandate Delegation (Summary + Signed Mandate Details)](#ap2_payment_delegate)
+  - [AP2 Delegation (SDK Default Renderer for DelegateTransaction)](#ap2_delegate_default_renderer)
 - **[3. Multi-Credential & Optional Combinations](#03_multi_credential)** (`03_multi_credential` — 6 scenarios)
   - [Compound Solution: ID + Boarding Pass in a Single Use-Case](#mdl_and_boarding_pass_single_use_case)
   - [Alternative Credential Types: mDL OR Boarding Pass](#mdl_or_boarding_pass)
@@ -309,6 +310,20 @@ Delegating payment authority via an Agent Payments Protocol (AP2) intent mandate
 | :---: | :---: | :---: |
 | **Compose** | <img src="02_transactions/ap2_payment_delegate__main.png" alt="Compose: AP2 Payment Mandate Delegation (Summary + Signed Mandate Details) - Main AP2 delegate mandate prompt" width="260" /> | <img src="02_transactions/ap2_payment_delegate__tx_details.png" alt="Compose: AP2 Payment Mandate Delegation (Summary + Signed Mandate Details) - AP2 mandate transaction details page" width="260" /> |
 | **SwiftUI** | <img src="../../multipaz-swiftui/golden-screenshots/02_transactions/ap2_payment_delegate__main.png" alt="SwiftUI: AP2 Payment Mandate Delegation (Summary + Signed Mandate Details) - Main AP2 delegate mandate prompt" width="260" /> | <img src="../../multipaz-swiftui/golden-screenshots/02_transactions/ap2_payment_delegate__tx_details.png" alt="SwiftUI: AP2 Payment Mandate Delegation (Summary + Signed Mandate Details) - AP2 mandate transaction details page" width="260" /> |
+
+<a id="ap2_delegate_default_renderer"></a>
+
+### `ap2_delegate_default_renderer` — AP2 Delegation (SDK Default Renderer for DelegateTransaction)
+
+- **Relying Party:** Utopia Marketplace — Over-the-Internet (OpenID4VP)
+- **Protocol / Credentials:** DigitalPaymentCredentialSdJwt + DelegateTransaction
+- **Risk Assessment:** `NORMAL`
+
+An AP2 `delegate` request, with the mandates as AP2 sends them, drawn by the SDK's DelegateTransactionRendererCompose. The summary sets the per-purchase and total limits large, then gives the merchant, the item, the expiry and the agent a row each. The details page lists both mandates in full, as they will be signed.
+
+| `main` — Main spending permission prompt | `tx_details` — Spending permission details page |
+| :---: | :---: |
+| <img src="02_transactions/ap2_delegate_default_renderer__main.png" alt="Compose: AP2 Delegation (SDK Default Renderer for DelegateTransaction) - Main spending permission prompt" width="260" /> | <img src="02_transactions/ap2_delegate_default_renderer__tx_details.png" alt="Compose: AP2 Delegation (SDK Default Renderer for DelegateTransaction) - Spending permission details page" width="260" /> |
 
 ---
 

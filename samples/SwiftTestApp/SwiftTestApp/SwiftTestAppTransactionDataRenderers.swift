@@ -4,9 +4,14 @@ import Multipaz
 /// The SwiftTestApp's renderers for transaction data in the consent prompt.
 ///
 /// A `PaymentTransaction` is drawn by the app: the amount, payee and tip in the prompt, with every
-/// field on the details page. Other transaction types keep the built-in rendering.
+/// field on the details page. A `DelegateTransaction` is drawn by the SDK's
+/// `DelegateTransactionRendererSwiftUi`. Other transaction types keep the built-in rendering.
 func makeSwiftTestAppTransactionDataRenderers() -> TransactionDataRendererRepository {
     let renderers = TransactionDataRendererRepository()
+    renderers.addRenderer(
+        identifier: DelegateTransaction.shared.identifier,
+        renderer: DelegateTransactionRendererSwiftUi()
+    )
     renderers.addRenderer(
         identifier: PaymentTransaction.shared.identifier,
         renderer: TransactionDataRendererSwiftUi(
