@@ -2,6 +2,8 @@ package org.multipaz.testapp
 
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.java.Java
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -106,4 +108,6 @@ actual object TestAppConfiguration {
     actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
 
     actual val mdocTransportFactory: MdocTransportFactory = BtHciMdocTransportFactory()
+
+    actual val isUsingExternalBleAdapter: StateFlow<Boolean> = MutableStateFlow(false)
 }

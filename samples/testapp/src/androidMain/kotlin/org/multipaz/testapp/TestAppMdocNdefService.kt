@@ -50,6 +50,7 @@ class TestAppMdocNdefService : MdocNdefService() {
                 bleExportPeripheralAddress = app.settingsModel.presentmentBleExportPeripheralAddress.value,
                 bleUsePeripheralAddress = app.settingsModel.presentmentBleUsePeripheralAddress.value,
             ),
+            transportFactory = TestAppConfiguration.mdocTransportFactory,
         )
     }
 }

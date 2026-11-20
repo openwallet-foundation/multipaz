@@ -33,6 +33,15 @@ interface HciPacketIo {
         get() = false
 
     /**
+     * Whether [BleHciEngine] should issue `HCI_Reset` and await `HCI_Command_Complete` before
+     * calling [close] so the controller cleanly stops advertising, scanning, and connections.
+     *
+     * Defaults to [keepsDescriptorOpenOnClose].
+     */
+    val requiresControllerResetOnClose: Boolean
+        get() = keepsDescriptorOpenOnClose
+
+    /**
      * Notifies the transport that `HCI_Reset` has already been executed and acknowledged prior to [close].
      */
     fun markControllerResetCompleted() {}

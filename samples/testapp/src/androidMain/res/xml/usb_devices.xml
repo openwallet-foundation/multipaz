@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <!-- Match all USB CCID (Class 11 / 0x0B) Smart Card / NFC readers -->
+    <usb-device class="11" />
+    <!-- Standard USB Bluetooth HCI Primary Controller (Class 0xE0 / 224, Subclass 1, Protocol 1) -->
+    <usb-device class="224" subclass="1" protocol="1" />
+    <!-- Broadcom-style vendor-specific USB Bluetooth HCI controllers (Class 0xFF / 255, Subclass 1, Protocol 1) -->
+    <usb-device class="255" subclass="1" protocol="1" />
+</resources>

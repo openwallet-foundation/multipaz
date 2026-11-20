@@ -199,6 +199,7 @@ fun IsoMdocProximityReadingScreen(
     val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.readerIssuerIdentifiers.value) }
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
+    val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
     val readerShowQrScanner = remember { mutableStateOf(false) }
     val readerQrUriToShow = remember { mutableStateOf<String?>(null) }
@@ -429,7 +430,7 @@ fun IsoMdocProximityReadingScreen(
 
     val readerTransportState = readerTransport.value?.state?.collectAsState()
 
-    if (!blePermissionState.isGranted) {
+    if (!usingExternalBleAdapter && !blePermissionState.isGranted) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -445,7 +446,7 @@ fun IsoMdocProximityReadingScreen(
                 Text("Request BLE permissions")
             }
         }
-    }  else if (!bleEnabledState.isEnabled) {
+    } else if (!usingExternalBleAdapter && !bleEnabledState.isEnabled) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,

@@ -841,7 +841,7 @@ internal class BleHciEngine(
     /**
      * Flushes any in-flight ACL fragments (waiting for `HCI_Number_Of_Completed_Packets`), cleanly
      * terminates any active LE connections via `HCI_Disconnect` (`0x13` Remote User Terminated
-     * Connection), and—if [packetIo] keeps its descriptor open across sessions—executes `HCI_Reset`
+     * Connection), and—if [packetIo] requires a controller reset on close—executes `HCI_Reset`
      * and awaits `HCI_Command_Complete` before [close] runs.
      */
     suspend fun flushAndDisconnect(timeout: Duration = 500.milliseconds) {
@@ -870,7 +870,7 @@ internal class BleHciEngine(
                 disconnectWaiters.remove(handle)
             }
         }
-        if (packetIo.keepsDescriptorOpenOnClose && !closed) {
+        if (packetIo.requiresControllerResetOnClose && !closed) {
             try {
                 val resetRsp = sendCommand(BleHciConstants.HCI_OP_RESET, timeout = timeout)
                 if (resetRsp.isNotEmpty() && (resetRsp[0].toInt() and 0xFF) == 0x00) {

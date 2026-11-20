@@ -2,6 +2,7 @@ package org.multipaz.testapp
 
 import android.content.ComponentName
 import android.content.Intent
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.net.Uri
@@ -21,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.multipaz.applinks.AppLinksCheck
+import org.multipaz.bthci.AndroidUsbHciPacketIo
 import org.multipaz.context.initializeApplication
 import org.multipaz.nfc.handleUsbDeviceAttached
 import org.multipaz.testapp.TestAppConfiguration.ACTION_VIEW_DOCUMENT
@@ -133,10 +135,25 @@ class MainActivity : FragmentActivity() {
                 lifecycle.coroutineScope.launch {
                     val app = App.getInstance()
                     app.initialize()
-                    app.externalNfcReaderStore.handleUsbDeviceAttached(device)
+                    if (AndroidUsbHciPacketIo.isBluetoothHciDevice(device)) {
+                        AndroidUsbBluetoothManager.onUsbDeviceAttached(device)
+                    }
+                    if (hasCcidInterface(device)) {
+                        app.externalNfcReaderStore.handleUsbDeviceAttached(device)
+                    }
                 }
             }
         }
+    }
+
+    private fun hasCcidInterface(device: UsbDevice): Boolean {
+        if (device.deviceClass == UsbConstants.USB_CLASS_CSCID) return true
+        for (i in 0 until device.interfaceCount) {
+            if (device.getInterface(i).interfaceClass == UsbConstants.USB_CLASS_CSCID) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun getFileNameFromUri(uri: Uri): String? {

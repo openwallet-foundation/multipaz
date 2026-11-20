@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +59,7 @@ fun IsoMdocMultiDeviceTestingScreen(
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
+    val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -156,7 +158,7 @@ fun IsoMdocMultiDeviceTestingScreen(
     }
 
 
-    if (!blePermissionState.isGranted) {
+    if (!usingExternalBleAdapter && !blePermissionState.isGranted) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -172,7 +174,7 @@ fun IsoMdocMultiDeviceTestingScreen(
                 Text("Request BLE permissions")
             }
         }
-    } else if (!bleEnabledState.isEnabled) {
+    } else if (!usingExternalBleAdapter && !bleEnabledState.isEnabled) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
