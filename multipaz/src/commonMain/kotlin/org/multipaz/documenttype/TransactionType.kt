@@ -24,6 +24,7 @@ import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Namespace defined by ISO/IEC 18013-5 for transaction data signing.
@@ -90,6 +91,10 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
+ * @param nestSdJwtResponseClaims whether the claims returned by [generateSdJwtResponseClaims] are
+ *  nested in a JSON object under [kbJwtResponseClaimName] (the default). Set to `false` when a
+ *  specification fixes the shape and position of its own KB-JWT claims; they are then merged in
+ *  verbatim, preserving arrays that the nesting would wrap in an object.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -97,6 +102,7 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
+    val nestSdJwtResponseClaims: Boolean = true,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.
@@ -105,6 +111,30 @@ abstract class TransactionType<PayloadT: Any>(
         TransactionProtocol.ISO_18013_5 -> ISO_18013_TRANSACTION_DATA_NAMESPACE
         TransactionProtocol.OPENID4VP -> openId4VpMdocResponseNamespace
     }
+
+    /**
+     * The `typ` header the Key Binding JWT carries when it signs [transactionData], all the items
+     * of this type in the response, or `null` for the ordinary `kb+jwt`.
+     *
+     * Returns `null` by default. Override it when a specification gives the Key Binding JWT its own
+     * `typ`, which may depend on what is being signed. One Key Binding JWT signs every item, so the
+     * value is decided over all of them together and must not depend on their order.
+     */
+    open fun sdJwtKbType(transactionData: List<TransactionData<PayloadT>>): String? = null
+
+    /**
+     * Checks the items of this type that one Key Binding JWT will sign together, before the consent
+     * prompt, so a request that could only fail after the person approved is refused up front with
+     * its reason. The items are all of this type for one credential, in request order.
+     *
+     * Does nothing by default. Override it for what no single item shows, such as two items that
+     * cannot be answered in one response.
+     *
+     * @param transactionData the items of this type for one credential.
+     * @throws IllegalArgumentException if the items cannot be answered together.
+     */
+    @Throws(IllegalArgumentException::class)
+    open fun validateTogether(transactionData: List<TransactionData<PayloadT>>) {}
 
     /**
      * Serializes transaction data for use in OpenID4VP protocol.
@@ -134,7 +164,9 @@ abstract class TransactionType<PayloadT: Any>(
      *
      * @param jsonString parsed JSON string from base64url-encoded OpenID4VP transaction_data
      * @return transaction payload
+     * @throws IllegalArgumentException if the transaction data is malformed.
      */
+    @Throws(IllegalArgumentException::class)
     open fun parseOpenId4VpRequest(jsonString: String): PayloadT =
         throw UnsupportedOperationException("parseOpenId4VpRequest not implemented for '$identifier'")
 
@@ -160,9 +192,11 @@ abstract class TransactionType<PayloadT: Any>(
      *
      * @param serialized the base64url-encoded JSON transaction data item.
      * @return transaction data wrapping the parsed payload.
-     * @throws IllegalArgumentException if `transaction_data_hashes_alg` is present but not an
-     *  array of strings, or names no known hash algorithm.
+     * @throws IllegalArgumentException if the payload is malformed (see [parseOpenId4VpRequest]), or
+     *  `transaction_data_hashes_alg` is present but not an array of strings, or names no known hash
+     *  algorithm.
      */
+    @Throws(IllegalArgumentException::class)
     open fun parseJson(serialized: ByteString): TransactionData<PayloadT> {
         val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
         return TransactionData(
@@ -218,7 +252,10 @@ abstract class TransactionType<PayloadT: Any>(
      * @param transactionData transaction data being considered
      * @param credential one of the credentials in the [Document] being considered
      * @return true if transaction can be processed false if it cannot
+     * @throws IllegalArgumentException if the transaction data itself is malformed, which is not a
+     *   property of [credential]; the message says why.
      */
+    @Throws(IllegalArgumentException::class, CancellationException::class)
     open suspend fun isApplicable(
         transactionData: TransactionData<PayloadT>,
         credential: Credential
@@ -296,6 +333,29 @@ abstract class TransactionType<PayloadT: Any>(
             docRequestId?.let { put("doc_request_id", JsonPrimitive(it)) }
         }
     }
+
+    /**
+     * Generates what this transaction adds to an SD-JWT presentation: the Key Binding JWT claims
+     * and any disclosures that follow the Key Binding JWT.
+     *
+     * Returns the claims of [generateSdJwtResponseClaims] and no disclosures by default. A type
+     * whose claims refer to disclosures it adds itself, such as a digest of each, overrides this
+     * so the claims and the disclosures they commit to come from one call.
+     *
+     * @param transactionData transaction data
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5, null in OpenID4VP
+     * @return the claims and the disclosures to add to the presentation
+     */
+    open suspend fun generateSdJwtResponse(
+        transactionData: TransactionData<PayloadT>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): SdJwtTransactionResponse = SdJwtTransactionResponse(
+        claims = generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId),
+    )
 
     /**
      * Verifies transaction response returned in an Mdoc presentation.

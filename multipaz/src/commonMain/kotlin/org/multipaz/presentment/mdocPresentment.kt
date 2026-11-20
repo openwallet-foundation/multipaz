@@ -484,6 +484,11 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         docRequestId = docRequest.docRequestId,
                         transactionUserInput = match.transactionUserInput
                     )
+                    // A response with disclosures is a Delegated SD-JWT, which the ISO/IEC 18013-5
+                    // reader does not accept; no type produces one here, so fail rather than drop it.
+                    check(transactionResponse.disclosures.isEmpty()) {
+                        "Transaction responses with disclosures are not supported in ISO/IEC 18013-5"
+                    }
                     val sdJwtKb = filteredSdJwtVc.present(
                         signingKey = AsymmetricKey.AnonymousSecureAreaBased(
                             alias = match.credential.alias,
@@ -496,7 +501,7 @@ internal suspend fun mdocPresentmentGenerateResponseInternal(
                         creationTime = creationTime
                     ) {
                         if (!match.transactionData.isEmpty()) {
-                            for ((key, response) in transactionResponse) {
+                            for ((key, response) in transactionResponse.claims) {
                                 put(key, response)
                             }
                         }
