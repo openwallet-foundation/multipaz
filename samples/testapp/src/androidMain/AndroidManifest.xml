@@ -9,7 +9,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus"/>
     <uses-permission android:name="android.permission.CAMERA"/>
 
-    <!-- For USB-based NFC readers -->
+    <!-- For USB-based NFC readers and Bluetooth HCI adapters -->
     <uses-feature android:name="android.hardware.usb.host" />
 
     <!-- For BLE -->
@@ -118,12 +118,12 @@
                 <data android:host="*"/>
             </intent-filter>
 
-            <!-- This is for when the user attaches a supported USB-based external NFC Reader -->
+            <!-- This is for when the user attaches a supported USB NFC Reader or Bluetooth HCI adapter -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
             <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/usb_nfc_readers" />
+                android:resource="@xml/usb_devices" />
 
             <!-- CredentialContainer support for application/vnd.multipaz.mpzpass MIME type and
                  associated .mpzpass file extension

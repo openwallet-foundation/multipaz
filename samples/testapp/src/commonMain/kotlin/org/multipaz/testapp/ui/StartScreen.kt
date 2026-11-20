@@ -63,6 +63,7 @@ fun StartScreen(
     onClickDeviceCheck: () -> Unit = {},
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
+    val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
     val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
     val dcAuthorizationState = digitalCredentials?.authorizationState?.collectAsState()?.value
@@ -94,7 +95,7 @@ fun StartScreen(
                     }
                 }
                 if (!documentInfos.isEmpty()) {
-                    if (!blePermissionState.isGranted) {
+                    if (!usingExternalBleAdapter && !blePermissionState.isGranted) {
                         WarningCard(
                             modifier = Modifier.padding(8.dp).clickable() {
                                 coroutineScope.launch {

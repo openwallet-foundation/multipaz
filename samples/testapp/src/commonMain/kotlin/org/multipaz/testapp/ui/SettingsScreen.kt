@@ -178,6 +178,14 @@ fun SettingsScreen(
                 enabled = nfcAvailable
             )
         }
+        if (TestAppConfiguration.platform == TestAppPlatform.ANDROID) {
+            item {
+                PlatformBluetoothAdapterSettingsSection(
+                    settingsModel = app.settingsModel,
+                    showToast = showToast,
+                )
+            }
+        }
         item {
             SettingHeadline("ISO mdoc Transports (QR and NFC Static Handover)")
         }

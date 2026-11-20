@@ -135,6 +135,7 @@ kotlin {
 
         val androidMain by getting {
             dependencies {
+                implementation(project(":multipaz-bthci"))
                 implementation(project(":multipaz-dcapi-credman"))
                 implementation(compose.preview)
                 implementation(libs.androidx.activity.compose)

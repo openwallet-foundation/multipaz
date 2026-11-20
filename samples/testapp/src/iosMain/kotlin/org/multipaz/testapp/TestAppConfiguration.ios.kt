@@ -15,6 +15,8 @@ import kotlinx.cinterop.toKString
 import kotlinx.cinterop.value
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import org.multipaz.digitalcredentials.DigitalCredentials
@@ -159,5 +161,7 @@ actual object TestAppConfiguration {
     actual fun getPlatformFaceMatchers(): List<FaceMatcher> = emptyList()
 
     actual val mdocTransportFactory: MdocTransportFactory = MdocTransportFactory.Default
+
+    actual val isUsingExternalBleAdapter: StateFlow<Boolean> = MutableStateFlow(false)
 }
 

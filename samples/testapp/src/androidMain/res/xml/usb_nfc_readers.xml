@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-
-<resources>
-    <!-- Match all USB CCID (Class 11 / 0x0B) Smart Card / NFC readers -->
-    <usb-device class="11" />
-</resources>

@@ -56,6 +56,7 @@ fun IsoMdocProximitySharingScreen(
     val coroutineScope = rememberCoroutineScope { promptModel }
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
+    val usingExternalBleAdapter = TestAppConfiguration.isUsingExternalBleAdapter.collectAsState().value
     var disablePlatformImplementation by remember { mutableStateOf(false) }
 
     val faceMatcherOptions = remember {
@@ -76,13 +77,13 @@ fun IsoMdocProximitySharingScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (!blePermissionState.isGranted) {
+        if (!usingExternalBleAdapter && !blePermissionState.isGranted) {
             Button(
                 onClick = { coroutineScope.launch { blePermissionState.launchPermissionRequest() } }
             ) {
                 Text("Request BLE permissions")
             }
-        } else if (!bleEnabledState.isEnabled) {
+        } else if (!usingExternalBleAdapter && !bleEnabledState.isEnabled) {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,

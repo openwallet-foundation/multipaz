@@ -227,6 +227,9 @@ class TestAppSettingsModel private constructor(
         bind(nciIrqGpioPin, "nciIrqGpioPin", "23")
         bind(nciVenGpioPin, "nciVenGpioPin", "24")
 
+        bind(androidBleUsbAdapterId, "androidBleUsbAdapterId", "")
+        bind(androidBleUsbAdapterName, "androidBleUsbAdapterName", "")
+
         bind(currentlyFocusedDocumentId, "currentlyFocusedDocumentId", "")
 
         bind(signRequest, "signRequest", true)
@@ -292,6 +295,9 @@ class TestAppSettingsModel private constructor(
     val nciGpioChipPath = MutableStateFlow<String>("/dev/gpiochip0")
     val nciIrqGpioPin = MutableStateFlow<String>("23")
     val nciVenGpioPin = MutableStateFlow<String>("24")
+
+    val androidBleUsbAdapterId = MutableStateFlow<String>("")
+    val androidBleUsbAdapterName = MutableStateFlow<String>("")
 
     val currentlyFocusedDocumentId = MutableStateFlow<String>("")
     val signRequest = MutableStateFlow<Boolean>(true)

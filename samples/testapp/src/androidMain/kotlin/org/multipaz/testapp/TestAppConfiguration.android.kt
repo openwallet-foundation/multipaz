@@ -40,7 +40,12 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.androidCredmanOmitClaims
 import org.multipaz.document.setAndroidCredmanOmitClaims
 import org.multipaz.facematch.FaceMatcher
+import kotlinx.coroutines.flow.StateFlow
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
+import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
+import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
@@ -77,6 +82,7 @@ actual object TestAppConfiguration {
             Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
             Security.insertProviderAt(BouncyCastleProvider(), 1)
         }
+        AndroidUsbBluetoothManager.init(settingsModel)
     }
 
     actual fun restartApp() {
@@ -210,6 +216,25 @@ actual object TestAppConfiguration {
         return listOf(CustomUiFaceMatcher())
     }
 
-    actual val mdocTransportFactory: MdocTransportFactory = MdocTransportFactory.Default
+    actual val mdocTransportFactory: MdocTransportFactory = object : MdocTransportFactory {
+        override fun createTransport(
+            connectionMethod: MdocConnectionMethod,
+            role: MdocRole,
+            options: MdocTransportOptions,
+        ): MdocTransport = AndroidUsbBluetoothManager
+            .getActiveTransportFactory()
+            .createTransport(connectionMethod, role, options)
+
+        override fun createTransports(
+            connectionMethods: List<MdocConnectionMethod>,
+            role: MdocRole,
+            options: MdocTransportOptions,
+        ): List<MdocTransport> = AndroidUsbBluetoothManager
+            .getActiveTransportFactory()
+            .createTransports(connectionMethods, role, options)
+    }
+
+    actual val isUsingExternalBleAdapter: StateFlow<Boolean>
+        get() = AndroidUsbBluetoothManager.isExternalAdapterSelected
 }
 

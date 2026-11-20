@@ -1,6 +1,7 @@
 package org.multipaz.testapp
 
 import io.ktor.client.engine.HttpClientEngineFactory
+import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.DrawableResource
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
@@ -61,4 +62,6 @@ expect object TestAppConfiguration {
     fun getPlatformFaceMatchers(): List<FaceMatcher>
 
     val mdocTransportFactory: MdocTransportFactory
+
+    val isUsingExternalBleAdapter: StateFlow<Boolean>
 }
