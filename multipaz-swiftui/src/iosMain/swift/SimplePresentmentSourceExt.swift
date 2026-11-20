@@ -5,13 +5,13 @@ private var handlersHolderKey: UInt8 = 0
 
 private final class HandlersHolder: NSObject {
     let resolveTrustHandler: AnyObject
-    let showConsentPromptHandler: AnyObject
+    let showConsentPromptHandler: AnyObject?
     let getBadgesHandler: AnyObject
     let getFaceMatchingModeHandler: AnyObject
     
     init(
         resolveTrustHandler: AnyObject,
-        showConsentPromptHandler: AnyObject,
+        showConsentPromptHandler: AnyObject?,
         getBadgesHandler: AnyObject,
         getFaceMatchingModeHandler: AnyObject
     ) {
@@ -34,7 +34,12 @@ extension SimplePresentmentSource.Companion {
     ///   - eventLogger: an [EventLogger] for logging events or `nil`.
     ///   - requesterHistory: a [RequesterHistory] for tracking relying party interactions or `nil`.
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
-    ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
+    ///   - transactionDataRendererRepository: the ``TransactionDataRendererRepository`` the default consent prompt
+    ///     finds renderers for transaction data in. Without it a type that `TransactionType.requiresRenderer` is
+    ///     always refused. It is not used when `showConsentPromptFn` is given: that function has to pass a
+    ///     repository to the prompt itself.
+    ///   - showConsentPromptFn: a [ShowConsentPromptFn] used to show a consent prompt when required, or `nil` for
+    ///     `promptModelRequestConsent` with `transactionDataRendererRepository`.
     ///   - getBadgesFn: a function to get badges for a document.
     ///   - getFaceMatchingModeFn: a function to determine face matching mode for a credential.
     ///   - preferSignatureToKeyAgreement: whether to use mdoc ECDSA authentication even if mdoc MAC authentication is possible (ISO mdoc only).
@@ -53,13 +58,14 @@ extension SimplePresentmentSource.Companion {
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
         ) async -> TrustedRequesterIdentity?,
-        showConsentPromptFn: @escaping @MainActor @Sendable (
+        transactionDataRendererRepository: TransactionDataRendererRepository? = nil,
+        showConsentPromptFn: (@MainActor @Sendable (
             _ requester: Requester,
             _ trustMetadata: TrustedRequesterIdentity?,
             _ presentmentData: PresentmentData,
             _ preselectedDocuments: [MultipazDocument],
             _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [MultipazDocument]) -> Void
-        ) async -> PresentmentSelection?,
+        ) async -> PresentmentSelection?)? = nil,
         getBadgesFn: @escaping @MainActor @Sendable (
             _ document: MultipazDocument
         ) async -> [DocumentBadge] = { document in [] },
@@ -75,7 +81,7 @@ extension SimplePresentmentSource.Companion {
         domainsKeyBoundSdJwt: [ String ] = [],
     ) -> SimplePresentmentSource {
         let resolveTrustHandler = ResolveTrustHandler(f: resolveTrustFn)
-        let showConsentPromptHandler = ShowConsentPromptHandler(f: showConsentPromptFn)
+        let showConsentPromptHandler = showConsentPromptFn.map { ShowConsentPromptHandler(f: $0) }
         let getBadgesHandler = GetBadgesHandler(f: getBadgesFn)
         let getFaceMatchingModeHandler = GetFaceMatchingModeHandler(f: getFaceMatchingModeFn)
         
@@ -87,6 +93,7 @@ extension SimplePresentmentSource.Companion {
             requesterHistory: requesterHistory,
             getFaceMatcherFn: getFaceMatcherFn,
             resolveTrustFn: resolveTrustHandler,
+            transactionDataRendererRepository: transactionDataRendererRepository,
             showConsentPromptFn: showConsentPromptHandler,
             getBadgesFn: getBadgesHandler,
             getFaceMatchingModeFn: getFaceMatchingModeHandler,

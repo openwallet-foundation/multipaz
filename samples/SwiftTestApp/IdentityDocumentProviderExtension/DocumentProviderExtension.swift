@@ -65,13 +65,19 @@ func getPresentmentSource() async -> PresentmentSource {
             return nil
         },
         showConsentPromptFn: { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus in
-            try! await promptModelSilentConsent(
-                requester: requester,
-                trustedRequesterIdentity: trustedRequesterIdentity,
-                presentmentData: presentmentData,
-                preselectedDocuments: preselectedDocuments,
-                onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
-            )
+            // A refusal, such as for transaction data no renderer can show, ends the request as if dismissed.
+            do {
+                return try await promptModelSilentConsent(
+                    requester: requester,
+                    trustedRequesterIdentity: trustedRequesterIdentity,
+                    presentmentData: presentmentData,
+                    preselectedDocuments: preselectedDocuments,
+                    onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
+                )
+            } catch {
+                Logger.shared.e(tag: "DocumentProviderExtension", msg: "Consent refused: \(error)")
+                return nil
+            }
         },
         preferSignatureToKeyAgreement: false,
         domainsMdocSignature: ["mdoc_user_auth", "mdoc_no_user_auth"],

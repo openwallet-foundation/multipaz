@@ -5,29 +5,16 @@ package org.multipaz.prompt
  *
  * Renderers are keyed by [org.multipaz.documenttype.TransactionType.identifier], for example
  * `"org.multipaz.transaction.ping"` or `"urn:eudi:sca:payment:1"`. Transaction types without a
- * renderer keep the consent prompt's built-in rendering.
+ * renderer keep the consent prompt's built-in rendering, unless they set
+ * [org.multipaz.documenttype.TransactionType.requiresRenderer]: then the prompt is refused.
  *
  * The repository is passed to the consent prompt with each request, see [promptModelRequestConsent].
  * An application wanting different renderers for a given issuer or relying party can pass a
  * different repository for that request, or override [getRenderer].
  *
- * With [org.multipaz.presentment.SimplePresentmentSource], pass it from the consent prompt function:
- *
- * ```
- * val source = SimplePresentmentSource(
- *     // ...
- *     showConsentPromptFn = { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus ->
- *         promptModelRequestConsent(
- *             requester = requester,
- *             trustedRequesterIdentity = trustedRequesterIdentity,
- *             presentmentData = presentmentData,
- *             preselectedDocuments = preselectedDocuments,
- *             onDocumentsInFocus = onDocumentsInFocus,
- *             transactionDataRendererRepository = renderers,
- *         )
- *     },
- * )
- * ```
+ * With [org.multipaz.presentment.SimplePresentmentSource], pass it as `transactionDataRendererRepository`.
+ * A wallet that shows consent with its own [ShowConsentPromptFn] passes it to the prompt there instead, for
+ * example as the `transactionDataRendererRepository` argument of [promptModelRequestConsent].
  */
 open class TransactionDataRendererRepository {
     private val renderers = mutableMapOf<String, TransactionDataRenderer>()
@@ -46,7 +33,8 @@ open class TransactionDataRendererRepository {
      * Gets the renderer for a transaction type.
      *
      * @param identifier the [org.multipaz.documenttype.TransactionType.identifier].
-     * @return the [TransactionDataRenderer] for that transaction type or `null` to use the built-in rendering.
+     * @return the [TransactionDataRenderer] for that transaction type or `null` to use the built-in
+     *   rendering, which is refused for a type that [org.multipaz.documenttype.TransactionType.requiresRenderer].
      */
     open fun getRenderer(identifier: String): TransactionDataRenderer? = renderers[identifier]
 }

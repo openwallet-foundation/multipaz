@@ -3,16 +3,20 @@ package org.multipaz.compose.prompt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
 import org.multipaz.compose.presentment.ConsentModalBottomSheet
+import org.multipaz.compose.presentment.TransactionDataRendererCompose
 import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.prompt.ConsentPromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptDismissedException
+import org.multipaz.prompt.TransactionDataRendererNotAvailableException
+import org.multipaz.prompt.missingTransactionDataRenderer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +33,20 @@ fun ConsentPromptDialog(
     val dialogStateValue = dialogState.value
     if (dialogStateValue is PromptDialogModel.DialogShownState) {
         val dialogParameters = dialogStateValue.parameters
+        // A renderer made for another toolkit is no renderer here: a type whose data the person must
+        // see is refused rather than drawn with the built-in rendering. `requestConsent` has already
+        // refused the cases where there is no renderer at all.
+        val missingRenderer = missingTransactionDataRenderer(
+            transactionData = dialogParameters.presentmentData.allTransactionData,
+            repository = dialogParameters.transactionDataRendererRepository,
+            isUsable = { it is TransactionDataRendererCompose },
+        )
+        if (missingRenderer != null) {
+            LaunchedEffect(dialogStateValue) {
+                dialogStateValue.resultChannel.close(TransactionDataRendererNotAvailableException(missingRenderer))
+            }
+            return
+        }
         ConsentModalBottomSheet(
             sheetState = sheetState,
             requester = dialogParameters.requester,

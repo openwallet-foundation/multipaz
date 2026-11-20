@@ -75,6 +75,10 @@ abstract class PresentmentSource(
      * In either case implementations *MUST* always call [onSelectionChanged], even if no user interaction
      * is happening.
      *
+     * An implementation that draws its own consent has to refuse transaction data of a type that
+     * [org.multipaz.documenttype.TransactionType.requiresRenderer] and that it cannot show, by throwing
+     * [org.multipaz.prompt.TransactionDataRendererNotAvailableException] before any selection is made.
+     *
      * @param requester the relying party which is requesting the data.
      * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
      * @param presentmentData the combinations of credentials and claims that the user can select.

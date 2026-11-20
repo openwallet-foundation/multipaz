@@ -83,7 +83,8 @@ suspend fun PromptModel.requestPassphrase(
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
- *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ *   find renderers for transaction data, or `null` to use only the built-in rendering, which is refused for a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer].
  * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
  *   credentials with [requester] before.
  * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
@@ -98,13 +99,18 @@ suspend fun PromptModel.requestPassphrase(
  * @throws PromptDismissedException if the user dismissed the prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws TransactionDataRendererNotAvailableException if [presentmentData] holds transaction data of
+ *   a type that [org.multipaz.documenttype.TransactionType.requiresRenderer] and
+ *   [transactionDataRendererRepository] has no renderer for it, or none was passed. The prompt is not
+ *   shown. A renderer made for another UI toolkit than the one bound is refused the same way by that UI.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
     PromptDismissedException::class,
     PromptModelNotAvailableException::class,
-    PromptUiNotAvailableException::class
+    PromptUiNotAvailableException::class,
+    TransactionDataRendererNotAvailableException::class
 )
 suspend fun PromptModel.requestConsent(
     requester: Requester,
@@ -119,6 +125,10 @@ suspend fun PromptModel.requestConsent(
     classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
     platformConsentOptions: PlatformConsentOptions? = null,
 ): PresentmentSelection {
+    // Before anything is shown: a type whose data the person must see is never approved blind.
+    // Which toolkit a renderer is made for is not known here: the UI layer checks that again.
+    missingTransactionDataRenderer(presentmentData.allTransactionData, transactionDataRendererRepository) { true }
+        ?.let { throw TransactionDataRendererNotAvailableException(it) }
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,
