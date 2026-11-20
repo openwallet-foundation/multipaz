@@ -100,6 +100,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -835,11 +836,13 @@ class BleHciTransportTest {
                     }
                     BleHciConstants.HCI_OP_LE_SET_ADVERTISE_ENABLE -> {
                         val enabled = params.isNotEmpty() && params[0].toInt() != 0
-                        sendCommandComplete(opcode)
                         val disconnectReason = pendingMidHandshakeDisconnectReason
                         if (enabled && disconnectReason >= 0) {
-                            advEnabled = true
-                            pendingMidHandshakeDisconnectReason = -1
+                            busStateLock.withLock {
+                                advEnabled = true
+                                pendingMidHandshakeDisconnectReason = -1
+                                sendCommandComplete(opcode)
+                            }
                             val disconnParams = ByteArray(4)
                             disconnParams[0] = 0x00
                             putU16le(disconnParams, 1, 0x0040)
@@ -854,6 +857,7 @@ class BleHciTransportTest {
                         } else {
                             busStateLock.withLock {
                                 advEnabled = enabled
+                                sendCommandComplete(opcode)
                                 if (!enabled) return@withLock
                                 val peerInitAddr = peer.initiatingPeerAddr
                                 if (peerInitAddr != null &&
@@ -894,9 +898,9 @@ class BleHciTransportTest {
                         if (enabled) {
                             scanEnableCount.incrementAndGet()
                         }
-                        sendCommandComplete(opcode)
                         busStateLock.withLock {
                             scanEnabled = enabled
+                            sendCommandComplete(opcode)
                             if (enabled) {
                                 scanAttemptCount++
                                 if (peer.advEnabled && scanAttemptCount > faultConfig.dropScanAttempts) {
@@ -1204,13 +1208,14 @@ class BleHciTransportTest {
     private fun createCentralManager(
         io: HciPacketIo,
         randomAddress: ByteArray? = null,
-        gapDeviceName: String = "Multipaz"
+        gapDeviceName: String = "Multipaz",
+        scanRestartTimeout: Duration = 3.seconds,
     ): MdocTransportFactory =
         BtHciMdocTransportFactory(
             gapDeviceName = gapDeviceName,
             randomAddress = randomAddress,
             centralConfig = BleCentralConfig(
-                scanRestartTimeout = 20.milliseconds,
+                scanRestartTimeout = scanRestartTimeout,
                 postScanDelay = 1.milliseconds,
                 connectRetryDelay = 10.milliseconds,
                 discoverServicesRetryDelay = 10.milliseconds,
@@ -2853,7 +2858,11 @@ class BleHciTransportTest {
                 bleUseL2CAP = useL2cap,
             )
 
-            val centralManager = createCentralManager(bus.centralIo, randomAddress = centralRandomAddr)
+            val centralManager = createCentralManager(
+                io = bus.centralIo,
+                randomAddress = centralRandomAddr,
+                scanRestartTimeout = if (faultConfig.dropScanAttempts > 0) 200.milliseconds else 3.seconds,
+            )
             val peripheralManager = createPeripheralManager(bus.peripheralIo, randomAddress = peripheralRandomAddr)
             val readerTransport = BleTransportCentralMdocReader(
                 role = MdocRole.MDOC_READER,
