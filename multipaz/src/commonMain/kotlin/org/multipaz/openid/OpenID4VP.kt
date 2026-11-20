@@ -446,7 +446,7 @@ object OpenID4VP {
             try {
                 source.documentTypeRepository.parseJsonTransactions(list.map {
                     it.jsonPrimitive.content
-                })
+                }).also { requireSingleHashAlgorithmForSdJwtQueries(it, dcqlQuery) }
             } catch (err: IllegalArgumentException) {
                 throw IllegalStateException("Problem processing transaction(s)", err)
             }
@@ -773,6 +773,39 @@ object OpenID4VP {
         return Cbor.encode(deviceResponse.toDataItem()).toBase64Url()
     }
 
+    private fun requireSingleHashAlgorithmForSdJwtQueries(
+        transactionDataMap: Map<String, List<TransactionData<*>>>,
+        dcqlQuery: DcqlQuery
+    ) {
+        for ((credentialId, items) in transactionDataMap) {
+            val query = dcqlQuery.credentialQueries.firstOrNull { it.id == credentialId }
+            if (query?.vctValues != null) {
+                selectTransactionHashAlgorithm(items)
+            }
+        }
+    }
+
+    /**
+     * Selects the single hash algorithm for `transaction_data_hashes_alg` that every item accepts.
+     *
+     * An item without `transaction_data_hashes_alg` accepts only SHA-256. Among the algorithms
+     * accepted by all items, the one listed first by the first item that has an explicit list wins.
+     *
+     * @param transactionData transaction data items answered by one credential
+     * @return the algorithm to use, or `null` if no item lists algorithms (SHA-256 is implied and
+     *   `transaction_data_hashes_alg` must be omitted)
+     * @throws IllegalArgumentException if no single algorithm is accepted by all items
+     */
+    fun selectTransactionHashAlgorithm(transactionData: List<TransactionData<*>>): Algorithm? {
+        val preferred = transactionData.firstNotNullOfOrNull { it.hashAlgorithms } ?: return null
+        return preferred.firstOrNull { candidate ->
+            transactionData.all { (it.hashAlgorithms ?: listOf(Algorithm.SHA256)).contains(candidate) }
+        } ?: throw IllegalArgumentException(
+            "No hash algorithm in 'transaction_data_hashes_alg' is accepted by all " +
+                    "transaction data items"
+        )
+    }
+
     /**
      * Processes transaction data for the given SD-JWT credential.
      *
@@ -806,13 +839,8 @@ object OpenID4VP {
         }
         val isIso18013_5 = transactionData.any { it.protocol == TransactionProtocol.ISO_18013_5 }
         if (!isIso18013_5) {
-            val hashAlgorithm = transactionData.firstNotNullOfOrNull { it.hashAlgorithms?.first() }
+            val hashAlgorithm = selectTransactionHashAlgorithm(transactionData)
             if (hashAlgorithm != null) {
-                // Non-default hash algorithm; ensure all transaction data items are
-                // using the same one
-                transactionData.forEach { data ->
-                    check(hashAlgorithm == (data.hashAlgorithms?.first() ?: Algorithm.SHA256))
-                }
                 transactionResponse["transaction_data_hashes_alg"] =
                     JsonPrimitive(hashAlgorithm.hashAlgorithmName)
             }
