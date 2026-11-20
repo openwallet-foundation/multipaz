@@ -95,6 +95,12 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  nested in a JSON object under [kbJwtResponseClaimName] (the default). Set to `false` when a
  *  specification fixes the shape and position of its own KB-JWT claims; they are then merged in
  *  verbatim, preserving arrays that the nesting would wrap in an object.
+ * @param requiresRenderer whether the consent prompt must be able to draw this transaction data with
+ *  a [org.multipaz.prompt.TransactionDataRenderer] made for its UI toolkit, and refuses to show the
+ *  prompt when it can't. The built-in rendering shows only a heading and what the type's own
+ *  specification may require the person to read before approving is left out, so a type whose data
+ *  the person must see to give informed consent sets this. Defaults to `false`: the built-in
+ *  rendering is enough.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -103,6 +109,7 @@ abstract class TransactionType<PayloadT: Any>(
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
     val nestSdJwtResponseClaims: Boolean = true,
+    val requiresRenderer: Boolean = false,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.

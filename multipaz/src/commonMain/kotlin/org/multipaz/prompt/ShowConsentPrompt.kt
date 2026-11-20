@@ -78,6 +78,8 @@ suspend fun promptModelSilentConsent(
  *   conveying which credentials the user selected, if multiple options are available.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws TransactionDataRendererNotAvailableException if the transaction data holds a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] and has no renderer here.
  */
 suspend fun promptModelRequestConsent(
     requester: Requester,

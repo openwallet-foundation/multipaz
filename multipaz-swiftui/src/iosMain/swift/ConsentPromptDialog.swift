@@ -21,7 +21,20 @@ struct ConsentPromptDialog: View {
                     if state is PromptDialogModelNoDialogState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection> {
                         data = nil
                     } else if state is PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection> {
-                        data = ConsentPromptDialogData(state: state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection>)
+                        let shown = state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, PresentmentSelection>
+                        // A renderer made for another toolkit is no renderer here: a type whose data the
+                        // person must see is refused rather than drawn with the built-in rendering.
+                        let params = shown.parameters!
+                        let missingRenderer = TransactionDataRendererRequirementKt.missingTransactionDataRenderer(
+                            transactionData: params.presentmentData.allTransactionData,
+                            repository: params.transactionDataRendererRepository,
+                            isUsable: { KotlinBoolean(bool: $0 is TransactionDataRendererSwiftUi) }
+                        )
+                        if let missingRenderer {
+                            shown.resultChannel.close(cause: TransactionDataRendererNotAvailableException(typeIdentifier: missingRenderer))
+                        } else {
+                            data = ConsentPromptDialogData(state: shown)
+                        }
                     }
                 }
             }
