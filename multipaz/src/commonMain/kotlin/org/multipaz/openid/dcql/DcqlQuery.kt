@@ -60,6 +60,19 @@ private data class QueryResponseMatch(
     val faceMatchNeeded: Boolean = false,
 )
 
+/**
+ * Asks the transaction type whether this applies to [credential], refusing a request whose
+ * transaction data the type finds malformed with the type's reason as the cause.
+ *
+ * Only [TransactionData.isApplicable] is translated, so an unrelated `IllegalArgumentException`
+ * (a corrupt stored credential, a [PresentmentSource] callback) keeps its own message.
+ */
+private suspend fun TransactionData<*>.isApplicableOrRefuse(credential: Credential): Boolean = try {
+    isApplicable(credential)
+} catch (err: IllegalArgumentException) {
+    throw IllegalStateException("Problem processing transaction(s)", err)
+}
+
 private fun DcqlCredentialSetOption.isSatisfied(
     credentialQueryIdToResponse: MutableMap<String, QueryResponse>
 ): Boolean {
@@ -291,7 +304,7 @@ data class DcqlQuery(
                     }
                     val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
                     for (transaction in transactionData) {
-                        if (!transaction.isApplicable(cred)) {
+                        if (!transaction.isApplicableOrRefuse(cred)) {
                             didNotMatch = true
                             break
                         }
@@ -355,7 +368,7 @@ data class DcqlQuery(
                         }
                         val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
                         for (transaction in transactionData) {
-                            if (!transaction.isApplicable(cred)) {
+                            if (!transaction.isApplicableOrRefuse(cred)) {
                                 didNotMatch = true
                                 break
                             }
