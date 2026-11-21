@@ -19,6 +19,15 @@ data class PresentmentData(
     val useCases: List<PresentmentUseCase>,
 ) {
 
+    /**
+     * Every transaction data item of every match in every solution of every use-case, in order. A
+     * consent prompt uses it to find out which renderers it needs before it is shown.
+     */
+    val allTransactionData: List<TransactionData<*>>
+        get() = useCases.flatMap { useCase ->
+            useCase.solutions.flatMap { solution -> solution.matches.flatMap { it.transactionData } }
+        }
+
     private fun compatibleMultiIndices(
         useCase: PresentmentUseCase,
         candidateIndices: List<Int>,

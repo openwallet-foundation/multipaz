@@ -98,13 +98,18 @@ suspend fun PromptModel.requestPassphrase(
  * @throws PromptDismissedException if the user dismissed the prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws TransactionDataRendererNotAvailableException if [presentmentData] holds transaction data of
+ *   a type that [org.multipaz.documenttype.TransactionType.requiresRenderer] and
+ *   [transactionDataRendererRepository] has no renderer for it, or none was passed. The prompt is not
+ *   shown. A renderer made for another UI toolkit than the one bound is refused the same way by that UI.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
     PromptDismissedException::class,
     PromptModelNotAvailableException::class,
-    PromptUiNotAvailableException::class
+    PromptUiNotAvailableException::class,
+    TransactionDataRendererNotAvailableException::class
 )
 suspend fun PromptModel.requestConsent(
     requester: Requester,
@@ -119,6 +124,10 @@ suspend fun PromptModel.requestConsent(
     classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
     platformConsentOptions: PlatformConsentOptions? = null,
 ): PresentmentSelection {
+    // Before anything is shown: a type whose data the person must see is never approved blind.
+    // Which toolkit a renderer is made for is not known here: the UI layer checks that again.
+    missingTransactionDataRenderer(presentmentData.allTransactionData, transactionDataRendererRepository) { true }
+        ?.let { throw TransactionDataRendererNotAvailableException(it) }
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,

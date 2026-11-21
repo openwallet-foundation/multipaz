@@ -247,6 +247,7 @@ import org.multipaz.presentment.RequesterHistoryEntry
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.prompt.TransactionDataRendererRepository
+import org.multipaz.prompt.missingTransactionDataRenderer
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -355,7 +356,10 @@ private const val TAG = "Consent"
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Continue" button, returns the user's selection.
- * @param onCancel called when the sheet is dismissed.
+ * @param onCancel called when the sheet is dismissed. It is also called, with nothing drawn, when
+ *   [presentmentData] holds transaction data of a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] and [transactionDataRendererRepository]
+ *   has no [TransactionDataRendererCompose] for it: such data is never approved with the built-in rendering.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -374,6 +378,20 @@ fun Consent(
     onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
 ) {
+    val missingRenderer = remember(presentmentData, transactionDataRendererRepository) {
+        missingTransactionDataRenderer(
+            transactionData = presentmentData.allTransactionData,
+            repository = transactionDataRendererRepository,
+            isUsable = { it is TransactionDataRendererCompose },
+        )
+    }
+    if (missingRenderer != null) {
+        LaunchedEffect(missingRenderer) {
+            Logger.w(TAG, "No usable renderer for transaction type '$missingRenderer', not showing consent")
+            onCancel()
+        }
+        return
+    }
     val navController = rememberNavController()
     val appInfo = remember {
         requester.appId?.let {

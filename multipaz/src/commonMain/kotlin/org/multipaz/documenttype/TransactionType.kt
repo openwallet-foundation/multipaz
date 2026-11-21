@@ -90,6 +90,12 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
+ * @param requiresRenderer whether the consent prompt must be able to draw this transaction data with
+ *  a [org.multipaz.prompt.TransactionDataRenderer] made for its UI toolkit, and refuses to show the
+ *  prompt when it can't. The built-in rendering shows only a heading and what the type's own
+ *  specification may require the person to read before approving is left out, so a type whose data
+ *  the person must see to give informed consent sets this. Defaults to `false`: the built-in
+ *  rendering is enough.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -97,6 +103,7 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
+    val requiresRenderer: Boolean = false,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.
