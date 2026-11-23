@@ -3323,4 +3323,22 @@ class DeviceRequestTest {
             twoOptionsData.toPresentmentSelection(listOf(listOf(firstOptIdx, secondOptIdx)))
         }
     }
+
+    @Test
+    fun testVerifyReaderAuthenticationRejectsMalformedNegativeLengthCert() = runTest {
+        // GHSA-4426-vj7r-m9qq: DeviceRequest with x5chain containing a malformed DER certificate
+        // whose 4-byte length has the top bit set (30 06 04 84 ff ff ff fa) must fail with
+        // SignatureVerificationException instead of looping until OutOfMemoryError.
+        val malformedDeviceRequestHex =
+            "a26776657273696f6e63312e306b646f63526571756573747381a26c6974656d735265717565" +
+            "7374d818584ba267646f6354797065756f72672e69736f2e31383031332e352e312e6d444c6a" +
+            "6e616d65537061636573a1716f72672e69736f2e31383031332e352e31a16b66616d696c795f" +
+            "6e616d65f46a726561646572417574688443a10126a118214830060484fffffffaf658400000" +
+            "0000000000000000000000000000000000000000000000000000000000000000000000000000" +
+            "000000000000000000000000000000000000000000000000"
+        val request = DeviceRequest.fromDataItem(Cbor.decode(malformedDeviceRequestHex.fromHex()))
+        assertFailsWith<SignatureVerificationException> {
+            request.verifyReaderAuthentication(Cbor.decode("83f6f6f6".fromHex()))
+        }
+    }
 }

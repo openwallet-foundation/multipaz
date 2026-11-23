@@ -5,8 +5,6 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.util.appendUInt8
-import org.multipaz.util.getUInt16
-import org.multipaz.util.getUInt32
 import org.multipaz.util.getUInt8
 import org.multipaz.util.putUInt32
 import kotlin.math.max
@@ -24,6 +22,8 @@ internal data class IdentifierOctets(
  * [ITU-T Recommendation X.690](https://www.itu.int/itu-t/recommendations/rec.aspx?rec=x.690).
  */
 object ASN1 {
+
+    internal const val MAX_DECODE_DEPTH = 100
 
     internal fun appendIdentifierAndLength(
         builder: ByteStringBuilder,
@@ -69,6 +69,11 @@ object ASN1 {
     }
 
     internal fun decodeIdentifierOctets(derEncoded: ByteArray, offset: Int): Pair<Int, IdentifierOctets> {
+        if (offset < 0 || offset >= derEncoded.size) {
+            throw IllegalArgumentException(
+                "Offset $offset out of bounds for DER data of size ${derEncoded.size}"
+            )
+        }
         var o = offset
         val idOctet0 = derEncoded[o++]
         val cls = ASN1TagClass.parse(idOctet0)
@@ -80,9 +85,16 @@ object ASN1 {
         } else {
             var result = 0
             do {
+                if (o >= derEncoded.size) {
+                    throw IllegalArgumentException("Truncated high-tag-number encoding at offset $offset")
+                }
                 val b = derEncoded.getUInt8(o++).toInt()
-                result = result shl 7
-                result = result or b.and(0x7f)
+                if (result > (Int.MAX_VALUE ushr 7)) {
+                    throw IllegalArgumentException(
+                        "ASN.1 tag number overflows 31-bit integer at offset $offset"
+                    )
+                }
+                result = (result shl 7) or b.and(0x7f)
             } while (b.and(0x80) != 0)
             result
         }
@@ -90,27 +102,54 @@ object ASN1 {
     }
 
     internal fun decodeLength(derEncoded: ByteArray, offset: Int): Pair<Int, Int> {
-        val length = derEncoded.getUInt8(offset).toInt()
-        val numOctets = length.and(0x7f)
-        return if (length.and(0x80) == 0) {
-            // Short-form
-            Pair(offset + 1, length)
+        if (offset < 0 || offset >= derEncoded.size) {
+            throw IllegalArgumentException("Truncated ASN.1 length at offset $offset")
         }
-        else {
-            Pair(
-                offset + 1 + numOctets,
-                when (numOctets) {
-                    0 -> throw IllegalArgumentException("Indeterminate length not supported")
-                    1 -> derEncoded.getUInt8(offset + 1).toInt()
-                    2 -> derEncoded.getUInt16(offset + 1).toInt()
-                    4 -> derEncoded.getUInt32(offset + 1).toInt()
-                    else -> throw IllegalArgumentException("Length size of $numOctets bytes not supported")
-                }
+        val firstOctet = derEncoded.getUInt8(offset).toInt()
+        if (firstOctet.and(0x80) == 0) {
+            // Short-form
+            return Pair(offset + 1, firstOctet)
+        }
+        val numOctets = firstOctet.and(0x7f)
+        if (numOctets == 0) {
+            throw IllegalArgumentException("Indeterminate length not supported")
+        }
+        if (numOctets == 0x7f) {
+            throw IllegalArgumentException("Reserved length encoding 0xff not supported")
+        }
+        if (numOctets > 4) {
+            throw IllegalArgumentException("Length size of $numOctets bytes not supported")
+        }
+        val remaining = derEncoded.size - offset - 1
+        if (numOctets > remaining) {
+            throw IllegalArgumentException(
+                "Truncated ASN.1 length: need $numOctets length bytes at offset ${offset + 1}, " +
+                    "only $remaining bytes remaining"
             )
         }
+        var decodedLength = 0L
+        for (i in 0 until numOctets) {
+            decodedLength = (decodedLength shl 8) or derEncoded.getUInt8(offset + 1 + i).toLong()
+        }
+        if (decodedLength > Int.MAX_VALUE) {
+            throw IllegalArgumentException(
+                "ASN.1 length $decodedLength exceeds maximum supported length"
+            )
+        }
+        return Pair(offset + 1 + numOctets, decodedLength.toInt())
     }
 
-    internal fun decode(derEncoded: ByteArray, offset: Int): Pair<Int, ASN1Object?> {
+    internal fun decode(
+        derEncoded: ByteArray,
+        offset: Int,
+        depth: Int = 0
+    ): Pair<Int, ASN1Object?> {
+        if (depth > MAX_DECODE_DEPTH) {
+            throw IllegalArgumentException("Maximum ASN.1 nesting depth ($MAX_DECODE_DEPTH) exceeded")
+        }
+        if (offset < 0) {
+            throw IllegalArgumentException("Negative offset $offset")
+        }
         if (offset >= derEncoded.size) {
             // TODO: review if we should move this check somewhere elsewhere.
             // We hit this code when parsing Android key attestation on the Pixel 3a emulator
@@ -119,8 +158,14 @@ object ASN1 {
         }
         val (lengthOffset, idOctets) = decodeIdentifierOctets(derEncoded, offset)
         val (contentOffset, length) = decodeLength(derEncoded, lengthOffset)
-        val content = derEncoded.sliceArray(IntRange(contentOffset, contentOffset + length - 1))
+        val remaining = derEncoded.size - contentOffset
+        if (length < 0 || length > remaining) {
+            throw IllegalArgumentException(
+                "ASN.1 element length $length at offset $offset exceeds remaining $remaining bytes"
+            )
+        }
         val nextOffset = contentOffset + length
+        val content = derEncoded.copyOfRange(contentOffset, nextOffset)
         val decodedObject = if (idOctets.cls == ASN1TagClass.UNIVERSAL) {
             when (idOctets.tag) {
                 // Note: we currently don't support the following tags and will simply
@@ -141,8 +186,8 @@ object ASN1 {
                 ASN1ObjectIdentifier.TAG_NUMBER -> ASN1ObjectIdentifier.parse(content)
                 ASN1OctetString.TAG_NUMBER -> ASN1OctetString.parse(content)
                 ASN1BitString.TAG_NUMBER -> ASN1BitString.parse(content)
-                ASN1Sequence.TAG_NUMBER -> ASN1Sequence.parse(content)
-                ASN1Set.TAG_NUMBER -> ASN1Set.parse(content)
+                ASN1Sequence.TAG_NUMBER -> ASN1Sequence(decodeMultiple(content, depth + 1))
+                ASN1Set.TAG_NUMBER -> ASN1Set(decodeMultiple(content, depth + 1))
                 else -> {
                     if (ASN1IntegerTag.entries.find { it.tag == idOctets.tag } != null ) {
                         ASN1Integer.parse(content, idOctets.tag)
@@ -174,11 +219,12 @@ object ASN1 {
             decode(derEncoded, 0)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
+            if (e is IllegalArgumentException) throw e
             throw IllegalArgumentException("Unexpected error decoding", e)
         }
         if (newOffset != derEncoded.size) {
             throw IllegalArgumentException(
-                "${newOffset - derEncoded.size} bytes leftover after decoding"
+                "${derEncoded.size - newOffset} bytes leftover after decoding"
             )
         }
         return obj
@@ -202,16 +248,28 @@ object ASN1 {
      * @throws IllegalArgumentException if the given bytes are not valid.
      */
     @Throws(IllegalArgumentException::class)
-    fun decodeMultiple(derEncoded: ByteArray): List<ASN1Object> {
+    fun decodeMultiple(derEncoded: ByteArray): List<ASN1Object> =
+        try {
+            decodeMultiple(derEncoded, depth = 0)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (e is IllegalArgumentException) throw e
+            throw IllegalArgumentException("Unexpected error decoding", e)
+        }
+
+    private fun decodeMultiple(derEncoded: ByteArray, depth: Int): List<ASN1Object> {
         val objects = mutableListOf<ASN1Object>()
         var offset = 0
-        do {
-            val (newOffset, obj) = decode(derEncoded, offset)
+        while (offset < derEncoded.size) {
+            val (newOffset, obj) = decode(derEncoded, offset, depth)
+            check(newOffset > offset) {
+                "ASN.1 decoder failed to advance offset (offset=$offset, newOffset=$newOffset)"
+            }
             if (obj != null) {
                 objects.add(obj)
             }
             offset = newOffset
-        } while (offset < derEncoded.size)
+        }
         return objects
     }
 
@@ -320,7 +378,7 @@ object ASN1 {
                         sb.append("[PRIVATE ${obj.tag}] (1 elem)\n")
                     }
                 }
-                if (obj.enc == ASN1Encoding.CONSTRUCTED) {
+                if (obj.enc == ASN1Encoding.CONSTRUCTED && indent / 2 < MAX_DECODE_DEPTH) {
                     // Try and decode the content as ASN.1, and if so, print it. If not,
                     // just print the content
                     try {

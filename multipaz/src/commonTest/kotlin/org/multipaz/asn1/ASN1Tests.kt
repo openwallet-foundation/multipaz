@@ -6,6 +6,7 @@ import org.multipaz.util.toHex
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -760,6 +761,111 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
             """.trimIndent().trim(),
             ASN1.print(authorityKeyIdentifier).trim()
         )
+    }
+
+    @Test
+    fun testRejectsNegativeAndOverflowingFourByteLengths() {
+        // GHSA-4426-vj7r-m9qq: 4-byte length with high bit set (0xfffffffa -> -6 when cast to Int)
+        // previously caused contentOffset + length to equal the element's own offset, resulting in
+        // an infinite loop in decodeMultiple() and OutOfMemoryError.
+        val malformedInputs = listOf(
+            "30060484fffffffa", // SEQUENCE { OCTET STRING len=0xfffffffa (-6) }
+            "3006048480000000", // SEQUENCE { OCTET STRING len=0x80000000 (Int.MIN_VALUE) }
+            "30060484ffffffff", // SEQUENCE { OCTET STRING len=0xffffffff (-1) }
+            "300604847fffffff", // SEQUENCE { OCTET STRING len=Int.MAX_VALUE (contentOffset+length overflows) }
+            "300604847ffffffa", // SEQUENCE { OCTET STRING len=0x7ffffffa (contentOffset+length == Int.MIN_VALUE) }
+            "31060484fffffffa", // SET { OCTET STRING len=0xfffffffa (-6) }
+            "0484fffffffa",     // Top-level OCTET STRING len=0xfffffffa
+            "048480000000",     // Top-level OCTET STRING len=0x80000000
+            "04847fffffff",     // Top-level OCTET STRING len=Int.MAX_VALUE
+        )
+        for (hex in malformedInputs) {
+            val bytes = hex.fromHex()
+            assertFailsWith<IllegalArgumentException>("Expected ASN1.decode to reject $hex") {
+                ASN1.decode(bytes)
+            }
+            assertFailsWith<IllegalArgumentException>("Expected ASN1.decodeMultiple to reject $hex") {
+                ASN1.decodeMultiple(bytes)
+            }
+        }
+
+        // Certificate entry point from GHSA-4426-vj7r-m9qq
+        assertFailsWith<IllegalArgumentException> {
+            X509Cert(ByteString("30060484fffffffa".fromHex())).subject
+        }
+    }
+
+    @Test
+    fun testRejectsMalformedLengthsAndTags() {
+        val malformedInputs = listOf(
+            "04",               // Missing length byte
+            "0480",             // Indeterminate length
+            "04ff00",           // Reserved length 0xff
+            "0485000000000100", // 5-byte length (unsupported)
+            "0481",             // Truncated 1-byte length
+            "048201",           // Truncated 2-byte length
+            "04830102",         // Truncated 3-byte length
+            "0484010203",       // Truncated 4-byte length
+            "04050102",         // Content shorter than declared length
+            "300604050102",     // Nested element content shorter than declared length
+            "1f",               // Truncated high-tag-number
+            "1f81",             // Unterminated high-tag-number
+            "1f8fffffff7f00",   // High-tag-number overflowing 31-bit signed Int
+        )
+        for (hex in malformedInputs) {
+            val bytes = hex.fromHex()
+            assertFailsWith<IllegalArgumentException>("Expected ASN1.decode to reject $hex") {
+                ASN1.decode(bytes)
+            }
+            assertFailsWith<IllegalArgumentException>("Expected ASN1.decodeMultiple to reject $hex") {
+                ASN1.decodeMultiple(bytes)
+            }
+        }
+    }
+
+    @Test
+    fun testThreeByteLengthRoundTrip() {
+        val payload = ByteArray(0x10000) { (it and 0xff).toByte() }
+        val encoded = ASN1.encode(ASN1OctetString(payload))
+        // 04 83 01 00 00 <65536 bytes>
+        assertEquals(5 + payload.size, encoded.size)
+        assertEquals("0483010000", encoded.copyOfRange(0, 5).toHex())
+        val decoded = ASN1.decode(encoded) as ASN1OctetString
+        assertContentEquals(payload, decoded.value)
+    }
+
+    @Test
+    fun testRejectsExcessiveNestingDepth() {
+        fun wrapNestedSequences(levels: Int): ByteArray {
+            var current: ASN1Object = ASN1Sequence(emptyList())
+            for (i in 1 until levels) {
+                current = ASN1Sequence(listOf(current))
+            }
+            return ASN1.encode(current)
+        }
+
+        // Depth at MAX_DECODE_DEPTH + 1 nested sequences (outer at depth 0, innermost at depth MAX_DECODE_DEPTH) succeeds
+        val atLimit = wrapNestedSequences(ASN1.MAX_DECODE_DEPTH + 1)
+        assertTrue(ASN1.decode(atLimit) is ASN1Sequence)
+
+        // One level deeper exceeds MAX_DECODE_DEPTH and must throw IllegalArgumentException (not StackOverflowError)
+        val overLimit = wrapNestedSequences(ASN1.MAX_DECODE_DEPTH + 2)
+        assertFailsWith<IllegalArgumentException> {
+            ASN1.decode(overLimit)
+        }
+    }
+
+    @Test
+    fun testPrintDeeplyNestedConstructedTaggedObjectsDoesNotOverflowStack() {
+        var current = byteArrayOf(0x05, 0x00) // ASN1Null
+        for (i in 0 until ASN1.MAX_DECODE_DEPTH + 20) {
+            current = ASN1.encode(
+                ASN1TaggedObject(ASN1TagClass.CONTEXT_SPECIFIC, ASN1Encoding.CONSTRUCTED, 0, current)
+            )
+        }
+        val decoded = ASN1.decode(current)!!
+        val printed = ASN1.print(decoded)
+        assertTrue(printed.startsWith("[0] (1 elem)"))
     }
 }
 
