@@ -612,16 +612,28 @@ import AuthenticationServices
     }
 
     @objc(mldsaSign::::) public class func mldsaSign(algorithm: String, seed: Data, pubKey: Data, message: Data) -> Data? {
+        return mldsaSignWithContext(algorithm: algorithm, seed: seed, pubKey: pubKey, message: message, context: Data())
+    }
+
+    @objc(mldsaSignWithContext:::::) public class func mldsaSignWithContext(algorithm: String, seed: Data, pubKey: Data, message: Data, context: Data) -> Data? {
         if #available(iOS 26.0, macOS 26.0, *) {
             if algorithm == "ML-DSA-65" {
                 if let pub = try? MLDSA65.PublicKey(rawRepresentation: pubKey),
                    let priv = try? MLDSA65.PrivateKey(seedRepresentation: seed, publicKey: pub) {
-                    return try? priv.signature(for: message)
+                    if context.isEmpty {
+                        return try? priv.signature(for: message)
+                    } else {
+                        return try? priv.signature(for: message, context: context)
+                    }
                 }
             } else if algorithm == "ML-DSA-87" {
                 if let pub = try? MLDSA87.PublicKey(rawRepresentation: pubKey),
                    let priv = try? MLDSA87.PrivateKey(seedRepresentation: seed, publicKey: pub) {
-                    return try? priv.signature(for: message)
+                    if context.isEmpty {
+                        return try? priv.signature(for: message)
+                    } else {
+                        return try? priv.signature(for: message, context: context)
+                    }
                 }
             }
         }
@@ -629,14 +641,26 @@ import AuthenticationServices
     }
 
     @objc(mldsaVerifySignature::::) public class func mldsaVerifySignature(algorithm: String, pubKey: Data, message: Data, signature: Data) -> Bool {
+        return mldsaVerifySignatureWithContext(algorithm: algorithm, pubKey: pubKey, message: message, signature: signature, context: Data())
+    }
+
+    @objc(mldsaVerifySignatureWithContext:::::) public class func mldsaVerifySignatureWithContext(algorithm: String, pubKey: Data, message: Data, signature: Data, context: Data) -> Bool {
         if #available(iOS 26.0, macOS 26.0, *) {
             if algorithm == "ML-DSA-65" {
                 if let pub = try? MLDSA65.PublicKey(rawRepresentation: pubKey) {
-                    return pub.isValidSignature(signature, for: message)
+                    if context.isEmpty {
+                        return pub.isValidSignature(signature, for: message)
+                    } else {
+                        return pub.isValidSignature(signature, for: message, context: context)
+                    }
                 }
             } else if algorithm == "ML-DSA-87" {
                 if let pub = try? MLDSA87.PublicKey(rawRepresentation: pubKey) {
-                    return pub.isValidSignature(signature, for: message)
+                    if context.isEmpty {
+                        return pub.isValidSignature(signature, for: message)
+                    } else {
+                        return pub.isValidSignature(signature, for: message, context: context)
+                    }
                 }
             }
         }

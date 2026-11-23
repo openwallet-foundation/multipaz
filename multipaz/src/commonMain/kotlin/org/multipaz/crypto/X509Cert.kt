@@ -115,6 +115,26 @@ data class X509Cert(
                 OID.ML_DSA_44.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_44, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
                 OID.ML_DSA_65.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_65, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
                 OID.ML_DSA_87.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_87, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_DSA_44_ED25519_SHA512.oid -> return HybridPublicKey(
+                    Algorithm.ML_DSA_44_ED25519,
+                    ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value)
+                )
+                OID.ML_DSA_44_ECDSA_P256_SHA256.oid -> return HybridPublicKey(
+                    Algorithm.ML_DSA_44_ES256,
+                    ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value)
+                )
+                OID.ML_DSA_65_ECDSA_P256_SHA512.oid -> return HybridPublicKey(
+                    Algorithm.ML_DSA_65_ES256,
+                    ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value)
+                )
+                OID.ML_DSA_65_ECDSA_P384_SHA512.oid -> return HybridPublicKey(
+                    Algorithm.ML_DSA_65_ES384,
+                    ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value)
+                )
+                OID.ML_DSA_87_ECDSA_P384_SHA512.oid -> return HybridPublicKey(
+                    Algorithm.ML_DSA_87_ES384,
+                    ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value)
+                )
                 OID.ML_KEM_512.oid -> return MlKemPublicKey(Algorithm.ML_KEM_512, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
                 OID.ML_KEM_768.oid -> return MlKemPublicKey(Algorithm.ML_KEM_768, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
                 OID.ML_KEM_1024.oid -> return MlKemPublicKey(Algorithm.ML_KEM_1024, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
@@ -490,6 +510,12 @@ data class X509Cert(
                     }
                     Pair(
                         ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                        publicKey.encoded.toByteArray()
+                    )
+                }
+                is HybridPublicKey -> {
+                    Pair(
+                        ASN1Sequence(listOf(ASN1ObjectIdentifier(HybridSigning.specFor(publicKey.algorithm).oid))),
                         publicKey.encoded.toByteArray()
                     )
                 }

@@ -63,6 +63,7 @@ object MultipazCtl {
                     Algorithm.PS256, Algorithm.PS384, Algorithm.PS512
                 ) -> Crypto.createRsaPrivateKey(2048)
                 algorithm.isMlDsa -> Crypto.createMlDsaPrivateKey(algorithm)
+                algorithm.isHybridSigning -> Crypto.createHybridPrivateKey(algorithm)
                 else -> Crypto.createEcPrivateKey(algorithm.curve!!)
             }
             return Pair(privateKey, algorithm)

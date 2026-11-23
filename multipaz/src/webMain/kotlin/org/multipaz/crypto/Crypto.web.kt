@@ -76,6 +76,12 @@ external interface RsaPssParams : web.crypto.Algorithm {
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
+external interface ContextParams : web.crypto.Algorithm {
+    override var name: String
+    var context: js.buffer.BufferSource
+}
+
+@OptIn(ExperimentalWasmJsInterop::class)
 external interface EncapsulatedBits : JsAny {
     val sharedKey: js.buffer.ArrayBufferLike
     val ciphertext: js.buffer.ArrayBufferLike
@@ -210,6 +216,9 @@ actual object Crypto {
         ).filter { isOperationSupported("encapsulateBits", it.second) }
             .map { it.first }
             .toSet()
+
+    actual val supportedHybridSigningAlgorithms: Set<Algorithm>
+        get() = HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
 
     actual val provider: String by lazy {
         "Web Crypto (${window.navigator.userAgent})"
@@ -487,8 +496,22 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: MlDsaSignature
     ) {
+        checkSignature(publicKey, message, algorithm, signature, byteArrayOf())
+    }
+
+    @OptIn(ExperimentalWasmJsInterop::class)
+    actual suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature,
+        context: ByteArray
+    ) {
         require(algorithm == publicKey.algorithm) {
             "Signature algorithm $algorithm doesn't match key algorithm ${publicKey.algorithm}"
+        }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
         }
         val algName = when (publicKey.algorithm) {
             Algorithm.ML_DSA_44 -> "ML-DSA-44"
@@ -513,8 +536,16 @@ actual object Crypto {
                 keyUsages = jsArrayOf(KeyUsage.verify)
             )
         }
+        val verifyAlgorithm: web.crypto.Algorithm = if (context.isEmpty()) {
+            unsafeJso<web.crypto.Algorithm> { this.name = algName }
+        } else {
+            unsafeJso<ContextParams> {
+                this.name = algName
+                this.context = context.toBufferSource()
+            }
+        }
         val verified = crypto.subtle.verify(
-            algorithm = unsafeJso<web.crypto.Algorithm> { this.name = algName },
+            algorithm = verifyAlgorithm,
             key = importedKey,
             signature = signature.signature.toBufferSource(),
             data = message.toBufferSource()
@@ -522,6 +553,15 @@ actual object Crypto {
         if (!verified) {
             throw SignatureVerificationException("ML-DSA signature verification failed")
         }
+    }
+
+    actual suspend fun checkSignature(
+        publicKey: HybridPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: HybridSignature
+    ) {
+        HybridSigning.checkSignature(publicKey, message, algorithm, signature)
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
@@ -665,13 +705,30 @@ actual object Crypto {
             ).unsafeCast<js.buffer.ArrayBufferLike>().toByteArray()
             MlDsaPrivateKey.fromPrivateKeyInfo(pkcs8Bytes, pubKey)
         } catch (_: Throwable) {
-            val rawBytes = crypto.subtle.exportKey(
-                format = KeyFormat.Companion.raw,
-                key = key.privateKey
-            ).toByteArray()
-            MlDsaPrivateKey(algorithm, ByteString(rawBytes), pubKey)
+            try {
+                val rawSeedBytes = crypto.subtle.exportKey(
+                    format = "raw-seed".toJsString().unsafeCast<KeyFormat>(),
+                    key = key.privateKey
+                ).toByteArray()
+                MlDsaPrivateKey(algorithm, ByteString(rawSeedBytes), pubKey)
+            } catch (_: Throwable) {
+                val rawBytes = crypto.subtle.exportKey(
+                    format = KeyFormat.Companion.raw,
+                    key = key.privateKey
+                ).toByteArray()
+                MlDsaPrivateKey(algorithm, ByteString(rawBytes), pubKey)
+            }
         }
         return privKey
+    }
+
+    actual suspend fun createHybridPrivateKey(
+        algorithm: Algorithm
+    ): HybridPrivateKey {
+        require(algorithm in supportedHybridSigningAlgorithms) {
+            "Hybrid signing algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridSigning.createPrivateKey(algorithm)
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
@@ -844,8 +901,21 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): MlDsaSignature {
+        return sign(key, signatureAlgorithm, message, byteArrayOf())
+    }
+
+    @OptIn(ExperimentalWasmJsInterop::class)
+    actual suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray,
+        context: ByteArray
+    ): MlDsaSignature {
         require(signatureAlgorithm == key.algorithm) {
             "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
+        }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
         }
         val algName = when (key.algorithm) {
             Algorithm.ML_DSA_44 -> "ML-DSA-44"
@@ -862,20 +932,46 @@ actual object Crypto {
                 keyUsages = jsArrayOf(KeyUsage.sign)
             )
         } catch (_: Throwable) {
-            crypto.subtle.importKey(
-                format = KeyFormat.Companion.raw,
-                keyData = key.encoded.toByteArray().toBufferSource(),
-                algorithm = unsafeJso<web.crypto.Algorithm> { this.name = algName },
-                extractable = false,
-                keyUsages = jsArrayOf(KeyUsage.sign)
-            )
+            try {
+                crypto.subtle.importKey(
+                    format = "raw-seed".toJsString().unsafeCast<KeyFormat>(),
+                    keyData = key.encoded.toByteArray().toBufferSource(),
+                    algorithm = unsafeJso<web.crypto.Algorithm> { this.name = algName },
+                    extractable = false,
+                    keyUsages = jsArrayOf(KeyUsage.sign)
+                )
+            } catch (_: Throwable) {
+                crypto.subtle.importKey(
+                    format = KeyFormat.Companion.raw,
+                    keyData = key.encoded.toByteArray().toBufferSource(),
+                    algorithm = unsafeJso<web.crypto.Algorithm> { this.name = algName },
+                    extractable = false,
+                    keyUsages = jsArrayOf(KeyUsage.sign)
+                )
+            }
+        }
+        val signAlgorithm: web.crypto.Algorithm = if (context.isEmpty()) {
+            unsafeJso<web.crypto.Algorithm> { this.name = algName }
+        } else {
+            unsafeJso<ContextParams> {
+                this.name = algName
+                this.context = context.toBufferSource()
+            }
         }
         val sig = crypto.subtle.sign(
-            algorithm = unsafeJso<web.crypto.Algorithm> { this.name = algName },
+            algorithm = signAlgorithm,
             key = importedKey,
             data = message.toBufferSource()
         ).toByteArray()
         return MlDsaSignature(sig)
+    }
+
+    actual suspend fun sign(
+        key: HybridPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): HybridSignature {
+        return HybridSigning.sign(key, signatureAlgorithm, message)
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
@@ -1078,6 +1174,15 @@ actual object Crypto {
         for (n in 1..certificates.lastIndex) {
             val toVerify = certificates[n - 1]
             val verifier = certificates[n]
+            if (HybridSigning.isCompositeOid(toVerify.signatureAlgorithmOid)) {
+                try {
+                    toVerify.verify(verifier.publicKey)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    return false
+                }
+                continue
+            }
 
             val toVerifyCert = ASN1.decode(toVerify.encoded) as ASN1Sequence
             val toVerifyTbsCert = toVerifyCert.elements[0] as ASN1Sequence

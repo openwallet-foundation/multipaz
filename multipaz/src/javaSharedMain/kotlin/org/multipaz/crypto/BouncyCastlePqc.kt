@@ -65,6 +65,15 @@ internal object BouncyCastlePqc {
     private val mldsaPrivParamsGetEncodedMethod by lazy {
         mldsaPrivParamsClass.getMethod("getEncoded")
     }
+    private val mldsaPrivParamsGetSeedMethod by lazy {
+        mldsaPrivParamsClass.getMethod("getSeed")
+    }
+    private val parametersWithContextConstructor by lazy {
+        Class.forName("org.bouncycastle.crypto.params.ParametersWithContext").getConstructor(
+            Class.forName("org.bouncycastle.crypto.CipherParameters"),
+            ByteArray::class.java
+        )
+    }
     private val mldsaSignerClass by lazy {
         Class.forName("org.bouncycastle.pqc.crypto.mldsa.MLDSASigner")
     }
@@ -199,23 +208,42 @@ internal object BouncyCastlePqc {
         val pubParams = keyPairGetPublicMethod.invoke(keyPair)
         val privParams = keyPairGetPrivateMethod.invoke(keyPair)
         val pubEncoded = mldsaPubParamsGetEncodedMethod.invoke(pubParams) as ByteArray
-        val privEncoded = mldsaPrivParamsGetEncodedMethod.invoke(privParams) as ByteArray
+        val privSeed = (mldsaPrivParamsGetSeedMethod.invoke(privParams) as ByteArray?)
+            ?: (mldsaPrivParamsGetEncodedMethod.invoke(privParams) as ByteArray)
         val publicKey = MlDsaPublicKey(algorithm, ByteString(pubEncoded))
-        MlDsaPrivateKey(algorithm, ByteString(privEncoded), publicKey)
+        try {
+            MlDsaPrivateKey(algorithm, ByteString(privSeed), publicKey)
+        } finally {
+            privSeed.secureZero()
+        }
     }
 
     fun sign(
         key: MlDsaPrivateKey,
         signatureAlgorithm: Algorithm,
-        message: ByteArray
+        message: ByteArray,
+        context: ByteArray = byteArrayOf()
     ): MlDsaSignature = wrapInvocation {
         require(signatureAlgorithm == key.algorithm) {
             "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
         }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
+        }
         val params = algorithmToMlDsaParameters(key.algorithm)
-        val privParams = mldsaPrivParamsConstructor.newInstance(params, key.encoded.toByteArray())
+        val keyBytes = key.encoded.toByteArray()
+        val privParams = try {
+            mldsaPrivParamsConstructor.newInstance(params, keyBytes)
+        } finally {
+            keyBytes.secureZero()
+        }
+        val initParams = if (context.isEmpty()) {
+            privParams
+        } else {
+            parametersWithContextConstructor.newInstance(privParams, context)
+        }
         val signer = mldsaSignerClass.getDeclaredConstructor().newInstance()
-        mldsaSignerInitMethod.invoke(signer, true, privParams)
+        mldsaSignerInitMethod.invoke(signer, true, initParams)
         mldsaSignerUpdateMethod.invoke(signer, message, 0, message.size)
         val signature = mldsaSignerGenerateSignatureMethod.invoke(signer) as ByteArray
         MlDsaSignature(signature)
@@ -225,15 +253,24 @@ internal object BouncyCastlePqc {
         publicKey: MlDsaPublicKey,
         message: ByteArray,
         algorithm: Algorithm,
-        signature: MlDsaSignature
+        signature: MlDsaSignature,
+        context: ByteArray = byteArrayOf()
     ): Unit = wrapInvocation {
         require(algorithm == publicKey.algorithm) {
             "Signature algorithm $algorithm doesn't match key algorithm ${publicKey.algorithm}"
         }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
+        }
         val params = algorithmToMlDsaParameters(publicKey.algorithm)
         val pubParams = mldsaPubParamsConstructor.newInstance(params, publicKey.encoded.toByteArray())
+        val initParams = if (context.isEmpty()) {
+            pubParams
+        } else {
+            parametersWithContextConstructor.newInstance(pubParams, context)
+        }
         val verifier = mldsaSignerClass.getDeclaredConstructor().newInstance()
-        mldsaSignerInitMethod.invoke(verifier, false, pubParams)
+        mldsaSignerInitMethod.invoke(verifier, false, initParams)
         mldsaSignerUpdateMethod.invoke(verifier, message, 0, message.size)
         val verified = mldsaSignerVerifySignatureMethod.invoke(verifier, signature.signature) as Boolean
         if (!verified) {

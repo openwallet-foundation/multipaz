@@ -101,6 +101,14 @@ sealed class X509Signed() {
                     MlDsaSignature(signature)
                 )
             }
+            is HybridPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    tbsCertificate,
+                    signatureAlgorithm,
+                    HybridSignature(signature)
+                )
+            }
             is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
         }
     }
@@ -161,6 +169,11 @@ sealed class X509Signed() {
                 OID.ML_DSA_44.oid -> Algorithm.ML_DSA_44
                 OID.ML_DSA_65.oid -> Algorithm.ML_DSA_65
                 OID.ML_DSA_87.oid -> Algorithm.ML_DSA_87
+                OID.ML_DSA_44_ED25519_SHA512.oid -> Algorithm.ML_DSA_44_ED25519
+                OID.ML_DSA_44_ECDSA_P256_SHA256.oid -> Algorithm.ML_DSA_44_ES256
+                OID.ML_DSA_65_ECDSA_P256_SHA512.oid -> Algorithm.ML_DSA_65_ES256
+                OID.ML_DSA_65_ECDSA_P384_SHA512.oid -> Algorithm.ML_DSA_65_ES384
+                OID.ML_DSA_87_ECDSA_P384_SHA512.oid -> Algorithm.ML_DSA_87_ES384
                 else -> throw IllegalArgumentException(
                     "Unexpected algorithm OID $signatureAlgorithmOid")
             }
@@ -400,7 +413,10 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
             Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096,
             Algorithm.RS384, Algorithm.RS384_3072, Algorithm.RS384_4096,
             Algorithm.RS512, Algorithm.RS512_4096 -> signature.toDerEncoded()
-            Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87 -> signature.toCoseEncoded()
+            Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87,
+            Algorithm.ML_DSA_44_ED25519, Algorithm.ML_DSA_44_ES256,
+            Algorithm.ML_DSA_65_ES256, Algorithm.ML_DSA_65_ES384,
+            Algorithm.ML_DSA_87_ES384 -> signature.toCoseEncoded()
             else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
         }
         return ASN1Sequence(listOf(
@@ -423,6 +439,16 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
                 Algorithm.ML_DSA_44 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_44.oid)))
                 Algorithm.ML_DSA_65 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_65.oid)))
                 Algorithm.ML_DSA_87 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_87.oid)))
+                Algorithm.ML_DSA_44_ED25519 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_44_ED25519_SHA512.oid)))
+                Algorithm.ML_DSA_44_ES256 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_44_ECDSA_P256_SHA256.oid)))
+                Algorithm.ML_DSA_65_ES256 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_65_ECDSA_P256_SHA512.oid)))
+                Algorithm.ML_DSA_65_ES384 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_65_ECDSA_P384_SHA512.oid)))
+                Algorithm.ML_DSA_87_ES384 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_87_ECDSA_P384_SHA512.oid)))
                 Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096 -> ASN1Sequence(listOf(
                     ASN1ObjectIdentifier(OID.SIGNATURE_RS256.oid),
                     ASN1Null()

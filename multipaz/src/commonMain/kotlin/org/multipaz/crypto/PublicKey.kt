@@ -98,6 +98,13 @@ sealed class PublicKey {
                 OID.ML_DSA_87.oid -> {
                     MlDsaPublicKey.fromSubjectPublicKeyInfo(encoded)
                 }
+                OID.ML_DSA_44_ED25519_SHA512.oid,
+                OID.ML_DSA_44_ECDSA_P256_SHA256.oid,
+                OID.ML_DSA_65_ECDSA_P256_SHA512.oid,
+                OID.ML_DSA_65_ECDSA_P384_SHA512.oid,
+                OID.ML_DSA_87_ECDSA_P384_SHA512.oid -> {
+                    HybridPublicKey.fromSubjectPublicKeyInfo(encoded)
+                }
                 OID.ML_KEM_512.oid,
                 OID.ML_KEM_768.oid,
                 OID.ML_KEM_1024.oid -> {
@@ -132,8 +139,10 @@ sealed class PublicKey {
                 Cose.COSE_KEY_TYPE_AKP.toDataItem() -> {
                     val algNum = coseKey.labels[Cose.COSE_KEY_ALG.toCoseLabel]?.asNumber?.toInt()
                     val alg = algNum?.let { Algorithm.fromCoseAlgorithmIdentifier(it) }
-                    if (alg != null && alg.isSigning) {
+                    if (alg != null && alg.isMlDsa) {
                         MlDsaPublicKey.fromCoseKey(coseKey)
+                    } else if (alg != null && alg.isHybridSigning) {
+                        HybridPublicKey.fromCoseKey(coseKey)
                     } else if (alg != null && alg.isKeyEncapsulation) {
                         MlKemPublicKey.fromCoseKey(coseKey)
                     } else {
@@ -142,6 +151,8 @@ sealed class PublicKey {
                             MlDsaPublicKey.fromCoseKey(coseKey)
                         } else if (pubSize in listOf(800, 1184, 1568)) {
                             MlKemPublicKey.fromCoseKey(coseKey)
+                        } else if (HybridSigning.specForPublicKeySizeOrNull(pubSize) != null) {
+                            HybridPublicKey.fromCoseKey(coseKey)
                         } else {
                             throw IllegalArgumentException("Cannot determine AKP key type for size $pubSize")
                         }
@@ -164,13 +175,14 @@ sealed class PublicKey {
                 "OKP", "EC" -> EcPublicKey.fromJwk(jwk)
                 "RSA" -> RsaPublicKey.fromJwk(jwk)
                 "AKP" -> {
-                    val alg = jwk["alg"]?.jsonPrimitive?.content
-                    if (alg?.startsWith("ML-DSA") == true) {
-                        MlDsaPublicKey.fromJwk(jwk)
-                    } else if (alg?.startsWith("ML-KEM") == true) {
-                        MlKemPublicKey.fromJwk(jwk)
-                    } else {
-                        throw IllegalArgumentException("Unsupported AKP algorithm $alg")
+                    val algName = jwk["alg"]?.jsonPrimitive?.content
+                        ?: throw IllegalArgumentException("Missing alg in AKP JWK")
+                    val alg = Algorithm.fromJoseAlgorithmIdentifier(algName)
+                    when {
+                        alg.isHybridSigning -> HybridPublicKey.fromJwk(jwk)
+                        alg.isMlDsa -> MlDsaPublicKey.fromJwk(jwk)
+                        alg.isKeyEncapsulation -> MlKemPublicKey.fromJwk(jwk)
+                        else -> throw IllegalArgumentException("Unsupported AKP algorithm $algName")
                     }
                 }
                 else -> throw IllegalArgumentException("Unsupported key type $kty")

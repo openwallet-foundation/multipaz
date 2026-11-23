@@ -14,6 +14,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridPublicKey
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
@@ -244,6 +246,14 @@ suspend fun validateJwt(
                     message = message.encodeToByteArray(),
                     algorithm = algorithm ?: key.algorithm,
                     signature = MlDsaSignature(signatureBytes)
+                )
+            }
+            is HybridPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey = key,
+                    message = message.encodeToByteArray(),
+                    algorithm = algorithm ?: key.algorithm,
+                    signature = HybridSignature(signatureBytes)
                 )
             }
             is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")

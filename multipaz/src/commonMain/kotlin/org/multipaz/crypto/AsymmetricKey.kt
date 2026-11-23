@@ -57,6 +57,11 @@ sealed class AsymmetricKey : AutoCloseable {
         get() = publicKey as? MlDsaPublicKey
             ?: throw IllegalStateException("Key is not an ML-DSA key")
 
+    /** Public key as [HybridPublicKey] */
+    val hybridPublicKey: HybridPublicKey
+        get() = publicKey as? HybridPublicKey
+            ?: throw IllegalStateException("Key is not a hybrid key")
+
     /**
      * Entity to which the key belongs; key id for named key, common name for the keys with
      * the certificate chain.
@@ -149,6 +154,26 @@ sealed class AsymmetricKey : AutoCloseable {
         sign(message) as? MlDsaSignature ?: throw IllegalStateException("Not an ML-DSA signature")
 
     /**
+     * Signs [message] with this PQ/T hybrid composite key.
+     *
+     * @param message the data to sign.
+     * @return the [HybridSignature].
+     * @throws IllegalStateException if the signature is not a [HybridSignature].
+     * @throws IllegalArgumentException if [message] cannot be signed with this key.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
+     */
+    @Throws(
+        IllegalStateException::class,
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
+    suspend fun signHybrid(message: ByteArray): HybridSignature =
+        sign(message) as? HybridSignature ?: throw IllegalStateException("Not a hybrid signature")
+
+    /**
      * Performs Key Agreement using this key and [otherKey].
      *
      * If the key needs unlocking before use (for example user authentication
@@ -191,6 +216,8 @@ sealed class AsymmetricKey : AutoCloseable {
             is EcPublicKey -> keyAgreement(otherKey)
             is RsaPublicKey -> throw IllegalArgumentException("Key agreement is not supported with RSA public key")
             is MlDsaPublicKey -> throw IllegalArgumentException("Key agreement is not supported with ML-DSA public key")
+            is HybridPublicKey ->
+                throw IllegalArgumentException("Key agreement is not supported with hybrid signing public key")
             is MlKemPublicKey -> throw IllegalArgumentException("Key agreement is not supported with ML-KEM public key")
         }
 
@@ -219,6 +246,11 @@ sealed class AsymmetricKey : AutoCloseable {
         val mlDsaPrivateKey: MlDsaPrivateKey
             get() = privateKey as? MlDsaPrivateKey
                 ?: throw IllegalStateException("Key is not an ML-DSA key")
+
+        /** Private key as [HybridPrivateKey] */
+        val hybridPrivateKey: HybridPrivateKey
+            get() = privateKey as? HybridPrivateKey
+                ?: throw IllegalStateException("Key is not a hybrid key")
     }
 
     /** Implemented by [AsymmetricKey] where the private key resides in [SecureArea] */
@@ -293,6 +325,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
             is MlDsaPrivateKey -> privateKey.algorithm
+            is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
         }
     ): X509Certified(), Explicit {
@@ -321,6 +354,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
             is MlDsaPrivateKey -> privateKey.algorithm
+            is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
         }
     ): Named(), Explicit {
@@ -348,6 +382,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
             is MlDsaPrivateKey -> privateKey.algorithm
+            is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
         }
     ): Anonymous(), Explicit {
@@ -467,6 +502,8 @@ sealed class AsymmetricKey : AutoCloseable {
                 is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey)
                 is RsaPrivateKey -> throw UnsupportedOperationException("RSA keys do not support key agreement")
                 is MlDsaPrivateKey -> throw UnsupportedOperationException("ML-DSA keys do not support key agreement")
+                is HybridPrivateKey ->
+                    throw UnsupportedOperationException("Hybrid signing keys do not support key agreement")
                 is MlKemPrivateKey -> throw UnsupportedOperationException("ML-KEM keys do not support key agreement")
             }
 
@@ -609,6 +646,7 @@ sealed class AsymmetricKey : AutoCloseable {
                 is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
                 is RsaPrivateKey -> Algorithm.RS256
                 is MlDsaPrivateKey -> privateKey.algorithm
+                is HybridPrivateKey -> privateKey.algorithm
                 is MlKemPrivateKey -> privateKey.algorithm
             }
         ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
@@ -636,6 +674,8 @@ sealed class AsymmetricKey : AutoCloseable {
                     AnonymousExplicit(Crypto.createRsaPrivateKey(keySizeBits), algorithm)
                 algorithm in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87) ->
                     AnonymousExplicit(Crypto.createMlDsaPrivateKey(algorithm), algorithm)
+                algorithm.isHybridSigning ->
+                    AnonymousExplicit(Crypto.createHybridPrivateKey(algorithm), algorithm)
                 algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024) ->
                     AnonymousExplicit(Crypto.createMlKemPrivateKey(algorithm), algorithm)
                 else ->

@@ -320,6 +320,41 @@ enum class Algorithm(
     ML_DSA_87(coseAlgorithmIdentifier = -50, joseAlgorithmIdentifier = "ML-DSA-87", fullySpecified = true,
         description = "ML-DSA-87", isSigning = true),
 
+    /**
+     * ML-DSA-44 + ECDSA P-256 with SHA-256 pre-hash composite signature algorithm
+     * (draft-ietf-jose-pq-composite-sigs-07, TBD requested COSE ID -54).
+     */
+    ML_DSA_44_ES256(coseAlgorithmIdentifier = -54, joseAlgorithmIdentifier = "ML-DSA-44-ES256",
+        fullySpecified = true, description = "ML-DSA-44-ES256", isSigning = true),
+
+    /**
+     * ML-DSA-65 + ECDSA P-256 with SHA-512 pre-hash composite signature algorithm
+     * (draft-ietf-jose-pq-composite-sigs-07, TBD requested COSE ID -55).
+     */
+    ML_DSA_65_ES256(coseAlgorithmIdentifier = -55, joseAlgorithmIdentifier = "ML-DSA-65-ES256",
+        fullySpecified = true, description = "ML-DSA-65-ES256", isSigning = true),
+
+    /**
+     * ML-DSA-65 + ECDSA P-384 with SHA-512 pre-hash composite signature algorithm
+     * (draft-ietf-jose-pq-composite-sigs-07, TBD requested COSE ID -56).
+     */
+    ML_DSA_65_ES384(coseAlgorithmIdentifier = -56, joseAlgorithmIdentifier = "ML-DSA-65-ES384",
+        fullySpecified = true, description = "ML-DSA-65-ES384", isSigning = true),
+
+    /**
+     * ML-DSA-87 + ECDSA P-384 with SHA-512 pre-hash composite signature algorithm
+     * (draft-ietf-jose-pq-composite-sigs-07, TBD requested COSE ID -57).
+     */
+    ML_DSA_87_ES384(coseAlgorithmIdentifier = -57, joseAlgorithmIdentifier = "ML-DSA-87-ES384",
+        fullySpecified = true, description = "ML-DSA-87-ES384", isSigning = true),
+
+    /**
+     * ML-DSA-44 + Ed25519 with SHA-512 pre-hash composite signature algorithm
+     * (draft-ietf-jose-pq-composite-sigs-07, TBD requested COSE ID -58).
+     */
+    ML_DSA_44_ED25519(coseAlgorithmIdentifier = -58, joseAlgorithmIdentifier = "ML-DSA-44-Ed25519",
+        fullySpecified = true, description = "ML-DSA-44-Ed25519", isSigning = true),
+
     /** ML-KEM-512 post-quantum key encapsulation mechanism (FIPS 203). */
     ML_KEM_512(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "ML-KEM-512", fullySpecified = true,
         description = "ML-KEM-512", isKeyEncapsulation = true),
@@ -338,6 +373,17 @@ enum class Algorithm(
     val isMlDsa: Boolean
         get() = when (this) {
             ML_DSA_44, ML_DSA_65, ML_DSA_87 -> true
+            else -> false
+        }
+
+    /** Whether this is a PQ/T hybrid composite signature algorithm. */
+    val isHybridSigning: Boolean
+        get() = when (this) {
+            ML_DSA_44_ES256,
+            ML_DSA_65_ES256,
+            ML_DSA_65_ES384,
+            ML_DSA_87_ES384,
+            ML_DSA_44_ED25519 -> true
             else -> false
         }
 

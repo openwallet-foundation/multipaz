@@ -10,6 +10,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.prompt.PromptModel
@@ -208,6 +209,7 @@ private suspend fun seTestUnguarded(
         val signatureDesc = when (signature) {
             is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
             is MlDsaSignature -> "signature=${signature.signature.toHex()}"
+            is HybridSignature -> "signature=${signature.signature.toHex()}"
             else -> "signature=$signature"
         }
         Logger.d(TAG, "Made signature with key $signatureDesc")

@@ -6,10 +6,13 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1
+import org.multipaz.asn1.ASN1Encoding
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.asn1.ASN1TagClass
+import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
@@ -115,6 +118,9 @@ class MlDsaPrivateKey(
 
     /**
      * Encodes this private key as a DER-encoded PKCS#8 OneAsymmetricKey sequence.
+     *
+     * When stored as a 32-byte FIPS 204 seed, the inner `privateKey` field uses the RFC 9881
+     * `seed [0] IMPLICIT OCTET STRING` encoding.
      */
     fun toPkcs8(): ByteArray {
         checkNotDestroyed()
@@ -124,15 +130,29 @@ class MlDsaPrivateKey(
             Algorithm.ML_DSA_87 -> OID.ML_DSA_87.oid
             else -> throw IllegalArgumentException()
         }
-        return ASN1.encode(
+        val privateKeyBytes = if (_encoded.size == 32) {
+            ASN1.encode(
+                ASN1TaggedObject(
+                    cls = ASN1TagClass.CONTEXT_SPECIFIC,
+                    enc = ASN1Encoding.PRIMITIVE,
+                    tag = 0,
+                    content = _encoded
+                )
+            )
+        } else {
+            ASN1.encode(ASN1OctetString(_encoded))
+        }
+        val result = ASN1.encode(
             ASN1Sequence(
                 listOf(
                     ASN1Integer(0),
                     ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
-                    ASN1OctetString(_encoded)
+                    ASN1OctetString(privateKeyBytes)
                 )
             )
         )
+        privateKeyBytes.secureZero()
+        return result
     }
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -193,9 +213,43 @@ class MlDsaPrivateKey(
                 else -> throw IllegalArgumentException("Unsupported ML-DSA OID: $oid")
             }
             val privKeyOctets = (seq.elements[2] as ASN1OctetString).value
+            val keyBytes = extractMlDsaPrivateKeyBytes(privKeyOctets)
             val effectivePublicKey = publicKey
                 ?: throw IllegalArgumentException("publicKey is required to deserialize ML-DSA private key")
-            return MlDsaPrivateKey(algorithm, ByteString(privKeyOctets), effectivePublicKey)
+            return MlDsaPrivateKey(algorithm, ByteString(keyBytes), effectivePublicKey)
+        }
+
+        private fun extractMlDsaPrivateKeyBytes(privKeyField: ByteArray): ByteArray {
+            if (privKeyField.size == 32) {
+                return privKeyField
+            }
+            val decoded = try {
+                ASN1.decode(privKeyField)?.takeIf { ASN1.encode(it).size == privKeyField.size }
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+            return when (decoded) {
+                is ASN1TaggedObject -> {
+                    require(decoded.cls == ASN1TagClass.CONTEXT_SPECIFIC && decoded.tag == 0) {
+                        "Unsupported ML-DSA private key tag: ${decoded.cls} ${decoded.tag}"
+                    }
+                    val seed = if (decoded.enc == ASN1Encoding.PRIMITIVE) {
+                        decoded.content
+                    } else {
+                        (ASN1.decode(decoded.content) as ASN1OctetString).value
+                    }
+                    require(seed.size == 32) { "Expected 32-byte ML-DSA seed, got ${seed.size}" }
+                    seed
+                }
+                is ASN1Sequence -> {
+                    require(decoded.elements.size >= 2) { "Invalid ML-DSA 'both' SEQUENCE" }
+                    val seed = (decoded.elements[0] as ASN1OctetString).value
+                    require(seed.size == 32) { "Expected 32-byte ML-DSA seed in 'both', got ${seed.size}" }
+                    seed
+                }
+                is ASN1OctetString -> decoded.value
+                else -> privKeyField
+            }
         }
 
         /**

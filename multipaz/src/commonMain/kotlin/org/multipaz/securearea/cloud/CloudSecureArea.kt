@@ -116,6 +116,7 @@ open class CloudSecureArea protected constructor(
                 it.curve != null ||
                 (it.keySizeBits != null && it.isSigning) ||
                 it.isMlDsa ||
+                it.isHybridSigning ||
                 it.isMlKem
             )
         }
@@ -830,7 +831,7 @@ open class CloudSecureArea protected constructor(
     }
 
     @CborSerializable(
-        schemaHash = "RUORjIQR7WTnW3b6i6-XRujKbW_WniY8QgUXGF8FyUs"
+        schemaHash = "sq9_OD3Ek9r489N1ADfSCf_qVkRu5E3XN__Pi3W418s"
     )
     internal data class KeyMetadata(
         val algorithm: Algorithm,

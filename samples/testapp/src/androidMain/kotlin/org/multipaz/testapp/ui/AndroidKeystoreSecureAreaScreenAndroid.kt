@@ -54,6 +54,7 @@ import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.X509CertChain
@@ -781,6 +782,7 @@ private suspend fun aksTestUnguarded(
             is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
             is RsaSignature -> "bytes=${signature.signature.toHex()}"
             is MlDsaSignature -> "bytes=${signature.signature.toHex()}"
+            is HybridSignature -> "bytes=${signature.signature.toHex()}"
         }
         Logger.d(
             TAG,
@@ -790,6 +792,7 @@ private suspend fun aksTestUnguarded(
             is EcSignature -> "EC"
             is RsaSignature -> "RSA"
             is MlDsaSignature -> "ML-DSA"
+            is HybridSignature -> "Hybrid"
         }
         showToast("$sigTypeStr signature in (${t1 - t0} msec)")
     } else {

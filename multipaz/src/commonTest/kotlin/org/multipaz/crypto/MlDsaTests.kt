@@ -1,9 +1,18 @@
 package org.multipaz.crypto
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.asn1.ASN1
+import org.multipaz.asn1.ASN1Encoding
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.ASN1ObjectIdentifier
+import org.multipaz.asn1.ASN1OctetString
+import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.asn1.ASN1TagClass
+import org.multipaz.asn1.ASN1TaggedObject
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.Tstr
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseSign1
@@ -106,6 +115,74 @@ class MlDsaTests {
             val pkcs8Bytes = privKey.toPrivateKeyInfo()
             val privFromPkcs8 = MlDsaPrivateKey.fromPrivateKeyInfo(pkcs8Bytes, pubKey)
             assertEquals(privKey, privFromPkcs8)
+
+            if (Crypto.provider.startsWith("JCA:") || Crypto.provider == "CryptoKit") {
+                assertEquals(32, privKey.encoded.size)
+            }
+
+            if (privKey.encoded.size == 32) {
+                val oid = when (alg) {
+                    Algorithm.ML_DSA_44 -> OID.ML_DSA_44.oid
+                    Algorithm.ML_DSA_65 -> OID.ML_DSA_65.oid
+                    Algorithm.ML_DSA_87 -> OID.ML_DSA_87.oid
+                    else -> throw IllegalArgumentException()
+                }
+                val seedBytes = privKey.encoded.toByteArray()
+                // RFC 9881 'both SEQUENCE' format
+                val bothInner = ASN1.encode(
+                    ASN1Sequence(
+                        listOf(
+                            ASN1OctetString(seedBytes),
+                            ASN1OctetString(ByteArray(64))
+                        )
+                    )
+                )
+                val bothPkcs8 = ASN1.encode(
+                    ASN1Sequence(
+                        listOf(
+                            ASN1Integer(0),
+                            ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                            ASN1OctetString(bothInner)
+                        )
+                    )
+                )
+                assertEquals(privKey, MlDsaPrivateKey.fromPrivateKeyInfo(bothPkcs8, pubKey))
+
+                // Unwrapped raw seed format inside PrivateKeyInfo.privateKey
+                val rawPkcs8 = ASN1.encode(
+                    ASN1Sequence(
+                        listOf(
+                            ASN1Integer(0),
+                            ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                            ASN1OctetString(seedBytes)
+                        )
+                    )
+                )
+                assertEquals(privKey, MlDsaPrivateKey.fromPrivateKeyInfo(rawPkcs8, pubKey))
+
+                // Verify RFC 9881 [0] IMPLICIT OCTET STRING is emitted by toPkcs8()
+                val decodedPkcs8 = ASN1.decode(pkcs8Bytes) as ASN1Sequence
+                val innerTag = ASN1.decode((decodedPkcs8.elements[2] as ASN1OctetString).value) as ASN1TaggedObject
+                assertEquals(ASN1TagClass.CONTEXT_SPECIFIC, innerTag.cls)
+                assertEquals(0, innerTag.tag)
+                assertEquals(ASN1Encoding.PRIMITIVE, innerTag.enc)
+
+                // OCTET STRING-wrapped expanded bytes fallback
+                val fakeExpanded = ByteArray(128) { 0x5A }
+                val wrappedExpandedPkcs8 = ASN1.encode(
+                    ASN1Sequence(
+                        listOf(
+                            ASN1Integer(0),
+                            ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                            ASN1OctetString(ASN1.encode(ASN1OctetString(fakeExpanded)))
+                        )
+                    )
+                )
+                assertEquals(
+                    ByteString(fakeExpanded),
+                    MlDsaPrivateKey.fromPrivateKeyInfo(wrappedExpandedPkcs8, pubKey).encoded
+                )
+            }
 
             // PEM roundtrip (MlDsaPublicKey and PublicKey companion)
             val pubPem = pubKey.toPem()
@@ -379,6 +456,38 @@ class MlDsaTests {
             assertTrue(signature is MlDsaSignature)
 
             Crypto.checkSignature(keyInfo.publicKey, dataToSign, alg, signature)
+        }
+    }
+
+    @Test
+    fun testContextSigning() = runTest {
+        val message = "Message signed with FIPS 204 context".encodeToByteArray()
+        val ctx = "COMPSIG-MLDSA65-ECDSA-P256-SHA512".encodeToByteArray()
+        val wrongCtx = "WRONG-CONTEXT".encodeToByteArray()
+
+        for (alg in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87)) {
+            if (alg !in Crypto.supportedMlDsaAlgorithms) {
+                continue
+            }
+            Crypto.createMlDsaPrivateKey(alg).use { privKey ->
+                val sigWithCtx = Crypto.sign(privKey, alg, message, ctx)
+                Crypto.checkSignature(privKey.publicKey, message, alg, sigWithCtx, ctx)
+
+                assertFailsWith<SignatureVerificationException> {
+                    Crypto.checkSignature(privKey.publicKey, message, alg, sigWithCtx)
+                }
+                assertFailsWith<SignatureVerificationException> {
+                    Crypto.checkSignature(privKey.publicKey, message, alg, sigWithCtx, wrongCtx)
+                }
+
+                val tooLongCtx = ByteArray(256)
+                assertFailsWith<IllegalArgumentException> {
+                    Crypto.sign(privKey, alg, message, tooLongCtx)
+                }
+                assertFailsWith<IllegalArgumentException> {
+                    Crypto.checkSignature(privKey.publicKey, message, alg, sigWithCtx, tooLongCtx)
+                }
+            }
         }
     }
 }

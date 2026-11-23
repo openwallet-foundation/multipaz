@@ -160,6 +160,45 @@ class PrivateKeyZeroingTest {
     }
 
     @Test
+    fun testHybridPrivateKeyZeroing() = runTest {
+        val alg = Algorithm.ML_DSA_44_ES256
+        if (alg !in Crypto.supportedHybridSigningAlgorithms) {
+            return@runTest
+        }
+        val key = Crypto.createHybridPrivateKey(alg)
+        assertFalse(key.isDestroyed)
+        val rawRef = key.encodedKeyMaterial
+        assertTrue(rawRef.any { it != 0.toByte() })
+
+        val dup = key.duplicate()
+        assertFalse(dup.isDestroyed)
+
+        key.close()
+        assertTrue(key.isDestroyed)
+        assertTrue(rawRef.all { it == 0.toByte() })
+        assertTrue(key.pqPrivateKey.isDestroyed)
+        assertTrue(key.traditionalPrivateKey.isDestroyed)
+
+        assertFailsWith<IllegalStateException> { key.encoded }
+        assertFailsWith<IllegalStateException> { key.encodedKeyMaterial }
+        assertFailsWith<IllegalStateException> { key.toPkcs8() }
+        assertFailsWith<IllegalStateException> { key.toPem() }
+        assertFailsWith<IllegalStateException> { key.toCoseKey() }
+        assertFailsWith<IllegalStateException> { key.toJwk() }
+        assertFailsWith<IllegalStateException> { key.duplicate() }
+
+        // Idempotent close
+        key.close()
+
+        // Duplicate remains usable after original is closed
+        val msg = "Hybrid duplicate sign test".encodeToByteArray()
+        val sig = Crypto.sign(dup, alg, msg)
+        Crypto.checkSignature(dup.publicKey, msg, alg, sig)
+        dup.close()
+        assertTrue(dup.isDestroyed)
+    }
+
+    @Test
     fun testAutoCloseableUseBlock() = runTest {
         var keyRef: EcPrivateKey? = null
         var dRef: ByteArray? = null

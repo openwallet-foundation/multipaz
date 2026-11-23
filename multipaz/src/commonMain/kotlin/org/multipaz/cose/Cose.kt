@@ -9,6 +9,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridPublicKey
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
@@ -325,6 +327,14 @@ object Cose {
                     toBeSigned,
                     signatureAlgorithm,
                     MlDsaSignature(signature.signature)
+                )
+            }
+            is HybridPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    toBeSigned,
+                    signatureAlgorithm,
+                    HybridSignature(signature.signature)
                 )
             }
             is MlKemPublicKey -> {

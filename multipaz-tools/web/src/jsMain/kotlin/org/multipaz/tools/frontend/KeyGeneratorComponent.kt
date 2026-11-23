@@ -21,6 +21,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
@@ -471,6 +472,20 @@ val KeyGeneratorComponent = FC {
                                 div {
                                     span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
                                     span { css { color = Color("#10b981") } ; +"Post-Quantum Signing" }
+                                }
+                            }
+                            is HybridPrivateKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"ALGORITHM" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.algorithm.name} (Composite PQ/T)" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"PUBLIC KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.publicKey.encoded.size} bytes" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
+                                    span { css { color = Color("#10b981") } ; +"Composite PQ/T Signing" }
                                 }
                             }
                             is MlKemPrivateKey -> {

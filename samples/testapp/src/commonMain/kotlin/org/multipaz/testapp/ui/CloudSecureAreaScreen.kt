@@ -43,6 +43,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaSignature
@@ -206,6 +207,11 @@ fun CloudSecureAreaScreen(
             Algorithm.ML_DSA_44,
             Algorithm.ML_DSA_65,
             Algorithm.ML_DSA_87,
+            Algorithm.ML_DSA_44_ES256,
+            Algorithm.ML_DSA_65_ES256,
+            Algorithm.ML_DSA_65_ES384,
+            Algorithm.ML_DSA_87_ES384,
+            Algorithm.ML_DSA_44_ED25519,
             Algorithm.ECDH_P256,
             Algorithm.ECDH_P384,
             Algorithm.ECDH_P521,
@@ -497,6 +503,7 @@ private suspend fun csaTestUnguarded(
             is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
             is RsaSignature -> "sig=${signature.signature.toHex()}"
             is MlDsaSignature -> "sig=${signature.signature.toHex()}"
+            is HybridSignature -> "sig=${signature.signature.toHex()}"
         }
         Logger.d(
             TAG,

@@ -8,6 +8,7 @@ import org.multipaz.securearea.SecureEnclaveKeyUnlockData
 import org.multipaz.util.UUID
 import org.multipaz.util.toByteArray
 import org.multipaz.util.toNSData
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -51,6 +52,9 @@ actual object Crypto {
         Algorithm.ML_KEM_768,
         Algorithm.ML_KEM_1024
     )
+
+    actual val supportedHybridSigningAlgorithms: Set<Algorithm> =
+        HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
 
     actual val provider: String = "CryptoKit"
 
@@ -204,23 +208,55 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: MlDsaSignature
     ) {
+        checkSignature(publicKey, message, algorithm, signature, byteArrayOf())
+    }
+
+    actual suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature,
+        context: ByteArray
+    ) {
         require(algorithm == publicKey.algorithm) {
             "Signature algorithm $algorithm doesn't match key algorithm ${publicKey.algorithm}"
+        }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
         }
         val algName = when (algorithm) {
             Algorithm.ML_DSA_65 -> "ML-DSA-65"
             Algorithm.ML_DSA_87 -> "ML-DSA-87"
             else -> throw IllegalArgumentException("Unsupported ML-DSA algorithm $algorithm")
         }
-        val verified = SwiftBridge.mldsaVerifySignature(
-            algName,
-            publicKey.encoded.toByteArray().toNSData(),
-            message.toNSData(),
-            signature.signature.toNSData()
-        )
+        val verified = if (context.isEmpty()) {
+            SwiftBridge.mldsaVerifySignature(
+                algName,
+                publicKey.encoded.toByteArray().toNSData(),
+                message.toNSData(),
+                signature.signature.toNSData()
+            )
+        } else {
+            SwiftBridge.mldsaVerifySignatureWithContext(
+                algName,
+                publicKey.encoded.toByteArray().toNSData(),
+                message.toNSData(),
+                signature.signature.toNSData(),
+                context.toNSData()
+            )
+        }
         if (!verified) {
             throw SignatureVerificationException("ML-DSA signature verification failed")
         }
+    }
+
+    actual suspend fun checkSignature(
+        publicKey: HybridPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: HybridSignature
+    ) {
+        HybridSigning.checkSignature(publicKey, message, algorithm, signature)
     }
 
     actual suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey {
@@ -284,6 +320,15 @@ actual object Crypto {
         return MlKemPrivateKey(algorithm, ByteString(seed), publicKey)
     }
 
+    actual suspend fun createHybridPrivateKey(
+        algorithm: Algorithm
+    ): HybridPrivateKey {
+        require(algorithm in supportedHybridSigningAlgorithms) {
+            "Hybrid signing algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridSigning.createPrivateKey(algorithm)
+    }
+
     actual suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
@@ -327,21 +372,51 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): MlDsaSignature {
+        return sign(key, signatureAlgorithm, message, byteArrayOf())
+    }
+
+    actual suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray,
+        context: ByteArray
+    ): MlDsaSignature {
         require(signatureAlgorithm == key.algorithm) {
             "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
+        }
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
         }
         val algName = when (key.algorithm) {
             Algorithm.ML_DSA_65 -> "ML-DSA-65"
             Algorithm.ML_DSA_87 -> "ML-DSA-87"
             else -> throw IllegalArgumentException("Unsupported ML-DSA algorithm ${key.algorithm}")
         }
-        val sig = SwiftBridge.mldsaSign(
-            algName,
-            key.encoded.toByteArray().toNSData(),
-            key.publicKey.encoded.toByteArray().toNSData(),
-            message.toNSData()
-        )?.toByteArray() ?: throw IllegalStateException("ML-DSA signing failed (requires iOS 26+)")
+        val sig = if (context.isEmpty()) {
+            SwiftBridge.mldsaSign(
+                algName,
+                key.encoded.toByteArray().toNSData(),
+                key.publicKey.encoded.toByteArray().toNSData(),
+                message.toNSData()
+            )
+        } else {
+            SwiftBridge.mldsaSignWithContext(
+                algName,
+                key.encoded.toByteArray().toNSData(),
+                key.publicKey.encoded.toByteArray().toNSData(),
+                message.toNSData(),
+                context.toNSData()
+            )
+        }?.toByteArray() ?: throw IllegalStateException("ML-DSA signing failed (requires iOS 26+)")
         return MlDsaSignature(sig)
+    }
+
+    actual suspend fun sign(
+        key: HybridPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): HybridSignature {
+        return HybridSigning.sign(key, signatureAlgorithm, message)
     }
 
     actual suspend fun kemEncapsulate(
@@ -553,14 +628,23 @@ actual object Crypto {
         val certificates = certChain.certificates
         for (i in 1..certificates.lastIndex) {
             val toVerify = certificates[i - 1]
-            val err = SwiftBridge.verifySignature(
-                certificates[i].encoded.toNSData(),
-                toVerify.tbsCertificate.toNSData(),
-                toVerify.signatureAlgorithmOid,
-                toVerify.signature.toNSData()
-            )
-            if (err != null) {
-                return false
+            if (HybridSigning.isCompositeOid(toVerify.signatureAlgorithmOid)) {
+                try {
+                    toVerify.verify(certificates[i].publicKey)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    return false
+                }
+            } else {
+                val err = SwiftBridge.verifySignature(
+                    certificates[i].encoded.toNSData(),
+                    toVerify.tbsCertificate.toNSData(),
+                    toVerify.signatureAlgorithmOid,
+                    toVerify.signature.toNSData()
+                )
+                if (err != null) {
+                    return false
+                }
             }
         }
         return true

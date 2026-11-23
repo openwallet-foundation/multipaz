@@ -9,6 +9,8 @@ import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.HybridPrivateKey
+import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.MlDsaPrivateKey
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlKemPrivateKey
@@ -106,6 +108,18 @@ class CoseKey(val labels: Map<CoseLabel, DataItem>) {
      */
     val mlKemPrivateKey: MlKemPrivateKey
         get() = MlKemPrivateKey.fromCoseKey(this)
+
+    /**
+     * Gets the public key in the COSE Key as a [HybridPublicKey].
+     */
+    val hybridPublicKey: HybridPublicKey
+        get() = HybridPublicKey.fromCoseKey(this)
+
+    /**
+     * Gets the private key in the COSE Key as a [HybridPrivateKey].
+     */
+    val hybridPrivateKey: HybridPrivateKey
+        get() = HybridPrivateKey.fromCoseKey(this)
 
     companion object {
         /**

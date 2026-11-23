@@ -41,6 +41,7 @@ sealed interface Signature {
                 dataItem.hasKey("r") && dataItem.hasKey("s") -> EcSignature.fromDataItem(dataItem)
                 dataItem.hasKey("rsa") -> RsaSignature.fromDataItem(dataItem)
                 dataItem.hasKey("mldsa") -> MlDsaSignature.fromDataItem(dataItem)
+                dataItem.hasKey("hybrid") -> HybridSignature.fromDataItem(dataItem)
                 else -> throw IllegalArgumentException("Unknown signature format: $dataItem")
             }
         }

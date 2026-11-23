@@ -586,6 +586,7 @@ private suspend fun generateDsKeyAndCert(
     val dsKey = when {
         algorithm.keySizeBits != null -> Crypto.createRsaPrivateKey(algorithm.keySizeBits!!)
         algorithm.isMlDsa -> Crypto.createMlDsaPrivateKey(algorithm)
+        algorithm.isHybridSigning -> Crypto.createHybridPrivateKey(algorithm)
         else -> Crypto.createEcPrivateKey(algorithm.curve!!)
     }
     val dsCert = MdocUtil.generateDsCertificate(
