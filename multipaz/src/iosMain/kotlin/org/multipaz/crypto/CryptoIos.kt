@@ -563,18 +563,46 @@ actual object Crypto {
         keyBlob: ByteArray,
         message: ByteArray,
         keyUnlockData: SecureEnclaveKeyUnlockData?
+    ): MlDsaSignature = secureEnclaveMlDsaSign(
+        algorithm = algorithm,
+        keyBlob = keyBlob,
+        message = message,
+        keyUnlockData = keyUnlockData,
+        context = byteArrayOf()
+    )
+
+    internal fun secureEnclaveMlDsaSign(
+        algorithm: Algorithm,
+        keyBlob: ByteArray,
+        message: ByteArray,
+        keyUnlockData: SecureEnclaveKeyUnlockData?,
+        context: ByteArray
     ): MlDsaSignature {
+        require(context.size <= 255) {
+            "ML-DSA context length must be at most 255 bytes, got ${context.size}"
+        }
         val algName = when (algorithm) {
             Algorithm.ML_DSA_65 -> "ML-DSA-65"
             Algorithm.ML_DSA_87 -> "ML-DSA-87"
             else -> throw IllegalArgumentException("Unsupported ML-DSA algorithm $algorithm")
         }
-        val signature = SwiftBridge.secureEnclaveMlDsaSign(
-            algName,
-            keyBlob.toNSData(),
-            message.toNSData(),
-            keyUnlockData?.authenticationContext as objcnames.classes.LAContext?
-        )?.toByteArray() ?: throw KeyLockedException("Unable to unlock key")
+        val authContext = keyUnlockData?.authenticationContext as objcnames.classes.LAContext?
+        val signature = if (context.isEmpty()) {
+            SwiftBridge.secureEnclaveMlDsaSign(
+                algName,
+                keyBlob.toNSData(),
+                message.toNSData(),
+                authContext
+            )
+        } else {
+            SwiftBridge.secureEnclaveMlDsaSignWithContext(
+                algName,
+                keyBlob.toNSData(),
+                message.toNSData(),
+                context.toNSData(),
+                authContext
+            )
+        }?.toByteArray() ?: throw KeyLockedException("Unable to unlock key")
         return MlDsaSignature(signature)
     }
 

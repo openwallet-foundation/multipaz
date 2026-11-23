@@ -480,6 +480,92 @@ class HybridSignatureTests {
         }
     }
 
+    @Test
+    fun testCombineSignAndCreatePublicKey() = runTest {
+        if (Algorithm.ML_DSA_65_ES256 !in Crypto.supportedHybridSigningAlgorithms) {
+            return@runTest
+        }
+        val pqPriv = Crypto.createMlDsaPrivateKey(Algorithm.ML_DSA_65)
+        val ecPriv = Crypto.createEcPrivateKey(EcCurve.P256)
+        try {
+            val pubKey = HybridSigning.createPublicKey(
+                algorithm = Algorithm.ML_DSA_65_ES256,
+                pqPublicKey = pqPriv.publicKey,
+                traditionalPublicKey = ecPriv.publicKey
+            )
+            assertEquals(Algorithm.ML_DSA_65_ES256, pubKey.algorithm)
+            assertEquals(pqPriv.publicKey, pubKey.pqPublicKey)
+            assertEquals(ecPriv.publicKey, pubKey.traditionalPublicKey)
+
+            // Mismatched traditional curve or PQ algorithm must fail
+            Crypto.createEcPrivateKey(EcCurve.P384).use { p384Priv ->
+                assertFailsWith<IllegalArgumentException> {
+                    HybridSigning.createPublicKey(
+                        algorithm = Algorithm.ML_DSA_65_ES256,
+                        pqPublicKey = pqPriv.publicKey,
+                        traditionalPublicKey = p384Priv.publicKey
+                    )
+                }
+            }
+            if (Algorithm.ML_DSA_44 in Crypto.supportedMlDsaAlgorithms) {
+                Crypto.createMlDsaPrivateKey(Algorithm.ML_DSA_44).use { mlDsa44Priv ->
+                    assertFailsWith<IllegalArgumentException> {
+                        HybridSigning.createPublicKey(
+                            algorithm = Algorithm.ML_DSA_65_ES256,
+                            pqPublicKey = mlDsa44Priv.publicKey,
+                            traditionalPublicKey = ecPriv.publicKey
+                        )
+                    }
+                }
+            }
+
+            val spec = HybridSigning.specFor(Algorithm.ML_DSA_65_ES256)
+            val message = "combineSign hardware split test".encodeToByteArray()
+            var capturedPqAlg: Algorithm? = null
+            var capturedPqMPrime: ByteArray? = null
+            var capturedContext: ByteArray? = null
+            var capturedTradAlg: Algorithm? = null
+            var capturedTradMPrime: ByteArray? = null
+
+            val hybridSig = HybridSigning.combineSign(
+                algorithm = Algorithm.ML_DSA_65_ES256,
+                message = message,
+                signPq = { pqAlgorithm, mPrime, context ->
+                    capturedPqAlg = pqAlgorithm
+                    capturedPqMPrime = mPrime
+                    capturedContext = context
+                    Crypto.sign(pqPriv, pqAlgorithm, mPrime, context)
+                },
+                signTraditional = { traditionalAlgorithm, mPrime ->
+                    capturedTradAlg = traditionalAlgorithm
+                    capturedTradMPrime = mPrime
+                    Crypto.sign(ecPriv, traditionalAlgorithm, mPrime)
+                }
+            )
+
+            assertEquals(Algorithm.ML_DSA_65, capturedPqAlg)
+            assertEquals(Algorithm.ESP256, capturedTradAlg)
+            assertContentEquals("COMPSIG-MLDSA65-ECDSA-P256-SHA512".encodeToByteArray(), capturedContext)
+            val expectedMPrime = HybridSigning.buildMPrime(spec, message)
+            assertContentEquals(expectedMPrime, capturedPqMPrime)
+            assertContentEquals(expectedMPrime, capturedTradMPrime)
+            Crypto.checkSignature(pubKey, message, Algorithm.ML_DSA_65_ES256, hybridSig)
+
+            // Also verify wrong-sized PQ signature is rejected
+            assertFailsWith<IllegalArgumentException> {
+                HybridSigning.combineSign(
+                    algorithm = Algorithm.ML_DSA_65_ES256,
+                    message = message,
+                    signPq = { _, _, _ -> MlDsaSignature(byteArrayOf(1, 2, 3)) },
+                    signTraditional = { tradAlg, mPrime -> Crypto.sign(ecPriv, tradAlg, mPrime) }
+                )
+            }
+        } finally {
+            pqPriv.close()
+            ecPriv.close()
+        }
+    }
+
     companion object {
         private val joseVectors = listOf(
         JoseVector(

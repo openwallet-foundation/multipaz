@@ -186,6 +186,16 @@ internal object HybridSigning {
         return pqBytes + tradBytes
     }
 
+    fun createPublicKey(
+        algorithm: Algorithm,
+        pqPublicKey: MlDsaPublicKey,
+        traditionalPublicKey: EcPublicKey
+    ): HybridPublicKey {
+        val spec = specFor(algorithm)
+        val pubBytes = serializePublicKey(pqPublicKey, traditionalPublicKey, spec)
+        return HybridPublicKey(algorithm, ByteString(pubBytes))
+    }
+
     fun deserializePrivateKey(
         algorithm: Algorithm,
         encoded: ByteArray,
@@ -268,8 +278,7 @@ internal object HybridSigning {
         var privBytes: ByteArray? = null
         return try {
             tradPriv = Crypto.createEcPrivateKey(spec.traditionalCurve)
-            val pubBytes = serializePublicKey(pqPriv.publicKey, tradPriv.publicKey, spec)
-            val pubKey = HybridPublicKey(algorithm, ByteString(pubBytes))
+            val pubKey = createPublicKey(algorithm, pqPriv.publicKey, tradPriv.publicKey)
             privBytes = serializePrivateKey(pqPriv, tradPriv, spec)
             HybridPrivateKey(algorithm, ByteString(privBytes), pubKey)
         } finally {
@@ -288,12 +297,38 @@ internal object HybridSigning {
         require(signatureAlgorithm == key.algorithm) {
             "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
         }
-        val spec = specFor(key.algorithm)
+        return combineSign(
+            algorithm = key.algorithm,
+            message = message,
+            signPq = { pqAlgorithm, mPrime, context ->
+                Crypto.sign(key.pqPrivateKey, pqAlgorithm, mPrime, context)
+            },
+            signTraditional = { traditionalAlgorithm, mPrime ->
+                Crypto.sign(key.traditionalPrivateKey, traditionalAlgorithm, mPrime)
+            }
+        )
+    }
+
+    suspend fun combineSign(
+        algorithm: Algorithm,
+        message: ByteArray,
+        signPq: suspend (pqAlgorithm: Algorithm, mPrime: ByteArray, context: ByteArray) -> MlDsaSignature,
+        signTraditional: suspend (traditionalAlgorithm: Algorithm, mPrime: ByteArray) -> EcSignature
+    ): HybridSignature {
+        val spec = specFor(algorithm)
         val mPrime = buildMPrime(spec, message)
-        val pqSig = Crypto.sign(key.pqPrivateKey, spec.pqAlgorithm, mPrime, spec.labelBytes)
-        val tradSig = Crypto.sign(key.traditionalPrivateKey, spec.traditionalAlgorithm, mPrime)
+        val pqSig = signPq(spec.pqAlgorithm, mPrime, spec.labelBytes)
+        require(pqSig.signature.size == spec.pqSignatureSize) {
+            "Expected ${spec.pqSignatureSize}-byte ${spec.pqAlgorithm} signature, got ${pqSig.signature.size}"
+        }
+        val tradSig = signTraditional(spec.traditionalAlgorithm, mPrime)
         val tradSigBytes = when (spec.traditionalCurve) {
-            EcCurve.ED25519 -> tradSig.r + tradSig.s
+            EcCurve.ED25519 -> {
+                require(tradSig.r.size == 32 && tradSig.s.size == 32) {
+                    "Expected 64-byte Ed25519 signature components, got r=${tradSig.r.size}, s=${tradSig.s.size}"
+                }
+                tradSig.r + tradSig.s
+            }
             EcCurve.P256, EcCurve.P384 -> encodeMinimalDerEcdsaSignature(tradSig)
             else -> throw IllegalArgumentException("Unsupported traditional curve ${spec.traditionalCurve}")
         }
