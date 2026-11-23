@@ -2,6 +2,8 @@ package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
@@ -121,10 +123,27 @@ class TransactionData<PayloadT: Any>(
     /**
      * Verifies transaction response returned in an SD-JWT presentation.
      *
-     * @param responseClaims claims returned in the Key Binding JWT
+     * @param responseClaims claims returned in the Key Binding JWT, see [sdJwtResponseClaims]
+     * @param kbDisclosures the disclosures that follow the Key Binding JWT, if any
+     * @throws IllegalStateException if the response does not match this transaction data
      */
-    suspend fun verifySdJwtResponse(responseClaims: Map<String, JsonElement>) =
-        type.verifySdJwtResponse(this, responseClaims)
+    @Throws(IllegalStateException::class, CancellationException::class)
+    suspend fun verifySdJwtResponse(
+        responseClaims: Map<String, JsonElement>,
+        kbDisclosures: List<String>
+    ) = type.verifySdJwtResponse(this, responseClaims, kbDisclosures)
+
+    /**
+     * The claims of the Key Binding JWT body [kbJwtBody] that make up the response of this type: the
+     * object under [TransactionType.kbJwtResponseClaimName] when the type nests its claims, else every
+     * claim other than the Key Binding JWT's own (see [TransactionType.nestSdJwtResponseClaims]).
+     */
+    internal fun sdJwtResponseClaims(kbJwtBody: JsonObject): Map<String, JsonElement> =
+        if (type.nestSdJwtResponseClaims) {
+            kbJwtBody[type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
+        } else {
+            kbJwtBody.filterKeys { it !in KB_JWT_OWN_CLAIMS }
+        }
 
     /**
      * Creates equivalent transaction data for use in ISO 18013-5 protocols.
@@ -132,6 +151,14 @@ class TransactionData<PayloadT: Any>(
     fun serializeIso18013Request(): DataItem = type.serializeIso18013Request(payload)
 
     companion object {
+        /**
+         * The Key Binding JWT's own claims (RFC 9901 §4.3) and the transaction data hashes OpenID4VP
+         * puts beside them: no transaction type may set these.
+         */
+        internal val KB_JWT_OWN_CLAIMS = setOf(
+            "iat", "aud", "nonce", "sd_hash", "transaction_data_hashes", "transaction_data_hashes_alg",
+        )
+
         /**
          * The `typ` header of a Key Binding JWT that signs all of [transactionData], as decided by
          * each transaction type over all of its own items (see [TransactionType.sdJwtKbType]), or

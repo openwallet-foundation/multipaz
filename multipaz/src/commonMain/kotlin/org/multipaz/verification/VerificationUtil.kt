@@ -65,6 +65,7 @@ import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -1117,11 +1118,33 @@ object VerificationUtil {
         keyBindingRequired: Boolean = true,
         docRequestIds: List<Int>? = null,
     ): VerifiedPresentation {
-        val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
-            Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
+        val parsed: Pair<SdJwt, SdJwtKb?> = when {
+            // A Delegated SD-JWT: <SD-JWT>~~<KB-JWT>~<Disclosure>~...~, which also ends with '~'.
+            "~~" in compactSerialization -> {
+                val sdJwtKb = SdJwtKb.fromDelegatedCompactSerialization(compactSerialization)
+                Pair(sdJwtKb.sdJwt, sdJwtKb)
+            }
+            compactSerialization.endsWith("~") ->
+                Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
+            else -> {
+                val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
+                Pair(sdJwtKb.sdJwt, sdJwtKb)
+            }
+        }
+        val (sdJwt, sdJwtKb) = parsed
+
+        // The request decides the `typ` of the Key Binding JWT: the ordinary `kb+jwt`, or the one its
+        // transaction types ask for. ISO/IEC 18013-5 has no place for another one.
+        val expectedKbType = if (transactionData.any { it.protocol == TransactionProtocol.ISO_18013_5 }) {
+            "kb+jwt"
         } else {
-            val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
-            Pair(sdJwtKb.sdJwt, sdJwtKb)
+            TransactionData.sdJwtKbType(transactionData)
+        }
+        if (sdJwtKb != null && sdJwtKb.kbDisclosures.isNotEmpty()) {
+            check(expectedKbType != "kb+jwt") {
+                "Disclosures after the Key Binding JWT need a transaction type that asks for its own " +
+                    "Key Binding JWT type"
+            }
         }
 
         if (sdJwtKb == null) {
@@ -1150,7 +1173,8 @@ object VerificationUtil {
                     val drift = (now - creationTime).absoluteValue
                     drift < 5.minutes
                 },
-                transactionData = transactionData
+                transactionData = transactionData,
+                expectedType = expectedKbType,
             )
         } else {
             sdJwt.verify(
@@ -1190,11 +1214,14 @@ object VerificationUtil {
         } else {
             buildMap<String, JsonElement> {
                 for (transaction in transactionData) {
-                    val responseClaims = sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
-                    transaction.verifySdJwtResponse(responseClaims)
-                    sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]?.let {
-                        put(transaction.type.identifier, it)
+                    val responseClaims = transaction.sdJwtResponseClaims(sdJwtKb.jwtBody)
+                    transaction.verifySdJwtResponse(responseClaims, sdJwtKb.kbDisclosures)
+                    val response = if (transaction.type.nestSdJwtResponseClaims) {
+                        sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]
+                    } else {
+                        JsonObject(responseClaims).takeIf { responseClaims.isNotEmpty() }
                     }
+                    response?.let { put(transaction.type.identifier, it) }
                 }
             }
         }

@@ -806,14 +806,6 @@ object OpenID4VP {
     }
 
     /**
-     * The Key Binding JWT's own claims (RFC 9901 §4.3) and the transaction data hashes OpenID4VP
-     * puts beside them: no transaction type may set these.
-     */
-    private val RESERVED_KB_JWT_CLAIMS = setOf(
-        "iat", "aud", "nonce", "sd_hash", "transaction_data_hashes", "transaction_data_hashes_alg",
-    )
-
-    /**
      * Presents [this] SD-JWT with the transaction response in the Key Binding JWT: a plain
      * SD-JWT+KB when the response carries no disclosures, a Delegated SD-JWT (§5.1.1) when it does.
      * The OpenID4VP presentment's one place for this. The ISO/IEC 18013-5 path does not use it: it
@@ -905,7 +897,7 @@ object OpenID4VP {
         // Which type set each claim: one type may not overwrite another's, nor the KB-JWT's own.
         val claimOwners = mutableMapOf<String, TransactionType<*>>()
         fun claim(name: String, type: TransactionType<*>) {
-            check(name !in RESERVED_KB_JWT_CLAIMS) {
+            check(name !in TransactionData.KB_JWT_OWN_CLAIMS) {
                 "Transaction type '${type.identifier}' cannot set the Key Binding JWT's '$name' claim"
             }
             val owner = claimOwners.getOrPut(name) { type }

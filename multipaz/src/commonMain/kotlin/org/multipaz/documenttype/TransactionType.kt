@@ -451,11 +451,28 @@ abstract class TransactionType<PayloadT: Any>(
 
     /**
      * Verifies transaction response returned in an SD-JWT presentation.
+     *
+     * Refuses disclosures after the Key Binding JWT by default. A type whose [generateSdJwtResponse]
+     * returns them overrides this without calling the default, and checks each against the claims.
+     *
+     * @param transactionData the transaction data the request carried
+     * @param responseClaims the claims this type put in the Key Binding JWT: the object under
+     *  [kbJwtResponseClaimName], or, when [nestSdJwtResponseClaims] is `false`, every claim of the
+     *  Key Binding JWT other than its own, as the claims of several types sit side by side
+     * @param kbDisclosures all the disclosures that follow the Key Binding JWT, those of every
+     *  transaction data item of the response and not only of [transactionData]; empty for an
+     *  ordinary SD-JWT+KB
+     * @throws IllegalStateException if the response does not match [transactionData]
      */
+    @Throws(IllegalStateException::class, CancellationException::class)
     open suspend fun verifySdJwtResponse(
         transactionData: TransactionData<PayloadT>,
-        responseClaims: Map<String, JsonElement>
+        responseClaims: Map<String, JsonElement>,
+        kbDisclosures: List<String>
     ) {
+        check(kbDisclosures.isEmpty()) {
+            "Transaction type '$identifier' does not take disclosures after the Key Binding JWT"
+        }
     }
 
     companion object {
