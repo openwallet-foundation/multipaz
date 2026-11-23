@@ -210,6 +210,9 @@ command and use an HTTPS `BASE_URL`. For a standalone issuer, pass
 When enabled with an HTTPS issuer URL, issuer metadata advertises
 `notification_endpoint`, and credential responses include a `notification_id`,
 including responses to credential refresh requests.
+Notification IDs expire at the issuance session's expiration time as it stood
+when the credential was issued. Identical event retries succeed until then;
+conflicting events for the same ID are rejected.
 
 The holder sends notifications only when both the endpoint and a notification ID
 are provided. It reports `credential_accepted` after successful credential storage,

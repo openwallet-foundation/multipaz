@@ -37,8 +37,7 @@ data class IssuanceState(
     var txCodeHash: ByteString? = null,
     val urlSchema: String? = null,  // for pre-authorized code generation
     var expiration: Instant = Instant.DISTANT_PAST,  // updated before storage
-    var credentials: MutableList<CredentialData> = mutableListOf(),
-    val notificationIds: MutableList<String> = mutableListOf()
+    var credentials: MutableList<CredentialData> = mutableListOf()
 ) {
     @CborSerializable
     data class CredentialData(

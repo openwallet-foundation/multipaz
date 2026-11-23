@@ -164,6 +164,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+        pendingNotificationId = null
         refreshAccessIfNeeded()
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
@@ -228,10 +229,10 @@ internal class OpenID4VCIProvisioningClient(
 
         val response = Json.parseToJsonElement(responseText) as JsonObject
         Logger.dJson(TAG, "Received credential response", response)
-        val notificationId = (response["notification_id"] as? JsonPrimitive)
-            ?.takeIf { it.isString }
-            ?.content
-        if (notificationId != null) {
+        response["notification_id"]?.let {
+            val notificationId = (it as? JsonPrimitive)?.takeIf { value ->
+                value.isString && value.content.isNotEmpty()
+            }?.content ?: throw IllegalStateException("Credential response: invalid notification_id")
             pendingNotificationId = notificationId
         }
         val serializedCredentials = response["credentials"]!!.jsonArray.map {
@@ -250,6 +251,9 @@ internal class OpenID4VCIProvisioningClient(
             null
         }
         val ids = extractCredentialIds(keyInfo, serializedCredentials.size)
+        check(serializedCredentials.size <= ids.size) {
+            "Credential response contains more credentials than requested keys"
+        }
         val idAndData = serializedCredentials.zip(ids).map { (data, id) ->
             CredentialCertification(id, data)
         }
@@ -260,6 +264,11 @@ internal class OpenID4VCIProvisioningClient(
         val notificationId = pendingNotificationId ?: return
         pendingNotificationId = null
         val notificationEndpoint = issuerConfiguration.notificationEndpoint ?: return
+        val eventValue = when (event) {
+            CredentialNotificationEvent.ACCEPTED -> "credential_accepted"
+            CredentialNotificationEvent.FAILURE -> "credential_failure"
+            CredentialNotificationEvent.DELETED -> "credential_deleted"
+        }
         try {
             refreshAccessIfNeeded()
             val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
@@ -267,13 +276,13 @@ internal class OpenID4VCIProvisioningClient(
                 httpClient = httpClient,
                 endpoint = notificationEndpoint,
                 notificationId = notificationId,
-                event = event.value,
+                event = eventValue,
                 dpopKey = getDPopKey()
             )
         } catch (err: CancellationException) {
             throw err
         } catch (err: Exception) {
-            Logger.e(TAG, "Failed to send credential notification: ${event.value}", err)
+            Logger.e(TAG, "Failed to send credential notification: $eventValue", err)
         }
     }
 
@@ -311,7 +320,7 @@ internal class OpenID4VCIProvisioningClient(
                 if (retry) {
                     retry = false
                     if (response.status.value !in 200..299) {
-                        Logger.e(TAG, "Retry notification with a fresh DPoP nonce")
+                        Logger.d(TAG, "Retry notification with a fresh DPoP nonce")
                         continue
                     }
                 }

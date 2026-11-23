@@ -5,6 +5,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
@@ -13,6 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.SerializationException
 import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.openid4vci.util.IssuanceState
+import org.multipaz.openid4vci.util.NotificationState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
@@ -49,7 +51,7 @@ internal suspend fun configuredNotificationEndpoint(): String? {
  */
 suspend fun notification(call: ApplicationCall) {
     if (configuredNotificationEndpoint() == null) {
-        call.respondText(status = HttpStatusCode.NotFound, text = "")
+        call.respond(HttpStatusCode.NotFound)
         return
     }
 
@@ -93,17 +95,14 @@ suspend fun notification(call: ApplicationCall) {
         respondWithNewDPoPNonce(call, nonceManager.credential())
         return
     } catch (_: InvalidRequestException) {
-        respondWithAuthorizationError(call)
+        respondWithAuthorizationError(call, error = "invalid_dpop_proof")
         return
     } catch (_: IllegalArgumentException) {
-        respondWithAuthorizationError(call)
+        respondWithAuthorizationError(call, error = "invalid_dpop_proof")
         return
     }
 
-    if (call.request.headers[HttpHeaders.ContentType]
-            ?.substringBefore(';')
-            ?.equals(ContentType.Application.Json.toString(), ignoreCase = true) != true
-    ) {
+    if (!isJsonNotificationContentType(call.request.headers[HttpHeaders.ContentType])) {
         respondWithNotificationError(call, "invalid_notification_request")
         return
     }
@@ -141,22 +140,30 @@ suspend fun notification(call: ApplicationCall) {
         respondWithNotificationError(call, "invalid_notification_request")
         return
     }
-    if (notificationId !in state.notificationIds) {
-        respondWithNotificationError(call, "invalid_notification_id")
-        return
-    }
     if (event !in setOf("credential_accepted", "credential_failure", "credential_deleted")) {
         respondWithNotificationError(call, "invalid_notification_request")
         return
     }
 
-    Logger.i(TAG, "Received notification: id=$notificationId, event=$event")
+    when (NotificationState.recordEvent(notificationId, id, event)) {
+        NotificationState.Result.INVALID_ID -> {
+            respondWithNotificationError(call, "invalid_notification_id")
+            return
+        }
+        NotificationState.Result.CONFLICT -> {
+            respondWithNotificationError(call, "invalid_notification_request")
+            return
+        }
+        NotificationState.Result.RECORDED -> Logger.i(TAG, "Received notification: id=$notificationId, event=$event")
+        NotificationState.Result.RETRY -> Logger.d(TAG, "Received repeated notification: id=$notificationId")
+    }
 
-    call.respondText(
-        status = HttpStatusCode.NoContent,
-        text = ""
-    )
+    call.respond(HttpStatusCode.NoContent)
 }
+
+internal fun isJsonNotificationContentType(contentType: String?): Boolean =
+    contentType?.substringBefore(';')?.trim()
+        ?.equals(ContentType.Application.Json.toString(), ignoreCase = true) == true
 
 private suspend fun respondWithNotificationError(call: ApplicationCall, error: String) {
     call.response.headers.append(HttpHeaders.CacheControl, "no-store")

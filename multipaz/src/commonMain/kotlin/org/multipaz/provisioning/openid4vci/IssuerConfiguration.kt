@@ -82,10 +82,14 @@ internal data class IssuerConfiguration(
             val nonceEndpoint = credentialMetadata.stringOrNull("nonce_endpoint")
             val credentialEndpoint = credentialMetadata.string("credential_endpoint")
             val notificationEndpoint = credentialMetadata.stringOrNull("notification_endpoint")
-            if (notificationEndpoint != null &&
-                Url(notificationEndpoint).protocol.name != "https"
-            ) {
-                throw IllegalStateException("Issuer metadata: notification_endpoint must use HTTPS")
+            if (notificationEndpoint != null) {
+                when (Url(notificationEndpoint).protocol.name) {
+                    "https" -> Unit
+                    "http" -> Logger.w(
+                        TAG, "Issuer metadata: notification_endpoint should use HTTPS outside of local testing"
+                    )
+                    else -> throw IllegalStateException("Issuer metadata: notification_endpoint must use HTTP or HTTPS")
+                }
             }
             val credentials = mutableMapOf<String, CredentialMetadata>()
             val credentialConfigurations = mutableMapOf<String, CredentialConfiguration>()

@@ -308,24 +308,33 @@ abstract class Credential {
      * this method.
      *
      * @param issuerProvidedAuthenticationData the issuer-provided static authentication data.
+     * @param replaceExisting whether to delete the credential this one replaces immediately. If
+     *  false, call [finishReplacement] after the new credential has been committed.
      */
-    open suspend fun certify(issuerProvidedAuthenticationData: ByteString) {
+    open suspend fun certify(
+        issuerProvidedAuthenticationData: ByteString,
+        replaceExisting: Boolean = true
+    ) {
         check(!isCertified) { "Credential is already certified" }
 
         _issuerProvidedData = issuerProvidedAuthenticationData
         val validity = extractValidityFromIssuerData()
         _validFrom = validity.first
         _validUntil = validity.second
-        val replacementForIdentifier = lock.withLock {
-            val replacementForIdentifier = this.replacementForIdentifier
-            this.replacementForIdentifier = null
+        lock.withLock {
             save()
-            replacementForIdentifier
         }
+        if (replaceExisting) {
+            finishReplacement()
+        }
+    }
 
-        if (replacementForIdentifier != null) {
-            document.deleteCredential(replacementForIdentifier)
-        }
+    /**
+     * Deletes the credential replaced by this certified credential, if it has not already been deleted.
+     */
+    suspend fun finishReplacement() {
+        check(isCertified) { "Credential is not certified" }
+        replacementForIdentifier?.let { document.deleteCredential(it) }
     }
 
     /**

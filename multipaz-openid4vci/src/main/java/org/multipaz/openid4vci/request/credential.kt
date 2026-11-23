@@ -47,6 +47,7 @@ import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.openid4vci.util.IssuanceState
+import org.multipaz.openid4vci.util.NotificationState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
@@ -184,7 +185,7 @@ suspend fun credential(call: ApplicationCall) {
         ))
         val notificationEndpoint = configuredNotificationEndpoint()
         val notificationId = notificationEndpoint?.let {
-            Crypto.secureRandom.nextBytes(16).toBase64Url().also(state.notificationIds::add)
+            NotificationState.create(id, state.expiration)
         }
         // Do not extend session expiration
         IssuanceState.updateIssuanceState(id, state, expiration = null)
@@ -380,7 +381,7 @@ suspend fun credential(call: ApplicationCall) {
 
     val notificationEndpoint = configuredNotificationEndpoint()
     val notificationId = notificationEndpoint?.let {
-        Crypto.secureRandom.nextBytes(16).toBase64Url().also(state.notificationIds::add)
+        NotificationState.create(id, state.expiration)
     }
     // Do not extend session expiration
     IssuanceState.updateIssuanceState(id, state, expiration = null)
