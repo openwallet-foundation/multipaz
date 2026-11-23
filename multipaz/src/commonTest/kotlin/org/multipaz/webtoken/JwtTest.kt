@@ -4,8 +4,11 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -201,6 +204,43 @@ class JwtTest {
         )
     }
 
+    @Test
+    fun testCriticalHeaderRejection() = runBackendTest {
+        // Control: non-critical unknown header parameter is accepted
+        val nonCritJwt = makeJwt(
+            privateTrustedKey,
+            extraHeader = { put("urn:example:non-critical", true) }
+        )
+        validateJwt(nonCritJwt, "test", privateTrustedKey.publicKey, atTime = clock.now())
+
+        // Unsupported critical extension is rejected with InvalidRequestException
+        val critJwt = makeJwt(
+            privateTrustedKey,
+            extraHeader = {
+                putJsonArray("crit") { add("urn:example:never-understood") }
+                put("urn:example:never-understood", true)
+            }
+        )
+        try {
+            validateJwt(critJwt, "test", privateTrustedKey.publicKey, atTime = clock.now())
+            fail()
+        } catch (err: InvalidRequestException) {
+            assertTrue(err.message!!.contains("crit"))
+        }
+
+        // Empty crit array is rejected
+        val emptyCritJwt = makeJwt(
+            privateTrustedKey,
+            extraHeader = { putJsonArray("crit") {} }
+        )
+        try {
+            validateJwt(emptyCritJwt, "test", privateTrustedKey.publicKey, atTime = clock.now())
+            fail()
+        } catch (err: InvalidRequestException) {
+            assertTrue(err.message!!.contains("crit"))
+        }
+    }
+
     private suspend fun makeJwt(
         privateKey: EcPrivateKey,
         typ: String = TEST_TYP,
@@ -212,7 +252,8 @@ class JwtTest {
         nonce: String? = TEST_NONCE,
         iat: Instant? = null,
         x5c: X509CertChain? = null,
-        kid: String? = null
+        kid: String? = null,
+        extraHeader: JsonObjectBuilder.() -> Unit = {}
     ): String {
         val alg = privateKey.curve.defaultSigningAlgorithmFullySpecified
         val header = buildJsonObject {
@@ -224,6 +265,7 @@ class JwtTest {
             if (x5c != null) {
                 put("x5c", x5c.toX5c(excludeRoot = true))
             }
+            extraHeader()
         }.toString().encodeToByteArray().toBase64Url()
         val body = buildJsonObject {
             if (iss != null) {

@@ -8,9 +8,12 @@ import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.appendInt32
 import org.multipaz.util.fromBase64Url
@@ -19,6 +22,7 @@ import org.multipaz.util.toHex
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class JsonWebEncryptionTests {
@@ -176,5 +180,76 @@ class JsonWebEncryptionTests {
         )
         contentEncryptionKey.close()
 
+    }
+
+    @Test
+    fun testCriticalHeaderRejection() = runTest {
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val recipientAsymmetricKey = AsymmetricKey.anonymous(
+            privateKey = recipientKey,
+            algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+        )
+        val claims = buildJsonObject { put("msg", "secret") }
+
+        suspend fun encryptWithCustomHeader(extraHeader: JsonObject): String {
+            return Crypto.createEcPrivateKey(EcCurve.P256).use { senderEphemeralKey ->
+                val protectedHeader = buildJsonObject {
+                    put("alg", "ECDH-ES")
+                    put("enc", Algorithm.A128GCM.joseAlgorithmIdentifier)
+                    put("epk", senderEphemeralKey.publicKey.toJwk())
+                    extraHeader.forEach { (k, v) -> put(k, v) }
+                }
+                val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
+                val algId = Algorithm.A128GCM.joseAlgorithmIdentifier!!.encodeToByteArray()
+                val cek = Crypto.keyAgreement(senderEphemeralKey, recipientKey.publicKey).use { sharedSecret ->
+                    JsonWebEncryption.concatKDF(
+                        sharedSecretZ = sharedSecret,
+                        keyDataLenBits = 128,
+                        algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                        partyUInfo = buildByteString { appendInt32(0) },
+                        partyVInfo = buildByteString { appendInt32(0) },
+                        suppPubInfo = buildByteString { appendInt32(128) }
+                    )
+                }
+                val nonce = Crypto.secureRandom.nextBytes(12)
+                val cipherTextWithTag = cek.use { key ->
+                    Crypto.encrypt(
+                        algorithm = Algorithm.A128GCM,
+                        key = key,
+                        nonce = nonce,
+                        messagePlaintext = Json.encodeToString(claims).encodeToByteArray(),
+                        aad = protectedHeaderB64.encodeToByteArray(),
+                    )
+                }
+                val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
+                val authTag = cipherTextWithTag.copyOfRange(cipherTextWithTag.size - 16, cipherTextWithTag.size)
+                "$protectedHeaderB64..${nonce.toBase64Url()}.${cipherText.toBase64Url()}.${authTag.toBase64Url()}"
+            }
+        }
+
+        // Control: non-critical unknown header parameter is ignored
+        val nonCritJwe = encryptWithCustomHeader(buildJsonObject { put("urn:example:non-critical", true) })
+        assertEquals(claims, JsonWebEncryption.decrypt(nonCritJwe, recipientAsymmetricKey))
+
+        // Unsupported critical extension is rejected
+        val critJwe = encryptWithCustomHeader(
+            buildJsonObject {
+                putJsonArray("crit") { add("urn:example:never-understood") }
+                put("urn:example:never-understood", true)
+            }
+        )
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(critJwe, recipientAsymmetricKey)
+        }
+
+        // Standard JWE header parameter listed in crit is rejected
+        val standardCritJwe = encryptWithCustomHeader(
+            buildJsonObject {
+                putJsonArray("crit") { add("enc") }
+            }
+        )
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(standardCritJwe, recipientAsymmetricKey)
+        }
     }
 }

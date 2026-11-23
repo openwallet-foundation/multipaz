@@ -2,10 +2,14 @@ package org.multipaz.crypto
 
 import kotlinx.coroutines.test.runTest
 import kotlin.time.Clock
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.buildJwt
@@ -15,6 +19,7 @@ import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.days
 
 class JsonWebSignatureTests {
@@ -136,5 +141,167 @@ class JsonWebSignatureTests {
             expected = "blah",
             actual = body["vp_token"]!!.jsonObject["credential"]!!.jsonObject["foo"]!!.jsonPrimitive.content
         )
+    }
+
+    @Test
+    fun testCriticalHeaderRejection() = runTest {
+        val privateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val signingKey = AsymmetricKey.anonymous(privateKey, Algorithm.ES256)
+
+        // Control: unknown non-critical header parameter must be ignored per RFC 7515 Section 4
+        val nonCriticalJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                put("urn:example:non-critical", true)
+            },
+        ) {
+            put("sub", "alice")
+        }
+        JsonWebSignature.verify(nonCriticalJwt, privateKey.publicKey)
+
+        // Unsupported critical extension present in header
+        val unsupportedCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add("urn:example:never-understood") }
+                put("urn:example:never-understood", true)
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(unsupportedCritJwt, privateKey.publicKey)
+        }
+
+        // Unsupported RFC 7797 b64 critical extension
+        val b64CritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add("b64") }
+                put("b64", false)
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(b64CritJwt, privateKey.publicKey)
+        }
+
+        // Empty crit array (RFC 7515 Section 4.1.11 forbids [])
+        val emptyCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") {}
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(emptyCritJwt, privateKey.publicKey)
+        }
+
+        // Non-array crit values (string, null)
+        val stringCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                put("crit", "urn:example:never-understood")
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(stringCritJwt, privateKey.publicKey)
+        }
+
+        val nullCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                put("crit", JsonNull)
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(nullCritJwt, privateKey.publicKey)
+        }
+
+        // Non-string and empty-string entries in crit
+        val nonStringEntryJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add(123) }
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(nonStringEntryJwt, privateKey.publicKey)
+        }
+
+        val emptyStringEntryJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add("") }
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(emptyStringEntryJwt, privateKey.publicKey)
+        }
+
+        // Duplicate entries in crit
+        val duplicateCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") {
+                    add("urn:example:dup")
+                    add("urn:example:dup")
+                }
+                put("urn:example:dup", true)
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(duplicateCritJwt, privateKey.publicKey)
+        }
+
+        // Standard RFC 7515 header parameter listed in crit
+        val standardParamCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add("alg") }
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(standardParamCritJwt, privateKey.publicKey)
+        }
+
+        // Critical header parameter not present in header
+        val missingParamCritJwt = buildJwt(
+            type = "JWT",
+            key = signingKey,
+            header = {
+                putJsonArray("crit") { add("urn:example:missing") }
+            },
+        ) {
+            put("sub", "alice")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebSignature.verify(missingParamCritJwt, privateKey.publicKey)
+        }
     }
 }

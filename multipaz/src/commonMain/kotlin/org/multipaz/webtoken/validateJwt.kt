@@ -14,6 +14,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
@@ -104,6 +105,11 @@ suspend fun validateJwt(
     val header = Json.parseToJsonElement(
         parts[0].fromBase64Url().decodeToString()
     ).jsonObject
+    try {
+        JsonWebSignature.validateCriticalHeaders(header)
+    } catch (e: IllegalArgumentException) {
+        throw InvalidRequestException("$jwtName: ${e.message}")
+    }
     val body = Json.parseToJsonElement(
         parts[1].fromBase64Url().decodeToString()
     ).jsonObject
