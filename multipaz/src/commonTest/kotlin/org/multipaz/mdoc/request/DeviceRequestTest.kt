@@ -5,7 +5,9 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.asn1.ASN1Integer
@@ -31,11 +33,15 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.HybridPublicKey
+import org.multipaz.crypto.HybridSigning
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import kotlin.experimental.xor
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
@@ -51,6 +57,8 @@ import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.credential.KeylessMdocCredential
+import org.multipaz.mdoc.devicesigned.DeviceAuth
+import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemParamValue
@@ -62,18 +70,22 @@ import org.multipaz.presentment.mdocPresentment
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
+import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
 import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toHex
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -83,8 +95,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 
 class DeviceRequestTest {
+    @BeforeTest
+    fun setup() = testUtilSetupCryptoProvider()
     private fun singleDocUseCaseInfo() = DeviceRequestInfo.fromValues(
         useCases = listOf(
             UseCase(
@@ -3340,5 +3355,633 @@ class DeviceRequestTest {
         assertFailsWith<SignatureVerificationException> {
             request.verifyReaderAuthentication(Cbor.decode("83f6f6f6".fromHex()))
         }
+    }
+
+    @Test
+    fun hybridCompositeSignaturesReaderAuthRoundTrip() = runTest {
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val validFrom = now - 1.days
+        val validUntil = now + 30.days
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val encodedSessionTranscript = Cbor.encode(sessionTranscript)
+
+        var testedCount = 0
+        for (alg in HybridSigning.specs.map { it.algorithm }) {
+            if (alg !in Crypto.supportedHybridSigningAlgorithms) {
+                continue
+            }
+            testedCount++
+
+            val readerRootEphemeral = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val readerRootCert = MdocUtil.generateReaderRootCertificate(
+                readerRootKey = readerRootEphemeral,
+                subject = X500Name.fromName("CN=Hybrid Reader Root $alg,C=US"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                crlUrl = "https://reader.example.com/crl"
+            )
+            assertIs<HybridPublicKey>(readerRootCert.publicKey)
+            assertEquals(alg, (readerRootCert.publicKey as HybridPublicKey).algorithm)
+            val readerRootCertified = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(readerRootCert)),
+                privateKey = readerRootEphemeral.privateKey,
+                algorithm = alg
+            )
+
+            // Software explicit reader key + leaf cert
+            val leafSoftware = AsymmetricKey.ephemeral(alg) as AsymmetricKey.AnonymousExplicit
+            val leafCertSoftware = MdocUtil.generateReaderCertificate(
+                readerRootKey = readerRootCertified,
+                readerKey = leafSoftware.publicKey,
+                subject = X500Name.fromName("CN=Hybrid SW Reader $alg,C=US"),
+                dnsName = "reader-sw.example.com",
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val readerCertifiedSoftware = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(leafCertSoftware, readerRootCert)),
+                privateKey = leafSoftware.privateKey,
+                algorithm = alg
+            )
+
+            // SoftwareSecureArea-backed reader key + leaf cert
+            val storage = EphemeralStorage()
+            val ssa = SoftwareSecureArea.create(storage)
+            val readerKeyInfo = ssa.createKey(
+                alias = null,
+                createKeySettings = CreateKeySettings(algorithm = alg)
+            )
+            assertIs<HybridPublicKey>(readerKeyInfo.publicKey)
+            val leafCertSsa = MdocUtil.generateReaderCertificate(
+                readerRootKey = readerRootCertified,
+                readerKey = readerKeyInfo.publicKey,
+                subject = X500Name.fromName("CN=Hybrid SSA Reader $alg,C=US"),
+                dnsName = "reader-ssa.example.com",
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+            val readerCertifiedSsa = AsymmetricKey.X509CertifiedSecureAreaBased(
+                certChain = X509CertChain(listOf(leafCertSsa, readerRootCert)),
+                secureArea = ssa,
+                keyInfo = readerKeyInfo
+            )
+
+            val trustManager = TrustManager(storage)
+            trustManager.addX509Cert(
+                certificate = readerRootCert,
+                metadata = TrustMetadata(displayName = "Hybrid Reader Root $alg")
+            )
+
+            // 1. v1.0 per-DocRequest readerAuth with both software explicit and SoftwareSecureArea keys
+            for ((readerKey, expectedLeafCert) in listOf(
+                readerCertifiedSoftware to leafCertSoftware,
+                readerCertifiedSsa to leafCertSsa,
+            )) {
+                val req = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+                    addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "family_name" to true,
+                                "age_over_21" to false,
+                            )
+                        ),
+                        docRequestInfo = null,
+                        readerKey = readerKey
+                    )
+                }
+                assertEquals("1.0", req.version)
+                val parsed = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(req.toDataItem())))
+                assertFailsWith<IllegalStateException> {
+                    parsed.docRequests[0].readerAuth
+                }
+                parsed.verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+                val readerAuth = parsed.docRequests[0].readerAuth!!
+                assertEquals(
+                    alg.coseAlgorithmIdentifier!!.toLong(),
+                    readerAuth.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+                )
+                val wireChain = (parsed.getRequesterIdentities().single() as Iso18013RequesterIdentity).certChain
+                val leafPubKey = assertIs<HybridPublicKey>(wireChain.certificates.first().publicKey)
+                assertEquals(alg, leafPubKey.algorithm)
+                assertEquals(expectedLeafCert, wireChain.certificates.first())
+                assertTrue(trustManager.verify(chain = wireChain.certificates, atTime = now).isTrusted)
+                assertEquals(req, parsed)
+            }
+
+            // 2. v1.1 readerAuthAll + protected x5t header
+            val reqAll = buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+                deviceRequestInfo = DeviceRequestInfo.fromValues(
+                    useCases = listOf(
+                        UseCase(
+                            mandatory = true,
+                            documentSets = listOf(DocumentSet(listOf(0, 1))),
+                            purposeHints = emptyMap()
+                        )
+                    )
+                )
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                )
+                addDocRequest(
+                    docType = EUPersonalID.EUPID_DOCTYPE,
+                    nameSpaces = mapOf(EUPersonalID.EUPID_NAMESPACE to mapOf("given_name" to false)),
+                )
+                addReaderAuthAll(readerKey = readerCertifiedSsa)
+            }
+            assertEquals("1.1", reqAll.version)
+            val parsedAll = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(reqAll.toDataItem())))
+            assertFailsWith<IllegalStateException> {
+                parsedAll.readerAuthAll
+            }
+            parsedAll.verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+            val readerAuthAll = parsedAll.readerAuthAll.single()
+            assertEquals(
+                alg.coseAlgorithmIdentifier!!.toLong(),
+                readerAuthAll.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+            )
+            assertEquals(
+                leafCertSsa.toCoseX5t(),
+                readerAuthAll.protectedHeaders[Cose.COSE_LABEL_X5T.toCoseLabel]
+            )
+            assertEquals(reqAll, parsedAll)
+
+            // 3. signDocRequests helper on multi-doc v1.0 request
+            val reqSignedBatch = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                )
+                addDocRequest(
+                    docType = EUPersonalID.EUPID_DOCTYPE,
+                    nameSpaces = mapOf(EUPersonalID.EUPID_NAMESPACE to mapOf("given_name" to false)),
+                )
+                signDocRequests(readerKey = readerCertifiedSoftware)
+            }
+            val parsedBatch = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(reqSignedBatch.toDataItem())))
+            parsedBatch.verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+            assertEquals(2, parsedBatch.docRequests.size)
+            for (docReq in parsedBatch.docRequests) {
+                assertEquals(
+                    alg.coseAlgorithmIdentifier!!.toLong(),
+                    docReq.readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+                )
+            }
+
+            // 4. Legacy DeviceRequestGenerator + DeviceRequestParser interop
+            @Suppress("DEPRECATION")
+            val legacyEncoded = DeviceRequestGenerator(encodedSessionTranscript)
+                .addDocumentRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    itemsToRequest = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    requestInfo = null,
+                    readerKeySecureArea = ssa,
+                    readerKeyAlias = readerKeyInfo.alias,
+                    readerKeyCertificateChain = X509CertChain(listOf(leafCertSsa))
+                )
+                .generate()
+            @Suppress("DEPRECATION")
+            val legacyParsed = DeviceRequestParser(legacyEncoded, encodedSessionTranscript).parse()
+            assertEquals("1.0", legacyParsed.version)
+            assertTrue(legacyParsed.docRequests.single().readerAuthenticated)
+            assertEquals(
+                X509CertChain(listOf(leafCertSsa)),
+                legacyParsed.docRequests.single().readerCertificateChain
+            )
+            DeviceRequest.fromDataItem(Cbor.decode(legacyEncoded))
+                .verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+
+            // 5. Negative checks: tamper both ML-DSA half (byte 0) and traditional half (last byte)
+            val baseReqForTamper = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                    readerKey = readerCertifiedSoftware
+                )
+            }
+            val baseDocReqCbor = baseReqForTamper.toDataItem()["docRequests"].asArray.single()
+            val origAuth = baseDocReqCbor["readerAuth"].asCoseSign1
+            for (flipIndex in listOf(0, origAuth.signature.lastIndex)) {
+                val tamperedBytes = origAuth.signature.copyOf()
+                tamperedBytes[flipIndex] = tamperedBytes[flipIndex] xor 0x01
+                val tamperedSig = CoseSign1(
+                    protectedHeaders = origAuth.protectedHeaders,
+                    unprotectedHeaders = origAuth.unprotectedHeaders,
+                    signature = tamperedBytes,
+                    payload = origAuth.payload
+                )
+                val tamperedReqCbor = buildCborMap {
+                    put("version", "1.0")
+                    putCborArray("docRequests") {
+                        addCborMap {
+                            put("itemsRequest", baseDocReqCbor["itemsRequest"])
+                            put("readerAuth", tamperedSig.toDataItem())
+                        }
+                    }
+                }
+                val tamperedEncoded = Cbor.encode(tamperedReqCbor)
+                assertFailsWith<SignatureVerificationException> {
+                    DeviceRequest.fromDataItem(Cbor.decode(tamperedEncoded))
+                        .verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+                }
+                @Suppress("DEPRECATION")
+                val parsedBad = DeviceRequestParser(tamperedEncoded, encodedSessionTranscript).parse()
+                assertFalse(parsedBad.docRequests.single().readerAuthenticated)
+            }
+
+            // Negative check on v1.1 readerAuthAll (traditional half tampered)
+            val reqAllCbor = reqAll.toDataItem()
+            val origAllSig = reqAllCbor["readerAuthAll"].asArray.single().asCoseSign1
+            val tamperedAllSigBytes = origAllSig.signature.copyOf()
+            tamperedAllSigBytes[tamperedAllSigBytes.lastIndex] =
+                tamperedAllSigBytes[tamperedAllSigBytes.lastIndex] xor 0x01
+            val tamperedAllSig = CoseSign1(
+                protectedHeaders = origAllSig.protectedHeaders,
+                unprotectedHeaders = origAllSig.unprotectedHeaders,
+                signature = tamperedAllSigBytes,
+                payload = origAllSig.payload
+            )
+            val tamperedAllReqCbor = buildCborMap {
+                put("version", "1.1")
+                put("docRequests", reqAllCbor["docRequests"])
+                put("deviceRequestInfo", reqAllCbor["deviceRequestInfo"])
+                putCborArray("readerAuthAll") {
+                    add(tamperedAllSig.toDataItem())
+                }
+            }
+            assertFailsWith<SignatureVerificationException> {
+                DeviceRequest.fromDataItem(tamperedAllReqCbor)
+                    .verifyReaderAuthentication(sessionTranscript = sessionTranscript, atTime = now)
+            }
+        }
+        if (Crypto.supportedHybridSigningAlgorithms.isNotEmpty()) {
+            assertEquals(Crypto.supportedHybridSigningAlgorithms.size, testedCount)
+        }
+    }
+
+    @Test
+    fun hybridCompositeSignaturesExecuteAndMdocPresentment() = runTest {
+        val supported = Crypto.supportedHybridSigningAlgorithms.toList()
+        if (supported.isEmpty()) {
+            return@runTest
+        }
+        val rootAlg = if (Algorithm.ML_DSA_87_ES384 in supported) {
+            Algorithm.ML_DSA_87_ES384
+        } else {
+            supported.first()
+        }
+        val leafAlg = supported.firstOrNull { it != rootAlg } ?: rootAlg
+        val deviceAlg = if (Algorithm.ML_DSA_44_ED25519 in supported) {
+            Algorithm.ML_DSA_44_ED25519
+        } else {
+            supported.last()
+        }
+
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        val now = harness.validFrom + 1.seconds
+        val validFrom = harness.validFrom
+        val validUntil = harness.validUntil
+        val sessionTranscript1 = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(10, 20, 30)) }
+        val sessionTranscript2 = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(40, 50, 60)) }
+
+        // Hybrid Reader Root CA + rotated leaf certs + spoofed attacker CA
+        val readerRootEph = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = readerRootEph,
+            subject = X500Name.fromName("CN=Hybrid Trusted Reader Root,C=US"),
+            serial = ASN1Integer(100L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://reader.example.com/crl"
+        )
+        harness.readerTrustManager.addX509Cert(
+            certificate = readerRootCert,
+            metadata = TrustMetadata(displayName = "Trusted Hybrid Reader")
+        )
+        val readerRootCertified = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerRootCert)),
+            privateKey = readerRootEph.privateKey,
+            algorithm = rootAlg
+        )
+
+        val readerLeafPriv1 = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+        val readerLeafCert1 = MdocUtil.generateReaderCertificate(
+            readerRootKey = readerRootCertified,
+            readerKey = readerLeafPriv1.publicKey,
+            subject = X500Name.fromName("CN=Hybrid Reader,C=US"),
+            dnsName = "reader.example.com",
+            serial = ASN1Integer(101L),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+        val readerLeafPriv2 = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+        val readerLeafCert2 = MdocUtil.generateReaderCertificate(
+            readerRootKey = readerRootCertified,
+            readerKey = readerLeafPriv2.publicKey,
+            subject = X500Name.fromName("CN=Hybrid Reader,C=US"),
+            dnsName = "reader.example.com",
+            serial = ASN1Integer(102L),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerLeafCert1, readerRootCert)),
+            privateKey = readerLeafPriv1.privateKey,
+            algorithm = leafAlg
+        )
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerLeafCert2, readerRootCert)),
+            privateKey = readerLeafPriv2.privateKey,
+            algorithm = leafAlg
+        )
+
+        val attackerRootEph = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+        val spoofedLeafPriv = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+        val spoofedLeafCert = X509Cert.Builder(
+            publicKey = spoofedLeafPriv.publicKey,
+            signingKey = attackerRootEph,
+            serialNumber = ASN1Integer(103L),
+            subject = readerLeafCert1.subject,
+            issuer = readerLeafCert1.issuer,
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).includeSubjectKeyIdentifier()
+            .setAuthorityKeyIdentifierToCertificate(readerRootCert)
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+        val spoofedReaderKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(spoofedLeafCert, readerRootCert)),
+            privateKey = spoofedLeafPriv.privateKey,
+            algorithm = leafAlg
+        )
+
+        val otherReaderRootEph = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+        val otherReaderRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = otherReaderRootEph,
+            subject = X500Name.fromName("CN=Other Hybrid Reader Root,C=US"),
+            serial = ASN1Integer(200L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = null
+        )
+        val otherReaderLeafEph = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+        val otherReaderLeafCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(otherReaderRootCert)),
+                privateKey = otherReaderRootEph.privateKey,
+                algorithm = rootAlg
+            ),
+            readerKey = otherReaderLeafEph.publicKey,
+            subject = X500Name.fromName("CN=Other Hybrid Reader,C=US"),
+            dnsName = null,
+            serial = ASN1Integer(201L),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+        val otherReaderKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(otherReaderLeafCert, otherReaderRootCert)),
+            privateKey = otherReaderLeafEph.privateKey,
+            algorithm = leafAlg
+        )
+
+        // 1. isSameAuthenticatedReader with hybrid reader chains & single-use leaf rotation
+        val untrustedSource = SimplePresentmentSource(
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+        )
+        val req1 = buildDeviceRequest(sessionTranscript1) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerKey1
+            )
+        }
+        val req1Again = buildDeviceRequest(sessionTranscript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerKey1
+            )
+        }
+        val req2Rotated = buildDeviceRequest(sessionTranscript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = readerKey2
+            )
+        }
+        val reqSpoofed = buildDeviceRequest(sessionTranscript2) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                readerKey = spoofedReaderKey
+            )
+        }
+        assertTrue(req1Again.isSameAuthenticatedReader(req1, harness.presentmentSource))
+        assertTrue(req1Again.isSameAuthenticatedReader(req1, untrustedSource))
+        assertTrue(req2Rotated.isSameAuthenticatedReader(req1, harness.presentmentSource))
+        assertFalse(req2Rotated.isSameAuthenticatedReader(req1, untrustedSource))
+        assertFalse(reqSpoofed.isSameAuthenticatedReader(req1, harness.presentmentSource))
+
+        // 2. Hybrid IACA -> DS certs + KeyBoundMdocCredential (mDL) + KeyBoundSdJwtVcCredential (EU PID)
+        val iaca1Eph = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+        val iaca1Cert = MdocUtil.generateIacaCertificate(
+            iacaKey = iaca1Eph,
+            subject = X500Name.fromName("CN=Hybrid Issuer 1 IACA,C=US"),
+            serial = ASN1Integer(300L),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            issuerAltNameUrl = "https://issuer1.example.com",
+            crlUrl = "https://issuer1.example.com/crl"
+        )
+        val ds1Eph = AsymmetricKey.ephemeral(leafAlg) as AsymmetricKey.AnonymousExplicit
+        val ds1Cert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(iaca1Cert)),
+                privateKey = iaca1Eph.privateKey,
+                algorithm = rootAlg
+            ),
+            dsKey = ds1Eph.publicKey,
+            subject = X500Name.fromName("CN=Hybrid Issuer 1 DS,C=US"),
+            serial = ASN1Integer(301L),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+        val ds1Key = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(ds1Cert, iaca1Cert)),
+            privateKey = ds1Eph.privateKey,
+            algorithm = leafAlg
+        )
+        val otherIacaEph = AsymmetricKey.ephemeral(rootAlg) as AsymmetricKey.AnonymousExplicit
+        val otherIacaCert = MdocUtil.generateIacaCertificate(
+            iacaKey = otherIacaEph,
+            subject = X500Name.fromName("CN=Other Hybrid Issuer IACA,C=US"),
+            serial = ASN1Integer(400L),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+
+        val expectedIssuerAki = ByteString(iaca1Cert.subjectKeyIdentifier!!)
+        val wrongIssuerAki = ByteString(otherIacaCert.subjectKeyIdentifier!!)
+        val expectedReaderAki = ByteString(readerRootCert.subjectKeyIdentifier!!)
+
+        val mdlDoc = harness.documentStore.createDocument(
+            displayName = "Hybrid mDL",
+            readerIdentifiers = listOf(expectedReaderAki)
+        )
+        val mdlCred = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = mdlDoc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = deviceAlg),
+            dsKey = ds1Key,
+            signedAt = validFrom,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            domain = "mdoc"
+        )
+        assertIs<HybridPublicKey>(mdlCred.mso.deviceKey)
+
+        val pidDoc = harness.documentStore.createDocument(
+            displayName = "Hybrid EU PID",
+            readerIdentifiers = listOf(expectedReaderAki)
+        )
+        val pidCred = EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+            document = pidDoc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = deviceAlg),
+            dsKey = ds1Key,
+            signedAt = validFrom,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            domain = "sdjwt"
+        )
+        val parsedIssuedSdJwt = SdJwt.fromCompactSerialization(pidCred.issuerProvidedData.decodeToString())
+        assertIs<HybridPublicKey>(parsedIssuedSdJwt.kbKey)
+
+        // Matching readerIdentifiers + issuerIdentifiers succeeds; mismatched reader or issuer fails
+        val matchingIdentifierReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript1,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(expectedIssuerAki)),
+                readerKey = readerKey1
+            )
+        }
+        val execMatch = matchingIdentifierReq.execute(presentmentSource = harness.presentmentSource, atTime = now)
+        assertEquals(1, execMatch.useCases.single().solutions.size)
+
+        val wrongReaderReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript1,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(expectedIssuerAki)),
+                readerKey = otherReaderKey
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            wrongReaderReq.execute(presentmentSource = harness.presentmentSource, atTime = now)
+        }
+
+        val wrongIssuerReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript1,
+            deviceRequestInfo = singleDocUseCaseInfo()
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false)),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(wrongIssuerAki)),
+                readerKey = readerKey1
+            )
+        }
+        assertFailsWith<Iso18015ResponseException> {
+            wrongIssuerReq.execute(presentmentSource = harness.presentmentSource, atTime = now)
+        }
+
+        // 3. Full end-to-end mdocPresentment for v1.1 multi-doc request (mDL + dc+sd-jwt EU PID)
+        val multiDocReq = buildDeviceRequest(
+            sessionTranscript = sessionTranscript1,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0, 1))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "given_name" to false,
+                        "age_over_21" to false,
+                    )
+                ),
+                docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(expectedIssuerAki)),
+                readerKey = readerKey1
+            )
+            addDocRequest(
+                docType = EUPersonalID.EUPID_VCT,
+                nameSpaces = mapOf("_" to mapOf("c0" to false)),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf("c0" to buildJsonArray { add("given_name") }),
+                    issuerIdentifiers = listOf(expectedIssuerAki)
+                ),
+                readerKey = readerKey1
+            )
+            addReaderAuthAll(readerKey = readerKey1)
+        }
+        val wiredReq = DeviceRequest.fromDataItem(Cbor.decode(Cbor.encode(multiDocReq.toDataItem())))
+        wiredReq.verifyReaderAuthentication(sessionTranscript = sessionTranscript1, atTime = now)
+
+        val eReaderPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val isoResponse = mdocPresentment(
+            deviceRequest = wiredReq,
+            eReaderKey = eReaderPrivateKey.publicKey,
+            sessionTranscript = sessionTranscript1,
+            source = harness.presentmentSource,
+            keyAgreementPossible = listOf(EcCurve.P256),
+            requesterAppId = null,
+            requesterOrigin = null,
+            creationTime = now,
+            onDocumentsInFocus = {}
+        )
+        val encodedResponse = Cbor.encode(isoResponse.deviceResponse.toDataItem())
+        val verifiedResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedResponse))
+        verifiedResponse.verify(
+            sessionTranscript = sessionTranscript1,
+            eReaderKey = AsymmetricKey.anonymous(eReaderPrivateKey),
+            deviceRequest = wiredReq,
+            atTime = now
+        )
+        assertEquals(1, verifiedResponse.documents.size)
+        assertEquals(1, verifiedResponse.otherDocuments.size)
+        val mdocDoc = verifiedResponse.documents.single()
+        assertEquals(listOf(0), mdocDoc.docRequestIds)
+        val deviceAuth = assertIs<DeviceAuth.Signature>(mdocDoc.deviceAuth)
+        assertEquals(
+            deviceAlg.coseAlgorithmIdentifier!!.toLong(),
+            deviceAuth.signature.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber
+        )
+        val docDeviceKey = assertIs<HybridPublicKey>(mdocDoc.mso.deviceKey)
+        assertEquals(deviceAlg, docDeviceKey.algorithm)
+        assertEquals(listOf(1), verifiedResponse.otherDocuments.single().docRequestIds)
     }
 }
