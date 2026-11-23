@@ -752,23 +752,7 @@ internal suspend fun computeDeviceNamespaces(
     }
 }
 
-internal fun isChv1Requested(match: PresentmentCredentialMatch): Boolean {
-    return when (val source = match.source) {
-        is PresentmentCredentialMatchSourceIso18013 -> {
-            source.docRequest.nameSpaces[ISO_23220_5_CHV_1_NAMESPACE]
-                ?.containsKey(ISO_23220_5_CHV_1_DATA_ELEMENT) == true
-        }
-        is PresentmentCredentialMatchSourceOpenID4VP -> {
-            val cq = source.credentialQuery
-            cq.claims.any { isChv1Claim(it) } ||
-                cq.claimSets.any { cs ->
-                    cs.claimIdentifiers.any { id ->
-                        cq.claimIdToClaim[id]?.let { isChv1Claim(it) } == true
-                    }
-                }
-        }
-    }
-}
+internal fun isChv1Requested(match: PresentmentCredentialMatch): Boolean = match.chv1Requested
 
 internal fun isChv1Claim(reqClaim: RequestedClaim): Boolean {
     return reqClaim is MdocRequestedClaim &&

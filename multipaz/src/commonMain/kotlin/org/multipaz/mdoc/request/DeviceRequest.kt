@@ -2,6 +2,7 @@ package org.multipaz.mdoc.request
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -793,6 +794,7 @@ data class DeviceRequest private constructor(
         val docRequest: DocRequest,
         val transactionData: List<TransactionData<*>>,
         val faceMatchNeeded: Boolean = false,
+        val chv1Requested: Boolean = false,
     )
 
     private data class DocRequestResult(
@@ -874,6 +876,7 @@ data class DeviceRequest private constructor(
                 source = PresentmentCredentialMatchSourceIso18013(docRequest = docRequest),
                 transactionData = transactionData,
                 faceMatchNeeded = faceMatchNeeded,
+                chv1Requested = chv1Requested,
                 encryptionRequested = docRequestInfo?.docResponseEncryption != null,
                 encryptionTargetCertificationChain = encryptionTargetCertificationChain,
                 encryptionTargetTrustMetadata = encryptionTargetTrustMetadata,
@@ -1327,6 +1330,7 @@ data class DeviceRequest private constructor(
                         docRequest = docRequest,
                         transactionData = selectedTransactions,
                         faceMatchNeeded = faceMatchNeeded,
+                        chv1Requested = chv1Matched,
                     ),
                     failureReason = null
                 )
@@ -1501,6 +1505,7 @@ data class DeviceRequest private constructor(
                             docRequest = docRequest,
                             transactionData = selectedTransactions,
                             faceMatchNeeded = faceMatchNeeded,
+                            chv1Requested = chv1Matched,
                         ),
                         failureReason = null
                     )
@@ -2065,7 +2070,12 @@ internal fun deviceRequestAddQueries(
         // as the primary.
 
         val nameSpaces = mutableMapOf<String, MutableMap<String, Boolean>>()
-        val dataElementIdentifierMapping = mutableMapOf<String, kotlinx.serialization.json.JsonArray>()
+        val dataElementIdentifierMapping = mutableMapOf<String, JsonArray>()
+
+        fun sdJwtElementId(claimPath: JsonArray): String =
+            "sdjwtkb_" + claimPath.joinToString("_") {
+                if (it is JsonNull) "null" else it.jsonPrimitive.content
+            }
 
         // Identify which claims are 'base' (primary).
         // If claim_sets exists, the first set usually represents the primary preference.
@@ -2088,9 +2098,7 @@ internal fun deviceRequestAddQueries(
                     }
                     is JsonRequestedClaim -> {
                         val nsMap = nameSpaces.getOrPut("_") { mutableMapOf() }
-                        val elementId = "sdjwtkb_" + requestedClaim.claimPath.joinToString("_") {
-                            if (it is JsonNull) "null" else it.jsonPrimitive.content
-                        }
+                        val elementId = sdJwtElementId(requestedClaim.claimPath)
                         nsMap[elementId] = false
                         dataElementIdentifierMapping[elementId] = requestedClaim.claimPath
                     }
@@ -2144,9 +2152,7 @@ internal fun deviceRequestAddQueries(
                                     ElementReference(claim.namespaceName, claim.dataElementName)
                                 }
                                 is JsonRequestedClaim -> {
-                                    val elementId = claim.claimPath.joinToString(".") {
-                                        if (it is JsonNull) "null" else it.jsonPrimitive.content
-                                    }
+                                    val elementId = sdJwtElementId(claim.claimPath)
                                     dataElementIdentifierMapping[elementId] = claim.claimPath
                                     ElementReference("_", elementId)
                                 }
@@ -2168,9 +2174,7 @@ internal fun deviceRequestAddQueries(
                             )
                         }
                         is JsonRequestedClaim -> {
-                            val elementId = primaryClaim.claimPath.joinToString(".") {
-                                if (it is JsonNull) "null" else it.jsonPrimitive.content
-                            }
+                            val elementId = sdJwtElementId(primaryClaim.claimPath)
                             dataElementIdentifierMapping[elementId] = primaryClaim.claimPath
                             ElementReference("_", elementId)
                         }
