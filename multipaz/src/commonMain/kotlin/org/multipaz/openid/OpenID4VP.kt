@@ -648,24 +648,12 @@ object OpenID4VP {
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): String {
         match.source as PresentmentCredentialMatchSourceOpenID4VP
+        val requestedClaims = match.claims.keys.filterIsInstance<MdocRequestedClaim>()
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (requestIsForZk) {
             check(match.transactionData.isEmpty())
-            val requesterSupportedZkSpecs = mutableListOf<ZkSystemSpec>()
-            for (entry in match.source.credentialQuery.meta["zk_system_type"]!!.jsonArray) {
-                entry as JsonObject
-                val system = entry["system"]!!.jsonPrimitive.content
-                val id = entry["id"]!!.jsonPrimitive.content
-                val item = ZkSystemSpec(id, system)
-                for (param in entry) {
-                    if (param.key == "system" || param.key == "id") {
-                        continue
-                    }
-                    item.addParam(param.key, param.value)
-                }
-                requesterSupportedZkSpecs.add(item)
-            }
+            val requesterSupportedZkSpecs = match.source.credentialQuery.parseZkSystemSpecs()
             val zkSystemRepository = source.zkSystemRepository
             if (zkSystemRepository != null) {
                 // Find the first ZK System that the requester supports and matches the document
@@ -673,8 +661,8 @@ object OpenID4VP {
                     val zkSystem = zkSystemRepository.lookup(zkSpec.system) ?: continue
 
                     val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                        zkSystemSpecs = requesterSupportedZkSpecs,
-                        requestedClaims = match.source.credentialQuery.claims
+                        zkSystemSpecs = listOf(zkSpec),
+                        requestedClaims = requestedClaims
                     )
                     if (matchingZkSystemSpec != null) {
                         zkSystemMatch = zkSystem
@@ -749,7 +737,7 @@ object OpenID4VP {
         val document = MdocDocument.fromPresentment(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
-            requestedClaims = match.claims.keys.filterIsInstance<MdocRequestedClaim>(),
+            requestedClaims = requestedClaims,
             deviceNamespaces = computeDeviceNamespaces(match, faceMatchedCredentials),
             iso18013AgeOverSubstitution = false,
         )

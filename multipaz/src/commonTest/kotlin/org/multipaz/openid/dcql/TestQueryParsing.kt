@@ -8,6 +8,8 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 internal fun DcqlQuery.print(): String {
     val pp = PrettyPrinter()
@@ -378,5 +380,135 @@ class TestQueryParsing {
             ).jsonObject).print().trim()
         )
 
+    }
+
+    @Test
+    fun invalidClaimsAndClaimSetsRejected() {
+        val baseCredPrefix = """
+            "id": "pid",
+            "format": "dc+sd-jwt",
+            "meta": { "vct_values": ["urn:eudi:pid:1"] }
+        """.trimIndent()
+
+        // 1. Empty claim_sets array
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [{"id": "a", "path": ["given_name"]}],
+                        "claim_sets": []
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 2. Empty claims array: accepted when claim_sets is absent, rejected when claim_sets is present
+        val parsedEmptyClaims = DcqlQuery.fromJsonString(
+            """
+                {
+                  "credentials": [{
+                    $baseCredPrefix,
+                    "claims": []
+                  }]
+                }
+            """.trimIndent()
+        )
+        assertTrue(parsedEmptyClaims.credentialQueries.single().claims.isEmpty())
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [],
+                        "claim_sets": [["a"]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 3. claim_sets present without claims
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claim_sets": [["a"]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 4. Duplicate claim id
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [
+                          {"id": "a", "path": ["given_name"]},
+                          {"id": "a", "path": ["family_name"]}
+                        ],
+                        "claim_sets": [["a"]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 5. Claim missing id when claim_sets is present
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [
+                          {"id": "a", "path": ["given_name"]},
+                          {"path": ["family_name"]}
+                        ],
+                        "claim_sets": [["a"]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 6. Empty inner claim_set
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [{"id": "a", "path": ["given_name"]}],
+                        "claim_sets": [[]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        // 7. Unknown claim id referenced in claim_sets
+        assertFailsWith<IllegalArgumentException> {
+            DcqlQuery.fromJsonString(
+                """
+                    {
+                      "credentials": [{
+                        $baseCredPrefix,
+                        "claims": [{"id": "a", "path": ["given_name"]}],
+                        "claim_sets": [["does_not_exist"]]
+                      }]
+                    }
+                """.trimIndent()
+            )
+        }
     }
 }

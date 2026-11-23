@@ -17,6 +17,7 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @property transactionUserInput additional user input for transactions, indexed by the transaction
  *   type identifier.
  * @property faceMatchNeeded whether face matching is needed for this credential presentment.
+ * @property chv1Requested whether ISO/IEC 23220-5 `chv_1` was requested in the matched claim set or permutation.
  * @property encryptionRequested whether the resulting credential is requested to be encrypted to a third party.
  * @property encryptionTargetCertificationChain the certificate chain of the third party, if supplied.
  * @property encryptionTargetTrustMetadata trust metadata for the third party, if available.
@@ -28,6 +29,7 @@ data class PresentmentCredentialMatch(
     val transactionData: List<TransactionData<*>>,
     val transactionUserInput: Map<String, TransactionUserInput> = emptyMap(),
     val faceMatchNeeded: Boolean = false,
+    val chv1Requested: Boolean = false,
     val encryptionRequested: Boolean = false,
     val encryptionTargetCertificationChain: X509CertChain? = null,
     val encryptionTargetTrustMetadata: TrustMetadata? = null,

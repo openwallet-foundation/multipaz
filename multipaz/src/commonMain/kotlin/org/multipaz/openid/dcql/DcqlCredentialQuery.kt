@@ -3,10 +3,12 @@ package org.multipaz.openid.dcql
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.claim.findMatchingClaim
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.request.RequestedClaim
 import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
@@ -157,5 +159,28 @@ data class DcqlCredentialQuery(
                 )
             }
         }
+    }
+
+    internal fun parseZkSystemSpecs(): List<ZkSystemSpec> {
+        val zkSystemTypeArray = meta["zk_system_type"]?.let {
+            it as? JsonArray
+                ?: throw IllegalArgumentException("'zk_system_type' in meta must be a JSON array for query '$id'")
+        } ?: return emptyList()
+        val specs = mutableListOf<ZkSystemSpec>()
+        for (entryElem in zkSystemTypeArray) {
+            val entry = entryElem as? JsonObject
+                ?: throw IllegalArgumentException("Each entry in 'zk_system_type' must be a JSON object for query '$id'")
+            val system = (entry["system"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: throw IllegalArgumentException("Missing 'system' in 'zk_system_type' entry for query '$id'")
+            val specId = (entry["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: throw IllegalArgumentException("Missing 'id' in 'zk_system_type' entry for query '$id'")
+            val item = ZkSystemSpec(specId, system)
+            for ((key, value) in entry) {
+                if (key == "system" || key == "id") continue
+                item.addParam(key, value)
+            }
+            specs.add(item)
+        }
+        return specs
     }
 }
