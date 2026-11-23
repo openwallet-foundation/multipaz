@@ -22,6 +22,7 @@ import org.multipaz.cbor.MajorType
 import org.multipaz.cbor.Tagged
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
@@ -198,6 +199,7 @@ val KeyViewComponent = FC<KeyViewProps> { props ->
                         is EcPrivateKey -> "EC Private Key"
                         is RsaPrivateKey -> "RSA Private Key"
                         is MlDsaPrivateKey -> "ML-DSA Private Key"
+                        is HybridPrivateKey -> "Hybrid Private Key"
                         is MlKemPrivateKey -> "ML-KEM Private Key"
                     }
                     +"$keyTypeStr (${keyFormat.uppercase()})"

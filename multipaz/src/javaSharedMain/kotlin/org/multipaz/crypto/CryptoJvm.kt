@@ -117,6 +117,9 @@ actual object Crypto {
             emptySet()
         }
 
+    actual val supportedHybridSigningAlgorithms: Set<Algorithm>
+        get() = HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
+
     actual val provider: String
         get() {
             val sb = StringBuilder("JCA: ")
@@ -390,13 +393,32 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: MlDsaSignature
     ) {
+        checkSignature(publicKey, message, algorithm, signature, byteArrayOf())
+    }
+
+    actual suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature,
+        context: ByteArray
+    ) {
         require(algorithm == publicKey.algorithm) {
             "Signature algorithm $algorithm doesn't match key algorithm ${publicKey.algorithm}"
         }
         if (!BouncyCastlePqc.isAvailable) {
             throw UnsupportedOperationException("ML-DSA is not supported in the current environment")
         }
-        BouncyCastlePqc.checkSignature(publicKey, message, algorithm, signature)
+        BouncyCastlePqc.checkSignature(publicKey, message, algorithm, signature, context)
+    }
+
+    actual suspend fun checkSignature(
+        publicKey: HybridPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: HybridSignature
+    ) {
+        HybridSigning.checkSignature(publicKey, message, algorithm, signature)
     }
 
     internal fun fixupEcDsaPrivateKeyMaterial(curve: EcCurve, d: ByteArray): ByteArray {
@@ -523,6 +545,15 @@ actual object Crypto {
         return BouncyCastlePqc.createMlKemPrivateKey(algorithm)
     }
 
+    actual suspend fun createHybridPrivateKey(
+        algorithm: Algorithm
+    ): HybridPrivateKey {
+        require(algorithm in supportedHybridSigningAlgorithms) {
+            "Hybrid signing algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridSigning.createPrivateKey(algorithm)
+    }
+
     /**
      * Signs data with a key.
      *
@@ -641,13 +672,30 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): MlDsaSignature {
+        return sign(key, signatureAlgorithm, message, byteArrayOf())
+    }
+
+    actual suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray,
+        context: ByteArray
+    ): MlDsaSignature {
         require(signatureAlgorithm == key.algorithm) {
             "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
         }
         if (!BouncyCastlePqc.isAvailable) {
             throw UnsupportedOperationException("ML-DSA is not supported in the current environment")
         }
-        return BouncyCastlePqc.sign(key, signatureAlgorithm, message)
+        return BouncyCastlePqc.sign(key, signatureAlgorithm, message, context)
+    }
+
+    actual suspend fun sign(
+        key: HybridPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): HybridSignature {
+        return HybridSigning.sign(key, signatureAlgorithm, message)
     }
 
     actual suspend fun kemEncapsulate(
@@ -736,13 +784,21 @@ actual object Crypto {
     }
 
     internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {
+        val certificates = certChain.certificates
         val javaCerts = certChain.javaX509Certificates
-        for (n in javaCerts.indices) {
-            if (n < javaCerts.size - 1) {
-                val cert = javaCerts[n]
-                val certSignedBy = javaCerts[n + 1]
+        for (n in 0 until certificates.size - 1) {
+            val cert = certificates[n]
+            val issuerCert = certificates[n + 1]
+            if (HybridSigning.isCompositeOid(cert.signatureAlgorithmOid)) {
                 try {
-                    cert.verify(certSignedBy.publicKey)
+                    cert.verify(issuerCert.publicKey)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    return false
+                }
+            } else {
+                try {
+                    javaCerts[n].verify(javaCerts[n + 1].publicKey)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     return false

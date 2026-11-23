@@ -47,6 +47,14 @@ expect object Crypto {
     val supportedMlKemAlgorithms: Set<Algorithm>
 
     /**
+     * The PQ/T hybrid composite signature algorithms supported by the platform.
+     *
+     * On JVM and Android, this requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`)
+     * on the classpath in addition to platform support for the traditional curve component.
+     */
+    val supportedHybridSigningAlgorithms: Set<Algorithm>
+
+    /**
      * A human-readable description of the underlying library used.
      */
     val provider: String
@@ -183,6 +191,42 @@ expect object Crypto {
     )
 
     /**
+     * Checks signature validity for an ML-DSA key with an explicit FIPS 204 context string.
+     *
+     * @param publicKey the public key the signature was made with.
+     * @param message the data that was signed.
+     * @param algorithm the signature algorithm to use.
+     * @param signature the signature.
+     * @param context the FIPS 204 domain separation context string (at most 255 bytes).
+     * @throws SignatureVerificationException if the signature check fails.
+     * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
+     */
+    suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature,
+        context: ByteArray
+    )
+
+    /**
+     * Checks signature validity for a PQ/T hybrid composite key.
+     *
+     * @param publicKey the composite public key the signature was made with.
+     * @param message the data that was signed.
+     * @param algorithm the composite signature algorithm to use.
+     * @param signature the composite signature.
+     * @throws SignatureVerificationException if the signature check fails.
+     * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
+     */
+    suspend fun checkSignature(
+        publicKey: HybridPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: HybridSignature
+    )
+
+    /**
      * Creates an EC private key.
      *
      * @param curve the curve to use.
@@ -218,6 +262,16 @@ expect object Crypto {
     suspend fun createMlKemPrivateKey(
         algorithm: Algorithm = Algorithm.ML_KEM_768
     ): MlKemPrivateKey
+
+    /**
+     * Creates a PQ/T hybrid composite private key.
+     *
+     * @param algorithm the composite signature algorithm to use.
+     * @return the newly created private key.
+     */
+    suspend fun createHybridPrivateKey(
+        algorithm: Algorithm = Algorithm.ML_DSA_65_ES256
+    ): HybridPrivateKey
 
     /**
      * Signs data with a key.
@@ -263,6 +317,36 @@ expect object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): MlDsaSignature
+
+    /**
+     * Signs data with an ML-DSA key using an explicit FIPS 204 context string.
+     *
+     * @param key the key to sign with.
+     * @param signatureAlgorithm the signature algorithm to use.
+     * @param message the data to sign.
+     * @param context the FIPS 204 domain separation context string (at most 255 bytes).
+     * @return the signature.
+     */
+    suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray,
+        context: ByteArray
+    ): MlDsaSignature
+
+    /**
+     * Signs data with a PQ/T hybrid composite private key.
+     *
+     * @param key the composite private key to sign with.
+     * @param signatureAlgorithm the composite signature algorithm to use.
+     * @param message the data to sign.
+     * @return the composite signature.
+     */
+    suspend fun sign(
+        key: HybridPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): HybridSignature
 
     /**
      * Encapsulates a shared secret using an ML-KEM recipient public key.
@@ -330,6 +414,7 @@ suspend fun Crypto.sign(
     is EcPrivateKey -> sign(key, signatureAlgorithm, message)
     is RsaPrivateKey -> sign(key, signatureAlgorithm, message)
     is MlDsaPrivateKey -> sign(key, signatureAlgorithm, message)
+    is HybridPrivateKey -> sign(key, signatureAlgorithm, message)
     is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
 }
 
@@ -358,6 +443,7 @@ suspend fun Crypto.checkSignature(
         is EcPublicKey -> checkSignature(publicKey, message, algorithm, signature as EcSignature)
         is RsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as RsaSignature)
         is MlDsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as MlDsaSignature)
+        is HybridPublicKey -> checkSignature(publicKey, message, algorithm, signature as HybridSignature)
         is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
     }
 }

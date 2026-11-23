@@ -13,6 +13,7 @@ import org.multipaz.compose.scrollbar.LazyColumnWithScrollbar
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaSignature
@@ -177,6 +178,7 @@ private suspend fun swTestUnguarded(
                 is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
                 is RsaSignature -> "sig=${signature.signature.toHex()}"
                 is MlDsaSignature -> "sig=${signature.signature.toHex()}"
+                is HybridSignature -> "sig=${signature.signature.toHex()}"
             }
             Logger.d(
                 TAG,

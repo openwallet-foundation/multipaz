@@ -25,6 +25,8 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.HybridPublicKey
+import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
@@ -315,6 +317,31 @@ class CloudSecureAreaProtocolTest {
                 dataToSign,
                 alg,
                 signature as MlDsaSignature
+            )
+        }
+    }
+
+    @Test
+    fun testHybridSigning() = runTest {
+        val server = createServer()
+        val client = CsaClient(server, "testPassphrase")
+        client.register()
+
+        for (alg in Crypto.supportedHybridSigningAlgorithms) {
+            val keyHandle = client.createKey(alg)
+            val leafCert = keyHandle.attestationChain.certificates[0]
+            assertEquals(setOf(X509KeyUsage.DIGITAL_SIGNATURE), leafCert.keyUsage)
+            assertTrue(leafCert.publicKey is HybridPublicKey)
+
+            val dataToSign = "Hybrid CSA signing $alg".encodeToByteArray()
+            val signature = client.sign(keyHandle, dataToSign)
+            assertTrue(signature is HybridSignature)
+
+            Crypto.checkSignature(
+                leafCert.publicKey as HybridPublicKey,
+                dataToSign,
+                alg,
+                signature as HybridSignature
             )
         }
     }

@@ -23,6 +23,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
 import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.crypto.PrivateKey
@@ -82,6 +83,7 @@ class SoftwareSecureArea private constructor(
                 (it.curve != null && Crypto.supportedCurves.contains(it.curve)) ||
                 (it.keySizeBits != null && it.isSigning) ||
                 (it in Crypto.supportedMlDsaAlgorithms) ||
+                (it in Crypto.supportedHybridSigningAlgorithms) ||
                 (it in Crypto.supportedMlKemAlgorithms)
             )
         }
@@ -129,6 +131,8 @@ class SoftwareSecureArea private constructor(
                 Crypto.createEcPrivateKey(settings.algorithm.curve!!)
             } else if (settings.algorithm in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87)) {
                 Crypto.createMlDsaPrivateKey(settings.algorithm)
+            } else if (settings.algorithm.isHybridSigning) {
+                Crypto.createHybridPrivateKey(settings.algorithm)
             } else if (settings.algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024)) {
                 Crypto.createMlKemPrivateKey(settings.algorithm)
             } else {
@@ -329,6 +333,7 @@ class SoftwareSecureArea private constructor(
                 is EcPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
                 is RsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
                 is MlDsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+                is HybridPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
                 is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
             }
         }
@@ -496,7 +501,7 @@ class SoftwareSecureArea private constructor(
         }
     }
 
-    @CborSerializable(schemaHash = "ZQhm_YwMdgsTBNuJjP_Zv5HQL2dKaVLwMRH96nxpf8Q")
+    @CborSerializable(schemaHash = "u3LrbOXxOxvcTO0lNCNrfZHvHZOOTleocRbyof4LUkM")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

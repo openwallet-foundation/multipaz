@@ -81,6 +81,21 @@ enum class OID(
     /** ML-DSA-87 post-quantum signature algorithm (FIPS 204). */
     ML_DSA_87("2.16.840.1.101.3.4.3.19", "ML-DSA-87 post-quantum signature algorithm"),
 
+    /** ML-DSA-44 and Ed25519 composite signature algorithm with SHA-512 pre-hash (RFC 10073). */
+    ML_DSA_44_ED25519_SHA512("1.3.6.1.5.5.7.6.39", "ML-DSA-44 with Ed25519 composite signature algorithm"),
+
+    /** ML-DSA-44 and ECDSA P-256 composite signature algorithm with SHA-256 pre-hash (RFC 10073). */
+    ML_DSA_44_ECDSA_P256_SHA256("1.3.6.1.5.5.7.6.40", "ML-DSA-44 with ECDSA P-256 composite signature algorithm"),
+
+    /** ML-DSA-65 and ECDSA P-256 composite signature algorithm with SHA-512 pre-hash (RFC 10073). */
+    ML_DSA_65_ECDSA_P256_SHA512("1.3.6.1.5.5.7.6.45", "ML-DSA-65 with ECDSA P-256 composite signature algorithm"),
+
+    /** ML-DSA-65 and ECDSA P-384 composite signature algorithm with SHA-512 pre-hash (RFC 10073). */
+    ML_DSA_65_ECDSA_P384_SHA512("1.3.6.1.5.5.7.6.46", "ML-DSA-65 with ECDSA P-384 composite signature algorithm"),
+
+    /** ML-DSA-87 and ECDSA P-384 composite signature algorithm with SHA-512 pre-hash (RFC 10073). */
+    ML_DSA_87_ECDSA_P384_SHA512("1.3.6.1.5.5.7.6.49", "ML-DSA-87 with ECDSA P-384 composite signature algorithm"),
+
     /** ML-KEM-512 post-quantum key encapsulation mechanism (FIPS 203). */
     ML_KEM_512("2.16.840.1.101.3.4.4.1", "ML-KEM-512 post-quantum key encapsulation mechanism"),
 

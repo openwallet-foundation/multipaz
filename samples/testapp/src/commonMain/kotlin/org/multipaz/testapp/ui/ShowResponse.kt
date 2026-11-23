@@ -39,6 +39,7 @@ import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaPublicKey
@@ -319,6 +320,7 @@ private suspend fun parseResponse(
                     is EcPublicKey -> pk.curve.name
                     is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
                     is MlDsaPublicKey -> pk.algorithm.name
+                    is HybridPublicKey -> pk.algorithm.name
                     is MlKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(mdocDsKeyDesc)))
@@ -375,6 +377,7 @@ private suspend fun parseResponse(
                     is EcPublicKey -> pk.curve.name
                     is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
                     is MlDsaPublicKey -> pk.algorithm.name
+                    is HybridPublicKey -> pk.algorithm.name
                     is MlKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(sdJwtDsKeyDesc)))

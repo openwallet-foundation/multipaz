@@ -2,6 +2,7 @@ package org.multipaz.securearea.software
 
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
 import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.crypto.PrivateKey
@@ -174,6 +175,7 @@ class SoftwareCreateKeySettings internal constructor(
                 null -> Algorithm.ESP256
                 is EcPrivateKey -> pk.curve.defaultSigningAlgorithmFullySpecified
                 is MlDsaPrivateKey -> pk.algorithm
+                is HybridPrivateKey -> pk.algorithm
                 is MlKemPrivateKey -> pk.algorithm
                 is RsaPrivateKey -> when (pk.publicKey.modulus.size * 8) {
                     2048 -> Algorithm.RS256_2048

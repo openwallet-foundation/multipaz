@@ -32,6 +32,7 @@ import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKeyOkp
+import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlKemPublicKey
@@ -718,6 +719,61 @@ val X509ParserComponent = FC {
                                             border = Border(1.px, LineStyle.solid, Color("#334155"))
                                         }
                                         +parsedPublicKey.encoded.toHex()
+                                    }
+                                }
+                            }
+                            is HybridPublicKey -> {
+                                div {
+                                    css {
+                                        display = Display.grid
+                                        gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
+                                        gap = 20.px
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span {
+                                            css {
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase
+                                            }
+                                            +"Key Type"
+                                        }
+                                        span {
+                                            css {
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px
+                                            }
+                                            +"Hybrid (${parsedPublicKey.algorithm.name})"
+                                        }
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span {
+                                            css {
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase
+                                            }
+                                            +"Key Size"
+                                        }
+                                        span {
+                                            css {
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px
+                                            }
+                                            +"${parsedPublicKey.encoded.size} bytes"
+                                        }
                                     }
                                 }
                             }

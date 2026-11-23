@@ -29,6 +29,8 @@ import kotlinx.serialization.json.jsonObject
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.HybridPrivateKey
+import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKeyOkp
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
@@ -363,7 +365,59 @@ val KeyDecoderComponent = FC {
                                         }
                                     }
                                 }
-                                is MlKemPublicKey -> {
+                                is HybridPublicKey -> {
+                                    div {
+                                        span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"KEY TYPE / ALGORITHM" }
+                                        span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; fontSize = 15.px }; +"Hybrid (${pubKey.algorithm.name})" }
+                                    }
+                                    div {
+                                        span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"PUBLIC KEY SIZE" }
+                                        span { css { color = Color("#f1f5f9"); fontSize = 15.px }; +"${pubKey.encoded.size} bytes" }
+                                    }
+                                    div {
+                                        span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"SIGNING" }
+                                        span { css { color = Color("#10b981"); fontSize = 15.px; fontWeight = FontWeight.bold }; +"Supported (Composite PQ/T)" }
+                                    }
+                                }
+                                is HybridPublicKey -> {
+                                div {
+                                    span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Composite Public Key (${pubKey.encoded.size} bytes)" }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#38bdf8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +pubKey.encoded.toHex()
+                                    }
+                                }
+                                if (privKey is HybridPrivateKey) {
+                                    div {
+                                        span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Composite Private Key (${privKey.encoded.size} bytes)" }
+                                        pre {
+                                            css {
+                                                background = Color("#1e293b")
+                                                padding = 16.px
+                                                borderRadius = 8.px
+                                                fontFamily = FontFamily.monospace
+                                                fontSize = 12.px
+                                                color = Color("#34d399")
+                                                marginTop = 8.px
+                                                overflowX = "auto".unsafeCast<Overflow>()
+                                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                            }
+                                            +privKey.encoded.toHex()
+                                        }
+                                    }
+                                }
+                            }
+                            is MlKemPublicKey -> {
                                     div {
                                         span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"KEY TYPE / ALGORITHM" }
                                         span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; fontSize = 15.px }; +"ML-KEM (${pubKey.algorithm.name})" }
@@ -563,6 +617,44 @@ val KeyDecoderComponent = FC {
                                 if (privKey is MlDsaPrivateKey) {
                                     div {
                                         span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Private Key (sk, ${privKey.encoded.size} bytes)" }
+                                        pre {
+                                            css {
+                                                background = Color("#1e293b")
+                                                padding = 16.px
+                                                borderRadius = 8.px
+                                                fontFamily = FontFamily.monospace
+                                                fontSize = 12.px
+                                                color = Color("#34d399")
+                                                marginTop = 8.px
+                                                overflowX = "auto".unsafeCast<Overflow>()
+                                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                            }
+                                            +privKey.encoded.toHex()
+                                        }
+                                    }
+                                }
+                            }
+                            is HybridPublicKey -> {
+                                div {
+                                    span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Composite Public Key (${pubKey.encoded.size} bytes)" }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#38bdf8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +pubKey.encoded.toHex()
+                                    }
+                                }
+                                if (privKey is HybridPrivateKey) {
+                                    div {
+                                        span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Composite Private Key (${privKey.encoded.size} bytes)" }
                                         pre {
                                             css {
                                                 background = Color("#1e293b")

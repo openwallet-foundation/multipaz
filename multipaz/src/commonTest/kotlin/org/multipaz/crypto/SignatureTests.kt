@@ -55,6 +55,21 @@ class SignatureTests {
     }
 
     @Test
+    fun hybridSignatureCborRoundtrip() {
+        val sigData = byteArrayOf(12, 24, 36, 48, 60, 72)
+        val sig = HybridSignature(sigData)
+        val dataItem = sig.toDataItem()
+        val cborBytes = Cbor.encode(dataItem)
+
+        val decodedSig = Signature.fromDataItem(Cbor.decode(cborBytes))
+        assertIs<HybridSignature>(decodedSig)
+        assertEquals(sig, decodedSig)
+
+        val directDecoded = HybridSignature.fromDataItem(Cbor.decode(cborBytes))
+        assertEquals(sig, directDecoded)
+    }
+
+    @Test
     fun invalidSignatureFromDataItem() {
         assertFailsWith<IllegalArgumentException> {
             Signature.fromDataItem(42L.toDataItem())
