@@ -2,8 +2,10 @@ package org.multipaz.sdjwt
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
 import org.multipaz.crypto.Algorithm
@@ -15,6 +17,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.util.toBase64Url
+import org.multipaz.webtoken.buildJwt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -404,5 +407,53 @@ class SdJwtValidationTest {
         val result = sdJwt.validate(now = now + 1.hours)
         assertTrue(result.hasErrors)
         assertTrue(result.errors.any { it.message.contains("Failed to parse issuer certificate in 'x5c'") })
+    }
+
+    @Test
+    fun testUnsupportedCritHeaderReportsError() = runTest {
+        val now = Instant.fromEpochSeconds(1700000000)
+        val ecKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        // Test without x5c to ensure validate() checks 'crit' independently of x5c signature verification
+        val jwsWithoutX5c = buildJwt(
+            type = "dc+sd-jwt",
+            key = AsymmetricKey.anonymous(ecKey, Algorithm.ES256),
+            header = {
+                putJsonArray("crit") { add("urn:example:never-understood") }
+                put("urn:example:never-understood", true)
+            },
+            creationTime = now,
+        ) {
+            put("iss", "https://issuer.example.com")
+            put("vct", "https://example.com/vct")
+            put("exp", (now + 1.days).epochSeconds)
+        }
+        val resultWithoutX5c = SdJwt.validate("$jwsWithoutX5c~", now = now)
+        assertTrue(resultWithoutX5c.hasErrors)
+        assertTrue(
+            resultWithoutX5c.errors.any { it.message.contains("crit") },
+            "Expected 'crit' error, got: ${resultWithoutX5c.errors.map { it.message }}"
+        )
+
+        // Test with x5c as well
+        val issuerKey = createIssuerKey(validFrom = now - 1.days, validUntil = now + 30.days)
+        val jwsWithX5c = buildJwt(
+            type = "dc+sd-jwt",
+            key = issuerKey,
+            header = {
+                putJsonArray("crit") { add("urn:example:never-understood") }
+                put("urn:example:never-understood", true)
+            },
+            creationTime = now,
+        ) {
+            put("iss", "https://issuer.example.com")
+            put("vct", "https://example.com/vct")
+            put("exp", (now + 1.days).epochSeconds)
+        }
+        val resultWithX5c = SdJwt.validate("$jwsWithX5c~", now = now)
+        assertTrue(resultWithX5c.hasErrors)
+        assertTrue(
+            resultWithX5c.errors.any { it.message.contains("crit") },
+            "Expected 'crit' error, got: ${resultWithX5c.errors.map { it.message }}"
+        )
     }
 }

@@ -120,7 +120,8 @@ object JsonWebEncryption {
      * @param encryptedJwt the compact serialization of the JWE.
      * @param recipientKey the recipients private key corresponding to the public key this was encrypted to.
      * @return the decrypted claims set.
-     * @throws IllegalArgumentException if the JWE format or algorithm is invalid or unsupported.
+     * @throws IllegalArgumentException if the JWE format, critical (`crit`) header parameters,
+     *   or algorithm is invalid or unsupported.
      * @throws IllegalStateException if decryption fails.
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
@@ -140,6 +141,10 @@ object JsonWebEncryption {
         require(splits.size == 5)
         val (protectedHeaderB64, encryptedKeyB64, ivB64, cipherTextB64, authenticationTagB64) = splits
         val protectedHeader = Json.decodeFromString(JsonObject.serializer(), protectedHeaderB64.fromBase64Url().decodeToString())
+        JsonWebSignature.validateCriticalHeaders(
+            header = protectedHeader,
+            standardParameters = JsonWebSignature.STANDARD_JWE_HEADER_PARAMETERS
+        )
 
         require(protectedHeader["alg"]!!.jsonPrimitive.content == "ECDH-ES")
 

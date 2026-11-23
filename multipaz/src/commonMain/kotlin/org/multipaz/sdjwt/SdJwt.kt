@@ -146,6 +146,7 @@ class SdJwt private constructor(
      *
      * @param issuerKey the issuer's key to use for verification or `null` to not perform issuer signature validation.
      * @return the processed SD-JWT payload.
+     * @throws IllegalArgumentException if the SD-JWT structure, critical header parameters, or disclosures are invalid.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      */
     suspend fun verify(
@@ -159,6 +160,8 @@ class SdJwt private constructor(
                 if (e is CancellationException) throw e
                 throw SignatureVerificationException("Error validating issuer signature", e)
             }
+        } else {
+            JsonWebSignature.validateCriticalHeaders(jwtHeader)
         }
         val referencedDisclosureStrings = mutableSetOf<String>()
         val seenDigests = mutableSetOf<String>()
@@ -216,6 +219,12 @@ class SdJwt private constructor(
             if (alg == null) {
                 addError("Unsupported signing algorithm in SD-JWT header: '$algStr'")
             }
+        }
+
+        try {
+            JsonWebSignature.validateCriticalHeaders(jwtHeader)
+        } catch (e: IllegalArgumentException) {
+            addError("SD-JWT header has invalid or unsupported 'crit' parameter: ${e.message}")
         }
 
         val certChain = x5c

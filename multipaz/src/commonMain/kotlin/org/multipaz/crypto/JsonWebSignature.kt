@@ -2,6 +2,7 @@ package org.multipaz.crypto
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -118,7 +119,8 @@ object JsonWebSignature {
      *
      * @param jws the compact serialization of the JWS.
      * @param publicKey the key to use for verification
-     * @throws IllegalArgumentException if the JWS is malformed.
+     * @throws IllegalArgumentException if the JWS is malformed or contains invalid or unsupported
+     *   critical (`crit`) header parameters.
      * @throws SignatureVerificationException if the signature check fails.
      */
     @Throws(
@@ -135,6 +137,7 @@ object JsonWebSignature {
             require(splits.size == 3) { "Malformed JWS" }
             val (headerStr, bodyStr, signatureStr) = splits
             val headerObj = Json.decodeFromString(JsonObject.serializer(), headerStr.fromBase64Url().decodeToString())
+            validateCriticalHeaders(headerObj)
             val toBeVerified = "$headerStr.$bodyStr".encodeToByteArray()
             val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
             when (publicKey) {
@@ -204,5 +207,57 @@ object JsonWebSignature {
             type = headerObj["typ"]!!.jsonPrimitive.content,
             x5c = headerObj["x5c"]?.let { X509CertChain.fromX5c(it) }
         )
+    }
+
+    internal val STANDARD_JWS_HEADER_PARAMETERS = setOf(
+        "alg", "jku", "jwk", "kid", "x5u", "x5c", "x5t", "x5t#S256", "typ", "cty", "crit"
+    )
+
+    internal val STANDARD_JWE_HEADER_PARAMETERS = STANDARD_JWS_HEADER_PARAMETERS + setOf(
+        "enc", "zip", "epk", "apu", "apv", "iv", "tag", "p2s", "p2c"
+    )
+
+    /**
+     * Validates the RFC 7515 Section 4.1.11 / RFC 7516 Section 4.1.13 `crit` (Critical)
+     * Header Parameter in a JOSE Protected Header.
+     *
+     * @param header the decoded JOSE Protected Header JSON object.
+     * @param standardParameters standard JOSE/JWA header parameter names that must not appear
+     *   in `crit`.
+     * @param supportedCriticalHeaders extension header parameter names understood and supported
+     *   by the recipient (defaults to empty).
+     * @throws IllegalArgumentException if `crit` is malformed or lists any unsupported extension.
+     */
+    internal fun validateCriticalHeaders(
+        header: JsonObject,
+        standardParameters: Set<String> = STANDARD_JWS_HEADER_PARAMETERS,
+        supportedCriticalHeaders: Set<String> = emptySet(),
+    ) {
+        val critElement = header["crit"] ?: return
+        require(critElement is JsonArray) {
+            "JOSE 'crit' header parameter must be a JSON array"
+        }
+        require(critElement.isNotEmpty()) {
+            "JOSE 'crit' header parameter must not be empty"
+        }
+        val seen = mutableSetOf<String>()
+        for (item in critElement) {
+            require(item is JsonPrimitive && item.isString && item.content.isNotEmpty()) {
+                "JOSE 'crit' header parameter must contain only non-empty strings"
+            }
+            val paramName = item.content
+            require(seen.add(paramName)) {
+                "Duplicate header parameter '$paramName' in JOSE 'crit' header"
+            }
+            require(paramName !in standardParameters) {
+                "Standard JOSE header parameter '$paramName' must not be listed in 'crit'"
+            }
+            require(paramName in header) {
+                "Critical header parameter '$paramName' is listed in 'crit' but not present in header"
+            }
+            require(paramName in supportedCriticalHeaders) {
+                "Unsupported critical header parameter '$paramName' in JOSE 'crit' header"
+            }
+        }
     }
 }

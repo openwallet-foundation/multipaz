@@ -3246,4 +3246,114 @@ class SdJwtTest {
         }
     }
 
+    @Test
+    fun testRejectUnsupportedCritHeaderInIssuerAndKbJwt() = runTest {
+        val issuerPrivKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val holderPrivKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerKey = AsymmetricKey.anonymous(issuerPrivKey, Algorithm.ES256)
+        val holderKey = AsymmetricKey.anonymous(holderPrivKey, Algorithm.ES256)
+        val now = Clock.System.now()
+        val nonce = "test-nonce"
+        val audience = "https://verifier.example"
+
+        val disclosure = """["salt_crit_1234567890","given_name","Erika"]"""
+            .encodeToByteArray()
+            .toBase64Url()
+        val disclosureDigest = Crypto.digest(
+            Algorithm.SHA256,
+            disclosure.encodeToByteArray()
+        ).toBase64Url()
+
+        suspend fun buildIssuerSdJwt(includeCrit: Boolean): SdJwt {
+            val jws = buildJwt(
+                type = "dc+sd-jwt",
+                key = issuerKey,
+                header = {
+                    if (includeCrit) {
+                        putJsonArray("crit") { add("urn:example:never-understood") }
+                    }
+                    put("urn:example:never-understood", true)
+                },
+                creationTime = now,
+            ) {
+                put("iss", "https://issuer.example")
+                put("_sd_alg", "sha-256")
+                putJsonArray("_sd") { add(disclosureDigest) }
+                put("cnf", buildJsonObject { put("jwk", holderPrivKey.publicKey.toJwk()) })
+            }
+            return SdJwt.fromCompactSerialization("$jws~$disclosure~")
+        }
+
+        suspend fun buildKbPresentation(sdJwt: SdJwt, includeCritInKb: Boolean): SdJwtKb {
+            val sdHash = Crypto.digest(
+                Algorithm.SHA256,
+                sdJwt.compactSerialization.encodeToByteArray()
+            ).toBase64Url()
+            val kbJwt = buildJwt(
+                type = "kb+jwt",
+                key = holderKey,
+                header = {
+                    if (includeCritInKb) {
+                        putJsonArray("crit") { add("urn:example:never-understood") }
+                    }
+                    put("urn:example:never-understood", true)
+                },
+                creationTime = now,
+            ) {
+                put("nonce", nonce)
+                put("aud", audience)
+                put("sd_hash", sdHash)
+            }
+            return SdJwtKb.fromCompactSerialization(sdJwt.compactSerialization + kbJwt)
+        }
+
+        // Control ("repaired"): same extension header present without `crit` is accepted
+        val controlSdJwt = buildIssuerSdJwt(includeCrit = false)
+        val controlKb = buildKbPresentation(controlSdJwt, includeCritInKb = false)
+        val processed = controlKb.verify(
+            issuerKey = issuerPrivKey.publicKey,
+            checkNonce = { it == nonce },
+            checkAudience = { it == audience },
+            checkCreationTime = { true },
+        )
+        assertEquals("Erika", processed["given_name"]!!.jsonPrimitive.content)
+
+        // Case 1 (`issuer-crit`): unsupported `crit` in issuer-signed JWT must be rejected
+        val issuerCritSdJwt = buildIssuerSdJwt(includeCrit = true)
+        assertFailsWith<SignatureVerificationException> {
+            issuerCritSdJwt.verify(issuerPrivKey.publicKey)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            issuerCritSdJwt.verify(null)
+        }
+        val issuerCritKb = buildKbPresentation(issuerCritSdJwt, includeCritInKb = false)
+        assertFailsWith<SignatureVerificationException> {
+            issuerCritKb.verify(
+                issuerKey = issuerPrivKey.publicKey,
+                checkNonce = { it == nonce },
+                checkAudience = { it == audience },
+                checkCreationTime = { true },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            issuerCritKb.verify(
+                issuerKey = null,
+                checkNonce = { it == nonce },
+                checkAudience = { it == audience },
+                checkCreationTime = { true },
+            )
+        }
+
+        // Case 2 (`kb-crit`): unsupported `crit` in Key Binding JWT must be rejected
+        val kbCritPresentation = buildKbPresentation(controlSdJwt, includeCritInKb = true)
+        assertFailsWith<SignatureVerificationException> {
+            kbCritPresentation.verify(
+                issuerKey = issuerPrivKey.publicKey,
+                checkNonce = { it == nonce },
+                checkAudience = { it == audience },
+                checkCreationTime = { true },
+            )
+        }
+    }
+
 }
