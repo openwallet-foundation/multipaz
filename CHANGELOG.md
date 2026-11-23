@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Significant changes since Multipaz 0.102.0 include:
 
 - (Will be filled out at release time, do not add anything here)
-- PQ/T hybrid composite signatures: Added initial support for IETF `draft-ietf-jose-pq-composite-sigs-07` / RFC 10073 composite signature algorithms (`ML_DSA_44_ES256`, `ML_DSA_65_ES256`, `ML_DSA_65_ES384`, `ML_DSA_87_ES384`, and `ML_DSA_44_ED25519`) via `HybridPublicKey`, `HybridPrivateKey`, and `HybridSignature` across `Crypto`, X.509, COSE, JOSE/JWT, `SoftwareSecureArea`, and `CloudSecureArea`, and normalized `MlDsaPrivateKey` generation to use 32-byte FIPS 204 seeds with context support.
+- PQ/T hybrid composite signatures: Added initial support for IETF `draft-ietf-jose-pq-composite-sigs-07` / RFC 10073 composite signature algorithms (`ML_DSA_44_ES256`, `ML_DSA_65_ES256`, `ML_DSA_65_ES384`, `ML_DSA_87_ES384`, and `ML_DSA_44_ED25519`) via `HybridPublicKey`, `HybridPrivateKey`, and `HybridSignature` across `Crypto`, X.509, COSE, JOSE/JWT, `SoftwareSecureArea`, `CloudSecureArea`, and `SecureEnclaveSecureArea` (`ML_DSA_65_ES256` on iOS 26+), and normalized `MlDsaPrivateKey` generation to use 32-byte FIPS 204 seeds with context support.
 
 ## [0.102.0] - 2026-10-22
 Significant changes since Multipaz 0.101.0 include:

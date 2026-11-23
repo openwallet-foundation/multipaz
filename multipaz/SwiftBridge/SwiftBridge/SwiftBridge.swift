@@ -269,6 +269,17 @@ import AuthenticationServices
 
     @objc(secureEnclaveMlDsaSign: : : :) public class func secureEnclaveMlDsaSign(
         algorithm: String, keyBlob: Data, dataToSign: Data, authContext: LAContext?) -> Data? {
+        return secureEnclaveMlDsaSignWithContext(
+            algorithm: algorithm,
+            keyBlob: keyBlob,
+            dataToSign: dataToSign,
+            context: Data(),
+            authContext: authContext
+        )
+    }
+
+    @objc(secureEnclaveMlDsaSignWithContext:::::) public class func secureEnclaveMlDsaSignWithContext(
+        algorithm: String, keyBlob: Data, dataToSign: Data, context: Data, authContext: LAContext?) -> Data? {
         if #available(iOS 26.0, macOS 26.0, *) {
             if algorithm == "ML-DSA-65" {
                 guard let key = try? SecureEnclave.MLDSA65.PrivateKey(
@@ -277,7 +288,11 @@ import AuthenticationServices
                 ) else {
                     return nil
                 }
-                return try? key.signature(for: dataToSign)
+                if context.isEmpty {
+                    return try? key.signature(for: dataToSign)
+                } else {
+                    return try? key.signature(for: dataToSign, context: context)
+                }
             } else if algorithm == "ML-DSA-87" {
                 guard let key = try? SecureEnclave.MLDSA87.PrivateKey(
                     dataRepresentation: keyBlob,
@@ -285,7 +300,11 @@ import AuthenticationServices
                 ) else {
                     return nil
                 }
-                return try? key.signature(for: dataToSign)
+                if context.isEmpty {
+                    return try? key.signature(for: dataToSign)
+                } else {
+                    return try? key.signature(for: dataToSign, context: context)
+                }
             }
         }
         return nil

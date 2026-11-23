@@ -9,8 +9,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.HybridSignature
+import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.prompt.PromptModel
@@ -135,6 +138,20 @@ actual fun SecureEnclaveSecureAreaScreen(
                 content = { Text("ML-DSA-87 Signature") }
             )
             TextButton(
+                onClick = { seTest(Algorithm.ML_DSA_65_ES256,
+                    setOf(),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-DSA-65-ES256 Signature") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_DSA_65_ES256,
+                    setOf(SecureEnclaveUserAuthType.USER_PRESENCE),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-DSA-65-ES256 Signature - Auth (User Presence)") }
+            )
+            TextButton(
                 onClick = { seTest(Algorithm.ML_KEM_768,
                     setOf(),
                     coroutineScope,
@@ -198,6 +215,7 @@ private suspend fun seTestUnguarded(
     )
 
     if (algorithm.isSigning) {
+        val keyInfo = secureEnclaveSecureArea.getKeyInfo("testKey")
         val dataToSign = "data".encodeToByteArray()
         val t0 = Clock.System.now()
         val signature = secureEnclaveSecureArea.sign(
@@ -206,6 +224,12 @@ private suspend fun seTestUnguarded(
             unlockReason = unlockReason
         )
         val t1 = Clock.System.now()
+        when (val pubKey = keyInfo.publicKey) {
+            is EcPublicKey -> Crypto.checkSignature(pubKey, dataToSign, algorithm, signature as EcSignature)
+            is MlDsaPublicKey -> Crypto.checkSignature(pubKey, dataToSign, algorithm, signature as MlDsaSignature)
+            is HybridPublicKey -> Crypto.checkSignature(pubKey, dataToSign, algorithm, signature as HybridSignature)
+            else -> throw IllegalStateException("Unexpected public key $pubKey")
+        }
         val signatureDesc = when (signature) {
             is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
             is MlDsaSignature -> "signature=${signature.signature.toHex()}"
