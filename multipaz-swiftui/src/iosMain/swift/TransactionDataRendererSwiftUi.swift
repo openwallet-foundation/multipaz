@@ -44,6 +44,10 @@ enum TransactionDataBlock {
 /// Items of a transaction type with a ``TransactionDataRendererSwiftUi`` in the repository are drawn
 /// together, in the place of the first of them. Every other item keeps the built-in rendering, one
 /// item at a time, in request order. Renderers made for another UI toolkit are ignored.
+///
+/// A type that requires user acceptance (see `TransactionType.requiresUserAcceptance`) but has no
+/// renderer keeps the built-in rendering here; presentment then fails in the library when it
+/// generates the response, instead of silently signing a statement the holder never saw.
 func transactionDataBlocks(
     _ transactionData: [TransactionData<AnyObject>],
     repository: TransactionDataRendererRepository?

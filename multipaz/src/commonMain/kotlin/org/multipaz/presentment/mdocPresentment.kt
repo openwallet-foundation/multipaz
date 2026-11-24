@@ -796,6 +796,18 @@ internal suspend fun computeTransactionResponse(
     if (match.transactionData.isEmpty()) {
         return buildDeviceNamespaces {}
     }
+    // Refuse to sign a transaction that requires explicit acceptance unless the wallet actually
+    // collected it. This keeps presentment fail-closed when no consent prompt was shown or no
+    // application renderer was registered for the type.
+    for (transaction in match.transactionData) {
+        check(transaction.type.isPresentationAllowed(
+            match.transactionUserInput[transaction.type.identifier]
+        )) {
+            "Can't present transaction '${transaction.type.identifier}': it requires the holder " +
+                "to accept its contents, but no acceptance was collected. The application may be " +
+                "out of date or have no transaction data renderer for this type."
+        }
+    }
     val isIso18013 = match.source is PresentmentCredentialMatchSourceIso18013
     val docRequestId = (match.source as? PresentmentCredentialMatchSourceIso18013)?.docRequest?.docRequestId
     val groupedByNamespace = mutableMapOf<String, MutableMap<String, DataItem>>()

@@ -23,6 +23,11 @@ internal sealed interface TransactionDataBlock {
  * together, in the place of the first of them. Every other item keeps the built-in rendering, one
  * item at a time, in request order. Renderers made for another UI toolkit are ignored.
  *
+ * A type that requires user acceptance (see
+ * [org.multipaz.documenttype.TransactionType.requiresUserAcceptance]) but has no renderer keeps the
+ * built-in rendering here; presentment then fails in the library when it generates the response,
+ * instead of silently signing a statement the holder never saw.
+ *
  * @param transactionData the transaction data items of one credential, in request order.
  * @param transactionDataRendererRepository the repository to look up renderers in, or `null` for none.
  * @return the blocks, in the order to draw them.

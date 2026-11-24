@@ -51,6 +51,7 @@ import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.utopia.knowntypes.PingTransaction
+import org.multipaz.utopia.knowntypes.TextAcceptanceTransaction
 import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_DATA_ELEMENT
 import org.multipaz.documenttype.ISO_23220_5_CHV_1_NAMESPACE
@@ -357,9 +358,15 @@ object TestAppUtils {
                     "Erika",
                     "Erika's Driving License",
                     Res.drawable.driving_license_card_art,
-                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedNamespaces = listOf(
+                        PingTransaction.openId4VpMdocResponseNamespace,
+                        TextAcceptanceTransaction.openId4VpMdocResponseNamespace,
+                    ),
                     deviceKeyAuthorizedDataElements = mapOf(
-                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                            PingTransaction.identifier,
+                            TextAcceptanceTransaction.identifier,
+                        )
                     )
                 )
                 // A second, leaner mDL whose MSO is small enough for the Longfellow ZK circuits.
@@ -378,9 +385,15 @@ object TestAppUtils {
                     "Erika's Driving License (ZKP-friendly)",
                     Res.drawable.driving_license_card_art,
                     zkFriendly = true,
-                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedNamespaces = listOf(
+                        PingTransaction.openId4VpMdocResponseNamespace,
+                        TextAcceptanceTransaction.openId4VpMdocResponseNamespace,
+                    ),
                     deviceKeyAuthorizedDataElements = mapOf(
-                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                            PingTransaction.identifier,
+                            TextAcceptanceTransaction.identifier,
+                        )
                     )
                 )
                 provisionDocument(
@@ -435,9 +448,15 @@ object TestAppUtils {
                     "Erika",
                     "Erika's EU PID",
                     Res.drawable.pid_card_art,
-                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedNamespaces = listOf(
+                        PingTransaction.openId4VpMdocResponseNamespace,
+                        TextAcceptanceTransaction.openId4VpMdocResponseNamespace,
+                    ),
                     deviceKeyAuthorizedDataElements = mapOf(
-                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                            PingTransaction.identifier,
+                            TextAcceptanceTransaction.identifier,
+                        )
                     )
                 )
                 provisionDocument(

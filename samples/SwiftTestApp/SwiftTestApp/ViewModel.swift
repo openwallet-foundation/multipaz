@@ -9,7 +9,7 @@ import SwiftUI
 class ViewModel {
 
     var path: [Destination] = []
-    var useTransactionDataRenderers: Bool = false
+    var useTransactionDataRenderers: Bool = true
     private let swiftTestAppTransactionDataRenderers = makeSwiftTestAppTransactionDataRenderers()
 
     /// The renderers the consent prompt uses for transaction data, or `nil` for the built-in rendering.

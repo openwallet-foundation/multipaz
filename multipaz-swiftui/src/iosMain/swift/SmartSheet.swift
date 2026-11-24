@@ -52,6 +52,13 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// Optional callback invoked when the scroll container/content heights change.
     public var onScrollMetricsChange: ((CGFloat, CGFloat) -> Void)? = nil
     
+    /// Optional callback invoked when the content stops being, or starts being, scrolled to its end.
+    ///
+    /// A view can use this to require the user to read all of a long text before it enables an
+    /// acceptance control. The value is `true` when the content fits without scrolling or when the
+    /// last part of the content is visible.
+    public var onAtBottomChange: ((Bool) -> Void)? = nil
+
     private let header: () -> Header
     private let content: () -> Content
     private let footer: (Bool, @escaping () -> Void) -> Footer
@@ -87,6 +94,9 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// Programmatic scroll control.
     @State private var scrollPosition = ScrollPosition()
 
+    /// Last value reported through `onAtBottomChange`, to avoid redundant callbacks.
+    @State private var reportedAtBottom: Bool? = nil
+
     /// Creates a smart sizing sheet.
     ///
     /// - Parameters:
@@ -94,6 +104,10 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     ///                Pass `.infinity` to let the sheet fill the screen if needed.
     ///   - updateDetents: Whether to automatically apply detents to the sheet. Defaults to true.
     ///   - heightBinding: Optional binding to publish the computed detent height to a parent container.
+    ///   - onScrollMetricsChange: Optional callback invoked with the scroll container height and the
+    ///                            total content height whenever the scroll geometry changes.
+    ///   - onAtBottomChange: Optional callback invoked when the content starts or stops being
+    ///                       scrolled to its end.
     ///   - header: A fixed view pinned to the top of the sheet.
     ///   - content: The scrollable content.
     ///   - footer: A fixed view pinned to the bottom. The closure receives:
@@ -107,6 +121,7 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         scrollToBottomTrigger: Int = 0,
         isActive: Bool = true,
         onScrollMetricsChange: ((CGFloat, CGFloat) -> Void)? = nil,
+        onAtBottomChange: ((Bool) -> Void)? = nil,
         @ViewBuilder header: @escaping () -> Header,
         @ViewBuilder content: @escaping () -> Content,
         @ViewBuilder footer: @escaping (Bool, @escaping () -> Void) -> Footer
@@ -118,6 +133,7 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         self.scrollToBottomTrigger = scrollToBottomTrigger
         self.isActive = isActive
         self.onScrollMetricsChange = onScrollMetricsChange
+        self.onAtBottomChange = onAtBottomChange
         self.header = header
         self.content = content
         self.footer = footer
@@ -142,6 +158,18 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         return (currentScrollY + scrollContainerHeight) >= (scrollContentHeight - 1.0)
     }
     
+    /// Reports whether the content is scrolled to its end, based on pure scroll geometry.
+    ///
+    /// Unlike `isAtBottom`, this ignores the presentation height, so it is correct for sheets that
+    /// manage their own detents (`updateDetents == false`).
+    private func reportAtBottom(offsetY: CGFloat, containerHeight: CGFloat, contentHeight: CGFloat) {
+        let atBottom = containerHeight > 0 && (offsetY + containerHeight) >= (contentHeight - 1.0)
+        if reportedAtBottom != atBottom {
+            reportedAtBottom = atBottom
+            onAtBottomChange?(atBottom)
+        }
+    }
+
     public var body: some View {
         let sheetContent = VStack(spacing: 0) {
             // 1. Measure Header
@@ -170,6 +198,11 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
                 scrollContentHeight = newValue.contentHeight
                 if isActive {
                     onScrollMetricsChange?(newValue.containerHeight, newValue.contentHeight)
+                    reportAtBottom(
+                        offsetY: newValue.offsetY,
+                        containerHeight: newValue.containerHeight,
+                        contentHeight: newValue.contentHeight
+                    )
                 }
                 if let isScrollableBinding = isScrollableBinding {
                     let newTotal = headerHeight + contentHeight + footerHeight + topSafeAreaHeight
@@ -186,6 +219,11 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
             .onChange(of: isActive) {
                 if isActive && scrollContainerHeight > 0 {
                     onScrollMetricsChange?(scrollContainerHeight, scrollContentHeight)
+                    reportAtBottom(
+                        offsetY: currentScrollY,
+                        containerHeight: scrollContainerHeight,
+                        contentHeight: scrollContentHeight
+                    )
                 }
             }
             .onChange(of: scrollToBottomTrigger) {

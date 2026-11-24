@@ -397,6 +397,9 @@ fun Consent(
     }
     var activeUseCaseIndex by remember { mutableStateOf(0) }
     var coolOffComplete by remember { mutableStateOf(false) }
+    var continueAllowed by remember {
+        mutableStateOf(emptyMap<PresentmentCredentialMatch, Map<String, Boolean>>())
+    }
     val scrollState = rememberScrollState()
     var documentDetails by remember { mutableStateOf<DocumentDetailsTarget?>(null) }
     var transactionDetails by remember { mutableStateOf<TransactionDetailsTarget?>(null) }
@@ -421,10 +424,25 @@ fun Consent(
             )
         }
 
+    val onContinueAllowedChanged: (PresentmentCredentialMatch, String, Boolean) -> Unit =
+        { match, type, allowed ->
+            val current = continueAllowed[match] ?: emptyMap()
+            if (current[type] != allowed) {
+                continueAllowed = continueAllowed.plus(match to current.plus(type to allowed))
+            }
+        }
+
     // TODO: it seems that we do not need to worry about transactionUserInput here; if we actually
     //  do, we should add it BOTH as key to remember and as a parameter to toPresentmentSelection
     val currentSelection = remember(selections, presentmentData) {
         presentmentData.toPresentmentSelection(selections, emptyMap())
+    }
+    val canContinue = remember(currentSelection, continueAllowed) {
+        currentSelection.matches.all { match ->
+            match.transactionData.all { transactionData ->
+                continueAllowed[match]?.get(transactionData.type.identifier) != false
+            }
+        }
     }
     val purposes = remember(
         requester,
@@ -538,11 +556,13 @@ fun Consent(
                     scrollState = scrollState,
                     coolOffComplete = coolOffComplete,
                     onCoolOffComplete = { coolOffComplete = true },
+                    canContinue = canContinue,
                     requesterHistoryLoaded = requesterHistoryLoaded,
                     requesterHistoryEntry = requesterHistoryEntry,
                     transactionUserInput = transactionUserInput,
                     transactionDataRendererRepository = transactionDataRendererRepository,
                     onTransactionUserInputChanged = onTransactionUserInputChanged,
+                    onContinueAllowedChanged = onContinueAllowedChanged,
                     onShowRequesterInfo = {
                         navController.navigate("showRequesterInfo")
                     },
@@ -623,6 +643,9 @@ fun Consent(
                         userInput = transactionUserInput[target.match]?.get(target.block.identifier),
                         onUserInputChanged = { userInput ->
                             onTransactionUserInputChanged(target.match, target.block.identifier, userInput)
+                        },
+                        onContinueAllowedChanged = { allowed ->
+                            onContinueAllowedChanged(target.match, target.block.identifier, allowed)
                         },
                         onBackClicked = {
                             navController.navigateUp()
@@ -1537,9 +1560,11 @@ private fun TransactionDetailsPage(
     purposes: Set<PresentmentPurpose>,
     userInput: TransactionUserInput?,
     onUserInputChanged: (userInput: TransactionUserInput) -> Unit,
+    onContinueAllowedChanged: (allowed: Boolean) -> Unit,
     onBackClicked: () -> Unit,
 ) {
     val details = target.block.renderer.details ?: return
+    val detailsScrollState = rememberScrollState()
     Column {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1558,7 +1583,7 @@ private fun TransactionDetailsPage(
         }
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(detailsScrollState)
                 .padding(top = 12.dp, bottom = 16.dp)
         ) {
             details(
@@ -1570,6 +1595,8 @@ private fun TransactionDetailsPage(
                     purposes = purposes,
                     userInput = userInput,
                     onUserInputChanged = onUserInputChanged,
+                    isScrolledToBottom = !detailsScrollState.canScrollForward,
+                    onContinueAllowedChanged = onContinueAllowedChanged,
                 )
             )
         }
@@ -1591,11 +1618,13 @@ private fun ConsentPage(
     scrollState: ScrollState,
     coolOffComplete: Boolean,
     onCoolOffComplete: () -> Unit,
+    canContinue: Boolean,
     requesterHistoryLoaded: Boolean,
     requesterHistoryEntry: RequesterHistoryEntry?,
     transactionUserInput: Map<PresentmentCredentialMatch, Map<String, TransactionUserInput>>,
     transactionDataRendererRepository: TransactionDataRendererRepository?,
     onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit,
+    onContinueAllowedChanged: (PresentmentCredentialMatch, String, Boolean) -> Unit,
     onShowRequesterInfo: () -> Unit,
     onShowDocumentDetails: (DocumentDetailsTarget) -> Unit,
     onShowTransactionDetails: (TransactionDetailsTarget) -> Unit,
@@ -1736,6 +1765,7 @@ private fun ConsentPage(
                         transactionDataRendererRepository = transactionDataRendererRepository,
                         appInfo = appInfo,
                         onTransactionUserInputChanged = onTransactionUserInputChanged,
+                        onContinueAllowedChanged = onContinueAllowedChanged,
                         onShowDocumentDetails = onShowDocumentDetails,
                         onShowTransactionDetails = onShowTransactionDetails,
                         onNavigateToPickSolution = {
@@ -1769,6 +1799,7 @@ private fun ConsentPage(
             requireCoolOff = (riskLevel == ConsentRiskLevel.HIGH_RISK),
             coolOffComplete = coolOffComplete,
             onCoolOffComplete = onCoolOffComplete,
+            canContinue = canContinue,
         )
     }
 }
@@ -1786,6 +1817,7 @@ private fun UseCaseViewer(
     transactionDataRendererRepository: TransactionDataRendererRepository?,
     appInfo: ApplicationInfo?,
     onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit,
+    onContinueAllowedChanged: (PresentmentCredentialMatch, String, Boolean) -> Unit,
     onShowDocumentDetails: (DocumentDetailsTarget) -> Unit,
     onShowTransactionDetails: (TransactionDetailsTarget) -> Unit,
     onNavigateToPickSolution: () -> Unit,
@@ -1930,6 +1962,7 @@ private fun UseCaseViewer(
                                     transactionUserInput = transactionUserInput,
                                     transactionDataRendererRepository = transactionDataRendererRepository,
                                     onTransactionUserInputChanged = onTransactionUserInputChanged,
+                                    onContinueAllowedChanged = onContinueAllowedChanged,
                                     onShowTransactionDetails = onShowTransactionDetails,
                                 )
                             }
@@ -1971,6 +2004,7 @@ private fun CredentialTransactionDataContent(
     transactionUserInput: Map<PresentmentCredentialMatch, Map<String, TransactionUserInput>>,
     transactionDataRendererRepository: TransactionDataRendererRepository?,
     onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Unit,
+    onContinueAllowedChanged: (PresentmentCredentialMatch, String, Boolean) -> Unit,
     onShowTransactionDetails: (TransactionDetailsTarget) -> Unit,
 ) {
     Column(
@@ -2015,6 +2049,13 @@ private fun CredentialTransactionDataContent(
                                     credential,
                                     block.identifier,
                                     userInput
+                                )
+                            },
+                            onContinueAllowedChanged = { allowed ->
+                                onContinueAllowedChanged.invoke(
+                                    credential,
+                                    block.identifier,
+                                    allowed
                                 )
                             },
                         )
@@ -2861,6 +2902,7 @@ private fun ButtonSection(
     requireCoolOff: Boolean = false,
     coolOffComplete: Boolean = false,
     onCoolOffComplete: () -> Unit = {},
+    canContinue: Boolean = true,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val showMoreButton = scrollState.canScrollForward
@@ -2884,6 +2926,7 @@ private fun ButtonSection(
     }
 
     val isWaiting = requireCoolOff && !showMoreButton && !coolOffComplete
+    val isBlocked = !canContinue && !showMoreButton
     val disabledTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     val disabledFillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -2924,16 +2967,20 @@ private fun ButtonSection(
                             topLeft = Offset(x = xOffset, y = 0f),
                             size = size.copy(width = fillWidth)
                         )
+                    } else if (isBlocked) {
+                        drawRect(color = disabledTrackColor)
                     }
                 },
-            enabled = !isWaiting,
+            enabled = !isWaiting && !isBlocked,
             colors = ButtonDefaults.buttonColors(
                 disabledContainerColor = Color.Transparent,
                 disabledContentColor = disabledContentColor,
             ),
             onClick = {
                 if (!showMoreButton) {
-                    onConfirm()
+                    if (canContinue) {
+                        onConfirm()
+                    }
                 } else {
                     coroutineScope.launch {
                         val step = (scrollState.viewportSize * 0.9).toInt()

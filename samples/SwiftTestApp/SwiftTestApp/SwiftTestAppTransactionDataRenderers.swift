@@ -14,8 +14,140 @@ func makeSwiftTestAppTransactionDataRenderers() -> TransactionDataRendererReposi
             details: { context in AnyView(PaymentDetails(context: context)) }
         )
     )
+    renderers.addRenderer(
+        identifier: TextAcceptanceTransaction.shared.identifier,
+        renderer: TransactionDataRendererSwiftUi(
+            summary: { context in AnyView(TextAcceptanceSummary(context: context)) },
+            details: { context in AnyView(TextAcceptanceDetails(context: context)) }
+        )
+    )
     return renderers
 }
+
+private struct TextAcceptanceSummary: View {
+    let context: TransactionDataContext
+
+    var body: some View {
+        let payloads = context.transactionData.compactMap {
+            $0.payload as? TextAcceptanceTransaction.Payload
+        }
+        let accepted = (context.userInput as? TextAcceptanceTransaction.UserInput)?.accepted == true
+        VStack(alignment: .leading, spacing: 6) {
+            Text(context.hasClaims
+                 ? "By continuing with this transaction you agree to the following, and your identity will also be shared:"
+                 : "By continuing with this transaction you agree to the following:")
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            // Show every statement, but only a preview. The details page always has the full text.
+            ForEach(payloads.indices, id: \.self) { index in
+                let payload = payloads[index]
+                Text(payload.text)
+                    .font(.subheadline)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                ExpiryRow(expiresAt: payload.expiresAt)
+            }
+            if !accepted {
+                Text("Open the full agreement and accept it before continuing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, context.hasClaims ? 12 : 0)
+        .task(id: accepted) {
+            context.onContinueAllowedChanged(KotlinBoolean(value: accepted))
+        }
+    }
+}
+
+private struct TextAcceptanceDetails: View {
+    let context: TransactionDataContext
+
+    var body: some View {
+        let payloads = context.transactionData.compactMap {
+            $0.payload as? TextAcceptanceTransaction.Payload
+        }
+        let accepted = (context.userInput as? TextAcceptanceTransaction.UserInput)?.accepted == true
+        let canAccept = context.isScrolledToBottom || accepted
+        VStack(alignment: .leading, spacing: 12) {
+            Text(context.hasClaims
+                 ? "By continuing with this transaction you agree to the following, and your identity will also be shared:"
+                 : "By continuing with this transaction you agree to the following:")
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            // Every statement is rendered verbatim as plain text: no markup is interpreted,
+            // no truncation, and no mutation after the holder begins confirming.
+            ForEach(payloads.indices, id: \.self) { index in
+                let payload = payloads[index]
+                if index > 0 {
+                    Divider()
+                }
+                Text(payload.text)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                ExpiryRow(expiresAt: payload.expiresAt)
+            }
+            Divider()
+            Toggle(isOn: Binding(
+                get: { accepted },
+                set: { checked in
+                    context.onUserInputChanged(TextAcceptanceTransaction.UserInput(accepted: checked))
+                    context.onContinueAllowedChanged(KotlinBoolean(value: checked))
+                }
+            )) {
+                Text("I have read and agree to the terms above.")
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .disabled(!canAccept)
+            if !context.isScrolledToBottom {
+                Text("Scroll to the end of the agreement to accept it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: accepted) {
+            context.onContinueAllowedChanged(KotlinBoolean(value: accepted))
+        }
+    }
+}
+
+/// The expiry of a statement, shown in the device's locale and time zone instead of the raw ISO 8601
+/// instant, with how long is left so the holder does not have to read the clock.
+private struct ExpiryRow: View {
+    let expiresAt: KotlinInstant
+
+    var body: some View {
+        let date = expiresAt.toNSDate()
+        HStack(spacing: 8) {
+            Image(systemName: "clock")
+                .imageScale(.small)
+            Text("Expires: \(expiryDateFormatter.string(from: date)) (\(expiryRelativeFormatter.localizedString(for: date, relativeTo: Date())))")
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private let expiryDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter
+}()
+
+private let expiryRelativeFormatter: RelativeDateTimeFormatter = {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    return formatter
+}()
 
 private struct TipOption {
     let percent: Double

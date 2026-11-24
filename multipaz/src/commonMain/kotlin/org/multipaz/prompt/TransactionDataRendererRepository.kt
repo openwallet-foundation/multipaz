@@ -5,7 +5,11 @@ package org.multipaz.prompt
  *
  * Renderers are keyed by [org.multipaz.documenttype.TransactionType.identifier], for example
  * `"org.multipaz.transaction.ping"` or `"urn:eudi:sca:payment:1"`. Transaction types without a
- * renderer keep the consent prompt's built-in rendering.
+ * renderer keep the consent prompt's built-in rendering. For a type that requires the holder to
+ * accept its contents (see [org.multipaz.documenttype.TransactionType.requiresUserAcceptance]),
+ * register a renderer that collects the acceptance: presentment refuses the transaction when none
+ * was collected, so an application without a renderer for such a type fails instead of silently
+ * signing a statement the holder never saw.
  *
  * The repository is passed to the consent prompt with each request, see [promptModelRequestConsent].
  * An application wanting different renderers for a given issuer or relying party can pass a
