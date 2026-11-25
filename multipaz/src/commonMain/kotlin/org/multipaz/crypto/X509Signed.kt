@@ -110,6 +110,7 @@ sealed class X509Signed() {
                 )
             }
             is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
+            is HybridKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with hybrid KEM key")
         }
     }
 

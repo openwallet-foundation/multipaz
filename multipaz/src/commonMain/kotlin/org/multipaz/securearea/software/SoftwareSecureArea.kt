@@ -23,6 +23,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.HybridKemPrivateKey
 import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.MlDsaPrivateKey
 import org.multipaz.crypto.MlKemPrivateKey
@@ -84,7 +85,8 @@ class SoftwareSecureArea private constructor(
                 (it.keySizeBits != null && it.isSigning) ||
                 (it in Crypto.supportedMlDsaAlgorithms) ||
                 (it in Crypto.supportedHybridSigningAlgorithms) ||
-                (it in Crypto.supportedMlKemAlgorithms)
+                (it in Crypto.supportedMlKemAlgorithms) ||
+                (Crypto.supportsSeedBackedHybridKem && it in Crypto.supportedHybridKemAlgorithms)
             )
         }
     }
@@ -135,6 +137,8 @@ class SoftwareSecureArea private constructor(
                 Crypto.createHybridPrivateKey(settings.algorithm)
             } else if (settings.algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024)) {
                 Crypto.createMlKemPrivateKey(settings.algorithm)
+            } else if (settings.algorithm.isHybridKem) {
+                Crypto.createHybridKemPrivateKey(settings.algorithm)
             } else {
                 Crypto.createRsaPrivateKey(settings.algorithm.keySizeBits ?: 2048)
             }
@@ -335,6 +339,7 @@ class SoftwareSecureArea private constructor(
                 is MlDsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
                 is HybridPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
                 is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
+                is HybridKemPrivateKey -> throw IllegalArgumentException("Cannot sign with hybrid KEM key")
             }
         }
     }
@@ -385,9 +390,11 @@ class SoftwareSecureArea private constructor(
         val keyData = loadKey(alias, keyUnlockData)
         return keyData.privateKey.use { privateKey ->
             require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
-            val mlKemPrivateKey = privateKey as? MlKemPrivateKey
-                ?: throw IllegalArgumentException("Key is not an ML-KEM key")
-            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext)
+            when (privateKey) {
+                is MlKemPrivateKey -> Crypto.kemDecapsulate(privateKey, ciphertext)
+                is HybridKemPrivateKey -> Crypto.kemDecapsulate(privateKey, ciphertext)
+                else -> throw IllegalArgumentException("Key is not a KEM key")
+            }
         }
     }
 
@@ -501,7 +508,7 @@ class SoftwareSecureArea private constructor(
         }
     }
 
-    @CborSerializable(schemaHash = "u3LrbOXxOxvcTO0lNCNrfZHvHZOOTleocRbyof4LUkM")
+    @CborSerializable(schemaHash = "ikaFGPSIG1sKgni9BYyyXpRk7KDkk8-lgG5S4Cpayow")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

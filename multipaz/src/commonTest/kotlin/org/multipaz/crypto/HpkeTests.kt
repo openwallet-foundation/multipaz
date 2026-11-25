@@ -1500,29 +1500,109 @@ class HpkeTests {
         )
     }
 
+    // Test vector for mode_base for DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, ChaCha20Poly1305 (RFC 9180 A.2.1)
+    @Test
+    fun testVectorsAppendix_A_2_1() = runTest {
+        checkTestVector(
+            TestData(
+                cipherSuite = Hpke.CipherSuite.DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_CHACHA20_POLY1305,
+                infoHex = "4f6465206f6e2061204772656369616e2055726e",
+                encPrivHex = "f4ec9b33b792c372c1d2c2063507b684ef925b8c75a42dbcbf57d63ccd381600",
+                encPubHex = "1afa08d3dec047a643885163f1180476fa7ddb54c6a8029ea33f95796bf2ac4a",
+                receiverPrivHex = "8057991eef8f1f1af18f4a9491d16a1ce333f695d4db8e38da75975c4478e0fb",
+                receiverPubHex = "4310ee97d88cc1f088a5576c77ab0cf5c3ac797f3d95139c6c84b5429c59662a",
+                psk = null,
+                pskId = null,
+                authPrivHex = null,
+                authPubHex = null,
+                sequencesToCheck = mapOf(
+                    0 to TestDataSeqValues(
+                        aadHex = "436f756e742d30",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "1c5250d8034ec2b784ba2cfd69dbdb8af406cfe3ff938e131f0def8c8b60b4db" +
+                            "21993c62ce81883d2dd1b51a28"
+                    ),
+                    1 to TestDataSeqValues(
+                        aadHex = "436f756e742d31",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "6b53c051e4199c518de79594e1c4ab18b96f081549d45ce015be002090bb119e" +
+                            "85285337cc95ba5f59992dc98c"
+                    ),
+                    2 to TestDataSeqValues(
+                        aadHex = "436f756e742d32",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "71146bd6795ccc9c49ce25dda112a48f202ad220559502cef1f34271e0cb4b02" +
+                            "b4f10ecac6f48c32f878fae86b"
+                    ),
+                    4 to TestDataSeqValues(
+                        aadHex = "436f756e742d34",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "63357a2aa291f5a4e5f27db6baa2af8cf77427c7c1a909e0b37214dd47db122b" +
+                            "b153495ff0b02e9e54a50dbe16"
+                    ),
+                    255 to TestDataSeqValues(
+                        aadHex = "436f756e742d323535",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "18ab939d63ddec9f6ac2b60d61d36a7375d2070c9b683861110757062c52b888" +
+                            "0a5f6b3936da9cd6c23ef2a95c"
+                    ),
+                    256 to TestDataSeqValues(
+                        aadHex = "436f756e742d323536",
+                        ptHex = "4265617574792069732074727574682c20747275746820626561757479",
+                        ctHex = "7a4a13e9ef23978e2c520fd4d2e757514ae160cd0cd05e556ef692370ca53076" +
+                            "214c0c40d4c728d6ed9e727a5b"
+                    ),
+                ),
+                exportedValuesToCheck = listOf(
+                    ExportedValues(
+                        exporterContext = "",
+                        length = 32,
+                        exportedValue = "4bbd6243b8bb54cec311fac9df81841b6fd61f56538a775e7c80a9f40160606e"
+                    ),
+                    ExportedValues(
+                        exporterContext = "00",
+                        length = 32,
+                        exportedValue = "8c1df14732580e5501b00f82b10a1647b40713191b7c1240ac80e2b68808ba69"
+                    ),
+                    ExportedValues(
+                        exporterContext = "54657374436f6e74657874",
+                        length = 32,
+                        exportedValue = "5acb09211139c43b3090489a9da433e8a30ee7188ba8b0a9a1ccf0c229283e53"
+                    ),
+                ),
+            )
+        )
+    }
+
     suspend fun checkTestVector(td: TestData) {
-        val curve = td.cipherSuite.kem.curve
-        if(!Crypto.supportedCurves.contains(curve)){
+        val curve = td.cipherSuite.kem.curve!!
+        if (!Crypto.supportedCurves.contains(curve)) {
             println("Skipping test: Curve $curve not supported on this platform")
+            return
+        }
+        if (td.cipherSuite.aead != Hpke.Aead.EXPORT_ONLY &&
+            td.cipherSuite.aead.alg !in Crypto.supportedEncryptionAlgorithms
+        ) {
+            println("Skipping test: AEAD ${td.cipherSuite.aead} not supported on this platform")
             return
         }
 
         val info = td.infoHex.fromHex()
 
         val encapsulatedKey = parseKey(
-            curve = td.cipherSuite.kem.curve,
+            curve = curve,
             encodedPriv = td.encPrivHex.fromHex(),
             encodedPub = td.encPubHex.fromHex()
         )
         val receiverKey = parseKey(
-            curve = td.cipherSuite.kem.curve,
+            curve = curve,
             encodedPriv = td.receiverPrivHex.fromHex(),
             encodedPub = td.receiverPubHex.fromHex()
         )
 
         val authKey = td.authPrivHex?.let {
             parseKey(
-                curve = td.cipherSuite.kem.curve,
+                curve = curve,
                 encodedPriv = td.authPrivHex.fromHex(),
                 encodedPub = td.authPubHex!!.fromHex()
             )

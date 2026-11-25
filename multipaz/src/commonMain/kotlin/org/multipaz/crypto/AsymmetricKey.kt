@@ -62,6 +62,16 @@ sealed class AsymmetricKey : AutoCloseable {
         get() = publicKey as? HybridPublicKey
             ?: throw IllegalStateException("Key is not a hybrid key")
 
+    /** Public key as [MlKemPublicKey] */
+    val mlKemPublicKey: MlKemPublicKey
+        get() = publicKey as? MlKemPublicKey
+            ?: throw IllegalStateException("Key is not an ML-KEM key")
+
+    /** Public key as [HybridKemPublicKey] */
+    val hybridKemPublicKey: HybridKemPublicKey
+        get() = publicKey as? HybridKemPublicKey
+            ?: throw IllegalStateException("Key is not a hybrid KEM key")
+
     /**
      * Entity to which the key belongs; key id for named key, common name for the keys with
      * the certificate chain.
@@ -219,7 +229,32 @@ sealed class AsymmetricKey : AutoCloseable {
             is HybridPublicKey ->
                 throw IllegalArgumentException("Key agreement is not supported with hybrid signing public key")
             is MlKemPublicKey -> throw IllegalArgumentException("Key agreement is not supported with ML-KEM public key")
+            is HybridKemPublicKey ->
+                throw IllegalArgumentException("Key agreement is not supported with hybrid KEM public key")
         }
+
+    /**
+     * Decapsulates a shared secret from [ciphertext] using this KEM private key.
+     *
+     * If the key needs unlocking before use (for example user authentication
+     * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
+     * what's needed, [KeyLockedException] is thrown.
+     *
+     * @param ciphertext the encapsulated ciphertext received from the sender.
+     * @return the decapsulated shared secret as a [SecureByteString].
+     * @throws IllegalArgumentException if [ciphertext] is invalid for this key.
+     * @throws UnsupportedOperationException if this key does not support key decapsulation.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
+     */
+    @Throws(
+        IllegalArgumentException::class,
+        UnsupportedOperationException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
+    abstract suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString
 
     /**
      * Implemented by [AsymmetricKey] where the private key is explicitly given.
@@ -251,6 +286,16 @@ sealed class AsymmetricKey : AutoCloseable {
         val hybridPrivateKey: HybridPrivateKey
             get() = privateKey as? HybridPrivateKey
                 ?: throw IllegalStateException("Key is not a hybrid key")
+
+        /** Private key as [MlKemPrivateKey] */
+        val mlKemPrivateKey: MlKemPrivateKey
+            get() = privateKey as? MlKemPrivateKey
+                ?: throw IllegalStateException("Key is not an ML-KEM key")
+
+        /** Private key as [HybridKemPrivateKey] */
+        val hybridKemPrivateKey: HybridKemPrivateKey
+            get() = privateKey as? HybridKemPrivateKey
+                ?: throw IllegalStateException("Key is not a hybrid KEM key")
     }
 
     /** Implemented by [AsymmetricKey] where the private key resides in [SecureArea] */
@@ -327,6 +372,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is MlDsaPrivateKey -> privateKey.algorithm
             is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
+            is HybridKemPrivateKey -> privateKey.algorithm
         }
     ): X509Certified(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -344,6 +390,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.Explicit]. */
@@ -356,6 +411,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is MlDsaPrivateKey -> privateKey.algorithm
             is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
+            is HybridKemPrivateKey -> privateKey.algorithm
         }
     ): Named(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -373,6 +429,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Anonymous] and [AsymmetricKey.Explicit]. */
@@ -384,6 +449,7 @@ sealed class AsymmetricKey : AutoCloseable {
             is MlDsaPrivateKey -> privateKey.algorithm
             is HybridPrivateKey -> privateKey.algorithm
             is MlKemPrivateKey -> privateKey.algorithm
+            is HybridKemPrivateKey -> privateKey.algorithm
         }
     ): Anonymous(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -401,6 +467,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.X509Certified] and [AsymmetricKey.SecureAreaBased]. */
@@ -428,6 +503,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.SecureAreaBased]. */
@@ -454,6 +538,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     /**
@@ -481,6 +574,15 @@ sealed class AsymmetricKey : AutoCloseable {
             CancellationException::class
         )
         override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
+        @Throws(
+            IllegalArgumentException::class,
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun kemDecapsulate(ciphertext: ByteArray): SecureByteString =
+            kemDecapsulate(this, ciphertext)
     }
 
     companion object Companion {
@@ -505,6 +607,8 @@ sealed class AsymmetricKey : AutoCloseable {
                 is HybridPrivateKey ->
                     throw UnsupportedOperationException("Hybrid signing keys do not support key agreement")
                 is MlKemPrivateKey -> throw UnsupportedOperationException("ML-KEM keys do not support key agreement")
+                is HybridKemPrivateKey ->
+                    throw UnsupportedOperationException("Hybrid KEM keys do not support key agreement")
             }
 
         private suspend fun keyAgreement(
@@ -514,6 +618,27 @@ sealed class AsymmetricKey : AutoCloseable {
             secureAreaBased.secureArea.keyAgreement(
                 alias = secureAreaBased.alias,
                 otherKey = otherKey,
+                unlockReason = secureAreaBased.unlockReason
+            )
+
+        private suspend fun kemDecapsulate(explicit: Explicit, ciphertext: ByteArray): SecureByteString =
+            when (val priv = explicit.privateKey) {
+                is MlKemPrivateKey -> Crypto.kemDecapsulate(key = priv, ciphertext = ciphertext)
+                is HybridKemPrivateKey -> Crypto.kemDecapsulate(key = priv, ciphertext = ciphertext)
+                is EcPrivateKey,
+                is RsaPrivateKey,
+                is MlDsaPrivateKey,
+                is HybridPrivateKey ->
+                    throw UnsupportedOperationException("Key does not support key decapsulation")
+            }
+
+        private suspend fun kemDecapsulate(
+            secureAreaBased: SecureAreaBased,
+            ciphertext: ByteArray
+        ): SecureByteString =
+            secureAreaBased.secureArea.kemDecapsulate(
+                alias = secureAreaBased.alias,
+                ciphertext = ciphertext,
                 unlockReason = secureAreaBased.unlockReason
             )
 
@@ -648,6 +773,7 @@ sealed class AsymmetricKey : AutoCloseable {
                 is MlDsaPrivateKey -> privateKey.algorithm
                 is HybridPrivateKey -> privateKey.algorithm
                 is MlKemPrivateKey -> privateKey.algorithm
+                is HybridKemPrivateKey -> privateKey.algorithm
             }
         ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
 
@@ -678,6 +804,8 @@ sealed class AsymmetricKey : AutoCloseable {
                     AnonymousExplicit(Crypto.createHybridPrivateKey(algorithm), algorithm)
                 algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024) ->
                     AnonymousExplicit(Crypto.createMlKemPrivateKey(algorithm), algorithm)
+                algorithm.isHybridKem ->
+                    AnonymousExplicit(Crypto.createHybridKemPrivateKey(algorithm), algorithm)
                 else ->
                     AnonymousExplicit(Crypto.createEcPrivateKey(algorithm.curve!!), algorithm)
             }

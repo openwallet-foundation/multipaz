@@ -82,6 +82,13 @@ external interface ContextParams : web.crypto.Algorithm {
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
+external interface ChaCha20Poly1305Params : web.crypto.Algorithm {
+    override var name: String
+    var iv: js.buffer.BufferSource
+    var additionalData: js.buffer.BufferSource
+}
+
+@OptIn(ExperimentalWasmJsInterop::class)
 external interface EncapsulatedBits : JsAny {
     val sharedKey: js.buffer.ArrayBufferLike
     val ciphertext: js.buffer.ArrayBufferLike
@@ -192,12 +199,31 @@ actual object Crypto {
             EcCurve.X25519,
         )
 
-    actual val supportedEncryptionAlgorithms = setOf(
-        Algorithm.A128GCM,
-        Algorithm.A256GCM,
-        Algorithm.A128CBC,
-        Algorithm.A256CBC
-    )
+    @OptIn(ExperimentalWasmJsInterop::class)
+    private fun isChaCha20Poly1305Supported(): Boolean {
+        if (!hasSubtleSupports()) {
+            return false
+        }
+        return try {
+            checkSubtleSupports("encrypt".toJsString(), "ChaCha20-Poly1305".toJsString())
+        } catch (_: JsException) {
+            false
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            false
+        }
+    }
+
+    actual val supportedEncryptionAlgorithms: Set<Algorithm>
+        get() = buildSet {
+            add(Algorithm.A128GCM)
+            add(Algorithm.A256GCM)
+            add(Algorithm.A128CBC)
+            add(Algorithm.A256CBC)
+            if (isChaCha20Poly1305Supported()) {
+                add(Algorithm.CHACHA20_POLY1305)
+            }
+        }
 
     actual val supportedMlDsaAlgorithms: Set<Algorithm>
         get() = setOf(
@@ -220,12 +246,18 @@ actual object Crypto {
     actual val supportedHybridSigningAlgorithms: Set<Algorithm>
         get() = HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
 
+    actual val supportedHybridKemAlgorithms: Set<Algorithm>
+        get() = HybridKem.supportedAlgorithmsFor(supportedMlKemAlgorithms, supportedCurves)
+
+    internal actual val supportsSeedBackedHybridKem: Boolean = false
+
     actual val provider: String by lazy {
         "Web Crypto (${window.navigator.userAgent})"
     }
 
     actual val secureRandom: Random = WebSecureRandom()
 
+    @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun digest(
         algorithm: Algorithm,
         message: ByteArray
@@ -235,9 +267,21 @@ actual object Crypto {
             Algorithm.SHA256 -> "SHA-256"
             Algorithm.SHA384 -> "SHA-384"
             Algorithm.SHA512 -> "SHA-512"
+            Algorithm.SHA3_256 -> "SHA3-256"
+            Algorithm.SHA3_384 -> "SHA3-384"
+            Algorithm.SHA3_512 -> "SHA3-512"
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        return crypto.subtle.digest(algName, message.toBufferSource()).toByteArray()
+        return try {
+            crypto.subtle.digest(algName, message.toBufferSource()).toByteArray()
+        } catch (e: JsException) {
+            when (algorithm) {
+                Algorithm.SHA3_256 -> Sha3.sha3_256(message)
+                Algorithm.SHA3_384 -> Sha3.sha3_384(message)
+                Algorithm.SHA3_512 -> Sha3.sha3_512(message)
+                else -> throw e
+            }
+        }
     }
 
     actual suspend fun mac(
@@ -287,6 +331,10 @@ actual object Crypto {
             Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
             Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
             Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+            }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         val (webAlgorithm, webImportAlgorithm) = when (algorithm) {
@@ -305,6 +353,17 @@ actual object Crypto {
                     iv = nonce.toBufferSource()
                 }
                 Pair(params, params)
+            }
+            Algorithm.CHACHA20_POLY1305 -> {
+                val params = unsafeJso<ChaCha20Poly1305Params> {
+                    name = "ChaCha20-Poly1305"
+                    additionalData = (aad ?: byteArrayOf()).toBufferSource()
+                    iv = nonce.toBufferSource()
+                }
+                val importParams = unsafeJso<web.crypto.Algorithm> {
+                    name = "ChaCha20-Poly1305"
+                }
+                Pair(params, importParams)
             }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
@@ -348,6 +407,19 @@ actual object Crypto {
                     iv = nonce.toBufferSource()
                 }
                 Pair(params, params)
+            }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+                val params = unsafeJso<ChaCha20Poly1305Params> {
+                    name = "ChaCha20-Poly1305"
+                    additionalData = (aad ?: byteArrayOf()).toBufferSource()
+                    iv = nonce.toBufferSource()
+                }
+                val importParams = unsafeJso<web.crypto.Algorithm> {
+                    name = "ChaCha20-Poly1305"
+                }
+                Pair(params, importParams)
             }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
@@ -731,6 +803,15 @@ actual object Crypto {
         return HybridSigning.createPrivateKey(algorithm)
     }
 
+    actual suspend fun createHybridKemPrivateKey(
+        algorithm: Algorithm
+    ): HybridKemPrivateKey {
+        require(algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridKem.createPrivateKeyFromComponents(algorithm)
+    }
+
     @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun createMlKemPrivateKey(
         algorithm: Algorithm
@@ -1092,6 +1173,46 @@ actual object Crypto {
         return sharedSecret
     }
 
+    actual suspend fun kemEncapsulate(
+        recipientPublicKey: HybridKemPublicKey
+    ): KemResult {
+        require(recipientPublicKey.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${recipientPublicKey.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.encapsulate(recipientPublicKey)
+    }
+
+    actual suspend fun kemDecapsulate(
+        key: HybridKemPrivateKey,
+        ciphertext: ByteArray
+    ): SecureByteString {
+        require(key.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${key.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.decapsulate(key, ciphertext)
+    }
+
+    internal actual suspend fun createMlKemPrivateKeyFromSeed(
+        algorithm: Algorithm,
+        seed: ByteArray
+    ): MlKemPrivateKey {
+        throw UnsupportedOperationException("Deriving ML-KEM key from seed is not supported on Web")
+    }
+
+    internal actual suspend fun createEcPrivateKeyFromScalar(
+        curve: EcCurve,
+        scalar: ByteArray
+    ): EcPrivateKey {
+        throw UnsupportedOperationException("Deriving EC key from scalar is not supported on Web")
+    }
+
+    internal actual suspend fun kemEncapsulateDerand(
+        recipientPublicKey: MlKemPublicKey,
+        randomness: ByteArray
+    ): KemResult {
+        throw UnsupportedOperationException("Derandomized ML-KEM encapsulation is not supported on Web")
+    }
+
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
@@ -1105,57 +1226,69 @@ actual object Crypto {
             EcCurve.BRAINPOOLP320R1,
             EcCurve.BRAINPOOLP384R1,
             EcCurve.BRAINPOOLP512R1 -> {
-                val importedKey = crypto.subtle.importKey(
-                    format = KeyFormat.Companion.jwk,
-                    keyData = key.toJsonWebKey("deriveBits"),
-                    algorithm = unsafeJso<EcKeyImportParams> {
-                        name = "ECDH"
-                        namedCurve = key.curve.jwkName.toJsString()
-                    },
-                    extractable = false,
-                    keyUsages = jsArrayOf(KeyUsage.deriveBits)
-                )
-                val importedOtherKey = crypto.subtle.importKey(
-                    format = KeyFormat.Companion.raw,
-                    keyData = (otherKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding.toBufferSource(),
-                    algorithm = unsafeJso<EcKeyImportParams> {
-                        name = "ECDH"
-                        namedCurve = otherKey.curve.jwkName.toJsString()
-                    },
-                    extractable = false,
-                    keyUsages = jsArrayOf()
-                )
-                crypto.subtle.deriveBits(
-                    algorithm = unsafeJso<EcdhKeyDeriveParams> {
-                        name = "ECDH"
-                        public = importedOtherKey
-                    },
-                    baseKey = importedKey
-                ).toByteArray()
+                try {
+                    val importedKey = crypto.subtle.importKey(
+                        format = KeyFormat.Companion.jwk,
+                        keyData = key.toJsonWebKey("deriveBits"),
+                        algorithm = unsafeJso<EcKeyImportParams> {
+                            name = "ECDH"
+                            namedCurve = key.curve.jwkName.toJsString()
+                        },
+                        extractable = false,
+                        keyUsages = jsArrayOf(KeyUsage.deriveBits)
+                    )
+                    val importedOtherKey = crypto.subtle.importKey(
+                        format = KeyFormat.Companion.raw,
+                        keyData = (otherKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding.toBufferSource(),
+                        algorithm = unsafeJso<EcKeyImportParams> {
+                            name = "ECDH"
+                            namedCurve = otherKey.curve.jwkName.toJsString()
+                        },
+                        extractable = false,
+                        keyUsages = jsArrayOf()
+                    )
+                    crypto.subtle.deriveBits(
+                        algorithm = unsafeJso<EcdhKeyDeriveParams> {
+                            name = "ECDH"
+                            public = importedOtherKey
+                        },
+                        baseKey = importedKey
+                    ).toByteArray()
+                } catch (e: JsException) {
+                    throw IllegalArgumentException("Key agreement failed for ${key.curve.name}", e)
+                }
             }
             EcCurve.X448,
             EcCurve.X25519 -> {
-                val importedKey = crypto.subtle.importKey(
-                    format = KeyFormat.Companion.jwk,
-                    keyData = key.toJsonWebKey("deriveBits"),
-                    algorithm = key.curve.jwkName,
-                    extractable = false,
-                    keyUsages = jsArrayOf(KeyUsage.deriveBits)
-                )
-                val importedOtherKey = crypto.subtle.importKey(
-                    format = KeyFormat.Companion.jwk,
-                    keyData = otherKey.toJsonWebKey("deriveBits"),
-                    algorithm = otherKey.curve.jwkName,
-                    extractable = false,
-                    keyUsages = jsArrayOf()
-                )
-                val foo = crypto.subtle.deriveBits(
-                    algorithm = unsafeJso<XdhKeyDeriveParams> {
-                        name = key.curve.jwkName
-                        public = importedOtherKey
-                    },
-                    baseKey = importedKey
-                ).toByteArray()
+                val foo = try {
+                    val importedKey = crypto.subtle.importKey(
+                        format = KeyFormat.Companion.jwk,
+                        keyData = key.toJsonWebKey("deriveBits"),
+                        algorithm = key.curve.jwkName,
+                        extractable = false,
+                        keyUsages = jsArrayOf(KeyUsage.deriveBits)
+                    )
+                    val importedOtherKey = crypto.subtle.importKey(
+                        format = KeyFormat.Companion.jwk,
+                        keyData = otherKey.toJsonWebKey("deriveBits"),
+                        algorithm = otherKey.curve.jwkName,
+                        extractable = false,
+                        keyUsages = jsArrayOf()
+                    )
+                    crypto.subtle.deriveBits(
+                        algorithm = unsafeJso<XdhKeyDeriveParams> {
+                            name = key.curve.jwkName
+                            public = importedOtherKey
+                        },
+                        baseKey = importedKey
+                    ).toByteArray()
+                } catch (e: JsException) {
+                    throw IllegalArgumentException("Key agreement failed for ${key.curve.name}", e)
+                }
+                if (foo.all { it == 0.toByte() }) {
+                    foo.secureZero()
+                    throw IllegalArgumentException("${key.curve.name} key agreement produced all-zero shared secret")
+                }
                 foo
             }
             EcCurve.ED448,

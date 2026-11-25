@@ -29,6 +29,8 @@ import kotlinx.serialization.json.jsonObject
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.HybridKemPrivateKey
+import org.multipaz.crypto.HybridKemPublicKey
 import org.multipaz.crypto.HybridPrivateKey
 import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
@@ -443,6 +445,20 @@ val KeyDecoderComponent = FC {
                                         }
                                     }
                                 }
+                            is HybridKemPublicKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"KEY TYPE / ALGORITHM" }
+                                    span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; fontSize = 15.px }; +"Hybrid KEM (${pubKey.algorithm.name})" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"PUBLIC KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9"); fontSize = 15.px }; +"${pubKey.encoded.size} bytes" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold }; +"KEY ENCAPSULATION" }
+                                    span { css { color = Color("#10b981"); fontSize = 15.px; fontWeight = FontWeight.bold }; +"Supported (PQ/T Hybrid KEM)" }
+                                }
+                            }
                             }
                         }
                     }
@@ -693,6 +709,44 @@ val KeyDecoderComponent = FC {
                                 if (privKey is MlKemPrivateKey) {
                                     div {
                                         span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Decapsulation Key (dk, ${privKey.encoded.size} bytes)" }
+                                        pre {
+                                            css {
+                                                background = Color("#1e293b")
+                                                padding = 16.px
+                                                borderRadius = 8.px
+                                                fontFamily = FontFamily.monospace
+                                                fontSize = 12.px
+                                                color = Color("#34d399")
+                                                marginTop = 8.px
+                                                overflowX = "auto".unsafeCast<Overflow>()
+                                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                            }
+                                            +privKey.encoded.toHex()
+                                        }
+                                    }
+                                }
+                            }
+                            is HybridKemPublicKey -> {
+                                div {
+                                    span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Encapsulation Key (ek, ${pubKey.encoded.size} bytes)" }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#38bdf8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +pubKey.encoded.toHex()
+                                    }
+                                }
+                                if (privKey is HybridKemPrivateKey) {
+                                    div {
+                                        span { css { color = Color("#64748b"); fontWeight = FontWeight.bold; fontSize = 12.px; textTransform = TextTransform.uppercase }; +"Private Key / Seed (${privKey.encoded.size} bytes)" }
                                         pre {
                                             css {
                                                 background = Color("#1e293b")

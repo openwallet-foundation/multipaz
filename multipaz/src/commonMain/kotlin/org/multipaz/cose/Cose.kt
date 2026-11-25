@@ -9,6 +9,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.HybridKemPublicKey
 import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.HybridSignature
 import org.multipaz.crypto.MlDsaPublicKey
@@ -339,6 +340,9 @@ object Cose {
             }
             is MlKemPublicKey -> {
                 throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
+            }
+            is HybridKemPublicKey -> {
+                throw IllegalArgumentException("Cannot verify signature with hybrid KEM key")
             }
         }
     }

@@ -39,6 +39,7 @@ import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.HybridKemPublicKey
 import org.multipaz.crypto.HybridPublicKey
 import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlKemPublicKey
@@ -322,6 +323,7 @@ private suspend fun parseResponse(
                     is MlDsaPublicKey -> pk.algorithm.name
                     is HybridPublicKey -> pk.algorithm.name
                     is MlKemPublicKey -> pk.algorithm.name
+                    is HybridKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(mdocDsKeyDesc)))
                 val trustResult =
@@ -379,6 +381,7 @@ private suspend fun parseResponse(
                     is MlDsaPublicKey -> pk.algorithm.name
                     is HybridPublicKey -> pk.algorithm.name
                     is MlKemPublicKey -> pk.algorithm.name
+                    is HybridKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(sdJwtDsKeyDesc)))
                 val trustResult =

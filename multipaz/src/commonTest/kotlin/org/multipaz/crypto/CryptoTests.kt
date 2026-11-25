@@ -34,6 +34,74 @@ class CryptoTests {
             "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
             Crypto.digest(Algorithm.SHA512, "".encodeToByteArray()).toHex()
         )
+        val b200Hex =
+            "1374d53697f859ba1b7cdd3e9f0061c22384e546a70869ca2b8ced4eaf1071d2" +
+                "3394f556b71879da3b9cfd5ebf2081e243a40566c72889ea4bac0d6ecf3091f2" +
+                "53b41576d73899fa5bbc1d7edf40a10263c42586e748a90a6bcc2d8eef50b112" +
+                "73d43596f758b91a7bdc3d9eff60c12283e445a60768c92a8bec4dae0f70d132" +
+                "93f455b61778d93a9bfc5dbe1f80e142a30465c62788e94aab0c6dce2f90f152" +
+                "b31475d63798f95abb1c7dde3fa00162c32485e647a8096acb2c8dee4fb01172" +
+                "d33495f657b8197a"
+        val b200 = b200Hex.fromHex()
+        assertEquals(
+            "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+            Crypto.digest(Algorithm.SHA3_256, "".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532",
+            Crypto.digest(Algorithm.SHA3_256, "abc".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "e167f68d6563d75bb25f3aa49c29ef612d41352dc00606de7cbd630bb2665f51",
+            Crypto.digest(Algorithm.SHA3_256, "Hello World".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "cc2232b80618869478f737ce7a109b22edcdf7a8bdf86118eefa5e96f8ae79f5",
+            Crypto.digest(Algorithm.SHA3_256, b200).toHex()
+        )
+        assertEquals(
+            "0c63a75b845e4f7d01107d852e4c2485c51a50aaaa94fc61995e71bbee983a2a" +
+                "c3713831264adb47fb6bd1e058d5f004",
+            Crypto.digest(Algorithm.SHA3_384, "".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "ec01498288516fc926459f58e2c6ad8df9b473cb0fc08c2596da7cf0e49be4b2" +
+                "98d88cea927ac7f539f1edf228376d25",
+            Crypto.digest(Algorithm.SHA3_384, "abc".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "a78ec2851e991638ce505d4a44efa606dd4056d3ab274ec6fdbac00cde164782" +
+                "63ef7213bad5a7db7044f58d637afdeb",
+            Crypto.digest(Algorithm.SHA3_384, "Hello World".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "4262ec6971add00cdbdc882ac417b9e65890931d72d3517d7b457e82159b9f26" +
+                "555118dd5db7b7e6d2e44984c492a140",
+            Crypto.digest(Algorithm.SHA3_384, b200).toHex()
+        )
+        assertEquals(
+            "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a6" +
+                "15b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26",
+            Crypto.digest(Algorithm.SHA3_512, "".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e" +
+                "10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0",
+            Crypto.digest(Algorithm.SHA3_512, "abc".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "3d58a719c6866b0214f96b0a67b37e51a91e233ce0be126a08f35fdf4c043c61" +
+                "26f40139bfbc338d44eb2a03de9f7bb8eff0ac260b3629811e389a5fbee8a894",
+            Crypto.digest(Algorithm.SHA3_512, "Hello World".encodeToByteArray()).toHex()
+        )
+        assertEquals(
+            "98f4a4b25f0326bf3c227968098678c5bef552a295541387436b881fb24f443b" +
+                "19fc3bf5a5f6d713c45b016341cc30cada89357a4aba16c8f474a908a5e39952",
+            Crypto.digest(Algorithm.SHA3_512, b200).toHex()
+        )
+        assertEquals(Algorithm.SHA3_256, Algorithm.fromHashAlgorithmIdentifier("sha3-256"))
+        assertEquals(Algorithm.SHA3_384, Algorithm.fromHashAlgorithmIdentifier("sha3-384"))
+        assertEquals(Algorithm.SHA3_512, Algorithm.fromHashAlgorithmIdentifier("sha3-512"))
     }
 
     @Test
@@ -423,4 +491,66 @@ class CryptoTests {
     fun testUncompressedFromTo_BRAINPOOLP384R1() = runTest { testUncompressedFromTo(EcCurve.BRAINPOOLP384R1) }
     @Test
     fun testUncompressedFromTo_BRAINPOOLP512R1() = runTest { testUncompressedFromTo(EcCurve.BRAINPOOLP512R1) }
+
+    @Test
+    fun testChaCha20Poly1305() = runTest {
+        if (Algorithm.CHACHA20_POLY1305 !in Crypto.supportedEncryptionAlgorithms) {
+            return@runTest
+        }
+        // RFC 8439 Section 2.8.2 Test Vector
+        val keyBytes = "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f".fromHex()
+        val nonce = "070000004041424344454647".fromHex()
+        val aad = "50515253c0c1c2c3c4c5c6c7".fromHex()
+        val plaintext = (
+            "Ladies and Gentlemen of the class of '99: If I could offer you " +
+                "only one tip for the future, sunscreen would be it."
+            ).encodeToByteArray()
+        val expectedCiphertextAndTag = (
+            "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d6" +
+                "3dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b36" +
+                "92ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc" +
+                "3ff4def08e4b7a9de576d26586cec64b6116" +
+                "1ae10b594f09e26a7e902ecbd0600691"
+            ).fromHex()
+
+        SecretKey(keyBytes).use { key ->
+            val ciphertext = Crypto.encrypt(Algorithm.CHACHA20_POLY1305, key, nonce, plaintext, aad)
+            assertContentEquals(expectedCiphertextAndTag, ciphertext)
+            val decrypted = Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, ciphertext, aad)
+            assertContentEquals(plaintext, decrypted)
+
+            // Round-trip without AAD and empty plaintext
+            val ctNoAad = Crypto.encrypt(Algorithm.CHACHA20_POLY1305, key, nonce, plaintext, null)
+            assertContentEquals(plaintext, Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, ctNoAad, null))
+            val ctEmpty = Crypto.encrypt(Algorithm.CHACHA20_POLY1305, key, nonce, byteArrayOf(), aad)
+            assertEquals(16, ctEmpty.size)
+            assertContentEquals(byteArrayOf(), Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, ctEmpty, aad))
+
+            // Negative cases: tampered tag, tampered ciphertext, wrong AAD, truncated, bad nonce/key lengths
+            val badTag = ciphertext.copyOf()
+            badTag[badTag.size - 1] = badTag[badTag.size - 1] xor 0x01
+            assertFailsWith<IllegalStateException> {
+                Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, badTag, aad)
+            }
+            val badCt = ciphertext.copyOf()
+            badCt[0] = badCt[0] xor 0x01
+            assertFailsWith<IllegalStateException> {
+                Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, badCt, aad)
+            }
+            assertFailsWith<IllegalStateException> {
+                Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, ciphertext, "wrong".encodeToByteArray())
+            }
+            assertFailsWith<IllegalStateException> {
+                Crypto.decrypt(Algorithm.CHACHA20_POLY1305, key, nonce, ciphertext.copyOf(15), aad)
+            }
+            assertFailsWith<IllegalArgumentException> {
+                Crypto.encrypt(Algorithm.CHACHA20_POLY1305, key, ByteArray(16), plaintext, aad)
+            }
+        }
+        SecretKey(ByteArray(16)).use { shortKey ->
+            assertFailsWith<IllegalArgumentException> {
+                Crypto.encrypt(Algorithm.CHACHA20_POLY1305, shortKey, nonce, plaintext, aad)
+            }
+        }
+    }
 }

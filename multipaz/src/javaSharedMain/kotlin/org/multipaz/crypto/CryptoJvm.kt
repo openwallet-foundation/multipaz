@@ -10,9 +10,11 @@ import org.multipaz.asn1.ASN1Sequence
 import kotlin.math.min
 import kotlin.random.Random
 import java.security.GeneralSecurityException
+import java.security.InvalidKeyException
 import java.security.KeyPairGenerator
-import java.security.SecureRandom
 import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
+import java.security.SecureRandom
 import java.security.Security
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
@@ -24,6 +26,7 @@ import java.security.spec.PSSParameterSpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
+import javax.crypto.NoSuchPaddingException
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -74,14 +77,30 @@ actual object Crypto {
             }
         }
 
-    actual val supportedEncryptionAlgorithms = setOf(
-        Algorithm.A128GCM,
-        Algorithm.A192GCM,
-        Algorithm.A256GCM,
-        Algorithm.A128CBC,
-        Algorithm.A192CBC,
-        Algorithm.A256CBC
-    )
+    private fun resolveChaCha20Poly1305Transformation(): String? {
+        for (transformation in listOf("ChaCha20-Poly1305", "ChaCha20/Poly1305/NoPadding")) {
+            try {
+                Cipher.getInstance(transformation)
+                return transformation
+            } catch (_: NoSuchAlgorithmException) {
+            } catch (_: NoSuchPaddingException) {
+            }
+        }
+        return null
+    }
+
+    actual val supportedEncryptionAlgorithms: Set<Algorithm>
+        get() = buildSet {
+            add(Algorithm.A128GCM)
+            add(Algorithm.A192GCM)
+            add(Algorithm.A256GCM)
+            add(Algorithm.A128CBC)
+            add(Algorithm.A192CBC)
+            add(Algorithm.A256CBC)
+            if (resolveChaCha20Poly1305Transformation() != null) {
+                add(Algorithm.CHACHA20_POLY1305)
+            }
+        }
 
     /**
      * The ML-DSA algorithms supported by the platform.
@@ -120,6 +139,12 @@ actual object Crypto {
     actual val supportedHybridSigningAlgorithms: Set<Algorithm>
         get() = HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
 
+    actual val supportedHybridKemAlgorithms: Set<Algorithm>
+        get() = HybridKem.supportedAlgorithmsFor(supportedMlKemAlgorithms, supportedCurves)
+
+    internal actual val supportsSeedBackedHybridKem: Boolean
+        get() = BouncyCastlePqc.isAvailable
+
     actual val provider: String
         get() {
             val sb = StringBuilder("JCA: ")
@@ -141,7 +166,9 @@ actual object Crypto {
     /**
      * Message digest function.
      *
-     * @param algorithm must one of [Algorithm.INSECURE_SHA1], [Algorithm.SHA256], [Algorithm.SHA384], [Algorithm.SHA512].
+     * @param algorithm must be one of [Algorithm.INSECURE_SHA1], [Algorithm.SHA256],
+     *   [Algorithm.SHA384], [Algorithm.SHA512], [Algorithm.SHA3_256], [Algorithm.SHA3_384],
+     *   or [Algorithm.SHA3_512].
      * @param message the message to get a digest of.
      * @return the digest.
      * @throws IllegalArgumentException if the given algorithm is not supported.
@@ -155,13 +182,25 @@ actual object Crypto {
             Algorithm.SHA256 -> "SHA-256"
             Algorithm.SHA384 -> "SHA-384"
             Algorithm.SHA512 -> "SHA-512"
+            Algorithm.SHA3_256 -> "SHA3-256"
+            Algorithm.SHA3_384 -> "SHA3-384"
+            Algorithm.SHA3_512 -> "SHA3-512"
             else -> {
                 throw IllegalArgumentException("Unsupported algorithm $algorithm")
             }
         }
-        val md = MessageDigest.getInstance(algName)
-        md.update(message)
-        return md.digest()
+        return try {
+            val md = MessageDigest.getInstance(algName)
+            md.update(message)
+            md.digest()
+        } catch (e: NoSuchAlgorithmException) {
+            when (algorithm) {
+                Algorithm.SHA3_256 -> Sha3.sha3_256(message)
+                Algorithm.SHA3_384 -> Sha3.sha3_384(message)
+                Algorithm.SHA3_512 -> Sha3.sha3_512(message)
+                else -> throw e
+            }
+        }
     }
 
     /**
@@ -203,12 +242,13 @@ actual object Crypto {
      * Message encryption.
      *
      * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
-     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC], or
+     *   [Algorithm.CHACHA20_POLY1305].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messagePlaintext the message to encrypt.
-     * @return the cipher text with the tag appended to it (for GCM) or padded (for CBC).
-     * @throws IllegalArgumentException if the given algorithm is not supported.
+     * @return the cipher text with the tag appended to it (for AEAD modes) or padded (for CBC).
+     * @throws IllegalArgumentException if the given algorithm is not supported or key/nonce sizes are invalid.
      */
     actual suspend fun encrypt(
         algorithm: Algorithm,
@@ -223,6 +263,10 @@ actual object Crypto {
             Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
             Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
             Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+            }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         return when (algorithm) {
@@ -239,6 +283,15 @@ actual object Crypto {
                     doFinal(messagePlaintext)
                 }
             }
+            Algorithm.CHACHA20_POLY1305 -> {
+                val transformation = resolveChaCha20Poly1305Transformation()
+                    ?: throw UnsupportedOperationException("ChaCha20-Poly1305 is not supported in the current environment")
+                Cipher.getInstance(transformation).run {
+                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(rawKey, "ChaCha20"), IvParameterSpec(nonce))
+                    aad?.let { updateAAD(it) }
+                    doFinal(messagePlaintext)
+                }
+            }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
@@ -247,12 +300,13 @@ actual object Crypto {
      * Message decryption.
      *
      * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
-     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC], or
+     *   [Algorithm.CHACHA20_POLY1305].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
-     * @param messageCiphertext the message to decrypt with the tag at the end (for GCM) or padded (for CBC).
+     * @param messageCiphertext the message to decrypt with the tag at the end (for AEAD modes) or padded (for CBC).
      * @return the plaintext.
-     * @throws IllegalArgumentException if the given algorithm is not supported.
+     * @throws IllegalArgumentException if the given algorithm is not supported or key/nonce sizes are invalid.
      * @throws IllegalStateException if decryption fails
      */
     actual suspend fun decrypt(
@@ -285,6 +339,22 @@ actual object Crypto {
                 return try {
                     Cipher.getInstance("AES/CBC/PKCS5Padding").run {
                         init(Cipher.DECRYPT_MODE, SecretKeySpec(rawKey, "AES"), IvParameterSpec(nonce))
+                        doFinal(messageCiphertext)
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw IllegalStateException("Decryption failed", e)
+                }
+            }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+                val transformation = resolveChaCha20Poly1305Transformation()
+                    ?: throw UnsupportedOperationException("ChaCha20-Poly1305 is not supported in the current environment")
+                return try {
+                    Cipher.getInstance(transformation).run {
+                        init(Cipher.DECRYPT_MODE, SecretKeySpec(rawKey, "ChaCha20"), IvParameterSpec(nonce))
+                        aad?.let { updateAAD(it) }
                         doFinal(messageCiphertext)
                     }
                 } catch (e: Exception) {
@@ -554,6 +624,15 @@ actual object Crypto {
         return HybridSigning.createPrivateKey(algorithm)
     }
 
+    actual suspend fun createHybridKemPrivateKey(
+        algorithm: Algorithm
+    ): HybridKemPrivateKey {
+        require(algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridKem.createPrivateKey(algorithm)
+    }
+
     /**
      * Signs data with a key.
      *
@@ -717,6 +796,55 @@ actual object Crypto {
         return BouncyCastlePqc.kemDecapsulate(key, ciphertext)
     }
 
+    actual suspend fun kemEncapsulate(
+        recipientPublicKey: HybridKemPublicKey
+    ): KemResult {
+        require(recipientPublicKey.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${recipientPublicKey.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.encapsulate(recipientPublicKey)
+    }
+
+    actual suspend fun kemDecapsulate(
+        key: HybridKemPrivateKey,
+        ciphertext: ByteArray
+    ): SecureByteString {
+        require(key.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${key.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.decapsulate(key, ciphertext)
+    }
+
+    internal actual suspend fun createMlKemPrivateKeyFromSeed(
+        algorithm: Algorithm,
+        seed: ByteArray
+    ): MlKemPrivateKey {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
+        }
+        return BouncyCastlePqc.createMlKemPrivateKeyFromSeed(algorithm, seed)
+    }
+
+    internal actual suspend fun createEcPrivateKeyFromScalar(
+        curve: EcCurve,
+        scalar: ByteArray
+    ): EcPrivateKey {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("EC scalar derivation is not supported without Bouncy Castle")
+        }
+        return BouncyCastlePqc.createEcPrivateKeyFromScalar(curve, scalar)
+    }
+
+    internal actual suspend fun kemEncapsulateDerand(
+        recipientPublicKey: MlKemPublicKey,
+        randomness: ByteArray
+    ): KemResult {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
+        }
+        return BouncyCastlePqc.kemEncapsulateDerand(recipientPublicKey, randomness)
+    }
+
     /**
      * Performs Key Agreement.
      *
@@ -758,7 +886,14 @@ actual object Crypto {
                     val ka = KeyAgreement.getInstance("X25519")
                     ka.init(key.javaPrivateKey)
                     ka.doPhase(otherKey.javaPublicKey, true)
-                    ka.generateSecret()
+                    val secret = ka.generateSecret()
+                    if (secret.all { it == 0.toByte() }) {
+                        secret.secureZero()
+                        throw IllegalArgumentException("X25519 key agreement produced all-zero shared secret")
+                    }
+                    secret
+                } catch (e: InvalidKeyException) {
+                    throw IllegalArgumentException("Invalid public key for X25519 key agreement", e)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     throw IllegalStateException("Unexpected Exception", e)
@@ -771,7 +906,14 @@ actual object Crypto {
                     val ka = KeyAgreement.getInstance("X448")
                     ka.init(key.javaPrivateKey)
                     ka.doPhase(otherKey.javaPublicKey, true)
-                    ka.generateSecret()
+                    val secret = ka.generateSecret()
+                    if (secret.all { it == 0.toByte() }) {
+                        secret.secureZero()
+                        throw IllegalArgumentException("X448 key agreement produced all-zero shared secret")
+                    }
+                    secret
+                } catch (e: InvalidKeyException) {
+                    throw IllegalArgumentException("Invalid public key for X448 key agreement", e)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     throw IllegalStateException("Unexpected Exception", e)

@@ -79,6 +79,18 @@ enum class Algorithm(
     SHA512(coseAlgorithmIdentifier = -44, hashAlgorithmName = "sha-512",
         description = "SHA-2 (512 bit)"),
 
+    /** SHA-3 256-bit Hash */
+    SHA3_256(hashAlgorithmName = "sha3-256",
+        description = "SHA-3 (256 bit)"),
+
+    /** SHA-3 384-bit Hash */
+    SHA3_384(hashAlgorithmName = "sha3-384",
+        description = "SHA-3 (384 bit)"),
+
+    /** SHA-3 512-bit Hash */
+    SHA3_512(hashAlgorithmName = "sha3-512",
+        description = "SHA-3 (512 bit)"),
+
     /** HMAC w/ SHA-1 (insecure, shouldn't be used) */
     HMAC_INSECURE_SHA1(joseAlgorithmIdentifier = "HS1",  // Note: doesn't exist in COSE registry
         description = "HMAC with SHA-1"),
@@ -118,6 +130,10 @@ enum class Algorithm(
     /** AES-CBC mode w/ 256-bit key and PKCS#7 padding */
     A256CBC(coseAlgorithmIdentifier = -65529, joseAlgorithmIdentifier = "A256CBC",
         description = "AES-CBC mode w/ 256-bit key and PKCS#7 padding"),
+
+    /** ChaCha20/Poly1305 AEAD w/ 256-bit key, 96-bit nonce, 128-bit tag (RFC 8439). */
+    CHACHA20_POLY1305(coseAlgorithmIdentifier = 24,
+        description = "ChaCha20/Poly1305 w/ 256-bit key, 128-bit tag"),
 
     /** RSASSA-PKCS1-v1_5 using SHA-256 */
     RS256(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256",
@@ -367,6 +383,27 @@ enum class Algorithm(
     ML_KEM_1024(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "ML-KEM-1024", fullySpecified = true,
         description = "ML-KEM-1024", isKeyEncapsulation = true),
 
+    /**
+     * MLKEM768-P256 PQ/T hybrid key encapsulation mechanism
+     * (`draft-irtf-cfrg-concrete-hybrid-kems-04` / `draft-ietf-hpke-pq-05`).
+     */
+    MLKEM768_P256(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "MLKEM768-P256",
+        fullySpecified = true, description = "MLKEM768-P256", isKeyEncapsulation = true),
+
+    /**
+     * MLKEM1024-P384 PQ/T hybrid key encapsulation mechanism
+     * (`draft-irtf-cfrg-concrete-hybrid-kems-04` / `draft-ietf-hpke-pq-05`).
+     */
+    MLKEM1024_P384(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "MLKEM1024-P384",
+        fullySpecified = true, description = "MLKEM1024-P384", isKeyEncapsulation = true),
+
+    /**
+     * MLKEM768-X25519 (X-Wing) PQ/T hybrid key encapsulation mechanism
+     * (`draft-irtf-cfrg-concrete-hybrid-kems-04` / `draft-ietf-hpke-pq-05`).
+     */
+    MLKEM768_X25519(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "MLKEM768-X25519",
+        fullySpecified = true, description = "MLKEM768-X25519 (X-Wing)", isKeyEncapsulation = true),
+
     ;
 
     /** Whether this is an ML-DSA post-quantum signature algorithm. */
@@ -391,6 +428,13 @@ enum class Algorithm(
     val isMlKem: Boolean
         get() = when (this) {
             ML_KEM_512, ML_KEM_768, ML_KEM_1024 -> true
+            else -> false
+        }
+
+    /** Whether this is a PQ/T hybrid key encapsulation mechanism algorithm. */
+    val isHybridKem: Boolean
+        get() = when (this) {
+            MLKEM768_P256, MLKEM1024_P384, MLKEM768_X25519 -> true
             else -> false
         }
 
