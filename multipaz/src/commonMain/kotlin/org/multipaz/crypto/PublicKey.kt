@@ -143,8 +143,10 @@ sealed class PublicKey {
                         MlDsaPublicKey.fromCoseKey(coseKey)
                     } else if (alg != null && alg.isHybridSigning) {
                         HybridPublicKey.fromCoseKey(coseKey)
-                    } else if (alg != null && alg.isKeyEncapsulation) {
+                    } else if (alg != null && alg.isMlKem) {
                         MlKemPublicKey.fromCoseKey(coseKey)
+                    } else if (alg != null && alg.isHybridKem) {
+                        HybridKemPublicKey.fromCoseKey(coseKey)
                     } else {
                         val pubSize = coseKey.labels[Cose.COSE_KEY_PARAM_PUB_KEY.toCoseLabel]?.asBstr?.size ?: 0
                         if (pubSize in listOf(1312, 1952, 2592)) {
@@ -153,6 +155,8 @@ sealed class PublicKey {
                             MlKemPublicKey.fromCoseKey(coseKey)
                         } else if (HybridSigning.specForPublicKeySizeOrNull(pubSize) != null) {
                             HybridPublicKey.fromCoseKey(coseKey)
+                        } else if (HybridKem.specForPublicKeySizeOrNull(pubSize) != null) {
+                            HybridKemPublicKey.fromCoseKey(coseKey)
                         } else {
                             throw IllegalArgumentException("Cannot determine AKP key type for size $pubSize")
                         }
@@ -181,7 +185,8 @@ sealed class PublicKey {
                     when {
                         alg.isHybridSigning -> HybridPublicKey.fromJwk(jwk)
                         alg.isMlDsa -> MlDsaPublicKey.fromJwk(jwk)
-                        alg.isKeyEncapsulation -> MlKemPublicKey.fromJwk(jwk)
+                        alg.isMlKem -> MlKemPublicKey.fromJwk(jwk)
+                        alg.isHybridKem -> HybridKemPublicKey.fromJwk(jwk)
                         else -> throw IllegalArgumentException("Unsupported AKP algorithm $algName")
                     }
                 }

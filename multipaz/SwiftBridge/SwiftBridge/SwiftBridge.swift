@@ -30,6 +30,30 @@ import AuthenticationServices
         return Data(hashed)
     }
 
+    @objc(sha3_256:) public class func sha3_256(data: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let hashed = SHA3_256.hash(data: data)
+            return Data(hashed)
+        }
+        return nil
+    }
+
+    @objc(sha3_384:) public class func sha3_384(data: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let hashed = SHA3_384.hash(data: data)
+            return Data(hashed)
+        }
+        return nil
+    }
+
+    @objc(sha3_512:) public class func sha3_512(data: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let hashed = SHA3_512.hash(data: data)
+            return Data(hashed)
+        }
+        return nil
+    }
+
     @objc(hmacSha1: :) public class func hmacSha1(key: Data, data: Data) -> Data {
         var hmac = [UInt8](repeating: 0, count: Int(20))
         data.withUnsafeBytes { messageBytes in
@@ -90,6 +114,35 @@ import AuthenticationServices
         }
     }
 
+    @objc(chaChaPolyEncrypt: : : :) public class func chaChaPolyEncrypt(key: Data, plainText: Data, nonce: Data, aad: Data?) -> Data {
+        let symmetricKey = SymmetricKey(data: key)
+        if (aad != nil) {
+            let sealedBox = try! ChaChaPoly.seal(plainText, using: symmetricKey, nonce: ChaChaPoly.Nonce(data: nonce), authenticating: aad!)
+            var ret = sealedBox.ciphertext
+            ret.append(sealedBox.tag)
+            return ret
+        } else {
+            let sealedBox = try! ChaChaPoly.seal(plainText, using: symmetricKey, nonce: ChaChaPoly.Nonce(data: nonce))
+            var ret = sealedBox.ciphertext
+            ret.append(sealedBox.tag)
+            return ret
+        }
+    }
+
+    @objc(chaChaPolyDecrypt: : : : :) public class func chaChaPolyDecrypt(key: Data, cipherText: Data, tag: Data, nonce: Data, aad: Data?) -> Data? {
+        let symmetricKey = SymmetricKey(data: key)
+        do {
+            let sealedBox = try ChaChaPoly.SealedBox(nonce: ChaChaPoly.Nonce(data: nonce), ciphertext: cipherText, tag: tag)
+            if (aad != nil) {
+                return try ChaChaPoly.open(sealedBox, using: symmetricKey, authenticating: aad!)
+            } else {
+                return try ChaChaPoly.open(sealedBox, using: symmetricKey)
+            }
+        } catch {
+            return nil
+        }
+    }
+
     @objc(aesCbcEncrypt: : :) public class func aesCbcEncrypt(key: Data, plainText: Data, iv: Data) -> Data {
         var outLength: Int = 0
         let bufferSize = plainText.count + kCCBlockSizeAES128
@@ -139,6 +192,7 @@ import AuthenticationServices
     static let CURVE_P256 = 1
     static let CURVE_P384 = 2
     static let CURVE_P521 = 3
+    static let CURVE_X25519 = 4
     
     @objc(createEcPrivateKey:) public class func createEcPrivateKey(curve: Int) -> Array<Data> {
         switch (curve) {
@@ -151,8 +205,38 @@ import AuthenticationServices
         case CURVE_P521:
             let key = P521.Signing.PrivateKey.init(compactRepresentable: false)
             return [Data(key.rawRepresentation), Data(key.publicKey.rawRepresentation)]
+        case CURVE_X25519:
+            let key = Curve25519.KeyAgreement.PrivateKey()
+            return [Data(key.rawRepresentation), Data(key.publicKey.rawRepresentation)]
         default:
             return []
+        }
+    }
+
+    @objc(ecPrivateKeyFromScalar: :) public class func ecPrivateKeyFromScalar(curve: Int, scalar: Data) -> Data? {
+        switch (curve) {
+        case CURVE_P256:
+            guard let key = try? P256.KeyAgreement.PrivateKey(rawRepresentation: scalar) else {
+                return nil
+            }
+            return Data(key.publicKey.rawRepresentation)
+        case CURVE_P384:
+            guard let key = try? P384.KeyAgreement.PrivateKey(rawRepresentation: scalar) else {
+                return nil
+            }
+            return Data(key.publicKey.rawRepresentation)
+        case CURVE_P521:
+            guard let key = try? P521.KeyAgreement.PrivateKey(rawRepresentation: scalar) else {
+                return nil
+            }
+            return Data(key.publicKey.rawRepresentation)
+        case CURVE_X25519:
+            guard let key = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: scalar) else {
+                return nil
+            }
+            return Data(key.publicKey.rawRepresentation)
+        default:
+            return nil
         }
     }
     
@@ -486,23 +570,32 @@ import AuthenticationServices
     }
 
     @objc(ecKeyAgreement: : :) public class func ecKeyAgreement(privateKeyCurve: Int, privateKeyRepresentation: Data, otherPublicKeyRepresentation: Data) -> Data? {
-        switch (privateKeyCurve) {
-        case CURVE_P256:
-            let key = try! P256.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
-            let otherKey = try! P256.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
-            let sharedSecret = try! key.sharedSecretFromKeyAgreement(with: otherKey)
-            return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
-        case CURVE_P384:
-            let key = try! P384.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
-            let otherKey = try! P384.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
-            let sharedSecret = try! key.sharedSecretFromKeyAgreement(with: otherKey)
-            return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
-        case CURVE_P521:
-            let key = try! P521.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
-            let otherKey = try! P521.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
-            let sharedSecret = try! key.sharedSecretFromKeyAgreement(with: otherKey)
-            return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
-        default:
+        do {
+            switch (privateKeyCurve) {
+            case CURVE_P256:
+                let key = try P256.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
+                let otherKey = try P256.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
+                let sharedSecret = try key.sharedSecretFromKeyAgreement(with: otherKey)
+                return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
+            case CURVE_P384:
+                let key = try P384.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
+                let otherKey = try P384.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
+                let sharedSecret = try key.sharedSecretFromKeyAgreement(with: otherKey)
+                return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
+            case CURVE_P521:
+                let key = try P521.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
+                let otherKey = try P521.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
+                let sharedSecret = try key.sharedSecretFromKeyAgreement(with: otherKey)
+                return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
+            case CURVE_X25519:
+                let key = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: privateKeyRepresentation)
+                let otherKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: otherPublicKeyRepresentation)
+                let sharedSecret = try key.sharedSecretFromKeyAgreement(with: otherKey)
+                return sharedSecret.withUnsafeBytes { return Data(Array($0)) }
+            default:
+                return nil
+            }
+        } catch {
             return nil
         }
     }
@@ -699,6 +792,21 @@ import AuthenticationServices
             }
         }
         return []
+    }
+
+    @objc(mlkemPrivateKeyFromSeed::) public class func mlkemPrivateKeyFromSeed(algorithm: String, seed: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-KEM-768" {
+                if let key = try? MLKEM768.PrivateKey(seedRepresentation: seed, publicKey: nil) {
+                    return key.publicKey.rawRepresentation
+                }
+            } else if algorithm == "ML-KEM-1024" {
+                if let key = try? MLKEM1024.PrivateKey(seedRepresentation: seed, publicKey: nil) {
+                    return key.publicKey.rawRepresentation
+                }
+            }
+        }
+        return nil
     }
 
     @objc(mlkemEncapsulate::) public class func mlkemEncapsulate(algorithm: String, pubKey: Data) -> Array<Data>? {

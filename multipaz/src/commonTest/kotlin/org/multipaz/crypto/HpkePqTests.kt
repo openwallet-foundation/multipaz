@@ -1,0 +1,1296 @@
+package org.multipaz.crypto
+
+import kotlinx.coroutines.test.runTest
+import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.testUtilSetupCryptoProvider
+import org.multipaz.util.fromHex
+import org.multipaz.util.toHex
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+
+class HpkePqTests {
+    @BeforeTest
+    fun setup() = testUtilSetupCryptoProvider()
+
+    private data class VectorEncryption(
+        val seq: Long,
+        val aadHex: String,
+        val ptHex: String,
+        val ctHex: String,
+    )
+
+    private data class VectorExport(
+        val contextHex: String,
+        val length: Int,
+        val exportedHex: String,
+    )
+
+    private data class HpkePqVector(
+        val kem: Hpke.Kem,
+        val kdf: Hpke.Kdf,
+        val aead: Hpke.Aead,
+        val infoHex: String,
+        val ikmEHex: String,
+        val ikmRHex: String,
+        val skRmHex: String,
+        val pkRmHex: String,
+        val encHex: String,
+        val encryptions: List<VectorEncryption>,
+        val exports: List<VectorExport>,
+    )
+
+    @Test
+    fun testHpkePqVectors() = runTest {
+        val vectors = listOf(
+            HpkePqVector(
+                kem = Hpke.Kem.ML_KEM_512,
+                kdf = Hpke.Kdf.HKDF_SHA256,
+                aead = Hpke.Aead.AES_128_GCM,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "a4f31f1285babd975087bad56c61ce3947c2f537d4256e184f5657f8ba4c7668",
+                ikmRHex = "53c72362cd4c0d3c04fb963bb2d8fa3b61be2a83befb53883892f68d1e6af3ee" +
+                    "2ab07a445a87cd505fe27f3434e35c8ad26e6452b51f24e5c9d3d174b326fb0e",
+                skRmHex = "0466a81fc187205d5925aaa518e98d6cbde2a1aa63d756da4a62f873f6a0b1f1" +
+                    "418d0eec2620055b8537aca724d18ad436e47972f85f4c5c5d2cfb1c62b100bd",
+                pkRmHex = "3e774db858732c35a408388fceb66cc61777d361c85a72b1e844422cca0effcb" +
+                    "5778cc5de43acab0ec682b0b318fa4122bac224d10c193b5933758320587196f" +
+                    "d50cf76c94a1222b2a330a9fdb32b0ec8a42931c531bb025095e49fc0df8a520" +
+                    "5b32149e7354d63232c8199dd9e6654ec0bef0937484b0904950b05b29297dbb" +
+                    "410be008ad441ebce23052c8cda593bb1bf4b5e0e520ac4a53e9a1bc38591c3f" +
+                    "723e66c177a6715d3a365b0c156a5f72aa439ccb42944b8f47a32b446ab6d8ce" +
+                    "58096a778a2322b3b467f2c5a17875fcd6a69ee74ea297093798765f6851e640" +
+                    "2b77c723b335c5c8857d94090d41fa2b5e54ce5b7194d29175f141718c36959e" +
+                    "6142402b2e816a856d914b1f2b3fc62329cccc7e23fb9d14828e44941997b323" +
+                    "bcc90c497579d49462d79671809a38d79c3137cc4258563134d4662872260cc1" +
+                    "3b5c990215959721082c827bab0cb9a2559b16eb704cdea7cfe60b24224b13d0" +
+                    "55b382ea9e0920adb3592689b3635239ccf8db631f585957a37c57fa8d92fc79" +
+                    "07d0266dca9b55fa5b68d308d8d6cbdcd8b583fa804c03ac620003911b506396" +
+                    "709bea2ad1a7a83f697c9ec741cf650464bac0093a0efd462207620c13b86cc0" +
+                    "dc10dc9442870250390384c5e2b8f5294f9c88b26b09c8d504c286d16109a568" +
+                    "38830caa35b231811bda3a1677d3087ce216ed9c8ce5cc4020d290efcc60ded5" +
+                    "11bb990795d00674a12641e885ceda249e387ce470716188cd359c66f4e61908" +
+                    "e12757b97c3095168fb8714681a96c54c1cd401231a5500896a8eabaa521da68" +
+                    "0e759222d9765746624ab6c79a754b10477a0ae12ba2175f6f701569bb15d2eb" +
+                    "c4e6e9b8e6f1c021b31edccb152ea23365db5ef396c893a9ba12cca8a3847e99" +
+                    "f6c732523e55844a17ba34cbd6042d1b7ffdc47d6031a7587162ada1a283267e" +
+                    "aaa31da17cc611038fff51446e0384c7397450b05084859cb8f79e6a1775710a" +
+                    "19f8e9896e83861debc6ffe1ba8ebb1cdee95da61c30f6c99091e31b4f3c5933" +
+                    "52a1253910261c187c60a420e1445951cd797b74a4a7b53b50b0c1370e69e65f" +
+                    "cd29aa553682cc42f6802ac4b8a3bd7b1c482ff85523aa2848b95ee9654b55af",
+                encHex = "a66b74747cbe84af3c6c824792211ab3b5ce0847f49090036c4ebf5b9767a656" +
+                    "4c0c6cd52137245582e773b5dbf530ade89b05e7df571c278476b5f874e5aa15" +
+                    "90a47d9ee2c4d2c447eb4a070e86ff448bec7d38412cb7df4463b2d42ce0691d" +
+                    "59a97c25f0a2b6b39f07ab04e4c9b11e6a27a738e9c3b6869ca803602b5fb78f" +
+                    "071e3f447845fde4d1d0893f650ea246eb599bcfbef61e3d5f03c6a20bcb99c6" +
+                    "10a22712045c8e37f549c353949ce27bfdd953bfef97469e1a46696dde84326d" +
+                    "d6a7eb79af9107ede1b61f4d5d17c8859a604dc0b67fc712f545efbc8ab6bba6" +
+                    "6931396769874794ad44654d63e57fb36a8ed188c9dff164100eb26581d08537" +
+                    "19f88619220ba1815f8d737727a35bc33227e2580c5b68baec549e0cb722caf2" +
+                    "4a4ee28cf585cc12e7de2a845a5b0599cccd94a49be72acd52e0eb1c26cb764b" +
+                    "ac0e25e93fc015456ea2f6f2807a47a46fe5c1715394a5a913812ee17a4684b9" +
+                    "857f229b61add7440301e12d00b4cb2c406a28de76bfc31b5c239dc96d94a3f2" +
+                    "9f3a85b507118d0c66fca652c33da63dc246024f429399c1cd9531e6e85c6ef3" +
+                    "0d6954270c895c5e318744b5ed728ea326f242e1be5c519bccdb01668704d132" +
+                    "8afd97476157e1322525b994a7a48d3ed1b9097a9eb632b84a92e257ef191fb5" +
+                    "e469cfc9a5943175b7c52e3e0a83d6df64038fde3cc2938bed141a5e19011247" +
+                    "f87183602f5b98dc495fbdf463e8ede9da6f970632dad9cea242e91d1681ba80" +
+                    "1be84190e1a13e6d1820fe846945a41d920b1f717f12b10d70a9b203377316bf" +
+                    "d3f6217b758a949a899de90119e934fdf0daae68f6a8b0b89f93064c727e1469" +
+                    "1c4149c1147d1ae457d127eda31a4b63fd8aa7f5e501b3e1de20ee1024c7cb00" +
+                    "10a0996adebb9527c4919ac3903296ca8253facf1a225faa95aa7b26889a1302" +
+                    "132cbfb519cda8cb60dd14646c3e94cc335881015b0e63191b82711fd498442c" +
+                    "b448cec3c2581e26019632f66c2d301261e199026eebb351866d82212c1a5b4a" +
+                    "cef12e7c22f4597c185301cf606f6ce69482f81a630539d3cd1611875fa28a1d",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "c80cc04803277f688c29c5c0a9f222f1977c7bfc5cc5e66ff4210c5bc315ceb3" +
+                            "47135531581a411dc61bb35059a781fbf8c52e9539c1e55bef647086ea64a7cf" +
+                            "3e5d6c4211f38f747276",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "f3c5de027b9b14bfe43fcfdd66c136b47ccfeb03096a212f480c74bdbd2987c9" +
+                            "844b103d16ce2d98dfde273ac757a389bbe1ddf7295c1b6903495fe54caeb337" +
+                            "f7a1856f3861a888a051",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "cd629625b73b85743e4d88636a9459d0222e45704d7a5d0bb22b8aded487731c" +
+                            "7173b090fe56293d06e822c087ea227271e08e1f6ef7a3b17e630f4c74545806" +
+                            "723662fb03fa8b6d059e",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "a188bb14db42930838fbd89529f61afe0bd6c0f69c80df4ffac6a23496063dae" +
+                            "97cadf414f07cfa6911756fdb217a5ecad4cd6939a22ea43b3bbeb22c6a693b7" +
+                            "388f5521cbfcbacb9b4d",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "59047cd54181a97057b845b22b88dbbab6dd37c862f837cf428b932c8027439f" +
+                            "15120082c5630a6021361bcc00d6dc4bdf6d4840d0772ca8be99e5c40b448029" +
+                            "ef3cf320b6b63d3eb6da",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "c0186fd042852629d81ba939012f98d444a5c19bd7cee946389fa016cbb3d9a3",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "d4db343a5d04f812edac36da2b3bf29cbbb10e058b94de2a9a3ccabc621783bf",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "f9ba1dbc672d27b24880c74d16417c0e6e0e0ff68fd37684aa654b3e915289a3",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "cb7c0165ab19dad598712b092c3b03b9569aa042582a7c3750aa002015103386",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "c6c8ffed2d6900062c3ec5c92ea82fd68d2063325f320e269d3f1ac8a0530ad4",
+                    ),
+                ),
+            ),
+            HpkePqVector(
+                kem = Hpke.Kem.ML_KEM_768,
+                kdf = Hpke.Kdf.HKDF_SHA256,
+                aead = Hpke.Aead.AES_128_GCM,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "9b933cd9c9421cd58db0c5f6cea53eedbd7fae056ff95d688d8ed9a58177e76b",
+                ikmRHex = "a60b35f174ce9ac7a4ff5b9f81e38125b03506ecbd56a3a55c31ece0f5907052" +
+                    "0729773a61a499d5137daaef824b493848b6e4dd332a815ff19aa9f58a381eb8",
+                skRmHex = "80008d036609972cf761d7e2d3b831e48d3e941cda94fbf9bae09bca87373f9b" +
+                    "b7411f58fd3324ba1d0daa5a7b42768c5b53e1df29c28d4f5428a8233a905089",
+                pkRmHex = "1a9664765a7f3322c86c451287f56dcafb799cc39a17e8c33f911a8703b90b3a" +
+                    "99bbd712962c0eb0b9cca65843cd784ada958b261116dea17e0fa2533ca23498" +
+                    "c0793078c5b8254d2a162e4042085d3c164d4615270bb56e4393672056c9f1ba" +
+                    "bad3b95307b04ed54caa699bcc3cb24b1b488fcc5448d65bf9d8cdb9cc2140b7" +
+                    "a18535232c14432e4bcba045bf80e00c8110679375406f278e96218de5662436" +
+                    "d96b161829d23bceb66c338b78ab2eb956f90b867738754763ce13f35eac655a" +
+                    "eae10949a582810a625964a58f1a6d15ea52ceabb463b211e0e1b19f736e1af4" +
+                    "a7d2c02485a4538b1551fcccb996a605ec93719c876a5c86a8782b78565c603c" +
+                    "538856228257033831eb99072a1a2d0413b007a7fa9a013efca0ca9800bae097" +
+                    "b12790506640cbbbb903d545b87a20adabaebc7c46c781a11fc08f3dea902a30" +
+                    "64ceab86525a3e33758e1fc76d17eb9796e0afce3099e2b64300d4586b24ccf2" +
+                    "9185c1e26b0ae29925527e79607e48786d27d651a290174f966200b3cea6b28a" +
+                    "dd1368a410c753b692f5388763e9530e3a4db61627a56b70d6fc545e5b8712d3" +
+                    "546a7c0548a03efe3a1312091434133520b21dc04b6d8b70c01894ca5714cd81" +
+                    "1b6f8b671544575bb5016d5e8788abb0206b22a7d8f64a09ca4f4d773ec7029a" +
+                    "6bec726aa612bec0213377b3cc8a9218b465abc8b242937fabe57ae932151092" +
+                    "c3cba5ae2734088f67244346c93a024506485af5f7ae6a8257f04b912e6c5ab9" +
+                    "f12777473b8efb73a8056ee006294ae93ea03a204a09a858d87b09d425881819" +
+                    "716b4cee09461daa8fdba8ad0ee81aeb60bd9ab59ba9c59381d3b147244c1d22" +
+                    "85b5d79d5154abb794170a945c1a0acf2e4c82a5093371836bd153b6c9bb0fd3" +
+                    "f21cc682bf1ad8467ebc88002840815a1bbd340603a8a45c002c3613503c6ab4" +
+                    "e8620150c2331987559d6987900a803b05bd4b609f3ef6cbfb74c854eb83552c" +
+                    "3db404af93746918eb7afd920434681a2eb618259c791ae58fa7e43fc083c14e" +
+                    "3001e09c82e3e31efe61a2126936a7560a4239c85d366d01c67d08a2158d3605" +
+                    "e1a8335e42b4c1d8457be130451968ab3c4325553923442892c9bd2a238b9429" +
+                    "02b6d1cf5603674811020330c9b8f77d274c885a982167ea995aab3c4ad4c15a" +
+                    "2368ab8bbcb3f27064e3cbea93b652c869db424f7722839f4b55e1acafd0a4b1" +
+                    "d6b561c3a416cfa2c175933da440b01daa4970e3b1888814dc972fd27030b150" +
+                    "51d8348ac75b91752304acf3961670341b334fe9591fd60469d1dac085ca745a" +
+                    "e0cbd7d48f951746ac523c42679a105978af3a36dfe36bcccb9386b96c3c4984" +
+                    "83d7c8ad869204d7a298d085105c8cd40601782a874bb8337bd00a2cf39650dc" +
+                    "499bf32e67233219bc597165124e194252d47f23d78df18b43dcaaa29640269f" +
+                    "f9197db15ebf919b3c702e16c01dd80881f627600d35c60c059daa53cd6114cf" +
+                    "29f739302996cb3132e17a2e852038569223e2fcc23f6a90559b9b4a1059d85b" +
+                    "827fe2568558376cb946f9bca484030988e53f61431ab60a276d9b43a85b3863" +
+                    "7aa017535533a00f72064602948c83cb1e050b0584a7628b2697d23476af2b0e" +
+                    "68b5d57d4718ede11de2080798a309cc8102fff10ad012bd3d32efdc2052d8fd",
+                encHex = "86a740f005d8a10afb812bf6d0a97ea0c2a5c7a729af0c286418726ace669954" +
+                    "45a5f6fc099b498ac3ef9e752ddb7ef88bec618c7fb4516385d681328381924c" +
+                    "0723d92ffc9765a25ee558e29b1f7e8a38aff5debec491ef6fbbdca10170f54c" +
+                    "2bd08aec077920e59380e5cd81983cecc15b2c4b201f2c2cf70640eeee3224a7" +
+                    "849d8efc6404b317ef3b81be28dc1334ab4c71b16682db94ae7115da8069fef8" +
+                    "2a9dba4ea1671cfb5707333e4e107631016934480368514d3ead43fb3c916dba" +
+                    "86da2071066d288b12b8c9397757e643c41ed7e240c5bdd924e30d923e90af5d" +
+                    "03b7adfe1a3bb055195d37309e28a55a10ee859f812d06145a6346354ca8dfd7" +
+                    "2a829ef348de166d5dde7e41f60d3387933b41ce33d29c134ab96f2982c51388" +
+                    "4e7bcb790d31f0a8371e990c6cc9c1572d25d0efc7c0e979c88e1b6935d74b7b" +
+                    "a78d53837ca5e486e8da5e6055d13e0a1f566cbde09caa2e73c1c1f0afb2f7db" +
+                    "73a820a738a997639a96dac040e72eb8b18f48e7d9e964e3625ac12883a8a10d" +
+                    "2f4f907e7703021347885081ef38c8445698717b947aa7df75f1dd3c320b71a4" +
+                    "31dd5d18b0de1ed307dba95a201aaf8ab37d8edd71c5da6097cfea602429abaf" +
+                    "d9924de42757fcd203b8bc6feafdac6d4178c7dfeda5435eba612a0a0c603171" +
+                    "ce6ec491363c706730667445f69c9754ec0922c9f5dd593894f5c5a928488837" +
+                    "6d22002242831babcb86feb2c7ec5df5b463e2469fd7a80d4aa6ce8ac21f48db" +
+                    "b95de64ddf15b1bd0f65548122f8f61c9f41a3ea75a2d66e970a04a79dc73c73" +
+                    "b3e1ae0420677dcece4b36338d01ef7ff381a09c9aaffd1fc4f46c2461c0b8ee" +
+                    "92de43379f086151d7065c4acac7a3ffe9205db754f717f9108ae4e364f6f375" +
+                    "acf5a565de7e2c1249a353df05258c8eafdda03410ba2778714cacb64f61d494" +
+                    "c4d5bcb420f718954a1db1e937df6b2483ca88b3d78476d3b2c78fe068ac2b58" +
+                    "4832c73fcccd2ac38aad93e35c717c1e172ac096eb2909f63ba780d009fc7c83" +
+                    "b3acfe5be95be3ab11c25c86638a2cf3a2ebd23cb15b501c77eca0a28dc0a621" +
+                    "ef1f337fcd7138e01d1324e985bd7eaf6d745530334b052b8d5c5b22064a623b" +
+                    "9c7960d128e1665c8c7f8869d5afe7ed40f02f02edff64c577fd1084253aa40b" +
+                    "1f8482725f6416f3e4d59add5002ba6b6d5b7be87a1aa3af89bba6c40838011f" +
+                    "93dbb1bda2ecbd24a446619d15841f1ece8e0fb7769bd350d6bdd23ad074d0ef" +
+                    "2d683bd7a6e64e97039aa92ea70f84f42ccc6ae0871da60362de0dfc6ea338dc" +
+                    "ae3eb2bf4c0e0746588faac369eb8b6b0e38a7a96d265fc5d4a91c9941581687" +
+                    "57e9750c80a90b571ec6c914eebf67901c7974732947d3871e41c9d59cd78bfd" +
+                    "8e7e1fa6023545d54d2070ef64ecb70daa01f0b508764f6a3ad19d680927e78f" +
+                    "86a664e62313b57941524bd9b691cfc514ecca83e172bc1e0c2b2b62ea7d896b" +
+                    "3f4218fe39c1fd892b9852ac170524524205ac19ac58102a4e7562d2dd453d80",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "4b7dd443eecc37d978fb2e41808d8b3025e0afdefb57b96be0b2ee1c1e437a6a" +
+                            "676e379812eac544f55e463d07b20cbe88225ba97736c48ba39bdd96bcd783b4" +
+                            "3a67eedb77bcd612820b",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "86e2d78ff8f07fc10e651796c0b51516200dfa224b35a99b460c9147eda0a422" +
+                            "66cffa5763709ad8ff6ac0db08ac9a33ce4e8eab643380ea55fcd1d272dc8ecb" +
+                            "ed98d3b8e60a53805187",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "0908bf6f5163b23a220d8217ad53ec21dc8dbeb10d0ef86fb116c0c4a29a56a8" +
+                            "8b49b596ac7b90483b2bc64bdeb23006973992aaab358e825259acd3b56b80ea" +
+                            "fa635abc230911af016c",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "dd49fd3e866b6dd14af37d0cbf7b513a2bbf7657e676a858f4805561f28e046d" +
+                            "b1a808e43b9cbee3041c4a324289725a85621fc3de8344bc98c0f4706b4dbd8b" +
+                            "eff8414ca86540a51033",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "a8620253f72db37e2aa316a375f08c62b466546c84669a024194e7d36fd9864d" +
+                            "5325420123e2ff4dafd016638a3c138a729bb57f0f1a4dc6c072801bb3f66b3f" +
+                            "4794688206b69c9fb284",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "4ce822c6932f0cbc2f1fbc3a652bbef4976ac63833d35fcce20b35c4a3d05443",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "f8a7549322f1921e48ffc17b05b71d54640bb0253c6e4589b0ee748120d9e735",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "7be483d9a999b4ae759bc3ea1a713bc989540fdc376c36472a7c1038a6c6ee04",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "9acdf000eb38f40b663ac4f05e2e86409499bf40dd5b439303b4e575b2091e53",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "4a48d80f407a18636fdac0d912020bc134e33d1e30e0be7fd36fb4b56d9849da",
+                    ),
+                ),
+            ),
+            HpkePqVector(
+                kem = Hpke.Kem.ML_KEM_1024,
+                kdf = Hpke.Kdf.HKDF_SHA384,
+                aead = Hpke.Aead.AES_256_GCM,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "54e68c4d0f72b94d956acf637c23570e505db5c08c0068bd136cacbc7dedda89",
+                ikmRHex = "d6688a981deeff1d1273426af8a44aab877c50b6e8ac74b11e01a5960d97c03b" +
+                    "ffd9634894d255c424c80c74e0930b85b9f4c60e22a3efb09f4bad4749be427b",
+                skRmHex = "73a9ffe155d39edcc023b11171ad6cf541ff85eff68c33b521ba25cbb1b7079b" +
+                    "f848b63f5b8ca53f809255b51f1bef24b342d706a77cb460981e16b2ce737552",
+                pkRmHex = "aa0a1b451a9aa747370a94ba416aa977c5bac5b19def1a59f1e9182564b1b8d4" +
+                    "c761d30c598415ca200f30c2638d8635e4e8b67df03e207c2dcb2048e01590f5" +
+                    "da7fff8c5d6657c32f5c2cc5e6b807e647a50b252817c9063bc542282cc1fb6f" +
+                    "400b2382e7b39407c5234b6ea2319828348dd1a8b92f506f67eb686726138781" +
+                    "337573b6ae878133b7c8548c307656c817f529d8f068f031c70b044ce1a09d3f" +
+                    "8c8caec215dc3a68ad805617d11aff61c9a2d1632b4b7fdb8b67f37a2814e997" +
+                    "4490b307b3ad3ccc9fbd3c577d9c147cbb69ea55c604f67895e2921f8b75d3b7" +
+                    "1e7126032acac6d2e5cbdad32587b6a99f9b12df949822e6392394a9761cc1be" +
+                    "d0155bf28338e50c8cfaa1f0115f4c5384f6e8c46885588fc79cff4430fe745d" +
+                    "4b74c1bf85cde60236e3b0b87dabac96677ca6c0cb7372bcf39708d5c1aff382" +
+                    "35829b67d6d51eaaf36bcfc4c82980ca024a0495d8c3fd5a8ada25a3f7b33e78" +
+                    "fb86701b710fd0b39f4b9b5649a654d719e5a96d63ca306e3862ccb52937a3bc" +
+                    "1cf8079a996a27ba34bd9c54cc9b99fd504f758abb3ca519c6521095b8964c47" +
+                    "8063a2a5e668c88eac1feda35ae0865b1cd83bc7d1513bb21188b7c81d71cac1" +
+                    "048756680fe15493c79c5b3de8563698cc900a30833793a46a7237623cb70b15" +
+                    "1024855c69ac2124ce426c8375a0874c6718b554875608935124a90357c277a6" +
+                    "c4bc487266066bb0d7a7e76b5d3142a6c2aa8ce6da7540794eceb9329da1244e" +
+                    "8b9fbfa0303ea9511d9c9a5ce39bd3c6358e4914d5a96a1c6bb47e7916b2c711" +
+                    "4078c003d939e4a22118c7626d995b5455c6cb07ad59275e024944d599c81764" +
+                    "8ad0852625525a34fc1343325ebd286cfd2bcfd856cea2078415c49e485abb3b" +
+                    "f8bbde7a93bcdb0a8ab84f4712370f71bc1f80c89fb9c548613ae9b267ade1c5" +
+                    "0915c3b6d9a464a6387ce71e2f268bae278e264acdc8f8ced1d85047aa2ee05a" +
+                    "0c530117e1e06ff75624eae953938a7bac13698bfc0139eb930ff799bad7abab" +
+                    "d85b74babcd6d05212b55db227339694cb72258bc365860d56bae2e21c5c8862" +
+                    "86e9a10f747d9345b9ba25cc741a742dbc1dd1193eea58ab08496f1a8bac7520" +
+                    "c5ad109ff3b8380f764c0ed84008e54cc56c96a32187f6ba972fab323100b851" +
+                    "e0586427223b67b4ec32011b33053bd1ab7d515b3ff02cef9c8994411085abc0" +
+                    "7d4b43c16147f15877703598d5626a85e56e665724d4f62c07590c5354109d30" +
+                    "b46f6b5764fcb45e2630d18b6bc1d767e814ccb215cce3861600d1b17be16cb1" +
+                    "e05b26577ef53c7f1a0c4ea15488fdfc52c5808c9c2854fcf1633f977cd9333f" +
+                    "b97933a9624bfee00872dcaace051c189551a45963d9f20eed23bbcedb37e9b2" +
+                    "9039a294a299795cf416e8990d76f73af6474d157107afe0ac5cbb16a1241fc0" +
+                    "13a7350011b4ba70d9ac50c644b479f23e81ac986bacbd462b980f7a17c8426d" +
+                    "d16a8a1f6289221255a8437a1280bd06b4c8a8f1b566c13a5841abc6aab41426" +
+                    "4932ba7d56f94e8970570d8586ff6c7754822c0a0c21cd2b190a8a3ce6294346" +
+                    "a430757b40361833628b603a9c331165c8c7c55a45ab8b57118c885c93eed7b7" +
+                    "fc8736ddd0a10f8a0d1d4b1d3f4bb41b09c67269493b03ae004917a625c4ccd0" +
+                    "64a21a822d45afb4d30b64a888460c37b1fc23082213cf468b10c60280ba9c91" +
+                    "d68cab57433ab6ccb7474f0c0074ce23ac09e28e7795c72f496581878a999097" +
+                    "fe940582b4af1784267bab2af681119dd58ab35ca006c04e7345091cd489a0e4" +
+                    "c42ad1cdd300bc13b395ee3121a9276ca01b6c2382212872729f9b9d10f2a777" +
+                    "8085a22966f44601c72524b8b168e368cb83466f06746c0df330bcfc7019456a" +
+                    "9740802cf6923b508a3326cb53265a4a3b961077884e38c073d29de9c8118941" +
+                    "0467ac6c46f7c38e5142528a945ad9a510115122f519ca937e84e075260a323d" +
+                    "900bb5e321080c264a95543106481cecc0d48275ebdbb4bdb6b5a9794a42d94b" +
+                    "fc5c644fc8a5f3b7bbef1b3ba09a48473b3d2933b61cb474d292764531821fb7" +
+                    "2a0eb72de454577a126ecd4778722c3c55e3b09d860a0941189e680847112b75" +
+                    "9963a1862612ab7236883d177067ae105d6db70d5aa86aa243004121baae8388" +
+                    "30b87c6ec203168987cbe6a9bf8765bc7ec4a51ca64cd7b22cd5a3877dfecc3c",
+                encHex = "a9a4421ea715fc52329204452922e20220e14c1488bdc5f5b9e33916ff8c4b46" +
+                    "481b8cad2a8b383f06b629908c71f7f7816afdb03c0a3e97fb58bcddad60cadd" +
+                    "46582c182e4c75c69283f5797efae3b0ba5d0957a8ee460828c53b925d836a16" +
+                    "16e564e0c2df7342400fe16a2efd0d441764328be60229f172d3244102345367" +
+                    "ace697c8332e931b32adbd47ed63854336a5eeb3128a4b555568dfe926206f93" +
+                    "c52285fc036e26a5d55e1e40939f8504877e0eaf2744549e4c6fcc4bf8e85458" +
+                    "dc66294699fb146d0be363b03444ee85cdf57cc373d463097b8015121f91c00b" +
+                    "66fd805d32ff0fb09a5c8c5af225f3c7c4d7fb7c4a39cf75878b16d3107edcd8" +
+                    "0ad10a450b1035b4144f3d662486b9e05f46f001ff8bf98688ceb4987bb0cdd7" +
+                    "5f58e184419c80ef55bc4ec0295fb290119af95d95ba24c0e2d0c371af7ad7a6" +
+                    "e4a34b635dbcb2961571eb64e8087b8a2c16b2a2a4f71e94129bbd11bb4a2678" +
+                    "dcafbd23bb6add7a3473880773f9b92812637b672edd418fb2630fe94d481789" +
+                    "657d90afa4ceb7617ce2732eaba2c6a019b03ab7976e886ef9b50affc46676e5" +
+                    "36575b46dd39fa95e1f6d242914fde952e07c789a6c41b0c53fa3423173bbaeb" +
+                    "a6b578c1ef84d5a49a044c69aa6cdba1a7c1b373f31ca39216c8713469b1f37a" +
+                    "c6436f4ec3e202176f767416b45421eee5c9603b26be09ddcceadc052bbc71f5" +
+                    "f32867627523772be84e62878bf6882b5b3c863e0a79c89a2efb0744ce880ebe" +
+                    "3f5c729baec24ca2c6541cc79f6e32a8163386a99c527233cfe88521467c6c2d" +
+                    "d786f4957834b4b24729235853622579ddb427929676b8e338de6e08b512c3b2" +
+                    "6bab191a3d7ea2f97f6b5c56d5d92df4e922fbfbe16c748b30ff1d2816d7d843" +
+                    "1b79ae3432a9f8d09e9e2577c1c3cf987cfaa17d699716892d4cbd8d5cb4fed6" +
+                    "56d58e1b3f5acdc6cac8afd31dc50bdfc8260c379b6479df9770fe752a9c1a34" +
+                    "c5da2671fec505d2da1dcfd3f2231d20a812908e73709d144717ba761ce5e200" +
+                    "b65af01ac5fb13e86ccc72cdebbac15e0f45ffba10120b844b5c4619ef546d5b" +
+                    "493bdbe4c90947bbd3023126c099cc6c5a916a46cef0ba465c4d4734f2d0a450" +
+                    "4ecc33f674d3e2560d2df0f201acad2988e454be3247aade5b5d7a2ca3059e75" +
+                    "f1b09cb3653aed9139281aa66b21ad3ff8d8c4f331b253078c70173d907e4114" +
+                    "0307b495cdd83de81b12ada65c441a50d834c32ed661a1686f2bbc57736b2b85" +
+                    "9302b545fb2c4214b5cc9b5b85e56c65ae02a1b15e561670019d477639773026" +
+                    "e3d233578f6a61e721cbb60c17a0d4035704b6dceb65c3e4e28772fd94df756b" +
+                    "6a50931224e6d70f51993031fa96770b1d9df23b6fe1e0b6707e08a95f403571" +
+                    "40287586b18f2cebc36544b90a82f086474fd1728f7d102e9f448f27fc632ec1" +
+                    "805e0afe41061ac0501e91b5711e0431a856490ef6b2ce206d51d40dfcb2c632" +
+                    "0aabf4904b9a58220b70bcc99b6a990a56398560dd0bb78aa84bf45e43e0ee4b" +
+                    "3e03c5ab31608ead929df2e9fff6a4ff9e9f863592c471ab12d944ed3eb4ea10" +
+                    "d80efc7ca22294b54bccc059f04170bdbd6d0a74f2366c0d26b97f0c508b3bbb" +
+                    "913ce024b1bd3a5c6ec5f0643d2cab3cf78055334bd67e065564830a42c75590" +
+                    "bdb5484fe758902ab79192255c250567b761bec6c6605fccaf50aec508103ea0" +
+                    "28065c34a799b208654a4b5260a4ff2ba8100c39ee128eef57ffbe36e009e530" +
+                    "fcf215176184f956d875eca94390fa1b3b264d4ce4d1dc0bc042596e4da23073" +
+                    "a4a6fa4bcd2d95380ceca4b4411a5d3726f3e41e5c8c0792ca5b378414e3044d" +
+                    "f8fe7074245a610c59c8a741a110a54807d172504ba9a0c078a88c33f610f7ac" +
+                    "28e6ca0399fa8dd0a11c4c3bedf6ac81172dd7f6ee5dc6aeb9aaba4f48e0ffd6" +
+                    "04df818f06c09734a546f69661e9d0d544c7e4477dd644aa6ba9a243e5f6c941" +
+                    "405a83216b2cb76e1e58cfc7566bafb11de4025cc40b7c24e0439c6ed791bc79" +
+                    "4b996e7f0473da9a542ff4aa68c14f224400588b6e4337db6a78558a89ac54f9" +
+                    "3d2cc076fd15547f1f7618d738c63217e7453d861a7141019f75cd7ec5a6c0c8" +
+                    "b690290ea3d2b61d142cd4803a3cd36b3b0d0b4ba545a454e23c14c723e7f21b" +
+                    "c1e9d2b571ecdcd21a463a8a793e3013e211a404d414070a1aa635c35e8c8b87",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "9d16979cb9ac997886c0ec51ed2c049d7ec53b369467026157ef061af23695b9" +
+                            "96e1893afd2173c310546859e82eea9c16e0a1363bc994f2ff708e5d60089c1b" +
+                            "233f38ce6a7fbd176744",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "36ac3e4d4b5709eb863f6cd257f046b2f36077a010952a9e2811494adc956676" +
+                            "74880e672d9cf1fa4e9e55245d22ca553c86a60cce2714108ba52865dc4addd1" +
+                            "025c69b3206598f78903",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "4e9c9424c210f9cc0d2dd090bb44a022de0b52d3e475d6c4371104f2da02e4a5" +
+                            "bc40e993d71f13e36d0b94a730e62198bd73195d688e68ca37dc4fc1cf6f0796" +
+                            "e701ca7752204ba806be",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "2eee98e32839053d1802c803883f7e75348c0a12751a93614ab5391e6f0d727d" +
+                            "ae9ad2727cfe4687039e7dcd090eeae23f423e8a39916dad79d4e9b2cc090230" +
+                            "e30dfa0d7f86ed2ac4ab",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "12125f1404895b4ac7f2043071b3e62f354f0306aeb2fb604da6385f5d6b4440" +
+                            "1d3bbaf55284843b7b3b57049c830826d15121984f11655d6f1807ed1b18e684" +
+                            "83b795e254d0174824b4",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "5bfa8896ed24e61987426ef9c223994f5ea8088f25f6cd46bfed4418a358c352",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "b9074bc3442b61a9d528f26685d741a37b7fae652c726a69f2f4a8d75c2dbfcb",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "c324cc1566312c5ed6d24d96a6c318efcf735828dacd615a2bcfb1a287d4f6d2",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "d5678af261a32206a4171563145aee2b1ff2265a4ca02c2d736c575872eaee64",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "e73be02bb01d7c3ac63ef11e04bda6e3d6a7de507f89574f803236c8c954dc3f",
+                    ),
+                ),
+            ),
+            HpkePqVector(
+                kem = Hpke.Kem.MLKEM768_P256,
+                kdf = Hpke.Kdf.HKDF_SHA256,
+                aead = Hpke.Aead.AES_128_GCM,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "60bb82b558667cd90fdaa6dad511b68ecc36c74aaba659838978c2f1f6e9194f" +
+                    "e391cdcd5aaf218bd2132ee45652de419faeff24b210dcdefd78db2f4d80757d" +
+                    "c026148067910f470240b079c36f31463f43a33962585e1a84f6230384071be6" +
+                    "9eac96ecf1ff4b4b4be510631406690c62c037d7ab2623ae4980c5885284d8b6" +
+                    "10e446eb79b5b6ecbc914ed3b924db036e8604569bec37093231d13bf31eb9df",
+                ikmRHex = "3bf888035cc5f48fa476c2ccdb73a5482e97a0d0578fa710b1e393ca9716b6f0",
+                skRmHex = "1f25a59a6b22ef57b8e48a6cfe739b9ec13e9cf57e82dfd6e0480e0324cf905b",
+                pkRmHex = "67a132b24aba43d90a9ff65c02cc8446ca3131b7496348359647bc145b52f6db" +
+                    "1253414e12515a17978a2437753fc754faf312ffea54d6c304f723989681037d" +
+                    "fb24b6e89dd72c095b5a2583e8656209845d1241876c4f98093d19d3ca36b8cc" +
+                    "def92471dacb96066dcec17503890456002bc43c60129cc9be2796e74ccb8cfc" +
+                    "ae45963cdb60890cf35ee6fb51b65c29e1461c89c849f8e3a7ca7a32b3e0318e" +
+                    "c8381443950b386200c645fcb5065c0cae32871c18f4b0a587895a78bb7139ad" +
+                    "14b238f34306d367b4e8590d1fc40ef30a30993b34b7c380c541653fb6b8f060" +
+                    "cfabc149a3440ad61ac4248b162df284dfb9433e623435d64972d9c409f37f4a" +
+                    "d28ec20161ddf43ee9d61ac754747f8a0201cb6ed9657b87071e843b78954158" +
+                    "1db891c8aa60bdf8965582a970300af8cc2a148630216b75d31ab5e3faa5ed5a" +
+                    "38ec5c6c459812fbf2412afb96b9095aca552b2572430edb97dbc967ee142df0" +
+                    "d0b83da744891a50760326eab584c1859fc42810d7c879fc67b78827313dc01b" +
+                    "2a374e0442ca8f20249617b9d5042b2ee140a3c93e73072e9a1163b3d6432304" +
+                    "66e66871a8b42bc032475259037188c8939660994c900d99011cc83a308a6539" +
+                    "0827ed8bb5ec85b4b8226e44104b78c09d3b69bc2741cc579244b9763427809c" +
+                    "dbd5aa8e838ffe3762eb0a9e23f2c3b25340c799c503609b50313c9f183a04a8" +
+                    "01ff1b883eb397d370a6c4b05d8f2cc549c40563d16bb01296c7c4afe1763422" +
+                    "6c95eba58a0af16d0d589a7a0c68ed887d36c98c8b75819a4674a79553f97639" +
+                    "e194aa735b04e157127b251658965f141c7319990ebac3cb675a43f2554fdaaa" +
+                    "211fd5037938935915c46a01cd0480a9bc624d2555b947d795e142608de987c7" +
+                    "c8ae255ab71cb61f0ed7cd0ac88caca1a7b597a2800b15a61222c5f168315985" +
+                    "e26378381168a885aa774a6151c065b8047bbf5aa9f3115f55343577782e7512" +
+                    "1c5d1bc59f4caeb180b5fd1c8811b967db91a5f8a1052adc0eb9941f51328fe6" +
+                    "a9608c4bcad74a5168b23475ca1d4be73f99ea59d209bba4a747f589a054ca28" +
+                    "54b22924b6bfc07b0a193a7883b2ab62248a0833800bac1759129dc465836fd6" +
+                    "5721cc08beca917807a3b0e29b0a8192a0a96fc4597177e6779f005be566705a" +
+                    "8a2daea40c8cb74b89030600466bbb62232c1a4fb0073257e9c8a518370d97c3" +
+                    "7448989ce9ce08844cd5114b2db0906892cfac404ed54288796670e2516e9384" +
+                    "ccb8aa5bd368bf7425241306082c59bc99942dd8144acf42904cbbb771162807" +
+                    "ea07bd53c99ef876398c551a08488b82446ec13ffa257d47f59a96449f1962ba" +
+                    "964c48f47130e0dc141b21102a5b003e31945b513b88a887cea21a6f9ab3ca96" +
+                    "6254db342ad1a5cfc9071c0013f32aa2bcf0b1fb15a22b629f138720394c87b8" +
+                    "2c779ad5221df26b459a7c8a573743901308066366e370f0480ffbe4a8db2342" +
+                    "88c1376341aebb98bc9bd1c9c8a702f42c99011c22ce33006752167a4c2aa964" +
+                    "9d6661b1ba30485eb35edb34a5f2c82045944a7dc85c6fc8b1f7f28e6c1a6b29" +
+                    "1591a6d9b9aae515dfb5277fa12d703a1481f44a88d760e6953150c67eb91543" +
+                    "62d41aefbbbc2605ff478661dace2516aac53b17ef86e2022546b810d4b22aa2" +
+                    "048b134f6b4783ce04cb9f5a67cfe41303954ee05abeab8aab18d97a790e6085" +
+                    "1fb2f11ab388694528ee86713e8fb3a79c3cdf4852f11c95fe359a2a94af5a55" +
+                    "e9",
+                encHex = "19c8a22f31dcc098ed9a445222584c04c4254c8f87abdc0bc3a308a7c360fe50" +
+                    "d133f394f48576f149cc272ea74cc07584186d36237e576ec55fbb49dbf1ec31" +
+                    "64ae36675a815460039e17dbffef0ccc733bd554ff7b97fc9db1a98eeb1fdc50" +
+                    "3ec014ab4cc2d88ac9e1c53ef8796975908365d591dcc16aac61d37d803f53ca" +
+                    "dcb5005e7730cfa6849a4aab01e07044f69d29ccfe9966cee08b725537b5aad4" +
+                    "b1a1e9d29b5061c32aabe077a5161e9a57fb1e8dc024be5f5e8cbed1f1ccfea1" +
+                    "d34e302281c325f9b4ee87ad9095295be6d211a19d0f77e9e21ebe1f3ee03275" +
+                    "9d1a3b8a9589ba340512a0d4b61e112a1c291e0864fec755744b5b3a659920f8" +
+                    "2971470df89b25283ff19acdbf8ba9b087dc119f7d34f175cb1727bc4539abb2" +
+                    "77e82680518c6ae1102f5c90bd0f17055b5f21c65be157740daf76d533fa9afe" +
+                    "28250a3fe32a767514375f09df494e1d8507a79a7ce4d8d83aaf8addab70feb6" +
+                    "4a5f1c565b3320bc1ad7171115a050b6b0be8db0447c351e25443f8870c552d0" +
+                    "74a00b02e03e81ef21f3b7b117ea44675f13c9cf9aa60f5a0941930094bf2787" +
+                    "f46c65d314d19d722e10104899bc732d7025174826774e5f355405b2175013b5" +
+                    "d0ab4adb980e776cbed35c93d26623ec08bc74a6229c6eb6e476ecf6e3180064" +
+                    "4589ccbbca7d8c46b138997144d5205e75237df59a0dc901ef3a3b4d3e45616d" +
+                    "a4761bfcbb7e38dce47ac631849702f66348090ea5a2ebe8e022939f8a108b0f" +
+                    "6d89c71aedca58b1bf98b61467fe8862296f1a407dbe11c526b53b1757814545" +
+                    "63670ec9b7c3b4c062c1af74b6c9f38197b0633e6fb304347b1b31b3110ad463" +
+                    "ced8fe2350924f0d49d4cbad080bb4d440270482f5f9985ad16bd8b350fc6f2c" +
+                    "6d9d4f1cb571043541901d6aa1f30c0a8595d663a44438f460ab5cdf6504f069" +
+                    "27ea71cb35f76a97c732071e234578560566c7d572393d33fb9e6e3401f6006a" +
+                    "7cda5b33750465bd0e070b97f55ed540e884f597d3289fc21ed1928c869e263b" +
+                    "82cda3cb3a7f06bd28ffad3d71b0a21b8626e0f82223860642566959e3593f16" +
+                    "8cf623d783189863246910106450415818240f8c047ea86455ee8710c574296f" +
+                    "8b698586cb2a067a6bfbbdb5f072483d26c082b96d0a39ddc71cf424a1907d69" +
+                    "a1913f81d6c7dfeec1bb7d58d043beb7ad1429a97f9745f8ed207a2e30ddb29c" +
+                    "a96561f0699cf3626cb471386674ca21a5a33b009da7fc0152383977bc7169b4" +
+                    "06571d3118c47fd6fe3224affbc1b8f118deb08e8b761633d96db58054b8fc5e" +
+                    "2035c516a74645c323362f8141edd50be3fa21f894483d4597cc046cd3de11b1" +
+                    "c0fb2cb8eb0021dad74d404ec952c71ece3f50101b54678883402ee0c3c55332" +
+                    "62a66cd1d0784b3fc7dabb28c29d347194521fab5214455117f3f6d40215bfd9" +
+                    "01a34411a8985ae2fa74b75d61b3d9037a54994622be15ca1bb24a03f6a9464b" +
+                    "32d094e78087e69b380dfd1dc137a108961ec564a28d4f083b249c8004310bfc" +
+                    "04fa6fa72b58b173345901cae4b54ff0860016232a46bc55d622880aa8a25216" +
+                    "c58793cf2c94a1df461b758d43784e9c9cb8e67928b5c81a78903643508659e6" +
+                    "ee",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "c55b375ecf13081a2448aefca58ca81ba771e04bc7299f9152aded351c76ac05" +
+                            "cdc985a1609335f1399855f528adb21f48dfcc841fd7ef1c38bc64d9bdcd9c18" +
+                            "c68d6d7a6c247429677d",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "d3ef453d4ae5192c86d339c1f3ddd5e487c1553018da29de16e08b82bb4c0b82" +
+                            "f606118ae9e11967d1cf572f27f64c4c29cdb4c70bee123664981a62169a3ed6" +
+                            "64f50229e8ec7726d1d9",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "fec739822bc47a13b041e2e45720a5401b084bced934678f462fcd47c0494f1f" +
+                            "5bacf0cd3417fb208e80b3ca1c5946000f84dd359434dcda5efc36bcc3a3872e" +
+                            "569a95149ae749273e27",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "d0877d09ee420d5e51d9323c6d774733711377f2ebe2495878fef4f342f2f84b" +
+                            "d931e279fcc9b37ef85d7c721363a8eabbf7b223114bc99abfc79a41a6a4b929" +
+                            "215857de2f3615f1e05d",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "eb2ce0435207a409d8016fab396018c3fbbbed318850546be045f2bf81eac4c3" +
+                            "938ad9820117440a8ab9cfacea7fa3d0b7e5bb5c760153c99a90c6f24cd25dac" +
+                            "1b94b823d2c6e8780528",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "a7e801ca7724275eea77f2e95340b7140b98aaa9f0035daa0be6d3325db4128f",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "4b6193c46d11cb047153e27e9cb43aa8ac1c107da4678ed3852ba8415ee3ff53",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "0f1490b86f762d3f7444072ea2cf5cf1641913950a6d81e4312af823b552d3c5",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "9d4620b1373bda21983457c5e2a00b5e3b99beced43a5b6cf434aa9c2ee66862",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "dc1febb6ef028d0ab03ea77a197f28a5b9e07c2e2808d4c29152c83e70bfe9df",
+                    ),
+                ),
+            ),
+            HpkePqVector(
+                kem = Hpke.Kem.MLKEM768_X25519,
+                kdf = Hpke.Kdf.HKDF_SHA256,
+                aead = Hpke.Aead.CHACHA20_POLY1305,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "c82228383c9fb887f7d8b332c28262024eda5b6b0ecd2325fe662daffc0594fa" +
+                    "d4990e7c8d13812137d06ba7017453de675ab0388d418853617f3ca58cc5daf3",
+                ikmRHex = "c8575d137deab99ac98fb0873048c83c3a1f47ef5b409f609c0ca652f58c83e0",
+                skRmHex = "b6bfa0299b955e85224df2e468f29eeab377ff3b96d4462b39447a22d32b91be",
+                pkRmHex = "d3d102410970b8bab2984008669914490c95dea2c2ae331ca229aaf3609a6d5a" +
+                    "cbd60a9ecdd71cd462c08300c474e318b554675679b6d4e1bb1a76269a7a87e6" +
+                    "8335ba54593239290f35b65e5aa0d3352933339336e83260125e10ac21c97b40" +
+                    "cff8385a18b2b7d62436377a13b00c27d22fea4176ff76ab80970ff0e26101c2" +
+                    "45b7c33dcaa420da8ab4df41b88985c6f3845e5a5364e7d7a74ae764c175bd46" +
+                    "2017cbbc5f684a7e4494391d050b83ba9ba66347774c707658c5cfe481a8c20e" +
+                    "fc670314d7569a4793625abfd6579435b31886f80924c88c9a4011a0c58b6fe8" +
+                    "5c5330ca27aa80ffcc58d3ac6a759897b44893bf8b520802b4d7d56bc24976ba" +
+                    "32c070f0cc7fd88c19e958de0b8fe93a7669b5bb8cf80a88e6aa827924cb1659" +
+                    "fe6177023611ddd30eb913ad8b2c08fc8209bb9719c61450518881ca5b12b8c7" +
+                    "3ba3c27824773b5ec6571df41b277555d9aa8f566444614a8473d3b1a5e997af" +
+                    "066ae1f355338302952281c82ba94f50a22e9ba55a56193d1a3f4b5365f7eb2c" +
+                    "a81cb4573c33d1d9861cac8d4cf327c0393ab0c0b02572bbc3821bedb45d4025" +
+                    "7e1f7643796786fcf50126eb136b35737794168a15643973639f6b6f3dd945d3" +
+                    "ac6a5ab96e5d4b8fdcc54809053828610ee3a56bf4c84447147a9ca5745d5c05" +
+                    "e3d9cfa659bb4c4c8f2e006826c27633a120c32151deaa2a98bc9578232b5186" +
+                    "04a5186fc7ac6a1e594b09106418eb1aa1ec6b44fabeae5105d75531b9279b07" +
+                    "f6277ab297a5ea77d2383154bcb9db8a08fbb10522987d63c99958a774160333" +
+                    "f5f208567a311464b59ebb8cc8375a1f02470de68bad55c8e5184c8c4a0dcd45" +
+                    "bfb59995f4c48ecf947896126830818aca48c0749c057b6591d381922d8bb593" +
+                    "e09d4bb7b6b046179c16a1d6b4149fb1cee31b6b9a015cca526cfac8bf060c69" +
+                    "9e751c9456c26d832d58926032bb78ffa44d0d024f7a417e1b452f1f779d49c8" +
+                    "6e0784ab97686acb025c90f9893cc13bfc9186f0e9946ba498eb15a6684828bc" +
+                    "0ca91482ce91dc4c12d0ce4b936e2556aebdc48cede6adcc066e78895086b493" +
+                    "16725d9a0987ca75a7e00b0bbe909397389fead7a8ff73bf94bb4272b27b9354" +
+                    "bdbf3777a978024d074a45077ed0435b8b845e4481139b39ad1276973fd1cd8b" +
+                    "1cc6e27b16998a7d6295c98347998d6669b15270dba7c098f16136015bd3b1c5" +
+                    "897b1312f230e49bc07476cf4deb5bf0c971d5ac37f980283940c4e52999c549" +
+                    "aed09681a7f350f5a1bb1dd5a3b8837a22d506eb2029146817ec955d9dbc2939" +
+                    "514ecf468c4eeb85198230effac612fb73348b42bcb9b27d9816a16596fb3618" +
+                    "e71bcc321a4523a66ca248ac032c06b9e24cb084c59bc489868639ae7533f8f0" +
+                    "3a4eeb56f8a3568f687f38f83fbe163673eb76275b79d7f32a9109c30eaa96a0" +
+                    "f622503c0337801fd9b2007603ce73c0378b250c35b634b6c8ac2cec1fbb2456" +
+                    "1a7a7812e77b4844bf9c6a299b409303c85199ca5dc6eac4e4f85ff10a464d96" +
+                    "c71382760af67fdf006c4eb6b627861d5bf1978588c02825ac70206274742af0" +
+                    "5a0dd136c2d465ac90b4293d05381d5911dcf48a878a6cf8d971d62c14700867" +
+                    "e91dd050f85d68c32e227e5be68d3de029608179f6f83b95e5deb6263fc01c80" +
+                    "641763ebe08e7add5686b0ed1d1e7053982aa616130939d0a09462df7dc74d05",
+                encHex = "ab354dd589f74ee0eab7718a630cbec5df1d09058e177cd6dd141d883450ddd7" +
+                    "0c050d88bed3d07cce23415cab411108cc30906482a71adcb134a56e978a6152" +
+                    "a8e063b24acd1534f264f10458152a9ed4f1f32b3d480c4f2453b7fdea772014" +
+                    "6b3ee92cf8a13a4840076f68c911c65fa3db5053fb0aabf79e64cd5e7aa71b2b" +
+                    "9641e713ec7df552e17d5020f8721ee449b42c888e2a3f87cfd96e3a98c3e7c4" +
+                    "cd8f647f899570f596bf17d2b6fa2cad19706d9cc3cf09493e1c7ffa0eb2a455" +
+                    "9ae1d940fdbef97bed383e6ccfdb448d9f1a81805166b32c2af2e16878c6dc46" +
+                    "ab43323ed9c136b925239782e3c329c31a5cf2a80faf025a80766e244605c27a" +
+                    "fe4b624d9d8ca99b6ef5439ed1ad044b518c434385acd49f1369ded6624a2832" +
+                    "a571ccdd70d08b3c04cb1cd3136166f9a485f536f69ec66f0293e840025ccaac" +
+                    "42f8e5f7c9cb818076c272797047f5e50c1e9f1dab81cfb48fe4c4998b2427f0" +
+                    "09702b145f34ad8dbc3e7ad4e4023057ba31cd02c4c0545ebf71eb02533e8eaa" +
+                    "2b2f2690ee1407bf1f66dc5f4d836c45b82f10b720df72d237488a9af1b6dfb4" +
+                    "741fd613379c2e211e77f7fae6b3734ad81de2d452005334857c4a3cbc82afc7" +
+                    "428fe510495969b296d24e1a7431f557d48578cf92ae86c0392f0ba73755a9e5" +
+                    "465c8e3495e4cd2a82d463244341e39414e26c9b242f31d2cf0e46b2aeb11dd5" +
+                    "e56ec44834350d151344229e410faff2b2ace5c9b3fa12571db1d28da2c71334" +
+                    "92781dac41b7a7e2bac2260fd12f56939033587824c9dfb17d41b3bceea53763" +
+                    "193abe0c7c184d5de161ef5312f31fab42478c9a193b868e4d29b2b7624f3ebe" +
+                    "740f393d03d843cd5327286a579fd2a6e37aca5b64f9316115d612c7781e704e" +
+                    "a7d182701c5019975cad14fbf4ab3904d4a35acaf0be32d716a1ef5d7188fc41" +
+                    "8ae9e60744325a3e8001655b756df94c24031c3ce32bd90c0ecdac52ca140fda" +
+                    "d7f44d04bd0a7e2a726c54cf9793f8784a23296f65da3fd1cbc18300d503c5b2" +
+                    "7be99b9b0e32d20b3614dc8a999f30c2779dd7886cfd486dc1c93ebcf517b521" +
+                    "0a4359d9fa1805381f0f2261ff47de01de555d98bc1a30dda557a83007b61636" +
+                    "abaf9041f96890f0f565eefc45859fbcd32d91b203215541227a4fcc3d95be2d" +
+                    "db0702878caa20f2da62c4ff9fe33af591ba1ec241fbe2208e0480f8b1cca167" +
+                    "9c096f8f5a02a33e9df445b3274ac112b43d51510135cd3f532a3379e90bb7f0" +
+                    "cb43717e90555bb1a80924cc69577455687cceb9b1610c05839541e87ad83d79" +
+                    "ef3ff24ace1934cfbe989691959d93ac48c716b672b370dd4c144ca1e3250870" +
+                    "7a6ef8aa29b55759b3d054c56bee1baa6f41b84b9fc3fd681a1a1528eac57814" +
+                    "1529836a29dda1501a49ba2455367256d2fe6f74ebb74ef9a49a94a4c6cd1dd0" +
+                    "9810f0e9bffa69dd8c94d226d0b2977b11a35382888961004a44c60fd602e9ff" +
+                    "4271287e9240ba96146515b9db9da60375aeeafeac1eeb764faebacd197df278" +
+                    "17c35fe4c5c802e43349d7bc95c8b40c001449d3251c1d92ff6d5c3b08c4b27c",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "a4ab74475a498ed725f685421f67c09a4783fe76f67bd251e1e73db8eb1452df" +
+                            "ad4df3c6453f7edecc7bb055dde561e2efd54d73a3d4f1f2f02eac90ba1e9b84" +
+                            "ded66d43aee6393524db",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "9a38169c711afe09f0e470779b137ab236a2559faf61d55e417eaf06d48fe623" +
+                            "64643e95ca68382a281c04c67bd88f311939955a14f5f8c64344e4c103e1d94f" +
+                            "3084f122671fc7c0cd7e",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "0f2a23afb6d94feccf5e151cc5cac46e686325dbf34def1394d157448c420376" +
+                            "cee6d3c8aa4f3862edcc16fb4c3a9ef8a7ca1054d13fd9b1cfc4a5a47198ffb3" +
+                            "b97372295c894dded976",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "923c933cbdc5955d34bf6134f1ad5e3c36f2acc9d9fb41dd8b4e0eba2101a05a" +
+                            "d5fe7a895e683176381b9baba7ced24498e87766a14fec8c256c7df2802371a5" +
+                            "d29d2faf03d9b4bbcaa9",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "90eb1a4fc6e9f6b5cb142d60d905ad221135aab544c8a20484c249d5417bd2eb" +
+                            "97c655ba8f15feda2adaab1a6bb5c06d0d7b17a6a6d298c9df95681d5ed131d7" +
+                            "c703918397e302620c6a",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "14b64c194571a8e6fc16cb4d22754c79391081174b6001cd8050142f928defbb",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "7152f82449d4cd8137afb9b514fab6791e0938ba7734cb62228b8385003f32a6",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "e3759bd609d81501bdac23863795a37437e804dd3274f0ed3964f82e8a6f97e5",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "3e9e46c25af47fe02c149de2d3d8300881bb59fdb5b07c6b46d001918945cffa",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "0dc9bd0216b18caa75d0188cab85d7fdef4b405c340da75b50e052b889fb2f78",
+                    ),
+                ),
+            ),
+            HpkePqVector(
+                kem = Hpke.Kem.MLKEM1024_P384,
+                kdf = Hpke.Kdf.HKDF_SHA384,
+                aead = Hpke.Aead.AES_256_GCM,
+                infoHex = "3466363436353230366636653230363132303437373236353633363936313665" +
+                    "3230353537323665",
+                ikmEHex = "a2aa5d3e682abee327d4d258e47fdf9b987efc96a15e1f11fd81413206d1ae2a" +
+                    "b11e0d808cb65a680cf32b00eed796e02d149f3454974db3e1751cf2fc1916e0" +
+                    "d887c307c18b28645809760d00d6191a",
+                ikmRHex = "14c036a5e3c4af452baccdcd62cf818f250607076c299636e5c8074b3c757df1",
+                skRmHex = "0ba4a1ff718a4444da0016d59f449e28d8abdeac107ee105e5ac0dc1e8219b37",
+                pkRmHex = "dd5407b4430e39f3416a6bc8e7d43b2a72c4f7480b1fd19e0c552af07b8f5bba" +
+                    "626c2c462724600d3b1598a254fa287661f14d1cf53a08019cb352b7078b2e6d" +
+                    "a44afb80467bc58c0b016933941a386609b66c8fecb0802ed41559dbb80ea577" +
+                    "3d3c446f60c103d121049722f7106658422b1a074ccac083e3503a70a259ad15" +
+                    "358b49b08f7b6502125cae1c18f3e596e4318297b3634e5a57a1275b60499b6f" +
+                    "e88372520f3ce62e90d36300c7395769227075a796943e9c257e213791a9fba9" +
+                    "55647167951bab3b8fd1a6baa6fca016ec51d59caed7bc45b77c1417ea1ae266" +
+                    "2e96d2338cf5a81178071ea127891788511731dd450b60c125f3cb10a847b9e9" +
+                    "558455608271a3b26ab3a996a697421441e28a4cc410c04b35379c04098f2415" +
+                    "097481fb1c8a5e25392c56130e948c17d59bc0f01ac9353359ec6d5d19cbbe75" +
+                    "589033717f797fb967c01877272d4509fb3c8259a13dc7d78eebb51c152bab16" +
+                    "2b5259f0a36e3c2f8468ac14c279b65929070546f3b572d2b84324943c227011" +
+                    "c878533629c96a235b4d88b498c0bba890535f00c98c01b620e3c5b293014d23" +
+                    "00f07b9d6c6a8e4c09c05532b5b4017099d1262f299f7b92663fbb074d115a29" +
+                    "f7a7d56b366a6cc48c931b19d12cb6ea28487a0c27d0cd5df93349b8c5f8d595" +
+                    "6196543e429d41f82d734c8dc5281d214c7b7ab32d9dba2c79b0007f229ad1b0" +
+                    "2e91c3ad1abc8d3ac16a9b951610d5293204522f4b049c77905115418ce571c1" +
+                    "ac43906799a2898f901105efe93c5acca2fbc72fc61a96a13b6869931009da8b" +
+                    "2f472914828908d85fd4806fb12a28b254b8f600c9b9a41ada526e41c8719ffa" +
+                    "71a7638c1ed4b4d86972e6da7442d98a5a9b8c5dd69fa5dc5c76a11f2a439436" +
+                    "c779b255604f2947205434cd8a155852864d009fc062623f5c89f3c381be153e" +
+                    "0479b032240e1c762e67d81728993f14431c8b0b3d3bb9103cb0262ef34d02d9" +
+                    "a3cef9bd25845a392320156784adb54df0691428d7b290827903abaa8fc009c5" +
+                    "7881a42c09dfa7bd9ec8c3e234b9f107ac00b42964266fd615b25bd906a1c762" +
+                    "a9f7678b56af6b9598e9db1fd1573f6dd803885b3907a0c4d618a6337b29f37c" +
+                    "8515509755e74e7364a6b32447cba852aa396ad9863a8d444aa39b519855bd8e" +
+                    "f40488776c02997033a4a6ac9520d898972b7aa49edc50d4b9143197974b1b3e" +
+                    "36668bccc0be1754a263ba63ada761aa852717050eec3b36a46835828569c527" +
+                    "bae503725679654e652520c5369fb0b862174110d5b36cd5c91d78c6d49752ef" +
+                    "c5c10b8a6dd51ba20dbc384cc20a30308912644090c8726536a35c906a752476" +
+                    "63798b94a3647de50caea55324825719f99d2b649e7d77be5e242a3227c89f41" +
+                    "98da3c59e81c5f1b999e5601968ef5b1ca6574b2501c33383fbe92ad8ff5a2ba" +
+                    "98b60428153b463ff32131c49b6272681dbe2299e8d292a163b903d7911dfc61" +
+                    "afa104e01433c2ab322b884743d338be8272e11561e51a4d53d371daf430d41c" +
+                    "997192ac2c27197385cd5a373bfc3ca8d6db042e16076afa6ac31abceea7bff7" +
+                    "3915c42acb25077405438ba8989ccd44b05d4043f8a3217b05bf899c8651bcc7" +
+                    "40ba9a678c6b9bc9313bc21a8a38205e079d1051a6bf1071f6a0a38f3a0db88a" +
+                    "7c9415cd5af72c3dd247bd20b14ea0a1d988816f101e302c9bf3918839e68a4f" +
+                    "19c621e446940305c0567dbb2c8f6fb0257d09727e164a021b562a1bc2cde1b0" +
+                    "64dac144ba4f84f14ebee5999db03b2d892d629c134fca1457b851b1891f0554" +
+                    "37caeba081814b029672b21c9a4283384bc93a8579ca5eb99067d84c0e10c3b5" +
+                    "bc1d7311829f95458a0b40e52681b1c262112b6c7f374ea86978359c096dfcaf" +
+                    "af097d520b10c021c2d0e0ab9dd8570d9b3f884448379367caabbbe924478f72" +
+                    "b0470c7c1ed956fe4b791db29ac9b6b905a8aac1b904fff757fddb27348932a6" +
+                    "560f4b776c2a74510b11379800b538b27114715273f43f9f7acb63b3addf3019" +
+                    "66591b963979028449cef3802269c8f94282364546ce91957b509c5f5696cfa4" +
+                    "9bb1eacae0219c963b802b35986a0b857c0144a9d1cab7d29d851970bda11b2c" +
+                    "86811023b216d4930ca94f97d80b7b65a0cb7a9ada2b37bde4355c5b65c5ec15" +
+                    "b1eb61530b04566a4299e91afbef01cc121f19ab90b705b5bf2e57373c16c686" +
+                    "04a70238ee7c3f7e7d364957e5f4e32fa6747c811fb22b7efde99966fd0da372" +
+                    "510c6e1fce1b25ce287707e5b3b0a2384e884cc6a3ac281fa6f5705d09ef0a82" +
+                    "3bfed3af81d8e5a38bb914d2269de2a4e47a1d7cdc6d85cbc009ea787f2eefed" +
+                    "4b",
+                encHex = "6252bc46bca0a8fea250a751deef5ebcd053d86881cab58afe159028253fa5be" +
+                    "d2fb7eca382831b2e9a0714629521466d6092509a0892e93d927d177c9b0ccfe" +
+                    "66e2fa44f2f1426ce7148cab999bcdae2e3db25ced0d669c078772346cdf7b12" +
+                    "fca942f5ea27ab175e74b861d1aac098384e848537627d21b64f460e008b8c5a" +
+                    "15c6811c892d49a053f8a1c06a8b1960b4650a8c7f91ecaf50079e34e2aeb1bb" +
+                    "45935cd4b578cb7a2578b2cd4215f803a02353d9bc83f096e2982b41e9e089d1" +
+                    "58b4dade7959915d2ae7b66c9ec4aa9f5f85faa62a8d4cedaace187eef5da43f" +
+                    "f523b4de139cfb7ee3edda8d2e45af7b591646920836ac97d83067a5f3ccc9bd" +
+                    "f6b10958b2542a600dd5e27d51d3a3179aa82260b272f3580bd76c19d6c7f996" +
+                    "0a04d72197904800a35234b84c50c142e68ddccc5a89dcb94491a1f03981bc1c" +
+                    "4d033f48fb18b4da14bdfb64b4e2e9985f21d634e3a4a88ca9f2782a2f11c796" +
+                    "32e23139b2c26d16de006c211f09493a7985e5eac0952a65449ecb84c2d0b7c7" +
+                    "ee27c5c127851b9b8061f8f9c64d6e98650bbe7321a2fad69fa6ced8adffdad8" +
+                    "f40dbd7122406211c09957d37eeab1721200abf815e66b0afa5d2986f66afa9b" +
+                    "80bfcd0bbdd6b848a19486f5a2daff4793b54d0a1ab99593977dbf5619599199" +
+                    "78f21d6b924fc19cdd54572b72f1f6fb4f765501b955dc833bf627684f367e0b" +
+                    "b02232ef428bd3aaa20aaebf36861432f6b1eaa022f5db22566d0065cc78f205" +
+                    "9f777ded29c2f7218c8995a988fc81af98b9d97551efef39b72b84cab58154c9" +
+                    "03ff724959d286d8159d1a0aee218ede82edb148286f7ff8fc8ec4a8fb48fe91" +
+                    "2851a3a677f6c27529edb36d811402a9e5658aade9e91df8c13765e41aca064b" +
+                    "14397613426dfb51f7971c29d8d688233a4e3a1e6e1c96e1c1ec39b4d2c0fbc5" +
+                    "258e1f363ce11c803183e4af52777ec4750dde7d499f4d8e1a69f78af8e3c2e7" +
+                    "5bb8de85376ab29d7f3da499a8480196258436386151b57252d104a061112721" +
+                    "b73ce1f2f5bb0334fd417d88bab0fdac368f46b2db22330adb6cd8e747dc14ef" +
+                    "f8cef6353c94f9525f6d0c1d32ec20b7ec624ad8df4b5e82b72375bee995fad8" +
+                    "c9694e765e2c5ff3d97e9cddf8848618bf08c7680f1a9f2cef663f81ad95f8ac" +
+                    "a6855f8aec99157ce9758883877326d08d75872a549f524cc5abadc3b007f9ad" +
+                    "37072376e97f7c7997b1548dcef72ebb751251a1f499c6d79bd4a6ce83331d44" +
+                    "9aff880e19473fea5ec9387ff984f24d56a7dd58426af98203506a7d7e8c0039" +
+                    "9144e91d9283e4cda4c3d7b7baa58bd7b58028101e57ef0410eb6bdf15aaad25" +
+                    "949f0e4e3610655197a6b6a6d9941109828299c567cb68bd18e2359552959bea" +
+                    "6ac6d51c181caf35b0f5fa0a6b075c3309bb06ff3bf36c6110241be25bb26b5c" +
+                    "36b74059fb0c72a0af36e65e8ea7cd4836f79931fa72b0606941a7f1474cab15" +
+                    "0b90ef2f7bd69b994e128177f387e6963dd7d5c15899230163b743cda48777fe" +
+                    "95d64d5a61278e2375e77a556e0ee52ef944e36a141123d6d03ba39db4481db4" +
+                    "0a545aa14b91bb14663d717f93d2db3fbf838c4dfda0ad866b652a1f2dba6bec" +
+                    "b1f856e1583305447824396bd2c8eb7ad02c86c9779aec904e85732141bef525" +
+                    "fe5c271ccb655e7dbc5f82327971905e9e8c52bbddac260500a8e7667e206994" +
+                    "7da3d62405fa357a0a96a937fd6b6ab9b0fc52fec997e63819fb1666db67429f" +
+                    "c2971f8aa53ff690877fe1b4c334a82c416822cfd06e2eb783e7bc20a76c6596" +
+                    "990b12f06e3a597764e2ca85b14f511e63eee821338d80451d714dc8fb2f3cc9" +
+                    "a5077553f121ae5edc0ac2e37f70e6454bc5bc3582b4da9872fddde5a0abc3f9" +
+                    "81fb5af044a78ec102827bccdca891218faeb27b0ccde8fb71f0b32dda854f73" +
+                    "7dfb7811c386c7d833d3bc81952b83b964dd61464477fb50f86ff5eb5b6f3929" +
+                    "928ab7cdec9974cfb97086fdf21ae4fd0d137ccb825d45584b5cadaac383abd8" +
+                    "d8d7b97229aea44e0985db277fc8c38bc93b520dfb197e5a9106c48e903c2120" +
+                    "e12a710261db45a17d41342a4053ce23b80fdfd90278dc64e0f6dc794d3740b3" +
+                    "4a28041f00a5b70e3c1dcc6e60944fd1cf6dbad0907c55b5501cea7acbce32c0" +
+                    "2066dab5a7f3bc2c2c237689b0299e18269df7252eab5e543ab03a777faef62f" +
+                    "04d1b38e73e0254b09c72a40c7a1e073dc3725a32f5d9de0e9de45d907b4cba4" +
+                    "8c3e078b4dcd78668b3ebd5c67b1682aa5beaed5e02473d713ff3181acd63c98" +
+                    "fde2f301e53c92b751c7dae053d7914f5c0c4633c0b16377c47fe22c64ec4bae" +
+                    "84",
+                encryptions = listOf(
+                    VectorEncryption(
+                        seq = 0L,
+                        aadHex = "436f756e742d30",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "1af5c6176d191f913bb9a39ae6af2c5847d5effca2d794242de5464ef287bfd6" +
+                            "d5f6735bab1b42b3d29a6b131a91b180b04dbf6afc395bdc35f2b8558db9c62c" +
+                            "e54c81872b42d222459a",
+                    ),
+                    VectorEncryption(
+                        seq = 1L,
+                        aadHex = "436f756e742d31",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "9e34298676cbe51af56ba3dbf356292f35189305f123b59f1fb4825f4d1746d8" +
+                            "4f4440ed957cd610b6aa0208956c9664a8297751377c909160df88bd33908f96" +
+                            "2593333727f83766f42b",
+                    ),
+                    VectorEncryption(
+                        seq = 2L,
+                        aadHex = "436f756e742d32",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "c2e427b4fc917ad8fa5cc2c2d63802a287be09d75e3c220bdd802a2365d08704" +
+                            "3058b6bbd64a966d51326646cc58ef6e0e5a4057f2082f305d96d9017482d292" +
+                            "b21ac25ab2bb500f2c9f",
+                    ),
+                    VectorEncryption(
+                        seq = 4L,
+                        aadHex = "436f756e742d34",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "306c0c5442f3257c52949676ca71b7eda004815a71dafce837df59826ec8bcb2" +
+                            "69fe7fc394bb508b169143f9770e07a27282fc32a0d4f67c3e5cb4a4fa5aba21" +
+                            "65a6826148cd71e9abfa",
+                    ),
+                    VectorEncryption(
+                        seq = 9L,
+                        aadHex = "436f756e742d39",
+                        ptHex = "3432363536313735373437393230363937333230373437323735373436383263" +
+                            "3230373437323735373436383230363236353631373537343739",
+                        ctHex = "2353b5655181723109376689bb5683afd959c8ba50fd43abeafff0a1d04943c6" +
+                            "a7177ead11f09a74acf0fb77353fbd7b893b61fc4dab0b71a944e704ec84199f" +
+                            "ef1fc07bec4ca18fbd70",
+                    ),
+                ),
+                exports = listOf(
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d30",
+                        length = 32,
+                        exportedHex = "29c8d4342d91ac6b7be5167cd58db0d6f0db21356c4dda73964e0d1bcca575fb",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d31",
+                        length = 32,
+                        exportedHex = "8218e9f4d94056911a6e0b46446ea36b02f16ed7b8f2d7333a153dd7d914c422",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d32",
+                        length = 32,
+                        exportedHex = "9470d784dddfa4c994942dbbc6466d7bf557253f1055018a7c0e7c11d1f91b19",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d33",
+                        length = 32,
+                        exportedHex = "d3e89c0a3ae9836c5de623e4470de1cafab694f2fa17ebb144aa2f93d9ad7491",
+                    ),
+                    VectorExport(
+                        contextHex = "70736575646f72616e646f6d34",
+                        length = 32,
+                        exportedHex = "1909e2bc8d6d98ca41f88f000c0cb0722160a4263cee5e1bd5817f276248db54",
+                    ),
+                ),
+            ),
+        )
+
+        for (v in vectors) {
+            val kemAlg = v.kem.kemAlgorithm!!
+            val supported = if (kemAlg.isMlKem) {
+                kemAlg in Crypto.supportedMlKemAlgorithms
+            } else {
+                kemAlg in Crypto.supportedHybridKemAlgorithms
+            }
+            if (!supported || v.aead.alg !in Crypto.supportedEncryptionAlgorithms) {
+                continue
+            }
+
+            val cipherSuite = Hpke.CipherSuite(v.kem, v.kdf, v.aead)
+            val receiverPriv = try {
+                Hpke.deriveKeyPair(v.kem, v.ikmRHex.fromHex())
+            } catch (e: UnsupportedOperationException) {
+                if (Crypto.provider.startsWith("JCA:")) {
+                    throw e
+                }
+                continue
+            }
+            when (receiverPriv) {
+                is MlKemPrivateKey -> {
+                    assertEquals(v.skRmHex.lowercase(), receiverPriv.encoded.toByteArray().toHex())
+                    assertEquals(v.pkRmHex.lowercase(), receiverPriv.publicKey.encoded.toByteArray().toHex())
+                }
+                is HybridKemPrivateKey -> {
+                    assertEquals(v.skRmHex.lowercase(), receiverPriv.encoded.toByteArray().toHex())
+                    assertEquals(v.pkRmHex.lowercase(), receiverPriv.publicKey.encoded.toByteArray().toHex())
+                }
+                else -> error("Unexpected derived key type: $receiverPriv")
+            }
+
+            val encrypter = try {
+                Hpke.getEncrypterDerand(
+                    cipherSuite = cipherSuite,
+                    receiverPublicKey = receiverPriv.publicKey,
+                    info = v.infoHex.fromHex(),
+                    ikmE = v.ikmEHex.fromHex()
+                )
+            } catch (e: UnsupportedOperationException) {
+                if (Crypto.provider.startsWith("JCA:")) {
+                    throw e
+                }
+                null
+            }
+            if (encrypter != null) {
+                assertEquals(v.encHex.lowercase(), encrypter.encapsulatedKey.toByteArray().toHex())
+            }
+
+            val decrypter = Hpke.getDecrypter(
+                cipherSuite = cipherSuite,
+                receiverPrivateKey = AsymmetricKey.AnonymousExplicit(receiverPriv),
+                encapsulatedKey = v.encHex.fromHex(),
+                info = v.infoHex.fromHex()
+            )
+
+            for (item in v.encryptions) {
+                if (encrypter != null) {
+                    encrypter.seq = item.seq
+                    val ct = encrypter.encrypt(item.ptHex.fromHex(), item.aadHex.fromHex())
+                    assertEquals(item.ctHex.lowercase(), ct.toHex())
+                }
+                decrypter.seq = item.seq
+                val pt = decrypter.decrypt(item.ctHex.fromHex(), item.aadHex.fromHex())
+                assertEquals(item.ptHex.lowercase(), pt.toHex())
+            }
+
+            for (exp in v.exports) {
+                if (encrypter != null) {
+                    assertEquals(
+                        exp.exportedHex.lowercase(),
+                        encrypter.exportSecret(exp.contextHex.fromHex(), exp.length).toHex()
+                    )
+                }
+                assertEquals(
+                    exp.exportedHex.lowercase(),
+                    decrypter.exportSecret(exp.contextHex.fromHex(), exp.length).toHex()
+                )
+            }
+
+            encrypter?.close()
+            decrypter.close()
+            receiverPriv.close()
+        }
+    }
+
+    @Test
+    fun testRoundTripsAllModesAndKemTypes() = runTest {
+        val kems = listOf(
+            Hpke.Kem.ML_KEM_512,
+            Hpke.Kem.ML_KEM_768,
+            Hpke.Kem.ML_KEM_1024,
+            Hpke.Kem.MLKEM768_P256,
+            Hpke.Kem.MLKEM1024_P384,
+            Hpke.Kem.MLKEM768_X25519,
+        )
+        val info = "multipaz-hpke-pq".encodeToByteArray()
+        val psk = ByteArray(32) { (it + 1).toByte() }
+        val pskId = "psk-id-1".encodeToByteArray()
+        val msg1 = "First HPKE PQ message".encodeToByteArray()
+        val msg2 = "Second HPKE PQ message".encodeToByteArray()
+        val aad = "aad".encodeToByteArray()
+
+        for (kem in kems) {
+            val alg = kem.kemAlgorithm!!
+            val supported = if (alg.isMlKem) {
+                alg in Crypto.supportedMlKemAlgorithms
+            } else {
+                alg in Crypto.supportedHybridKemAlgorithms
+            }
+            if (!supported) {
+                continue
+            }
+            val ks = SoftwareSecureArea.create(EphemeralStorage())
+            val explicitKey = AsymmetricKey.ephemeral(alg)
+            val receiverKeys = buildList {
+                add(explicitKey)
+                if (alg in ks.supportedAlgorithms) {
+                    val alias = "hpke_${kem.name}"
+                    ks.createKey(alias, CreateKeySettings(algorithm = alg))
+                    add(AsymmetricKey.AnonymousSecureAreaBased(alias, ks, ks.getKeyInfo(alias)))
+                }
+            }
+
+            val aeads = buildList {
+                add(Hpke.Aead.AES_128_GCM)
+                add(Hpke.Aead.AES_256_GCM)
+                if (Algorithm.CHACHA20_POLY1305 in Crypto.supportedEncryptionAlgorithms) {
+                    add(Hpke.Aead.CHACHA20_POLY1305)
+                }
+            }
+            for (receiverKey in receiverKeys) {
+                for (aead in aeads) {
+                    val suite = Hpke.CipherSuite(kem, Hpke.Kdf.HKDF_SHA256, aead)
+                    // Base mode multi-message + exportSecret
+                    val encBase = Hpke.getEncrypter(suite, receiverKey.publicKey, info)
+                    val decBase = Hpke.getDecrypter(
+                        suite, receiverKey, encBase.encapsulatedKey.toByteArray(), info
+                    )
+                    assertContentEquals(msg1, decBase.decrypt(encBase.encrypt(msg1, aad), aad))
+                    assertContentEquals(msg2, decBase.decrypt(encBase.encrypt(msg2, aad), aad))
+                    assertContentEquals(
+                        encBase.exportSecret(aad, 32),
+                        decBase.exportSecret(aad, 32)
+                    )
+                    encBase.close()
+                    decBase.close()
+
+                    // PSK mode
+                    val encPsk = Hpke.getEncrypter(suite, receiverKey.publicKey, info, psk = psk, pskId = pskId)
+                    val decPsk = Hpke.getDecrypter(
+                        suite, receiverKey, encPsk.encapsulatedKey.toByteArray(), info, psk = psk, pskId = pskId
+                    )
+                    assertContentEquals(msg1, decPsk.decrypt(encPsk.encrypt(msg1, aad), aad))
+                    encPsk.close()
+                    decPsk.close()
+                }
+
+                // EXPORT_ONLY mode
+                val exportSuite = Hpke.CipherSuite(kem, Hpke.Kdf.HKDF_SHA256, Hpke.Aead.EXPORT_ONLY)
+                val encExp = Hpke.getEncrypter(exportSuite, receiverKey.publicKey, info)
+                val decExp = Hpke.getDecrypter(
+                    exportSuite, receiverKey, encExp.encapsulatedKey.toByteArray(), info
+                )
+                assertContentEquals(encExp.exportSecret(aad, 48), decExp.exportSecret(aad, 48))
+                assertFailsWith<IllegalArgumentException> { encExp.encrypt(msg1, aad) }
+                assertFailsWith<IllegalArgumentException> { decExp.decrypt(ByteArray(32), aad) }
+                encExp.close()
+                decExp.close()
+            }
+            explicitKey.close()
+        }
+    }
+
+    @Test
+    fun testNegativeCases() = runTest {
+        val info = "info".encodeToByteArray()
+        val ecKey = AsymmetricKey.ephemeral(Algorithm.ESP256)
+        try {
+            if (Algorithm.ML_KEM_768 in Crypto.supportedMlKemAlgorithms) {
+                val mlKey = AsymmetricKey.ephemeral(Algorithm.ML_KEM_768)
+                val suite = Hpke.CipherSuite.ML_KEM_768_HKDF_SHA256_AES_128_GCM
+                try {
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(suite, mlKey.publicKey, info, authKey = ecKey)
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(
+                            suite, mlKey.publicKey, info, psk = ByteArray(32), pskId = ByteArray(4), authKey = ecKey
+                        )
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(suite, mlKey.publicKey, info, psk = ByteArray(32), pskId = null)
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(suite, ecKey.publicKey, info)
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getDecrypter(
+                            suite, mlKey, ByteArray(Hpke.Kem.ML_KEM_768.nEnc), info,
+                            authKey = ecKey.ecPublicKey
+                        )
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getDecrypter(suite, mlKey, ByteArray(10), info)
+                    }
+                    val encrypter = Hpke.getEncrypter(suite, mlKey.publicKey, info)
+                    val ct = encrypter.encrypt("hello".encodeToByteArray(), byteArrayOf())
+                    val badCt = ct.copyOf()
+                    badCt[0] = (badCt[0].toInt() xor 0xFF).toByte()
+                    val decrypter = Hpke.getDecrypter(
+                        suite, mlKey, encrypter.encapsulatedKey.toByteArray(), info
+                    )
+                    assertFailsWith<IllegalStateException> {
+                        decrypter.decrypt(badCt, byteArrayOf())
+                    }
+                    encrypter.close()
+                    decrypter.close()
+                } finally {
+                    mlKey.close()
+                }
+            }
+            if (Algorithm.MLKEM768_P256 in Crypto.supportedHybridKemAlgorithms) {
+                val hybKey = AsymmetricKey.ephemeral(Algorithm.MLKEM768_P256)
+                val hybSuite = Hpke.CipherSuite.MLKEM768_P256_HKDF_SHA256_AES_128_GCM
+                try {
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(hybSuite, hybKey.publicKey, info, authKey = ecKey)
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getEncrypter(
+                            Hpke.CipherSuite.MLKEM768_X25519_HKDF_SHA256_AES_128_GCM,
+                            hybKey.publicKey,
+                            info
+                        )
+                    }
+                    assertFailsWith<IllegalArgumentException> {
+                        Hpke.getDecrypter(hybSuite, hybKey, ByteArray(32), info)
+                    }
+                } finally {
+                    hybKey.close()
+                }
+            }
+            assertFailsWith<UnsupportedOperationException> {
+                Hpke.deriveKeyPair(Hpke.Kem.DHKEM_P256_HKDF_SHA256, ByteArray(32))
+            }
+            assertFailsWith<IllegalArgumentException> {
+                Hpke.deriveKeyPair(Hpke.Kem.ML_KEM_768, ByteArray(32))
+            }
+        } finally {
+            ecKey.close()
+        }
+    }
+}

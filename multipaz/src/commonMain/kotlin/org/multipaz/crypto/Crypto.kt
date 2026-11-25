@@ -26,7 +26,8 @@ expect object Crypto {
      * The encryption algorithms supported by the platform.
      *
      * This is a subset of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
-     * [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
+     * [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC], and
+     * [Algorithm.CHACHA20_POLY1305].
      */
     val supportedEncryptionAlgorithms: Set<Algorithm>
 
@@ -55,6 +56,16 @@ expect object Crypto {
     val supportedHybridSigningAlgorithms: Set<Algorithm>
 
     /**
+     * The PQ/T hybrid KEM algorithms supported by the platform.
+     *
+     * On JVM and Android, this requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`)
+     * on the classpath in addition to platform support for the traditional curve component.
+     */
+    val supportedHybridKemAlgorithms: Set<Algorithm>
+
+    internal val supportsSeedBackedHybridKem: Boolean
+
+    /**
      * A human-readable description of the underlying library used.
      */
     val provider: String
@@ -72,7 +83,8 @@ expect object Crypto {
     /**
      * Message digest function.
      *
-     * @param algorithm must one of [Algorithm.SHA256], [Algorithm.SHA384], [Algorithm.SHA512].
+     * @param algorithm must be one of [Algorithm.SHA256], [Algorithm.SHA384], [Algorithm.SHA512],
+     *   [Algorithm.SHA3_256], [Algorithm.SHA3_384], or [Algorithm.SHA3_512].
      * @param message the message to get a digest of.
      * @return the digest.
      * @throws IllegalArgumentException if the given algorithm is not supported.
@@ -102,13 +114,14 @@ expect object Crypto {
      * Message encryption.
      *
      * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
-     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC], or
+     *   [Algorithm.CHACHA20_POLY1305].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messagePlaintext the message to encrypt.
      * @param aad additional authenticated data or `null` (not used for CBC mode).
-     * @return the cipher text with the tag appended for GCM, or padded for CBC.
-     * @throws IllegalArgumentException if the given algorithm is not supported.
+     * @return the cipher text with the tag appended for AEAD modes, or padded for CBC.
+     * @throws IllegalArgumentException if the given algorithm is not supported or key/nonce sizes are invalid.
      */
     suspend fun encrypt(
         algorithm: Algorithm,
@@ -122,13 +135,14 @@ expect object Crypto {
      * Message decryption.
      *
      * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
-     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC], or
+     *   [Algorithm.CHACHA20_POLY1305].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
-     * @param messageCiphertext the message to decrypt with the tag at the end (for GCM) or padded (for CBC).
+     * @param messageCiphertext the message to decrypt with the tag at the end (for AEAD modes) or padded (for CBC).
      * @param aad additional authenticated data or `null` (not used for CBC mode).
      * @return the plaintext.
-     * @throws IllegalArgumentException if the given algorithm is not supported.
+     * @throws IllegalArgumentException if the given algorithm is not supported or key/nonce sizes are invalid.
      * @throws IllegalStateException if decryption fails
      */
     suspend fun decrypt(
@@ -274,6 +288,17 @@ expect object Crypto {
     ): HybridPrivateKey
 
     /**
+     * Creates a PQ/T hybrid KEM private key.
+     *
+     * @param algorithm the hybrid KEM algorithm to use ([Algorithm.MLKEM768_P256],
+     *   [Algorithm.MLKEM1024_P384], or [Algorithm.MLKEM768_X25519]).
+     * @return the newly created private key.
+     */
+    suspend fun createHybridKemPrivateKey(
+        algorithm: Algorithm = Algorithm.MLKEM768_P256
+    ): HybridKemPrivateKey
+
+    /**
      * Signs data with a key.
      *
      * The signature is DER encoded except for curve Ed25519 and Ed448 where it's just
@@ -371,6 +396,45 @@ expect object Crypto {
     ): SecureByteString
 
     /**
+     * Encapsulates a shared secret using a PQ/T hybrid KEM recipient public key.
+     *
+     * @param recipientPublicKey the public key of the recipient.
+     * @return the [KemResult] containing the generated shared secret and ciphertext.
+     * @throws IllegalArgumentException if [recipientPublicKey] is invalid or non-contributory.
+     */
+    suspend fun kemEncapsulate(
+        recipientPublicKey: HybridKemPublicKey
+    ): KemResult
+
+    /**
+     * Decapsulates a shared secret using a PQ/T hybrid KEM private key and ciphertext.
+     *
+     * @param key the recipient private key.
+     * @param ciphertext the ciphertext produced by encapsulation.
+     * @return the decapsulated shared secret as a [SecureByteString].
+     * @throws IllegalArgumentException if [ciphertext] is malformed, invalid, or non-contributory.
+     */
+    suspend fun kemDecapsulate(
+        key: HybridKemPrivateKey,
+        ciphertext: ByteArray
+    ): SecureByteString
+
+    internal suspend fun createMlKemPrivateKeyFromSeed(
+        algorithm: Algorithm,
+        seed: ByteArray
+    ): MlKemPrivateKey
+
+    internal suspend fun createEcPrivateKeyFromScalar(
+        curve: EcCurve,
+        scalar: ByteArray
+    ): EcPrivateKey
+
+    internal suspend fun kemEncapsulateDerand(
+        recipientPublicKey: MlKemPublicKey,
+        randomness: ByteArray
+    ): KemResult
+
+    /**
      * Performs Key Agreement.
      *
      * @param key the key to use for key agreement.
@@ -416,6 +480,7 @@ suspend fun Crypto.sign(
     is MlDsaPrivateKey -> sign(key, signatureAlgorithm, message)
     is HybridPrivateKey -> sign(key, signatureAlgorithm, message)
     is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
+    is HybridKemPrivateKey -> throw IllegalArgumentException("Cannot sign with hybrid KEM key")
 }
 
 /**
@@ -445,5 +510,6 @@ suspend fun Crypto.checkSignature(
         is MlDsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as MlDsaSignature)
         is HybridPublicKey -> checkSignature(publicKey, message, algorithm, signature as HybridSignature)
         is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
+        is HybridKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with hybrid KEM key")
     }
 }

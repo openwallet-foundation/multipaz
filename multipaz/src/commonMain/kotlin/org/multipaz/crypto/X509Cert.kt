@@ -531,6 +531,9 @@ data class X509Cert(
                         publicKey.encoded.toByteArray()
                     )
                 }
+                is HybridKemPublicKey -> {
+                    throw IllegalArgumentException("X.509 encoding is not supported for hybrid KEM keys")
+                }
             }
             val subjectPublicKeyInfoSeq = ASN1Sequence(listOf(
                 algorithmSeq,

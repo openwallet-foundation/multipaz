@@ -199,8 +199,10 @@ sealed class PrivateKey : AutoCloseable {
                         MlDsaPrivateKey.fromCoseKey(coseKey)
                     } else if (alg != null && alg.isHybridSigning) {
                         HybridPrivateKey.fromCoseKey(coseKey)
-                    } else if (alg != null && alg.isKeyEncapsulation) {
+                    } else if (alg != null && alg.isMlKem) {
                         MlKemPrivateKey.fromCoseKey(coseKey)
+                    } else if (alg != null && alg.isHybridKem) {
+                        HybridKemPrivateKey.fromCoseKey(coseKey)
                     } else {
                         val pubSize = coseKey.labels[Cose.COSE_KEY_PARAM_PUB_KEY.toCoseLabel]?.asBstr?.size ?: 0
                         if (pubSize in listOf(1312, 1952, 2592)) {
@@ -209,6 +211,8 @@ sealed class PrivateKey : AutoCloseable {
                             MlKemPrivateKey.fromCoseKey(coseKey)
                         } else if (HybridSigning.specForPublicKeySizeOrNull(pubSize) != null) {
                             HybridPrivateKey.fromCoseKey(coseKey)
+                        } else if (HybridKem.specForPublicKeySizeOrNull(pubSize) != null) {
+                            HybridKemPrivateKey.fromCoseKey(coseKey)
                         } else {
                             throw IllegalArgumentException("Cannot determine AKP key type for size $pubSize")
                         }
@@ -237,7 +241,8 @@ sealed class PrivateKey : AutoCloseable {
                     when {
                         alg.isHybridSigning -> HybridPrivateKey.fromJwk(jwk)
                         alg.isMlDsa -> MlDsaPrivateKey.fromJwk(jwk)
-                        alg.isKeyEncapsulation -> MlKemPrivateKey.fromJwk(jwk)
+                        alg.isMlKem -> MlKemPrivateKey.fromJwk(jwk)
+                        alg.isHybridKem -> HybridKemPrivateKey.fromJwk(jwk)
                         else -> throw IllegalArgumentException("Unsupported AKP algorithm $algName")
                     }
                 }

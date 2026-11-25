@@ -178,6 +178,8 @@ object JsonWebSignature {
                     )
                 }
                 is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
+                is HybridKemPublicKey ->
+                    throw IllegalArgumentException("Cannot verify signature with hybrid KEM key")
             }
         } catch (e: SerializationException) {
             throw IllegalArgumentException("Malformed JWS", e)

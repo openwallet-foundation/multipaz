@@ -26,12 +26,13 @@ actual object Crypto {
     /**
      * CryptoKit supports the following curves from [EcCurve].
      *
-     * TODO: CryptoKit actually supports ED25519 and X25519, add support for this too.
+     * TODO: CryptoKit also supports ED25519 signing, add support for that too.
      */
     actual val supportedCurves: Set<EcCurve> = setOf(
         EcCurve.P256,
         EcCurve.P384,
         EcCurve.P521,
+        EcCurve.X25519,
     )
 
     actual val supportedEncryptionAlgorithms = setOf(
@@ -40,7 +41,8 @@ actual object Crypto {
         Algorithm.A256GCM,
         Algorithm.A128CBC,
         Algorithm.A192CBC,
-        Algorithm.A256CBC
+        Algorithm.A256CBC,
+        Algorithm.CHACHA20_POLY1305
     )
 
     actual val supportedMlDsaAlgorithms = setOf(
@@ -56,6 +58,11 @@ actual object Crypto {
     actual val supportedHybridSigningAlgorithms: Set<Algorithm> =
         HybridSigning.supportedAlgorithmsFor(supportedMlDsaAlgorithms, supportedCurves)
 
+    actual val supportedHybridKemAlgorithms: Set<Algorithm> =
+        HybridKem.supportedAlgorithmsFor(supportedMlKemAlgorithms, supportedCurves)
+
+    internal actual val supportsSeedBackedHybridKem: Boolean = true
+
     actual val provider: String = "CryptoKit"
 
     actual val secureRandom: Random = IosSecureRandom()
@@ -69,6 +76,12 @@ actual object Crypto {
             Algorithm.SHA256 -> SwiftBridge.sha256(message.toNSData()).toByteArray()
             Algorithm.SHA384 -> SwiftBridge.sha384(message.toNSData()).toByteArray()
             Algorithm.SHA512 -> SwiftBridge.sha512(message.toNSData()).toByteArray()
+            Algorithm.SHA3_256 ->
+                SwiftBridge.sha3_256(message.toNSData())?.toByteArray() ?: Sha3.sha3_256(message)
+            Algorithm.SHA3_384 ->
+                SwiftBridge.sha3_384(message.toNSData())?.toByteArray() ?: Sha3.sha3_384(message)
+            Algorithm.SHA3_512 ->
+                SwiftBridge.sha3_512(message.toNSData())?.toByteArray() ?: Sha3.sha3_512(message)
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
@@ -101,6 +114,10 @@ actual object Crypto {
             Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
             Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
             Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+            }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         return when (algorithm) {
@@ -117,6 +134,14 @@ actual object Crypto {
                     rawKey.toNSData(),
                     messagePlaintext.toNSData(),
                     nonce.toNSData()
+                ).toByteArray()
+            }
+            Algorithm.CHACHA20_POLY1305 -> {
+                SwiftBridge.chaChaPolyEncrypt(
+                    rawKey.toNSData(),
+                    messagePlaintext.toNSData(),
+                    nonce.toNSData(),
+                    aad?.toNSData()
                 ).toByteArray()
             }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
@@ -150,6 +175,23 @@ actual object Crypto {
                     rawKey.toNSData(),
                     messageCiphertext.toNSData(),
                     nonce.toNSData()
+                )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
+            }
+            Algorithm.CHACHA20_POLY1305 -> {
+                require(rawKey.size == 32) { "Key size must be 32 bytes" }
+                require(nonce.size == 12) { "Nonce size must be 12 bytes" }
+                if (messageCiphertext.size < 16) {
+                    throw IllegalStateException("Decryption failed")
+                }
+                val ctLen = messageCiphertext.size
+                val ct = messageCiphertext.sliceArray(IntRange(0, ctLen - 16 - 1))
+                val tag = messageCiphertext.sliceArray(IntRange(ctLen - 16, ctLen - 1))
+                SwiftBridge.chaChaPolyDecrypt(
+                    rawKey.toNSData(),
+                    ct.toNSData(),
+                    tag.toNSData(),
+                    nonce.toNSData(),
+                    aad?.toNSData()
                 )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
             }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
@@ -266,9 +308,13 @@ actual object Crypto {
         }
         val privKeyBytes = (ret[0] as NSData).toByteArray()
         val pubKeyBytes = (ret[1] as NSData).toByteArray()
-        val x = pubKeyBytes.sliceArray(IntRange(0, pubKeyBytes.size/2 - 1))
-        val y = pubKeyBytes.sliceArray(IntRange(pubKeyBytes.size/2, pubKeyBytes.size - 1))
-        return EcPrivateKeyDoubleCoordinate(curve, privKeyBytes, x, y)
+        return if (curve == EcCurve.X25519) {
+            EcPrivateKeyOkp(curve, privKeyBytes, pubKeyBytes)
+        } else {
+            val x = pubKeyBytes.sliceArray(IntRange(0, pubKeyBytes.size / 2 - 1))
+            val y = pubKeyBytes.sliceArray(IntRange(pubKeyBytes.size / 2, pubKeyBytes.size - 1))
+            EcPrivateKeyDoubleCoordinate(curve, privKeyBytes, x, y)
+        }
     }
 
     actual suspend fun createRsaPrivateKey(keySizeBits: Int): RsaPrivateKey {
@@ -327,6 +373,15 @@ actual object Crypto {
             "Hybrid signing algorithm $algorithm is not supported in the current environment"
         }
         return HybridSigning.createPrivateKey(algorithm)
+    }
+
+    actual suspend fun createHybridKemPrivateKey(
+        algorithm: Algorithm
+    ): HybridKemPrivateKey {
+        require(algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm $algorithm is not supported in the current environment"
+        }
+        return HybridKem.createPrivateKey(algorithm)
     }
 
     actual suspend fun sign(
@@ -458,11 +513,79 @@ actual object Crypto {
         return sharedSecret
     }
 
+    actual suspend fun kemEncapsulate(
+        recipientPublicKey: HybridKemPublicKey
+    ): KemResult {
+        require(recipientPublicKey.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${recipientPublicKey.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.encapsulate(recipientPublicKey)
+    }
+
+    actual suspend fun kemDecapsulate(
+        key: HybridKemPrivateKey,
+        ciphertext: ByteArray
+    ): SecureByteString {
+        require(key.algorithm in supportedHybridKemAlgorithms) {
+            "Hybrid KEM algorithm ${key.algorithm} is not supported in the current environment"
+        }
+        return HybridKem.decapsulate(key, ciphertext)
+    }
+
+    internal actual suspend fun createMlKemPrivateKeyFromSeed(
+        algorithm: Algorithm,
+        seed: ByteArray
+    ): MlKemPrivateKey {
+        require(seed.size == 64) { "ML-KEM seed must be 64 bytes, got ${seed.size}" }
+        val algName = when (algorithm) {
+            Algorithm.ML_KEM_512 -> throw IllegalArgumentException("ML-KEM-512 is not supported on iOS")
+            Algorithm.ML_KEM_768 -> "ML-KEM-768"
+            Algorithm.ML_KEM_1024 -> "ML-KEM-1024"
+            else -> throw IllegalArgumentException("Unsupported ML-KEM algorithm $algorithm")
+        }
+        val pubBytes = SwiftBridge.mlkemPrivateKeyFromSeed(algName, seed.toNSData())?.toByteArray()
+            ?: throw IllegalStateException("Failed to derive ML-KEM key from seed (requires iOS 26+)")
+        val publicKey = MlKemPublicKey(algorithm, ByteString(pubBytes))
+        return MlKemPrivateKey(algorithm, ByteString(seed.copyOf()), publicKey)
+    }
+
+    internal actual suspend fun createEcPrivateKeyFromScalar(
+        curve: EcCurve,
+        scalar: ByteArray
+    ): EcPrivateKey {
+        if (curve !in supportedCurves) {
+            throw UnsupportedOperationException("Curve ${curve.name} is not supported")
+        }
+        val pubKeyBytes = SwiftBridge.ecPrivateKeyFromScalar(
+            curve.coseCurveIdentifier.toLong(),
+            scalar.toNSData()
+        )?.toByteArray()
+            ?: throw IllegalArgumentException("Invalid scalar for ${curve.name}")
+        return when (curve) {
+            EcCurve.X25519 -> EcPrivateKeyOkp(curve, scalar.copyOf(), pubKeyBytes)
+            else -> {
+                val x = pubKeyBytes.sliceArray(IntRange(0, pubKeyBytes.size / 2 - 1))
+                val y = pubKeyBytes.sliceArray(IntRange(pubKeyBytes.size / 2, pubKeyBytes.size - 1))
+                EcPrivateKeyDoubleCoordinate(curve, scalar.copyOf(), x, y)
+            }
+        }
+    }
+
+    internal actual suspend fun kemEncapsulateDerand(
+        recipientPublicKey: MlKemPublicKey,
+        randomness: ByteArray
+    ): KemResult {
+        throw UnsupportedOperationException("Derandomized ML-KEM encapsulation is not supported on iOS")
+    }
+
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
     ): SecureByteString {
         require(otherKey.curve == key.curve) { "Other key for ECDH is not ${key.curve.name}" }
+        if (key.curve !in supportedCurves) {
+            throw UnsupportedOperationException("Curve ${key.curve.name} is not supported")
+        }
         val otherKeyRaw = when (otherKey) {
             is EcPublicKeyDoubleCoordinate -> otherKey.x + otherKey.y
             is EcPublicKeyOkp -> otherKey.x
@@ -471,7 +594,7 @@ actual object Crypto {
             key.curve.coseCurveIdentifier.toLong(),
             key.d.toNSData(),
             otherKeyRaw.toNSData()
-        )?.toByteArray() ?: throw UnsupportedOperationException("Curve is not supported")
+        )?.toByteArray() ?: throw IllegalArgumentException("Key agreement failed for ${key.curve.name}")
         val sharedSecret = SecureByteString(secret)
         secret.secureZero()
         return sharedSecret

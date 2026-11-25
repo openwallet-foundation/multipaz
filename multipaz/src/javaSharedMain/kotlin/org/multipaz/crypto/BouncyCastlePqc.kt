@@ -3,6 +3,7 @@ package org.multipaz.crypto
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import java.lang.reflect.InvocationTargetException
+import java.math.BigInteger
 import java.security.SecureRandom
 
 /**
@@ -136,6 +137,12 @@ internal object BouncyCastlePqc {
     private val mlkemPrivParamsGetEncodedMethod by lazy {
         mlkemPrivParamsClass.getMethod("getEncoded")
     }
+    private val mlkemPrivParamsGetSeedMethod by lazy {
+        mlkemPrivParamsClass.getMethod("getSeed")
+    }
+    private val mlkemPrivParamsGetPublicKeyMethod by lazy {
+        mlkemPrivParamsClass.getMethod("getPublicKey")
+    }
     private val mlkemGeneratorClass by lazy {
         Class.forName("org.bouncycastle.pqc.crypto.mlkem.MLKEMGenerator")
     }
@@ -147,6 +154,58 @@ internal object BouncyCastlePqc {
             "generateEncapsulated",
             Class.forName("org.bouncycastle.crypto.params.AsymmetricKeyParameter")
         )
+    }
+    private val mlkemGeneratorInternalGenerateEncapsulatedMethod by lazy {
+        mlkemGeneratorClass.getMethod(
+            "internalGenerateEncapsulated",
+            Class.forName("org.bouncycastle.crypto.params.AsymmetricKeyParameter"),
+            ByteArray::class.java
+        )
+    }
+    private val customNamedCurvesGetByNameMethod by lazy {
+        Class.forName("org.bouncycastle.crypto.ec.CustomNamedCurves")
+            .getMethod("getByName", String::class.java)
+    }
+    private val x9EcParametersClass by lazy {
+        Class.forName("org.bouncycastle.asn1.x9.X9ECParameters")
+    }
+    private val x9EcParametersGetGMethod by lazy {
+        x9EcParametersClass.getMethod("getG")
+    }
+    private val x9EcParametersGetNMethod by lazy {
+        x9EcParametersClass.getMethod("getN")
+    }
+    private val ecPointClass by lazy {
+        Class.forName("org.bouncycastle.math.ec.ECPoint")
+    }
+    private val ecPointMultiplyMethod by lazy {
+        ecPointClass.getMethod("multiply", BigInteger::class.java)
+    }
+    private val ecPointNormalizeMethod by lazy {
+        ecPointClass.getMethod("normalize")
+    }
+    private val ecPointGetAffineXCoordMethod by lazy {
+        ecPointClass.getMethod("getAffineXCoord")
+    }
+    private val ecPointGetAffineYCoordMethod by lazy {
+        ecPointClass.getMethod("getAffineYCoord")
+    }
+    private val ecFieldElementGetEncodedMethod by lazy {
+        Class.forName("org.bouncycastle.math.ec.ECFieldElement")
+            .getMethod("getEncoded")
+    }
+    private val x25519PrivParamsClass by lazy {
+        Class.forName("org.bouncycastle.crypto.params.X25519PrivateKeyParameters")
+    }
+    private val x25519PrivParamsConstructor by lazy {
+        x25519PrivParamsClass.getConstructor(ByteArray::class.java, Int::class.javaPrimitiveType)
+    }
+    private val x25519PrivParamsGeneratePublicKeyMethod by lazy {
+        x25519PrivParamsClass.getMethod("generatePublicKey")
+    }
+    private val x25519PubParamsGetEncodedMethod by lazy {
+        Class.forName("org.bouncycastle.crypto.params.X25519PublicKeyParameters")
+            .getMethod("getEncoded")
     }
     private val secretWithEncapsulationClass by lazy {
         Class.forName("org.bouncycastle.crypto.SecretWithEncapsulation")
@@ -287,9 +346,26 @@ internal object BouncyCastlePqc {
         val pubParams = keyPairGetPublicMethod.invoke(keyPair)
         val privParams = keyPairGetPrivateMethod.invoke(keyPair)
         val pubEncoded = mlkemPubParamsGetEncodedMethod.invoke(pubParams) as ByteArray
-        val privEncoded = mlkemPrivParamsGetEncodedMethod.invoke(privParams) as ByteArray
+        val privSeed = (mlkemPrivParamsGetSeedMethod.invoke(privParams) as ByteArray?)
+            ?: (mlkemPrivParamsGetEncodedMethod.invoke(privParams) as ByteArray)
         val publicKey = MlKemPublicKey(algorithm, ByteString(pubEncoded))
-        MlKemPrivateKey(algorithm, ByteString(privEncoded), publicKey)
+        try {
+            MlKemPrivateKey(algorithm, ByteString(privSeed), publicKey)
+        } finally {
+            privSeed.secureZero()
+        }
+    }
+
+    fun createMlKemPrivateKeyFromSeed(
+        algorithm: Algorithm,
+        seed: ByteArray
+    ): MlKemPrivateKey = wrapInvocation {
+        require(seed.size == 64) { "ML-KEM seed must be 64 bytes, got ${seed.size}" }
+        val params = algorithmToMlKemParameters(algorithm)
+        val privParams = mlkemPrivParamsConstructor.newInstance(params, seed)
+        val pubEncoded = mlkemPrivParamsGetPublicKeyMethod.invoke(privParams) as ByteArray
+        val publicKey = MlKemPublicKey(algorithm, ByteString(pubEncoded))
+        MlKemPrivateKey(algorithm, ByteString(seed), publicKey)
     }
 
     fun kemEncapsulate(
@@ -309,16 +385,78 @@ internal object BouncyCastlePqc {
         )
     }
 
+    fun kemEncapsulateDerand(
+        recipientPublicKey: MlKemPublicKey,
+        randomness: ByteArray
+    ): KemResult = wrapInvocation {
+        require(randomness.size == 32) {
+            "ML-KEM encapsulation randomness must be 32 bytes, got ${randomness.size}"
+        }
+        val params = algorithmToMlKemParameters(recipientPublicKey.algorithm)
+        val pubParams = mlkemPubParamsConstructor.newInstance(params, recipientPublicKey.encoded.toByteArray())
+        val generator = mlkemGeneratorConstructor.newInstance(SecureRandom())
+        val result = mlkemGeneratorInternalGenerateEncapsulatedMethod.invoke(generator, pubParams, randomness)
+        val secret = secretWithEncapsulationGetSecretMethod.invoke(result) as ByteArray
+        val encapsulation = secretWithEncapsulationGetEncapsulationMethod.invoke(result) as ByteArray
+        val sharedSecret = SecureByteString(secret)
+        secret.secureZero()
+        KemResult(
+            sharedSecret = sharedSecret,
+            ciphertext = encapsulation
+        )
+    }
+
     fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
     ): SecureByteString = wrapInvocation {
         val params = algorithmToMlKemParameters(key.algorithm)
-        val privParams = mlkemPrivParamsConstructor.newInstance(params, key.encoded.toByteArray())
+        val keyBytes = key.encoded.toByteArray()
+        val privParams = try {
+            mlkemPrivParamsConstructor.newInstance(params, keyBytes)
+        } finally {
+            keyBytes.secureZero()
+        }
         val extractor = mlkemExtractorConstructor.newInstance(privParams)
         val secret = mlkemExtractorExtractSecretMethod.invoke(extractor, ciphertext) as ByteArray
         val sharedSecret = SecureByteString(secret)
         secret.secureZero()
         sharedSecret
+    }
+
+    fun createEcPrivateKeyFromScalar(
+        curve: EcCurve,
+        scalar: ByteArray
+    ): EcPrivateKey = wrapInvocation {
+        when (curve) {
+            EcCurve.X25519 -> {
+                require(scalar.size == 32) { "X25519 scalar must be 32 bytes, got ${scalar.size}" }
+                val privParams = x25519PrivParamsConstructor.newInstance(scalar, 0)
+                val pubParams = x25519PrivParamsGeneratePublicKeyMethod.invoke(privParams)
+                val pubBytes = x25519PubParamsGetEncodedMethod.invoke(pubParams) as ByteArray
+                EcPrivateKeyOkp(curve = curve, d = scalar.copyOf(), x = pubBytes)
+            }
+            EcCurve.P256,
+            EcCurve.P384,
+            EcCurve.P521 -> {
+                val expectedSize = (curve.bitSize + 7) / 8
+                require(scalar.size == expectedSize) {
+                    "EC scalar for ${curve.name} must be $expectedSize bytes, got ${scalar.size}"
+                }
+                val x9Params = customNamedCurvesGetByNameMethod.invoke(null, curve.SECGName)
+                    ?: throw IllegalArgumentException("Unsupported curve ${curve.name}")
+                val order = x9EcParametersGetNMethod.invoke(x9Params) as BigInteger
+                val s = BigInteger(1, scalar)
+                require(s > BigInteger.ZERO && s < order) {
+                    "EC scalar out of range [1, n-1] for ${curve.name}"
+                }
+                val g = x9EcParametersGetGMethod.invoke(x9Params)
+                val point = ecPointNormalizeMethod.invoke(ecPointMultiplyMethod.invoke(g, s))
+                val x = ecFieldElementGetEncodedMethod.invoke(ecPointGetAffineXCoordMethod.invoke(point)) as ByteArray
+                val y = ecFieldElementGetEncodedMethod.invoke(ecPointGetAffineYCoordMethod.invoke(point)) as ByteArray
+                EcPrivateKeyDoubleCoordinate(curve = curve, d = scalar.copyOf(), x = x, y = y)
+            }
+            else -> throw IllegalArgumentException("Unsupported curve for scalar derivation: ${curve.name}")
+        }
     }
 }
