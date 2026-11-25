@@ -24,7 +24,7 @@ class RawCbor(val encodedCbor: ByteArray)
     override fun equals(other: Any?): Boolean = other is RawCbor &&
             encodedCbor.contentEquals(other.encodedCbor)
 
-    override fun hashCode(): Int = encodedCbor.contentHashCode()
+    override fun hashCode(): Int = CborHash.hashBytes(CborHash.TAG_RAW_CBOR, encodedCbor)
 
     override fun toString(): String {
         val sb = StringBuilder("RawCbor(")

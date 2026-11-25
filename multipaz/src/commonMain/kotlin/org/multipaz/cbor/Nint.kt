@@ -21,7 +21,7 @@ class Nint(val value: ULong) : CborInt(MajorType.NEGATIVE_INTEGER) {
 
     override fun equals(other: Any?): Boolean = other is Nint && value == other.value
 
-    override fun hashCode(): Int = value.hashCode()
+    override fun hashCode(): Int = CborHash.hashLong(CborHash.TAG_NINT, value.toLong())
 
     override fun toString(): String = "Nint($value)"
 

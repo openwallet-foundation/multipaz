@@ -15,6 +15,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -907,6 +908,46 @@ class VerificationUtilTest {
             clientId = "x509_san_dns:example.com",
         ) as OpenID4VPDcResponse).sessionTranscript
         assertNotEquals(Cbor.encode(defaultClientTranscript).toList(), Cbor.encode(customClientTranscript).toList())
+    }
+
+    @Test
+    fun decryptDcResponse_rejectsCollidingMdocResponseWithoutQuadraticHang() = runTest {
+        val encryptionPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val responseEncryptionKey = AsymmetricKey.anonymous(encryptionPrivateKey)
+        val nonce = ByteString(Random.nextBytes(16))
+        val origin = "https://example.com"
+
+        val count = 40_000
+        val mapBuilder = ByteStringBuilder().apply {
+            append(0xba.toByte())
+            append((count ushr 24).toByte())
+            append((count ushr 16).toByte())
+            append((count ushr 8).toByte())
+            append(count.toByte())
+            for (k in 1L..count) {
+                append(0x1b.toByte())
+                val key = (k shl 32) or k
+                for (shift in intArrayOf(56, 48, 40, 32, 24, 16, 8, 0)) {
+                    append((key ushr shift).toByte())
+                }
+                append(0xf6.toByte())
+            }
+        }
+        val response = buildJsonObject {
+            put("protocol", "org-iso-mdoc")
+            putJsonObject("data") {
+                put("response", mapBuilder.toByteString().toByteArray().toBase64Url())
+            }
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            VerificationUtil.decryptDcResponse(
+                response = response,
+                nonce = nonce,
+                origin = origin,
+                responseEncryptionKey = responseEncryptionKey,
+            )
+        }
     }
 
     @Test

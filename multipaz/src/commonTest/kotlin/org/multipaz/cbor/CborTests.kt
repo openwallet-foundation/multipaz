@@ -16,6 +16,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class CborTests {
 
@@ -1241,5 +1243,376 @@ class CborTests {
                 taggedItem = Bstr(byteArrayOf(1, 2, 3, 15)),
             ).toJson()
         )
+    }
+
+    @Test
+    fun sipHash24TestVectors() {
+        val k0 = 0x0706050403020100L
+        val k1 = 0x0f0e0d0c0b0a0908L
+        val vectors = listOf(
+            0 to 0x726fdb47dd0e0e31UL,
+            1 to 0x74f839c593dc67fdUL,
+            2 to 0x0d6c8009d9a94f5aUL,
+            7 to 0xab0200f58b01d137UL,
+            8 to 0x93f5f5799a932462UL,
+            15 to 0xa129ca6149be45e5UL,
+            16 to 0x3f2acc7f57c29bdbUL,
+            31 to 0x32d892fad841c342UL,
+            32 to 0x7127512f72f27cceUL,
+            63 to 0x958a324ceb064572UL,
+        )
+        for ((len, expected) in vectors) {
+            val data = ByteArray(len) { it.toByte() }
+            assertEquals(
+                expected,
+                CborHash.sipHash24(k0, k1, data).toULong(),
+                "SipHash-2-4 mismatch for input length $len"
+            )
+        }
+    }
+
+    @Test
+    fun dataItemEqualsAndHashCodeContract() {
+        val equalPairs = listOf<Pair<DataItem, DataItem>>(
+            Uint(42UL) to Uint(42UL),
+            Nint(42UL) to Nint(42UL),
+            Bstr(byteArrayOf(1, 2, 3)) to Bstr(byteArrayOf(1, 2, 3)),
+            Tstr("hello") to Tstr("hello"),
+            Simple.TRUE to Simple(21U),
+            CborFloat(1.5f) to CborFloat(1.5f),
+            CborFloat(Float.NaN) to CborFloat(Float.fromBits(0x7fc00001)),
+            CborFloat(-0.0f) to CborFloat(0.0f),
+            CborDouble(1.5) to CborDouble(1.5),
+            CborDouble(Double.NaN) to CborDouble(Double.fromBits(0x7ff8000000000001L)),
+            CborDouble(-0.0) to CborDouble(0.0),
+            Tagged(24L, Bstr(byteArrayOf(0x01))) to Tagged(24L, Bstr(byteArrayOf(0x01))),
+            CborArray(mutableListOf(Uint(1UL), Tstr("a"))) to
+                CborArray(mutableListOf(Uint(1UL), Tstr("a"))),
+            buildCborMap {
+                put("a", 1)
+                put("b", 2)
+            } to buildCborMap {
+                put("b", 2)
+                put("a", 1)
+            },
+            IndefLengthBstr(listOf(byteArrayOf(1, 2), byteArrayOf(3))) to
+                IndefLengthBstr(listOf(byteArrayOf(1, 2), byteArrayOf(3))),
+            IndefLengthTstr(listOf("ab", "c")) to IndefLengthTstr(listOf("ab", "c")),
+            RawCbor(byteArrayOf(0x01)) to RawCbor(byteArrayOf(0x01)),
+        )
+        for ((a, b) in equalPairs) {
+            val isSignedZeroFloat = a is CborFloat && b is CborFloat && a.value == 0.0f && b.value == 0.0f
+            val isSignedZeroDouble = a is CborDouble && b is CborDouble && a.value == 0.0 && b.value == 0.0
+            if (!isSignedZeroFloat && !isSignedZeroDouble) {
+                assertEquals(a, b, "Expected equality for $a and $b")
+            }
+            if (a == b) {
+                assertEquals(a.hashCode(), b.hashCode(), "hashCode mismatch for equal items $a and $b")
+            }
+        }
+        // Signed zeros always share a hash code so equals/hashCode holds on JS/Wasm and JVM alike
+        assertEquals(CborFloat(-0.0f).hashCode(), CborFloat(0.0f).hashCode())
+        assertEquals(CborDouble(-0.0).hashCode(), CborDouble(0.0).hashCode())
+
+        // Indefinite-length string chunk boundaries remain distinct
+        assertNotEquals(
+            IndefLengthBstr(listOf(byteArrayOf(1, 2), byteArrayOf(3))),
+            IndefLengthBstr(listOf(byteArrayOf(1), byteArrayOf(2, 3)))
+        )
+        assertNotEquals(
+            IndefLengthTstr(listOf("ab", "c")),
+            IndefLengthTstr(listOf("a", "bc"))
+        )
+        // Domain separation between distinct types with equal underlying numbers
+        assertNotEquals(Uint(1UL) as DataItem, Nint(1UL))
+        assertNotEquals(Uint(1UL) as DataItem, Simple(1U))
+    }
+
+    private fun ByteStringBuilder.appendUint32Be(value: Int) {
+        append((value ushr 24).toByte())
+        append((value ushr 16).toByte())
+        append((value ushr 8).toByte())
+        append(value.toByte())
+    }
+
+    private fun ByteStringBuilder.appendUint64Be(value: Long) {
+        for (shift in intArrayOf(56, 48, 40, 32, 24, 16, 8, 0)) {
+            append((value ushr shift).toByte())
+        }
+    }
+
+    private fun buildCollidingIntKeyMap(
+        count: Int,
+        headByte: Byte,
+        indefinite: Boolean = false
+    ): ByteArray {
+        val builder = ByteStringBuilder()
+        if (indefinite) {
+            builder.append(0xbf.toByte())
+        } else {
+            builder.append(0xba.toByte())
+            builder.appendUint32Be(count)
+        }
+        for (k in 1L..count) {
+            builder.append(headByte)
+            builder.appendUint64Be((k shl 32) or k)
+            builder.append(0xf6.toByte()) // null
+        }
+        if (indefinite) {
+            builder.append(0xff.toByte())
+        }
+        return builder.toByteString().toByteArray()
+    }
+
+    private fun collidingEquivalentPairString(index: Int, pairs: Int): String {
+        val sb = StringBuilder(pairs * 2)
+        for (bit in 0 until pairs) {
+            sb.append(if ((index and (1 shl bit)) != 0) "BB" else "Aa")
+        }
+        return sb.toString()
+    }
+
+    @Test
+    fun decodeCollidingMapKeys() {
+        // 1. Definite-length map with 80,000 Uint keys (k shl 32) or k (all ULong.hashCode() == 0)
+        val uintMapBytes = buildCollidingIntKeyMap(80_000, 0x1b.toByte())
+        val uintMap = Cbor.decode(uintMapBytes) as CborMap
+        assertEquals(80_000, uintMap.items.size)
+        assertEquals(Simple.NULL, uintMap[Uint((1UL shl 32) or 1UL)])
+        assertEquals(Simple.NULL, uintMap[Uint((80_000UL shl 32) or 80_000UL)])
+        assertTrue(uintMap.items.keys.map { it.hashCode() }.toSet().size > 79_000)
+
+        // 2. Indefinite-length map with 40,000 Uint keys
+        val indefMapBytes = buildCollidingIntKeyMap(40_000, 0x1b.toByte(), indefinite = true)
+        val indefMap = Cbor.decode(indefMapBytes) as CborMap
+        assertEquals(40_000, indefMap.items.size)
+        assertTrue(indefMap.items.keys.map { it.hashCode() }.toSet().size > 39_000)
+
+        // 3. Definite-length map with 40,000 Nint keys (k shl 32) or k
+        val nintMapBytes = buildCollidingIntKeyMap(40_000, 0x3b.toByte())
+        val nintMap = Cbor.decode(nintMapBytes) as CborMap
+        assertEquals(40_000, nintMap.items.size)
+        assertTrue(nintMap.items.keys.map { it.hashCode() }.toSet().size > 39_000)
+
+        // 4. 32,768 Tstr keys made from "Aa"/"BB" pairs (all String.hashCode() equal)
+        val tstrCount = 32_768
+        val tstrBuilder = ByteStringBuilder()
+        tstrBuilder.append(0xba.toByte())
+        tstrBuilder.appendUint32Be(tstrCount)
+        for (i in 0 until tstrCount) {
+            val s = collidingEquivalentPairString(i, 15)
+            tstrBuilder.append(0x78.toByte())
+            tstrBuilder.append(30.toByte())
+            tstrBuilder.append(s.encodeToByteArray())
+            tstrBuilder.append(0xf6.toByte())
+        }
+        val tstrMap = Cbor.decode(tstrBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(tstrCount, tstrMap.items.size)
+        assertEquals(Simple.NULL, tstrMap[collidingEquivalentPairString(0, 15)])
+        assertEquals(Simple.NULL, tstrMap[collidingEquivalentPairString(tstrCount - 1, 15)])
+        assertTrue(tstrMap.items.keys.map { it.hashCode() }.toSet().size > 32_000)
+
+        // 5. 16,384 Bstr keys made from "Aa"/"BB" byte pairs (all contentHashCode() equal)
+        val bstrCount = 16_384
+        val bstrBuilder = ByteStringBuilder()
+        bstrBuilder.append(0xba.toByte())
+        bstrBuilder.appendUint32Be(bstrCount)
+        for (i in 0 until bstrCount) {
+            val bytes = collidingEquivalentPairString(i, 14).encodeToByteArray()
+            bstrBuilder.append(0x58.toByte())
+            bstrBuilder.append(28.toByte())
+            bstrBuilder.append(bytes)
+            bstrBuilder.append(0xf6.toByte())
+        }
+        val bstrMap = Cbor.decode(bstrBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(bstrCount, bstrMap.items.size)
+        assertTrue(bstrMap.items.keys.map { it.hashCode() }.toSet().size > 16_000)
+
+        // 6. 4,096 CborDouble keys with identical upper/lower 32-bit halves (Double.hashCode() == 0)
+        val doubleCount = 4_096
+        val doubleBuilder = ByteStringBuilder()
+        doubleBuilder.append(0xb9.toByte())
+        doubleBuilder.append((doubleCount ushr 8).toByte())
+        doubleBuilder.append(doubleCount.toByte())
+        for (k in 1L..doubleCount) {
+            val half = 0x3ff00000L + k
+            doubleBuilder.append(0xfb.toByte())
+            doubleBuilder.appendUint64Be((half shl 32) or half)
+            doubleBuilder.append(0xf6.toByte())
+        }
+        val doubleMap = Cbor.decode(doubleBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(doubleCount, doubleMap.items.size)
+        assertTrue(doubleMap.items.keys.map { it.hashCode() }.toSet().size > 4_000)
+
+        // 7. 4,096 Tagged keys, IndefLengthTstr keys, CborArray keys, and CborMap keys
+        val compoundCount = 4_096
+        val taggedBuilder = ByteStringBuilder().apply {
+            append(0xb9.toByte())
+            append((compoundCount ushr 8).toByte())
+            append(compoundCount.toByte())
+            for (k in 1L..compoundCount) {
+                append(0xdb.toByte())
+                appendUint64Be((k shl 32) or k)
+                append(0x00.toByte())
+                append(0xf6.toByte())
+            }
+        }
+        val taggedMap = Cbor.decode(taggedBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(compoundCount, taggedMap.items.size)
+        assertTrue(taggedMap.items.keys.map { it.hashCode() }.toSet().size > 4_000)
+
+        val indefTstrBuilder = ByteStringBuilder().apply {
+            append(0xb9.toByte())
+            append((compoundCount ushr 8).toByte())
+            append(compoundCount.toByte())
+            for (i in 0 until compoundCount) {
+                append(0x7f.toByte())
+                append(0x78.toByte())
+                append(24.toByte())
+                append(collidingEquivalentPairString(i, 12).encodeToByteArray())
+                append(0x62.toByte())
+                append("Aa".encodeToByteArray())
+                append(0xff.toByte())
+                append(0xf6.toByte())
+            }
+        }
+        val indefTstrMap = Cbor.decode(indefTstrBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(compoundCount, indefTstrMap.items.size)
+        assertTrue(indefTstrMap.items.keys.map { it.hashCode() }.toSet().size > 4_000)
+
+        val arrayKeyBuilder = ByteStringBuilder().apply {
+            append(0xb9.toByte())
+            append((compoundCount ushr 8).toByte())
+            append(compoundCount.toByte())
+            for (k in 1L..compoundCount) {
+                append(0x81.toByte())
+                append(0x1b.toByte())
+                appendUint64Be((k shl 32) or k)
+                append(0xf6.toByte())
+            }
+        }
+        val arrayKeyMap = Cbor.decode(arrayKeyBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(compoundCount, arrayKeyMap.items.size)
+        assertTrue(arrayKeyMap.items.keys.map { it.hashCode() }.toSet().size > 4_000)
+
+        val mapKeyBuilder = ByteStringBuilder().apply {
+            append(0xb9.toByte())
+            append((compoundCount ushr 8).toByte())
+            append(compoundCount.toByte())
+            for (k in 1L..compoundCount) {
+                append(0xa1.toByte())
+                append(0x1b.toByte())
+                appendUint64Be((k shl 32) or k)
+                append(0x00.toByte())
+                append(0xf6.toByte())
+            }
+        }
+        val mapKeyMap = Cbor.decode(mapKeyBuilder.toByteString().toByteArray()) as CborMap
+        assertEquals(compoundCount, mapKeyMap.items.size)
+        assertTrue(mapKeyMap.items.keys.map { it.hashCode() }.toSet().size > 4_000)
+    }
+
+    @Test
+    fun decodeDepthAndLengthBounds() {
+        // Exact MAX_DECODE_DEPTH succeeds (outer at depth 0, innermost scalar at depth MAX_DECODE_DEPTH)
+        val atArrayLimit = ByteArray(Cbor.MAX_DECODE_DEPTH + 1) { 0x81.toByte() }
+        atArrayLimit[Cbor.MAX_DECODE_DEPTH] = 0x00
+        assertTrue(Cbor.decode(atArrayLimit) is CborArray)
+
+        // One level deeper exceeds MAX_DECODE_DEPTH
+        for (depth in listOf(Cbor.MAX_DECODE_DEPTH + 1, 1000)) {
+            val nestedArrays = ByteArray(depth + 1) { 0x81.toByte() }
+            nestedArrays[depth] = 0x00
+            assertFailsWith<IllegalArgumentException> { Cbor.decode(nestedArrays) }
+
+            val nestedTags = ByteArray(depth + 1) { 0xc0.toByte() }
+            nestedTags[depth] = 0x00
+            assertFailsWith<IllegalArgumentException> { Cbor.decode(nestedTags) }
+
+            val nestedMaps = ByteStringBuilder().apply {
+                for (i in 0 until depth) {
+                    append(0xa1.toByte())
+                    append(0x00.toByte())
+                }
+                append(0x00.toByte())
+            }.toByteString().toByteArray()
+            assertFailsWith<IllegalArgumentException> { Cbor.decode(nestedMaps) }
+
+            val nestedMapKeys = ByteStringBuilder().apply {
+                for (i in 0 until depth) {
+                    append(0xa1.toByte())
+                }
+                append(0x00.toByte())
+                for (i in 0 until depth) {
+                    append(0x00.toByte())
+                }
+            }.toByteString().toByteArray()
+            assertFailsWith<IllegalArgumentException> { Cbor.decode(nestedMapKeys) }
+
+            val nestedIndefMaps = ByteStringBuilder().apply {
+                for (i in 0 until depth) {
+                    append(0xbf.toByte())
+                    append(0x00.toByte())
+                }
+                append(0x00.toByte())
+                for (i in 0 until depth) {
+                    append(0xff.toByte())
+                }
+            }.toByteString().toByteArray()
+            assertFailsWith<IllegalArgumentException> { Cbor.decode(nestedIndefMaps) }
+        }
+
+        // Indefinite byte/text string chunk at MAX_DECODE_DEPTH + 1 is rejected
+        val indefBstrOverLimit = ByteStringBuilder().apply {
+            for (i in 0 until Cbor.MAX_DECODE_DEPTH) {
+                append(0x81.toByte())
+            }
+            append(0x5f.toByte())
+            append(0x40.toByte())
+            append(0xff.toByte())
+        }.toByteString().toByteArray()
+        assertFailsWith<IllegalArgumentException> { Cbor.decode(indefBstrOverLimit) }
+
+        // 64-bit length truncation payloads (0x100000000 == 2^32, which truncates to 0 in 32-bit Int)
+        val truncated64BitPayloads = listOf(
+            "5b 00 00 00 01 00 00 00 00", // Bstr
+            "7b 00 00 00 01 00 00 00 00", // Tstr
+            "9b 00 00 00 01 00 00 00 00", // CborArray
+            "bb 00 00 00 01 00 00 00 00", // CborMap
+        )
+        for (hex in truncated64BitPayloads) {
+            assertFailsWith<IllegalArgumentException> {
+                Cbor.decode(hex.replace(" ", "").fromHex())
+            }
+        }
+
+        // Oversized 32-bit lengths must fail immediately without OOM
+        val oversizedLengths = listOf(
+            "5a 40 00 00 00 00", // 1 GiB Bstr
+            "7a 40 00 00 00 00", // 1 GiB Tstr
+            "9a 40 00 00 00",    // 1G-element CborArray
+            "ba 40 00 00 00",    // 1G-entry CborMap
+            "a2 00 00",          // 2-entry CborMap with only 2 remaining bytes
+            "5f",                // truncated indefinite Bstr
+            "7f",                // truncated indefinite Tstr
+            "f9",                // truncated half-float
+            "f9 00",
+            "fa 00 00",
+            "fb 00 00 00",
+        )
+        for (hex in oversizedLengths) {
+            assertFailsWith<IllegalArgumentException> {
+                Cbor.decode(hex.replace(" ", "").fromHex())
+            }
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            Cbor.decode(byteArrayOf(0x00), -1)
+        }
+
+        val leftoverError = assertFailsWith<IllegalArgumentException> {
+            Cbor.decode(byteArrayOf(0x00, 0x01))
+        }
+        assertTrue(leftoverError.message!!.startsWith("1 bytes leftover"))
     }
 }

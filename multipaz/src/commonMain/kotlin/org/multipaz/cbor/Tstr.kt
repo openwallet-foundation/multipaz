@@ -17,6 +17,12 @@ class Tstr(val value: String) : DataItem(MajorType.UNICODE_STRING) {
     companion object {
         internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, Tstr> {
             val (payloadBegin, length) = Cbor.decodeLength(encodedCbor, offset)
+            val remaining = (encodedCbor.size - payloadBegin).toULong()
+            if (length > remaining) {
+                throw IllegalArgumentException(
+                    "Text string length $length exceeds remaining $remaining bytes at offset $offset"
+                )
+            }
             val payloadEnd = payloadBegin + length.toInt()
             val slice = encodedCbor.sliceArray(IntRange(payloadBegin, payloadEnd - 1))
             return Pair(payloadEnd, Tstr(slice.decodeToString()))
@@ -25,7 +31,7 @@ class Tstr(val value: String) : DataItem(MajorType.UNICODE_STRING) {
 
     override fun equals(other: Any?): Boolean = other is Tstr && value == other.value
 
-    override fun hashCode(): Int = value.hashCode()
+    override fun hashCode(): Int = CborHash.hashString(CborHash.TAG_TSTR, value)
 
     override fun toString(): String = "Tstr(\"$value\")"
 }
