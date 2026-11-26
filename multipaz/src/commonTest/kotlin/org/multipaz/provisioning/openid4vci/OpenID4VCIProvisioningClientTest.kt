@@ -24,6 +24,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.multipaz.crypto.Algorithm
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialKeyAttestation
+import org.multipaz.provisioning.CredentialNotificationEvent
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.KeyBindingType
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -44,6 +45,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 class OpenID4VCIProvisioningClientTest {
     private lateinit var secureArea: SecureArea
@@ -293,6 +296,112 @@ class OpenID4VCIProvisioningClientTest {
         assertNull(config.pushedAuthorizationRequestEndpoint)
         assertEquals("https://issuer.example/token", config.tokenEndpoint)
         assertEquals(ClientAuthenticationType.CLIENT_ATTESTATION, config.clientAuthentication)
+    }
+
+    @Test
+    fun notificationEndpointAllowsHttpForLocalTesting() = runTest {
+        val metadata = Json.parseToJsonElement(
+            """
+            {
+              "credential_issuer": "http://localhost",
+              "credential_endpoint": "http://localhost/credential",
+              "notification_endpoint": "http://localhost/notification",
+              "credential_configurations_supported": {}
+            }
+            """.trimIndent()
+        ).jsonObject
+        val client = HttpClient(MockEngine { error("Unexpected request: ${it.url}") })
+        val config = IssuerConfiguration.get(
+            url = "http://localhost",
+            httpClient = client,
+            clientPreferences = clientPreferences,
+            credentialIssuerMetadata = metadata
+        )
+        assertEquals("http://localhost/notification", config.notificationEndpoint)
+        client.close()
+    }
+
+    @Test
+    fun notificationIdBelongsOnlyToCurrentCredentialRequest() = runTest {
+        val responses = ArrayDeque(listOf(
+            """{"notification_id":"first","credentials":[{"credential":"YQ"}]}""",
+            """{"credentials":[{"credential":"YQ"}]}""",
+            """{"notification_id":"second","credentials":[{"credential":"YQ"}]}""",
+            """{"notification_id":"","credentials":[{"credential":"YQ"}]}""",
+            """{"notification_id":42,"credentials":[{"credential":"YQ"}]}""",
+            """{"notification_id":"malformed","credentials":"invalid"}""",
+            """{"notification_id":"oversized","credentials":[{"credential":"YQ"},{"credential":"Yg"}]}"""
+        ))
+        val notifications = mutableListOf<JsonObject>()
+        val httpClient = HttpClient(MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/credential" -> respond(responses.removeFirst(), HttpStatusCode.OK)
+                "/notification" -> {
+                    notifications.add(Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject)
+                    respond("", HttpStatusCode.NoContent)
+                }
+                else -> error("Unexpected request: ${request.url}")
+            }
+        })
+        val issuerMetadata = Json.parseToJsonElement(
+            """
+            {
+              "credential_issuer": "https://issuer.example",
+              "credential_endpoint": "https://issuer.example/credential",
+              "notification_endpoint": "https://issuer.example/notification",
+              "credential_configurations_supported": {
+                "mDL": {"format": "mso_mdoc", "doctype": "org.iso.18013.5.1.mDL"}
+              }
+            }
+            """.trimIndent()
+        ).jsonObject
+        val authorizationMetadata = Json.parseToJsonElement(
+            """{"issuer":"https://issuer.example","token_endpoint":"https://issuer.example/token"}"""
+        ).jsonObject
+        withContext(testEnvironment(httpClient)) {
+            val client = OpenID4VCIProvisioningClient(
+                clientPreferences = clientPreferences,
+                credentialOffer = CredentialOffer.Grantless("https://issuer.example", "mDL"),
+                issuerConfiguration = IssuerConfiguration.get(
+                    "https://issuer.example", httpClient, clientPreferences, issuerMetadata
+                ),
+                authorizationConfiguration = AuthorizationConfiguration.get(
+                    "https://issuer.example", clientPreferences, authorizationMetadata
+                ),
+                secureArea = secureArea,
+                authorizationData = OpenID4VCIAuthorizationData(
+                    "https://issuer.example", "mDL", secureArea.identifier, null
+                )
+            )
+            client.token = "access-token"
+            client.tokenExpiration = Clock.System.now() + 10.minutes
+            client.obtainCredentials(KeyBindingInfo.Keyless)
+            client.obtainCredentials(KeyBindingInfo.Keyless)
+            client.notifyCredentialResult(CredentialNotificationEvent.ACCEPTED)
+            assertTrue(notifications.isEmpty())
+
+            client.obtainCredentials(KeyBindingInfo.Keyless)
+            assertFailsWith<IllegalStateException> { client.obtainCredentials(KeyBindingInfo.Keyless) }
+            client.notifyCredentialResult(CredentialNotificationEvent.FAILURE)
+            assertTrue(notifications.isEmpty())
+            assertFailsWith<IllegalStateException> { client.obtainCredentials(KeyBindingInfo.Keyless) }
+            assertFailsWith<IllegalArgumentException> { client.obtainCredentials(KeyBindingInfo.Keyless) }
+            client.notifyCredentialResult(CredentialNotificationEvent.FAILURE)
+            assertEquals(1, notifications.size)
+            assertEquals("malformed", notifications.single()["notification_id"]?.jsonPrimitive?.content)
+            assertEquals("credential_failure", notifications.single()["event"]?.jsonPrimitive?.content)
+
+            assertFailsWith<IllegalStateException> {
+                client.obtainCredentials(
+                    KeyBindingInfo.OpenidProofOfPossession(listOf("eyJraWQiOiJrZXkifQ.payload.sig"))
+                )
+            }
+            client.notifyCredentialResult(CredentialNotificationEvent.FAILURE)
+            assertEquals(2, notifications.size)
+            assertEquals("oversized", notifications.last()["notification_id"]?.jsonPrimitive?.content)
+            assertEquals("credential_failure", notifications.last()["event"]?.jsonPrimitive?.content)
+        }
+        httpClient.close()
     }
 
     @Test

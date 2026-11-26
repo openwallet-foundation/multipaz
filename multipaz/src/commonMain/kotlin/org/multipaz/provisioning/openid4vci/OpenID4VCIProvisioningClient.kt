@@ -41,6 +41,7 @@ import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.provisioning.CredentialNotificationEvent
 import org.multipaz.provisioning.CredentialCertification
 import org.multipaz.provisioning.Credentials
 import org.multipaz.provisioning.KeyBindingType
@@ -77,6 +78,7 @@ internal class OpenID4VCIProvisioningClient(
     var tokenExpiration: Instant? = null
     var authorizationDPoPNonce: String? = null
     var issuerDPoPNonce: String? = null
+    private var pendingNotificationId: String? = null
     var clientAttestationChallenge: String? = null
     var keyChallenge: String? = null
     var redirectState: String? = null
@@ -162,6 +164,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+        pendingNotificationId = null
         refreshAccessIfNeeded()
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
@@ -226,6 +229,12 @@ internal class OpenID4VCIProvisioningClient(
 
         val response = Json.parseToJsonElement(responseText) as JsonObject
         Logger.dJson(TAG, "Received credential response", response)
+        response["notification_id"]?.let {
+            val notificationId = (it as? JsonPrimitive)?.takeIf { value ->
+                value.isString && value.content.isNotEmpty()
+            }?.content ?: throw IllegalStateException("Credential response: invalid notification_id")
+            pendingNotificationId = notificationId
+        }
         val serializedCredentials = response["credentials"]!!.jsonArray.map {
             if (it !is JsonObject) {
                 throw IllegalStateException("Credential must be represented as json string")
@@ -242,10 +251,88 @@ internal class OpenID4VCIProvisioningClient(
             null
         }
         val ids = extractCredentialIds(keyInfo, serializedCredentials.size)
+        check(serializedCredentials.size <= ids.size) {
+            "Credential response contains more credentials than requested keys"
+        }
         val idAndData = serializedCredentials.zip(ids).map { (data, id) ->
             CredentialCertification(id, data)
         }
         return Credentials(idAndData, display)
+    }
+
+    override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+        val notificationId = pendingNotificationId ?: return
+        pendingNotificationId = null
+        val notificationEndpoint = issuerConfiguration.notificationEndpoint ?: return
+        val eventValue = when (event) {
+            CredentialNotificationEvent.ACCEPTED -> "credential_accepted"
+            CredentialNotificationEvent.FAILURE -> "credential_failure"
+            CredentialNotificationEvent.DELETED -> "credential_deleted"
+        }
+        try {
+            refreshAccessIfNeeded()
+            val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+            sendNotification(
+                httpClient = httpClient,
+                endpoint = notificationEndpoint,
+                notificationId = notificationId,
+                event = eventValue,
+                dpopKey = getDPopKey()
+            )
+        } catch (err: CancellationException) {
+            throw err
+        } catch (err: Exception) {
+            Logger.e(TAG, "Failed to send credential notification: $eventValue", err)
+        }
+    }
+
+    private suspend fun sendNotification(
+        httpClient: HttpClient,
+        endpoint: String,
+        notificationId: String,
+        event: String,
+        dpopKey: AsymmetricKey
+    ) {
+        var retry = true
+        val requestBody = buildJsonObject {
+            put("notification_id", notificationId)
+            put("event", event)
+        }
+        Logger.dJson(TAG, "Sending notification request to $endpoint", requestBody)
+        while (true) {
+            val dpop = OpenID4VCIUtil.generateDPoP(
+                dpopKey = dpopKey,
+                clientId = clientPreferences.clientId,
+                requestUrl = endpoint,
+                dpopNonce = issuerDPoPNonce,
+                accessToken = token
+            )
+            val response = httpClient.post(endpoint) {
+                headers {
+                    append("Authorization", "DPoP $token")
+                    append("DPoP", dpop)
+                    contentType(ContentType.Application.Json)
+                }
+                setBody(requestBody.toString())
+            }
+            if (response.headers.contains("DPoP-Nonce")) {
+                issuerDPoPNonce = response.headers["DPoP-Nonce"]!!
+                if (retry) {
+                    retry = false
+                    if (response.status.value !in 200..299) {
+                        Logger.d(TAG, "Retry notification with a fresh DPoP nonce")
+                        continue
+                    }
+                }
+            }
+            if (response.status.value !in 200..299) {
+                val responseText = response.readRawBytes().decodeToString()
+                Logger.e(TAG, "Notification request error: ${response.status} $responseText")
+            } else {
+                Logger.i(TAG, "Got successful response for notification request")
+            }
+            break
+        }
     }
 
     private suspend fun buildKeyProofs(

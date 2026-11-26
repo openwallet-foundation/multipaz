@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -21,6 +22,7 @@ internal data class IssuerConfiguration(
     val url: String,
     val nonceEndpoint: String?,
     val credentialEndpoint: String,
+    val notificationEndpoint: String?,
     val provisioningMetadata: ProvisioningMetadata,
     val authorizationServerUrls: List<String>,
     val credentialConfigurations: Map<String, CredentialConfiguration>
@@ -79,6 +81,16 @@ internal data class IssuerConfiguration(
             }
             val nonceEndpoint = credentialMetadata.stringOrNull("nonce_endpoint")
             val credentialEndpoint = credentialMetadata.string("credential_endpoint")
+            val notificationEndpoint = credentialMetadata.stringOrNull("notification_endpoint")
+            if (notificationEndpoint != null) {
+                when (Url(notificationEndpoint).protocol.name) {
+                    "https" -> Unit
+                    "http" -> Logger.w(
+                        TAG, "Issuer metadata: notification_endpoint should use HTTPS outside of local testing"
+                    )
+                    else -> throw IllegalStateException("Issuer metadata: notification_endpoint must use HTTP or HTTPS")
+                }
+            }
             val credentials = mutableMapOf<String, CredentialMetadata>()
             val credentialConfigurations = mutableMapOf<String, CredentialConfiguration>()
 
@@ -129,6 +141,7 @@ internal data class IssuerConfiguration(
                 url = url,
                 nonceEndpoint = nonceEndpoint,
                 credentialEndpoint = credentialEndpoint,
+                notificationEndpoint = notificationEndpoint,
                 provisioningMetadata = provisioningMetadata,
                 authorizationServerUrls = authorizationServerUrls,
                 credentialConfigurations = credentialConfigurations.toMap()

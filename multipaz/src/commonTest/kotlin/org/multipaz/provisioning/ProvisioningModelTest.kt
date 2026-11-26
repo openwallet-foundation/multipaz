@@ -13,6 +13,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -32,8 +35,11 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.DocumentStore
+import org.multipaz.document.Document
 import org.multipaz.document.NameSpacedData
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.eventlogger.Event
+import org.multipaz.eventlogger.EventLogger
 import org.multipaz.mdoc.credential.KeyBoundMdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
@@ -45,6 +51,7 @@ import org.multipaz.securearea.KeyAttestation
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlin.random.Random
@@ -52,6 +59,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -110,6 +118,341 @@ class ProvisioningModelTest {
         val credential = credentials.first() as KeyBoundMdocCredential
         assertTrue(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun notificationAcceptedAfterBatchIsStored() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val client = object : TestProvisioningClient() {
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                assertTrue(notifications.isEmpty())
+                val credentials = super.obtainCredentials(keyInfo)
+                val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+                assertEquals(2, document.getPendingCredentials().size)
+                assertTrue(document.getCertifiedCredentials().isEmpty())
+                return credentials
+            }
+
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+                assertEquals(2, document.getCertifiedCredentials().size)
+                assertTrue(document.getPendingCredentials().isEmpty())
+                assertEquals("Document Title", document.displayName)
+                notifications.add(event)
+            }
+        }
+
+        val document = model.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+
+        assertTrue(document.provisioned)
+        assertEquals(listOf(CredentialNotificationEvent.ACCEPTED), notifications)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun notificationFailureWhenDocumentUpdateFails() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val storageFailure = IllegalStateException("Simulated document storage failure")
+        val handler = object : DocumentProvisioningHandler(secureArea, documentStore) {
+            override suspend fun updateDocument(
+                document: Document,
+                display: Display?,
+                documentAuthorizationData: ByteString?
+            ) {
+                assertEquals(2, document.getCertifiedCredentials().size)
+                throw storageFailure
+            }
+        }
+        val failingModel = ProvisioningModel(
+            documentProvisioningHandler = handler,
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+        val client = object : TestProvisioningClient() {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            failingModel.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        }
+
+        assertEquals(storageFailure.message, failure.message)
+        assertEquals(listOf(CredentialNotificationEvent.FAILURE), notifications)
+        assertTrue(documentStore.listDocumentIds().isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refreshFailurePreservesReplacedCredentials() = runTest {
+        val document = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            TestProvisioningClient()
+        }.await()
+        val originalCredentials = document.getCertifiedCredentials()
+        val originalIds = originalCredentials.map { it.identifier }.toSet()
+        originalCredentials.forEach { it.increaseUsageCount() }
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val handler = object : DocumentProvisioningHandler(secureArea, documentStore) {
+            override suspend fun updateDocument(
+                document: Document,
+                display: Display?,
+                documentAuthorizationData: ByteString?
+            ) {
+                assertTrue(document.getCertifiedCredentials().size > originalIds.size)
+                throw IllegalStateException("Simulated document storage failure")
+            }
+        }
+        val failingModel = ProvisioningModel(
+            documentProvisioningHandler = handler,
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+        val client = object : TestProvisioningClient() {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        assertFailsWith<IllegalStateException> {
+            failingModel.launch(UnconfinedTestDispatcher(testScheduler), document) { client }.await()
+        }
+        assertEquals(originalIds, document.getCertifiedCredentials().map { it.identifier }.toSet())
+        assertTrue(document.getPendingCredentials().isEmpty())
+        assertEquals(listOf(CredentialNotificationEvent.FAILURE), notifications)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun failureBeforeObtainDoesNotNotify() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val client = object : TestProvisioningClient(
+            keyBindingChallengeHook = { throw IllegalStateException("Challenge failed") }
+        ) {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        assertFailsWith<IllegalStateException> {
+            model.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        }
+        assertTrue(notifications.isEmpty())
+        assertTrue(documentStore.listDocumentIds().isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun delayedIssuanceDoesNotReportAcceptance() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val client = object : TestProvisioningClient(obtainCredentialsHook = { false }) {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        val document = model.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        assertFalse(document.provisioned)
+        assertTrue(notifications.isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun notificationFailureWhenBatchContainsUnknownCredential() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val client = object : TestProvisioningClient() {
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                val credentials = super.obtainCredentials(keyInfo)
+                return credentials.copy(certifications = listOf(
+                    credentials.certifications.first(),
+                    credentials.certifications.last().copy(credentialId = "unknown")
+                ))
+            }
+
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        val document = model.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        assertEquals(1, document.getCertifiedCredentials().size)
+        assertEquals(listOf(CredentialNotificationEvent.FAILURE), notifications)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun delayedIssuanceWithEventLogger() = runTest {
+        val loggingModel = ProvisioningModel(
+            documentProvisioningHandler = DocumentProvisioningHandler(secureArea, documentStore),
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea,
+            eventLogger = object : EventLogger {
+                override suspend fun addEvent(event: Event): Event? = event
+                override fun addEventAsync(event: Event) = Unit
+            }
+        )
+        val document = loggingModel.launch(UnconfinedTestDispatcher(testScheduler)) {
+            TestProvisioningClient(obtainCredentialsHook = { false })
+        }.await()
+        assertFalse(document.provisioned)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun cancellationDuringAcceptedNotificationKeepsDocument() = runTest {
+        val notificationStarted = Channel<Unit>()
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val client = object : TestProvisioningClient() {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+                notificationStarted.send(Unit)
+                delay(Duration.INFINITE)
+            }
+        }
+        val deferred = model.launch(UnconfinedTestDispatcher(testScheduler)) { client }
+        notificationStarted.receive()
+        model.cancel()
+        assertFailsWith<CancellationException> { deferred.await() }
+        val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+        assertTrue(document.provisioned)
+        assertEquals(2, document.getCertifiedCredentials().size)
+        assertEquals(listOf(CredentialNotificationEvent.ACCEPTED), notifications)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun eventLoggerFailureDoesNotDeleteAcceptedDocument() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val failingModel = ProvisioningModel(
+            documentProvisioningHandler = DocumentProvisioningHandler(secureArea, documentStore),
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea,
+            eventLogger = object : EventLogger {
+                override suspend fun addEvent(event: Event): Event? {
+                    throw IllegalStateException("Event logger failed")
+                }
+
+                override fun addEventAsync(event: Event) = Unit
+            }
+        )
+        val client = object : TestProvisioningClient() {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        assertFailsWith<IllegalStateException> {
+            failingModel.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        }
+        val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+        assertTrue(document.provisioned)
+        assertEquals(2, document.getCertifiedCredentials().size)
+        assertEquals(listOf(CredentialNotificationEvent.ACCEPTED), notifications)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun laterKeylessFailureKeepsEarlierAcceptedCredential() = runTest {
+        val now = Clock.System.now()
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val cert = X509Cert.Builder(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test Issuer"),
+            issuer = X500Name.fromName("CN=Test Issuer"),
+            validFrom = now - 1.days,
+            validUntil = now + 30.days
+        ).build()
+        val vct = "https://example.com/vct"
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert)), key),
+            kbKey = null,
+            claims = buildJsonObject { put("given_name", "Jane") },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://issuer.example.com")
+                put("vct", vct)
+                put("iat", now.epochSeconds)
+                put("exp", (now + 10.days).epochSeconds)
+            }
+        )
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        var requests = 0
+        val client = object : TestProvisioningClient() {
+            override suspend fun getMetadata(): ProvisioningMetadata = metadata.copy(
+                credentials = mapOf(
+                    "testId" to metadata.credentials.getValue("testId").copy(
+                        format = CredentialFormat.SdJwt(vct),
+                        keyBindingType = KeyBindingType.Keyless
+                    )
+                )
+            )
+
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                if (++requests == 2) throw IllegalStateException("Second request failed")
+                return Credentials(
+                    listOf(CredentialCertification("", sdJwt.compactSerialization.encodeToByteString())),
+                    null
+                )
+            }
+
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+        val keylessModel = ProvisioningModel(
+            documentProvisioningHandler = DocumentProvisioningHandler(
+                secureArea = secureArea,
+                documentStore = documentStore,
+                defaultDocumentProvisioningSettings = DocumentProvisioningSettings(keylessCredentialNumPerDomain = 2)
+            ),
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+        assertFailsWith<IllegalStateException> {
+            keylessModel.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        }
+        val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+        assertEquals(1, document.getCertifiedCredentials().size)
+        assertTrue(document.getPendingCredentials().isEmpty())
+        assertEquals(
+            listOf(CredentialNotificationEvent.ACCEPTED, CredentialNotificationEvent.FAILURE),
+            notifications
+        )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun notificationFailureWhenSecondBatchCredentialIsMalformed() = runTest {
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        var firstCertification: CredentialCertification? = null
+        val client = object : TestProvisioningClient() {
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                val credentials = super.obtainCredentials(keyInfo)
+                firstCertification = credentials.certifications.first()
+                return credentials.copy(certifications = listOf(
+                    credentials.certifications.first(),
+                    credentials.certifications.last().copy(issuerData = ByteString(0xff.toByte()))
+                ))
+            }
+
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                val document = documentStore.lookupDocument(documentStore.listDocumentIds().single())!!
+                val certification = firstCertification!!
+                val firstCredential = document.lookupCredential(certification.credentialId)!!
+                assertTrue(firstCredential.isCertified)
+                assertEquals(certification.issuerData, firstCredential.issuerProvidedData)
+                notifications.add(event)
+            }
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            model.launch(UnconfinedTestDispatcher(testScheduler)) { client }.await()
+        }
+
+        assertEquals(listOf(CredentialNotificationEvent.FAILURE), notifications)
+        assertTrue(documentStore.listDocumentIds().isEmpty())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -255,12 +598,17 @@ class ProvisioningModelTest {
     @Test
     fun cancellation() = runTest {
         val channel = Channel<Unit>()
+        val notifications = mutableListOf<CredentialNotificationEvent>()
         val deferredDoc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
-            TestProvisioningClient(obtainCredentialsHook = {
+            object : TestProvisioningClient(obtainCredentialsHook = {
                 channel.send(Unit)
                 delay(Duration.INFINITE)
                 true
-            })
+            }) {
+                override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                    notifications.add(event)
+                }
+            }
         }
         assertTrue(deferredDoc.isActive)
         channel.receive()
@@ -280,6 +628,43 @@ class ProvisioningModelTest {
         } catch (_: CancellationException) {
         }
         // Initial provisioning failed, document must be cleaned up
+        assertTrue(documentStore.listDocumentIds().isEmpty())
+        assertTrue(notifications.isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun userCancellationDuringCredentialStorageNotifiesCredentialDeleted() = runTest {
+        val updateStarted = Channel<Unit>()
+        val notifications = mutableListOf<CredentialNotificationEvent>()
+        val handler = object : DocumentProvisioningHandler(secureArea, documentStore) {
+            override suspend fun updateDocument(
+                document: Document,
+                display: Display?,
+                documentAuthorizationData: ByteString?
+            ) {
+                updateStarted.send(Unit)
+                delay(Duration.INFINITE)
+            }
+        }
+        val cancelModel = ProvisioningModel(
+            documentProvisioningHandler = handler,
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+        val client = object : TestProvisioningClient() {
+            override suspend fun notifyCredentialResult(event: CredentialNotificationEvent) {
+                notifications.add(event)
+            }
+        }
+
+        val deferredDocument = cancelModel.launch(UnconfinedTestDispatcher(testScheduler)) { client }
+        updateStarted.receive()
+        cancelModel.cancel()
+
+        assertFailsWith<CancellationException> { deferredDocument.await() }
+        assertEquals(listOf(CredentialNotificationEvent.DELETED), notifications)
         assertTrue(documentStore.listDocumentIds().isEmpty())
     }
 

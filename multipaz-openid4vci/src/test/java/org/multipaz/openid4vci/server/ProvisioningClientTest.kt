@@ -10,12 +10,16 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.content.TextContent
 import io.ktor.http.parameters
 import io.ktor.http.protocolWithAuthority
 import io.ktor.http.takeFrom
+import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.install
+import io.ktor.server.request.path
 import io.ktor.server.testing.testApplication
 import io.ktor.util.encodeBase64
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +68,7 @@ import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.provisioning.CredentialNotificationEvent
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.Provisioning
 import org.multipaz.provisioning.CredentialKeyAttestation
@@ -135,7 +140,12 @@ class ProvisioningClientTest {
     lateinit var documentProvisioningHandler: DocumentProvisioningHandler
 
     private val credentialRequestBodies = mutableListOf<Any>()
+    private val credentialResponseBodies = mutableListOf<String>()
     private var checkedCredentialRequests = 0
+    private val notificationRequestBodies = mutableListOf<Any>()
+    private val notificationResponseStatuses = mutableListOf<HttpStatusCode>()
+    private val notificationResponseErrors = mutableListOf<String>()
+    private val notificationResponseChallenges = mutableListOf<String?>()
 
     // Records the body of every request sent to the credential endpoint, whatever its type,
     // so that assertCredentialRequestsCompliant() can reject bodies that are not JSON text.
@@ -143,6 +153,29 @@ class ProvisioningClientTest {
         onRequest { request, content ->
             if (request.url.pathSegments.lastOrNull() == "credential") {
                 credentialRequestBodies.add(content)
+            } else if (request.url.pathSegments.lastOrNull() == "notification") {
+                notificationRequestBodies.add(content)
+            }
+        }
+        onResponse { response ->
+            when (response.call.request.url.segments.lastOrNull()) {
+                "credential" -> credentialResponseBodies.add(response.readRawBytes().decodeToString())
+                "notification" -> {
+                    notificationResponseStatuses.add(response.status)
+                    notificationResponseChallenges.add(response.headers["WWW-Authenticate"])
+                    if (response.status == HttpStatusCode.NoContent) {
+                        Assert.assertNull(response.headers["Content-Type"])
+                        Assert.assertTrue(response.readRawBytes().isEmpty())
+                    }
+                    if (response.status == HttpStatusCode.BadRequest) {
+                        Assert.assertEquals(
+                            ContentType.Application.Json.toString(),
+                            response.headers["Content-Type"]?.substringBefore(';')
+                        )
+                        val json = Json.parseToJsonElement(response.readRawBytes().decodeToString()).jsonObject
+                        notificationResponseErrors.add(json["error"]!!.jsonPrimitive.content)
+                    }
+                }
             }
         }
     }
@@ -168,6 +201,13 @@ class ProvisioningClientTest {
             secureArea
         }
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
+        notificationRequestBodies.clear()
+        notificationResponseStatuses.clear()
+        notificationResponseErrors.clear()
+        notificationResponseChallenges.clear()
+        credentialRequestBodies.clear()
+        credentialResponseBodies.clear()
+        checkedCredentialRequests = 0
         documentProvisioningHandler = DocumentProvisioningHandler(secureArea, documentStore)
         credentalFactoryRegistry = CredentialFactoryRegistry(
             listOf(
@@ -437,6 +477,246 @@ class ProvisioningClientTest {
         )
     }
 
+    @Test
+    fun notificationEndpointRejectsUnknownNotificationId() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationIdOverride = "unknown-notification-id",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_id"
+        )
+    }
+
+    @Test
+    fun notificationEndpointRejectsUnsupportedEvent() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationEventOverride = "credential_issued",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_request"
+        )
+    }
+
+    @Test
+    fun notificationEndpointValidatesEventBeforeId() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationIdOverride = "unknown-notification-id",
+            notificationEventOverride = "invalid",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_request"
+        )
+    }
+
+    @Test
+    fun notificationEndpointRejectsMissingDpopProof() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            removeNotificationDpop = true,
+            expectedNotificationStatus = HttpStatusCode.Unauthorized,
+            expectedNotificationChallenge = "DPoP error=\"invalid_dpop_proof\""
+        )
+    }
+
+    @Test
+    fun notificationEndpointAcceptsJsonContentTypeWithCharset() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationContentType = "application/json ; charset=utf-8"
+        )
+    }
+
+    @Test
+    fun notificationEndpointAcceptsFailureEvent() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationEvent = CredentialNotificationEvent.FAILURE
+        )
+    }
+
+    @Test
+    fun notificationEndpointAcceptsUserDeclinedIssuanceEvent() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationEvent = CredentialNotificationEvent.DELETED
+        )
+    }
+
+    @Test
+    fun notificationEndpointRejectsMissingEvent() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationBodyOverride = """{"notification_id":"test-id"}""",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_request"
+        )
+    }
+
+    @Test
+    fun notificationEndpointRejectsMalformedJson() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationBodyOverride = "{",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_request"
+        )
+    }
+
+    @Test
+    fun notificationEndpointRejectsNonAsciiEventDescription() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=https://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "notification_endpoint_enabled=true"
+            ),
+            notificationBodyOverride =
+                """{"notification_id":"test-id","event":"credential_accepted","event_description":"bad\ntext"}""",
+            expectedNotificationStatus = HttpStatusCode.BadRequest,
+            expectedNotificationError = "invalid_notification_request"
+        )
+    }
+
+    @Test
+    fun notificationEndpointAdvertisedWhenEnabled() = testApplication {
+        val configuration = ServerConfiguration(arrayOf(
+            "-param", "base_url=https://localhost",
+            "-param", "database_engine=ephemeral",
+            "-param", "notification_endpoint_enabled=true"
+        ))
+        val serverEnvironment = ServerEnvironment.create(configuration) {
+            add(CredentialFactoryRegistry::class, credentalFactoryRegistry)
+        }
+        application {
+            installServerEnvironment(serverEnvironment)
+            configureRouting(serverEnvironment)
+        }
+        val httpClient = createClient {}
+        val response = httpClient.get("http://localhost/.well-known/openid-credential-issuer")
+        Assert.assertEquals(HttpStatusCode.OK, response.status)
+        val json = Json.parseToJsonElement(response.readRawBytes().decodeToString()).jsonObject
+        Assert.assertEquals("https://localhost/notification", json["notification_endpoint"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun notificationEndpointOmittedByDefault() = testApplication {
+        val configuration = ServerConfiguration(arrayOf(
+            "-param", "base_url=http://localhost",
+            "-param", "database_engine=ephemeral"
+        ))
+        val serverEnvironment = ServerEnvironment.create(configuration) {
+            add(CredentialFactoryRegistry::class, credentalFactoryRegistry)
+        }
+        application {
+            installServerEnvironment(serverEnvironment)
+            configureRouting(serverEnvironment)
+        }
+        val response = createClient {}.get("http://localhost/.well-known/openid-credential-issuer")
+        Assert.assertEquals(HttpStatusCode.OK, response.status)
+        val json = Json.parseToJsonElement(response.readRawBytes().decodeToString()).jsonObject
+        Assert.assertFalse(json.containsKey("notification_endpoint"))
+        val disabledResponse = createClient {}.post("http://localhost/notification")
+        Assert.assertEquals(HttpStatusCode.NotFound, disabledResponse.status)
+        Assert.assertNull(disabledResponse.headers["Content-Type"])
+        Assert.assertTrue(disabledResponse.readRawBytes().isEmpty())
+    }
+
+    @Test
+    fun notificationEndpointRequiresAccessToken() = testApplication {
+        val configuration = ServerConfiguration(arrayOf(
+            "-param", "base_url=https://localhost",
+            "-param", "database_engine=ephemeral",
+            "-param", "notification_endpoint_enabled=true"
+        ))
+        val serverEnvironment = ServerEnvironment.create(configuration) {
+            add(CredentialFactoryRegistry::class, credentalFactoryRegistry)
+        }
+        application {
+            installServerEnvironment(serverEnvironment)
+            configureRouting(serverEnvironment)
+        }
+        val response = createClient {}.post("http://localhost/notification") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"notification_id":"id","event":"credential_accepted"}""")
+        }
+        Assert.assertEquals(HttpStatusCode.Unauthorized, response.status)
+        Assert.assertEquals("DPoP", response.headers["WWW-Authenticate"])
+
+        val invalidTokenResponse = createClient {}.post("http://localhost/notification") {
+            headers.append("Authorization", "DPoP invalid")
+            contentType(ContentType.Application.Json)
+            setBody("""{"notification_id":"id","event":"credential_accepted"}""")
+        }
+        Assert.assertEquals(HttpStatusCode.Unauthorized, invalidTokenResponse.status)
+        Assert.assertTrue(invalidTokenResponse.headers["WWW-Authenticate"]?.contains("invalid_token") == true)
+    }
+
     fun runWithAuthorizationCode(
         offer: String,
         credentialFormat: CredentialFormat,
@@ -445,19 +725,55 @@ class ProvisioningClientTest {
         keyless: Boolean = false,
         signingAlgorithm: Algorithm = Algorithm.ESP256,
         useJwtProof: Boolean = false,
+        notificationIdOverride: String? = null,
+        notificationEventOverride: String? = null,
+        expectedNotificationStatus: HttpStatusCode = HttpStatusCode.NoContent,
+        notificationEvent: CredentialNotificationEvent = CredentialNotificationEvent.ACCEPTED,
+        notificationBodyOverride: String? = null,
+        expectedNotificationError: String? = null,
+        removeNotificationDpop: Boolean = false,
+        expectedNotificationChallenge: String? = null,
+        notificationContentType: String? = null,
         extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
+        val observedNotificationContentTypes = mutableListOf<String?>()
         val configuration = ServerConfiguration(serverArgs)
         val serverEnvironment = ServerEnvironment.create(configuration) {
             add(CredentialFactoryRegistry::class, credentalFactoryRegistry)
         }
         application {
+            install(createApplicationPlugin("ObserveNotificationContentType") {
+                onCall { call ->
+                    if (call.request.path().endsWith("/notification")) {
+                        observedNotificationContentTypes.add(call.request.headers["Content-Type"])
+                    }
+                }
+            })
             installServerEnvironment(serverEnvironment)
             configureRouting(serverEnvironment)
         }
         val httpClient = createClient {
             followRedirects = false
             install(credentialRequestRecorder)
+            if (removeNotificationDpop) {
+                install(createClientPlugin("RemoveNotificationDpop") {
+                    onRequest { request, _ ->
+                        if (request.url.pathSegments.lastOrNull() == "notification") {
+                            request.headers.remove("DPoP")
+                        }
+                    }
+                })
+            }
+            if (notificationContentType != null) {
+                install(createClientPlugin("NotificationContentType") {
+                    onRequest { request, _ ->
+                        if (request.url.pathSegments.lastOrNull() == "notification") {
+                            request.headers.remove("Content-Type")
+                            request.headers.append("Content-Type", notificationContentType)
+                        }
+                    }
+                })
+            }
             if (overrideCredentialConfigurationId != null) {
                 install(createClientPlugin("CredentialConfigurationIdOverrider") {
                     transformRequestBody { request, content, _ ->
@@ -478,12 +794,47 @@ class ProvisioningClientTest {
                     }
                 })
             }
+            if (notificationIdOverride != null || notificationEventOverride != null || notificationBodyOverride != null) {
+                install(createClientPlugin("NotificationRequestOverrider") {
+                    transformRequestBody { request, content, _ ->
+                        if (request.url.build().encodedPath.endsWith("/notification") && content is String) {
+                            if (notificationBodyOverride != null) {
+                                return@transformRequestBody TextContent(notificationBodyOverride, ContentType.Application.Json)
+                            }
+                            val notification = Json.parseToJsonElement(content).jsonObject
+                            val mutated = buildJsonObject {
+                                for ((key, value) in notification) {
+                                    when (key) {
+                                        "notification_id" -> put(
+                                            key,
+                                            notificationIdOverride?.let(::JsonPrimitive) ?: value
+                                        )
+                                        "event" -> put(
+                                            key,
+                                            notificationEventOverride?.let(::JsonPrimitive) ?: value
+                                        )
+                                        else -> put(key, value)
+                                    }
+                                }
+                            }
+                            TextContent(mutated.toString(), ContentType.Application.Json)
+                        } else {
+                            null
+                        }
+                    }
+                })
+            }
         }
         val clientPrefs = testClientPreferences.copy(signingAlgorithms = listOf(signingAlgorithm))
         val env = TestBackendEnvironment(httpClient, clientPrefs)
         withContext(env) {
+            val offerUri = if (serverArgs.contains("notification_endpoint_enabled=true")) {
+                offer.replace("http%3A%2F%2Flocalhost", "https%3A%2F%2Flocalhost")
+            } else {
+                offer
+            }
             val provisioningClient = OpenID4VCI.createClientFromOffer(
-                offerUri = offer,
+                offerUri = offerUri,
                 clientPreferences = clientPrefs
             )
             val challenges = provisioningClient.getAuthorizationChallenges()
@@ -626,9 +977,48 @@ class ProvisioningClientTest {
 
             Assert.assertEquals(1, credentialData.certifications.size)
             assertCredentialRequestsCompliant(expectProofs = !keyless)
+            Assert.assertTrue("Notification sent before storage", notificationRequestBodies.isEmpty())
+            val credentialResponse =
+                Json.parseToJsonElement(credentialResponseBodies.last()).jsonObject
+            Assert.assertEquals(
+                serverArgs.contains("notification_endpoint_enabled=true"),
+                credentialResponse.containsKey("notification_id")
+            )
 
-            credential.certify(credentialData.certifications.first().issuerData)
-            if (credential is MdocCredential) {
+            if (notificationEvent != CredentialNotificationEvent.DELETED) {
+                credential.certify(credentialData.certifications.first().issuerData)
+            }
+            provisioningClient.notifyCredentialResult(notificationEvent)
+            if (serverArgs.contains("notification_endpoint_enabled=true")) {
+                Assert.assertEquals(expectedNotificationStatus, notificationResponseStatuses.last())
+                if (expectedNotificationError != null) {
+                    Assert.assertEquals(expectedNotificationError, notificationResponseErrors.last())
+                }
+                if (expectedNotificationChallenge != null) {
+                    Assert.assertEquals(expectedNotificationChallenge, notificationResponseChallenges.last())
+                }
+                if (notificationContentType != null) {
+                    Assert.assertEquals(
+                        ContentType.parse(notificationContentType).toString(),
+                        observedNotificationContentTypes.last()
+                    )
+                }
+                val notificationBody = notificationRequestBodies.last() as String
+                val notification = Json.parseToJsonElement(notificationBody).jsonObject
+                val expectedEvent = when (notificationEvent) {
+                    CredentialNotificationEvent.ACCEPTED -> "credential_accepted"
+                    CredentialNotificationEvent.FAILURE -> "credential_failure"
+                    CredentialNotificationEvent.DELETED -> "credential_deleted"
+                }
+                Assert.assertEquals(expectedEvent, notification["event"]?.jsonPrimitive?.content)
+                Assert.assertTrue(notification["notification_id"]?.jsonPrimitive?.content?.isNotEmpty() == true)
+                val requestCount = notificationRequestBodies.size
+                provisioningClient.notifyCredentialResult(notificationEvent)
+                Assert.assertEquals("Notification sent twice", requestCount, notificationRequestBodies.size)
+            } else {
+                Assert.assertTrue("Notification sent when support is disabled", notificationRequestBodies.isEmpty())
+            }
+            if (credential is MdocCredential && notificationEvent != CredentialNotificationEvent.DELETED) {
                 // Assert that the IACA root certificate is excluded from x5chain
                 Assert.assertEquals(1, credential.issuerCertChain.certificates.size)
             }
@@ -654,8 +1044,9 @@ class ProvisioningClientTest {
     @Test
     fun runWithPreauthorizedCodeAndRefresh() = testApplication {
         val serverArgs = arrayOf(
-            "-param", "base_url=http://localhost",
+            "-param", "base_url=https://localhost",
             "-param", "database_engine=ephemeral",
+            "-param", "notification_endpoint_enabled=true"
         )
         val configuration = ServerConfiguration(serverArgs)
         val serverEnvironment = ServerEnvironment.create(configuration) {
@@ -691,6 +1082,7 @@ class ProvisioningClientTest {
             val json = Json.parseToJsonElement(response.readRawBytes().decodeToString()).jsonArray
             val offerObject = json.first().jsonObject
             val preauthorizedOffer = offerObject["offer"]!!.jsonPrimitive.content
+                .replace("http://localhost", "https://localhost")
             val txCode = offerObject["tx_code"]!!.jsonPrimitive.content
 
             val provisioningClient = OpenID4VCI.createClientFromOffer(
@@ -723,6 +1115,9 @@ class ProvisioningClientTest {
                     listOf(CredentialKeyAttestation("bar", keyInfo.attestation))))
 
             Assert.assertEquals(1, credentials.certifications.size)
+            val firstNotificationId = Json.parseToJsonElement(credentialResponseBodies.last())
+                .jsonObject["notification_id"]!!.jsonPrimitive.content
+            provisioningClient.notifyCredentialResult(CredentialNotificationEvent.ACCEPTED)
 
             val authorizationData = provisioningClient.getAuthorizationData()!!
 
@@ -737,6 +1132,19 @@ class ProvisioningClientTest {
             // The refresh token request carries a fresh client attestation challenge, so it
             // is not first refused with `use_attestation_challenge`.
             Assert.assertEquals(listOf(HttpStatusCode.OK), tokenResponseStatuses)
+            val refreshNotificationId = Json.parseToJsonElement(credentialResponseBodies.last())
+                .jsonObject["notification_id"]!!.jsonPrimitive.content
+            Assert.assertNotEquals(firstNotificationId, refreshNotificationId)
+            refreshClient.notifyCredentialResult(CredentialNotificationEvent.ACCEPTED)
+            Assert.assertEquals(
+                2,
+                notificationResponseStatuses.count { it == HttpStatusCode.NoContent }
+            )
+            val notifiedIds = notificationRequestBodies.map {
+                Json.parseToJsonElement(it as String).jsonObject["notification_id"]!!
+                    .jsonPrimitive.content
+            }.toSet()
+            Assert.assertEquals(setOf(firstNotificationId, refreshNotificationId), notifiedIds)
             assertCredentialRequestsCompliant()
 
             // Clean up authorization data
