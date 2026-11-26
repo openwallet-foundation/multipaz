@@ -186,6 +186,12 @@ data class MpzPass(
         private const val TAG = "MpzPass"
 
         /**
+         * Default maximum allowed decompressed size in bytes for the credential data payload of
+         * an [MpzPass] (10 MiB).
+         */
+        const val DEFAULT_MAX_DECOMPRESSED_SIZE: Int = 10 * 1024 * 1024
+
+        /**
          * Parses a CBOR array [DataItem] into an [MpzPass].
          *
          * If the pass contains a signed container (`#6.18(COSE_Sign1)`), the signature is checked against
@@ -195,8 +201,12 @@ data class MpzPass(
          *
          * @param dataItem The top-level CBOR array containing the MpzPass string tag and (signed or unsigned) compressed bytes.
          * @param disableSignatureVerification Set to `true` to skip cryptographic signature verification.
+         * @param maxDecompressedSize Maximum allowed uncompressed size in bytes for the pass payload.
+         *   Defaults to [DEFAULT_MAX_DECOMPRESSED_SIZE].
          * @return The parsed [MpzPass].
-         * @throws IllegalArgumentException if CBOR decoding or decompression fails, or if signature headers are malformed.
+         * @throws IllegalArgumentException if [maxDecompressedSize] is negative, if CBOR decoding or
+         *   decompression fails, if the decompressed payload exceeds [maxDecompressedSize] bytes,
+         *   or if signature headers are malformed.
          * @throws SignatureVerificationException if signature verification fails.
          */
         @Throws(
@@ -206,7 +216,8 @@ data class MpzPass(
         )
         suspend fun fromDataItem(
             dataItem: DataItem,
-            disableSignatureVerification: Boolean = false
+            disableSignatureVerification: Boolean = false,
+            maxDecompressedSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE,
         ): MpzPass {
             check(dataItem is CborArray) { "Expected an array" }
             require(dataItem[0].asTstr == "MpzPass") { "Wrong string at start" }
@@ -239,7 +250,7 @@ data class MpzPass(
                 else -> throw IllegalArgumentException("Expected bstr or Tagged.COSE_SIGN1 in dataItem[1]")
             }
 
-            val credentialDataBytes = compressedCredentialDataBytes.inflate()
+            val credentialDataBytes = compressedCredentialDataBytes.inflate(maxSize = maxDecompressedSize)
             val credentialData = Cbor.decode(credentialDataBytes)
 
             val uniqueId = credentialData["uniqueId"].asTstr

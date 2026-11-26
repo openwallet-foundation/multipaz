@@ -115,14 +115,25 @@ class CompressedStatusList(
 
     /**
      * Creates decompressed form of this status list.
+     *
+     * @param maxSize maximum allowed uncompressed size in bytes. Defaults to
+     *   [DEFAULT_MAX_DECOMPRESSED_SIZE].
+     * @return the decompressed [StatusList].
+     * @throws IllegalArgumentException if [maxSize] is negative, decompression fails,
+     *   or the decompressed status list exceeds [maxSize] bytes.
      */
-    suspend fun decompress(): StatusList {
-        return StatusList(bitsPerItem, compressedStatusList.toByteArray().zlibInflate())
+    suspend fun decompress(maxSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE): StatusList {
+        return StatusList(bitsPerItem, compressedStatusList.toByteArray().zlibInflate(maxSize = maxSize))
     }
 
     companion object {
         private const val STATUS_LIST_CLAIM = 65533L
         private const val TTL_CLAIM = 65534L
+
+        /**
+         * Default maximum allowed decompressed size in bytes for a [StatusList] bit array (16 MiB).
+         */
+        const val DEFAULT_MAX_DECOMPRESSED_SIZE: Int = 16 * 1024 * 1024
 
         /**
          * Parses and validates JWT that holds the status list.

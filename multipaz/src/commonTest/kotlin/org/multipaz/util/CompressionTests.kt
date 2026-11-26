@@ -140,4 +140,68 @@ class CompressionTests {
         val data = Random.nextBytes(64000)
         assertContentEquals(data, data.zlibDeflate().zlibInflate())
     }
+
+    @Test
+    fun inflateMaxSizeExactBoundary() = runTest {
+        for (size in listOf(1, 4096, 4097, 10_000)) {
+            val data = ByteArray(size) { (it % 251).toByte() }
+            val compressed = data.deflate(9)
+            assertContentEquals(data, compressed.inflate(maxSize = size))
+            assertFailsWith<IllegalArgumentException> {
+                compressed.inflate(maxSize = size - 1)
+            }
+        }
+    }
+
+    @Test
+    fun inflateMaxSizeZeroAndInvalid() = runTest {
+        val emptyCompressed = byteArrayOf().deflate()
+        assertContentEquals(byteArrayOf(), emptyCompressed.inflate(maxSize = 0))
+
+        val singleByteCompressed = byteArrayOf(42).deflate()
+        assertFailsWith<IllegalArgumentException> {
+            singleByteCompressed.inflate(maxSize = 0)
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            byteArrayOf().inflate()
+        }
+
+        val sampleCompressed = byteArrayOf(1, 2, 3).deflate()
+        assertFailsWith<IllegalArgumentException> {
+            sampleCompressed.inflate(maxSize = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            sampleCompressed.inflate(maxSize = Int.MIN_VALUE)
+        }
+    }
+
+    @Test
+    fun inflateRejectsDecompressionBomb() = runTest {
+        val bombPlaintext = ByteArray(8 * 1024 * 1024) { 'A'.code.toByte() }
+        val compressedBomb = bombPlaintext.deflate(9)
+        assertTrue(compressedBomb.size < 32 * 1024)
+        assertFailsWith<IllegalArgumentException> {
+            compressedBomb.inflate(maxSize = 64 * 1024)
+        }
+    }
+
+    @Test
+    fun zlibInflateMaxSizeBoundaryAndBomb() = runTest {
+        val data = ByteArray(5000) { (it % 251).toByte() }
+        val compressed = data.zlibDeflate()
+        assertContentEquals(data, compressed.zlibInflate(maxSize = data.size))
+        assertFailsWith<IllegalArgumentException> {
+            compressed.zlibInflate(maxSize = data.size - 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            compressed.zlibInflate(maxSize = -1)
+        }
+
+        val bombPlaintext = ByteArray(256 * 1024) { 'A'.code.toByte() }
+        val compressedBomb = bombPlaintext.zlibDeflate()
+        assertFailsWith<IllegalArgumentException> {
+            compressedBomb.zlibInflate(maxSize = 1024)
+        }
+    }
 }

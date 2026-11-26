@@ -1409,4 +1409,39 @@ class MpzPassTest {
             )
         }
     }
+
+    @Test
+    fun testFromDataItemMaxDecompressedSize() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val mdocDoc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+        )
+        val mdocCred = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = mdocDoc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = Algorithm.ESP256),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        mdocDoc.edit { provisioned = true }
+
+        val pass = mdocCred.exportToMpzPass()
+        val encoded = Cbor.decode(Cbor.encode(pass.toDataItem()))
+        val decompressedSize = encoded.asArray[1].asBstr.inflate().size
+
+        assertEquals(pass, MpzPass.fromDataItem(encoded, maxDecompressedSize = decompressedSize))
+        assertFailsWith<IllegalArgumentException> {
+            MpzPass.fromDataItem(encoded, maxDecompressedSize = decompressedSize - 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MpzPass.fromDataItem(encoded, maxDecompressedSize = -1)
+        }
+    }
 }
