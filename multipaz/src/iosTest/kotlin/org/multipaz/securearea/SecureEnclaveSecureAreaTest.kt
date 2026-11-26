@@ -517,8 +517,8 @@ class SecureEnclaveSecureAreaTest {
             reopened.sign("hybridKey", "preloaded payload".encodeToByteArray())
         }
         assertTrue(preloadedSig is HybridSignature)
-        assertSame(preloaded[0], backend.lastPqUnlockData)
-        assertSame(preloaded[0], backend.lastEcUnlockData)
+        assertSame<KeyUnlockData?>(preloaded[0], backend.lastPqUnlockData)
+        assertSame<KeyUnlockData?>(preloaded[0], backend.lastEcUnlockData)
 
         // Biometric enrollment change invalidates the hybrid key
         currentBiometryState = BiometryState.Enrolled(state2)

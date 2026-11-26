@@ -17,10 +17,17 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 private const val TAG = "OtherDocument"
+
+internal data class ParsedSdJwtPresentation(
+    val sdJwt: SdJwt,
+    val sdJwtKb: SdJwtKb?,
+    val decompressedSize: Int,
+)
 
 /**
  * A document in a [DeviceResponse] which isn't an ISO mdoc.
@@ -65,13 +72,41 @@ data class OtherDocument(
         _keyBindingRequired = true
     }
 
-    internal suspend fun parseSdJwtPresentation(): Pair<SdJwt, SdJwtKb?> {
-        val compactSerialization = data.toByteArray().zlibInflate().decodeToString()
+    /**
+     * Decompresses [data] using ZLIB (RFC 1950 + RFC 1951).
+     *
+     * @param maxSize maximum allowed uncompressed size in bytes. Defaults to
+     *   [DEFAULT_MAX_DECOMPRESSED_SIZE].
+     * @return the decompressed document bytes.
+     * @throws IllegalArgumentException if [maxSize] is negative, decompression fails,
+     *   or the decompressed payload exceeds [maxSize] bytes.
+     */
+    @Throws(
+        IllegalArgumentException::class,
+        CancellationException::class
+    )
+    suspend fun decompressData(
+        maxSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE
+    ): ByteArray = data.toByteArray().zlibInflate(maxSize = maxSize)
+
+    internal suspend fun parseSdJwtPresentation(
+        maxDecompressedSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE
+    ): ParsedSdJwtPresentation {
+        val decompressed = decompressData(maxSize = maxDecompressedSize)
+        val compactSerialization = decompressed.decodeToString()
         return if (compactSerialization.endsWith("~")) {
-            Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
+            ParsedSdJwtPresentation(
+                sdJwt = SdJwt.fromCompactSerialization(compactSerialization),
+                sdJwtKb = null,
+                decompressedSize = decompressed.size,
+            )
         } else {
             val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
-            Pair(sdJwtKb.sdJwt, sdJwtKb)
+            ParsedSdJwtPresentation(
+                sdJwt = sdJwtKb.sdJwt,
+                sdJwtKb = sdJwtKb,
+                decompressedSize = decompressed.size,
+            )
         }
     }
 
@@ -91,6 +126,8 @@ data class OtherDocument(
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
         keyBindingRequired: Boolean = true,
+        maxDecompressedSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE,
+        parsedSdJwt: ParsedSdJwtPresentation? = null,
     ) {
         _expectedAudience = null
         _keyBindingRequired = keyBindingRequired
@@ -101,6 +138,8 @@ data class OtherDocument(
                 transactionData = transactionData,
                 atTime = atTime,
                 keyBindingRequired = keyBindingRequired,
+                maxDecompressedSize = maxDecompressedSize,
+                parsedSdJwt = parsedSdJwt,
             )
             else -> throw IllegalStateException("Unsupported OtherDocument format '$docFormat'")
         }
@@ -112,8 +151,10 @@ data class OtherDocument(
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
         keyBindingRequired: Boolean = true,
+        maxDecompressedSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE,
+        parsedSdJwt: ParsedSdJwtPresentation? = null,
     ) {
-        val (sdJwt, sdJwtKb) = parseSdJwtPresentation()
+        val (sdJwt, sdJwtKb, _) = parsedSdJwt ?: parseSdJwtPresentation(maxDecompressedSize = maxDecompressedSize)
 
         val issuerCertChain = sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")
@@ -174,6 +215,12 @@ data class OtherDocument(
     }
 
     companion object {
+        /**
+         * Default maximum allowed decompressed size in bytes for a single [OtherDocument]
+         * payload (1 MiB).
+         */
+        const val DEFAULT_MAX_DECOMPRESSED_SIZE: Int = 1 * 1024 * 1024
+
         internal fun fromDataItem(dataItem: DataItem): OtherDocument {
             val docFormat = dataItem["docFormat"].asTstr
             val data = ByteString(dataItem["data"].asBstr)

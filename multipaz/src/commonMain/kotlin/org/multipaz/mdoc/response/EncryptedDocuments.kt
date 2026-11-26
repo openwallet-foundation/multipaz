@@ -35,7 +35,6 @@ import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -80,6 +79,11 @@ data class EncryptedDocuments internal constructor(
      *   decrypting `dc+sd-jwt` documents in [EncryptedDocumentsPlaintext.otherDocuments].
      * @param documentTypeRepository optional [DocumentTypeRepository] used to resolve verifier-approved
      *   `dc+sd-jwt` `vct` aliases via [org.multipaz.documenttype.JsonDocumentType.otherVcts].
+     * @param maxOtherDocumentDecompressedSize maximum allowed decompressed size in bytes for each
+     *   decrypted [OtherDocument] payload. Defaults to [OtherDocument.DEFAULT_MAX_DECOMPRESSED_SIZE].
+     * @param maxTotalOtherDocumentsDecompressedSize maximum total decompressed size in bytes across
+     *   all decrypted [OtherDocument] payloads. Defaults to at least
+     *   [DeviceResponse.DEFAULT_MAX_TOTAL_OTHER_DOCUMENTS_DECOMPRESSED_SIZE].
      * @return a [EncryptedDocumentsPlaintext].
      */
     suspend fun decrypt(
@@ -90,7 +94,18 @@ data class EncryptedDocuments internal constructor(
         atTime: Instant = Clock.System.now(),
         deviceRequest: DeviceRequest? = null,
         documentTypeRepository: DocumentTypeRepository? = null,
+        maxOtherDocumentDecompressedSize: Int = OtherDocument.DEFAULT_MAX_DECOMPRESSED_SIZE,
+        maxTotalOtherDocumentsDecompressedSize: Int = maxOf(
+            DeviceResponse.DEFAULT_MAX_TOTAL_OTHER_DOCUMENTS_DECOMPRESSED_SIZE,
+            maxOtherDocumentDecompressedSize
+        ),
     ): EncryptedDocumentsPlaintext {
+        require(maxOtherDocumentDecompressedSize >= 0) {
+            "maxOtherDocumentDecompressedSize must be non-negative, was $maxOtherDocumentDecompressedSize"
+        }
+        require(maxTotalOtherDocumentsDecompressedSize >= 0) {
+            "maxTotalOtherDocumentsDecompressedSize must be non-negative, was $maxTotalOtherDocumentsDecompressedSize"
+        }
         if (docRequestIds.distinct().size != docRequestIds.size) {
             throw IllegalStateException("Duplicate docRequestIds $docRequestIds in EncryptedDocuments")
         }
@@ -241,11 +256,20 @@ data class EncryptedDocuments internal constructor(
             }
         }
 
+        var remainingOtherDocDecompressedBytes = maxTotalOtherDocumentsDecompressedSize
         encDocsPt.otherDocuments.forEachIndexed { index, document ->
             try {
                 var matchedReqIds: List<Int> = emptyList()
-                if (deviceRequest != null && document.docFormat == "dc+sd-jwt") {
-                    val (sdJwt, sdJwtKb) = document.parseSdJwtPresentation()
+                val parsedSdJwt = if (document.docFormat == "dc+sd-jwt") {
+                    val limit = minOf(maxOtherDocumentDecompressedSize, remainingOtherDocDecompressedBytes)
+                    document.parseSdJwtPresentation(maxDecompressedSize = limit).also {
+                        remainingOtherDocDecompressedBytes -= it.decompressedSize
+                    }
+                } else {
+                    null
+                }
+                if (deviceRequest != null && parsedSdJwt != null) {
+                    val (sdJwt, sdJwtKb, _) = parsedSdJwt
                     val vct = (sdJwt.jwtBody["vct"] as? JsonPrimitive)?.content
                         ?: throw IllegalStateException("OtherDocument is missing 'vct' claim")
                     val innerIds = document.docRequestIds
@@ -306,7 +330,12 @@ data class EncryptedDocuments internal constructor(
                 val transactionData = if (index < transactionDataList.size) {
                     transactionDataList[index]
                 } else if (deviceRequest != null && documentTypeRepository != null && matchedReqIds.isNotEmpty()) {
-                    resolveEncryptedSdJwtTransactions(document, matchedReqIds, deviceRequest, documentTypeRepository)
+                    resolveEncryptedSdJwtTransactions(
+                        sdJwtKb = parsedSdJwt?.sdJwtKb,
+                        reqIds = matchedReqIds,
+                        deviceRequest = deviceRequest,
+                        documentTypeRepository = documentTypeRepository
+                    )
                 } else {
                     emptyList()
                 }
@@ -316,6 +345,8 @@ data class EncryptedDocuments internal constructor(
                     transactionData = transactionData,
                     atTime = atTime,
                     keyBindingRequired = keyBindingRequired,
+                    maxDecompressedSize = maxOtherDocumentDecompressedSize,
+                    parsedSdJwt = parsedSdJwt,
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -825,18 +856,12 @@ internal fun validateSignedSdJwtTransactionDocRequestIds(
     }
 }
 
-internal suspend fun resolveEncryptedSdJwtTransactions(
-    otherDocument: OtherDocument,
+internal fun resolveEncryptedSdJwtTransactions(
+    sdJwtKb: SdJwtKb?,
     reqIds: List<Int>,
     deviceRequest: DeviceRequest,
     documentTypeRepository: DocumentTypeRepository
 ): List<TransactionData<*>> {
-    val sdJwtKb = try {
-        otherDocument.parseSdJwtPresentation().second
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        null
-    }
     val result = mutableListOf<TransactionData<*>>()
     for (reqId in reqIds) {
         val req = deviceRequest.docRequests[reqId]

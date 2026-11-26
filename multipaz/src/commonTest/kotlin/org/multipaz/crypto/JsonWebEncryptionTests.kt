@@ -6,6 +6,7 @@ import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -250,6 +251,169 @@ class JsonWebEncryptionTests {
         )
         assertFailsWith<IllegalArgumentException> {
             JsonWebEncryption.decrypt(standardCritJwe, recipientAsymmetricKey)
+        }
+    }
+
+    private suspend fun encryptWithCustomHeaderAndBody(
+        recipientPublicKey: EcPublicKey,
+        extraHeader: JsonObject,
+        plaintext: ByteArray,
+    ): String {
+        return Crypto.createEcPrivateKey(EcCurve.P256).use { senderEphemeralKey ->
+            val protectedHeader = buildJsonObject {
+                put("alg", "ECDH-ES")
+                put("enc", Algorithm.A128GCM.joseAlgorithmIdentifier)
+                put("epk", senderEphemeralKey.publicKey.toJwk())
+                extraHeader.forEach { (k, v) -> put(k, v) }
+            }
+            val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
+            val algId = Algorithm.A128GCM.joseAlgorithmIdentifier!!.encodeToByteArray()
+            val cek = Crypto.keyAgreement(senderEphemeralKey, recipientPublicKey).use { sharedSecret ->
+                JsonWebEncryption.concatKDF(
+                    sharedSecretZ = sharedSecret,
+                    keyDataLenBits = 128,
+                    algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                    partyUInfo = buildByteString { appendInt32(0) },
+                    partyVInfo = buildByteString { appendInt32(0) },
+                    suppPubInfo = buildByteString { appendInt32(128) }
+                )
+            }
+            val nonce = Crypto.secureRandom.nextBytes(12)
+            val cipherTextWithTag = cek.use { key ->
+                Crypto.encrypt(
+                    algorithm = Algorithm.A128GCM,
+                    key = key,
+                    nonce = nonce,
+                    messagePlaintext = plaintext,
+                    aad = protectedHeaderB64.encodeToByteArray(),
+                )
+            }
+            val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
+            val authTag = cipherTextWithTag.copyOfRange(cipherTextWithTag.size - 16, cipherTextWithTag.size)
+            "$protectedHeaderB64..${nonce.toBase64Url()}.${cipherText.toBase64Url()}.${authTag.toBase64Url()}"
+        }
+    }
+
+    @Test
+    fun testCompressionMaxDecompressedSize() = runTest {
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val recipientAsymmetricKey = AsymmetricKey.anonymous(
+            privateKey = recipientKey,
+            algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+        )
+        val claims = buildJsonObject { put("padding", "A".repeat(10_000)) }
+        val encodedSize = Json.encodeToString(claims).encodeToByteArray().size
+
+        val compressedJwe = JsonWebEncryption.encrypt(
+            claimsSet = claims,
+            recipientPublicKey = recipientKey.publicKey,
+            encAlg = Algorithm.A128GCM,
+            apu = null,
+            apv = null,
+            compressionLevel = 9
+        )
+        assertEquals(
+            claims,
+            JsonWebEncryption.decrypt(
+                encryptedJwt = compressedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = encodedSize
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(
+                encryptedJwt = compressedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = encodedSize - 1
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(
+                encryptedJwt = compressedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = 0
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(
+                encryptedJwt = compressedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = -1
+            )
+        }
+
+        // Uncompressed JWEs remain unaffected when maxDecompressedSize == 0
+        val uncompressedJwe = JsonWebEncryption.encrypt(
+            claimsSet = claims,
+            recipientPublicKey = recipientKey.publicKey,
+            encAlg = Algorithm.A128GCM,
+            apu = null,
+            apv = null,
+            compressionLevel = null
+        )
+        assertEquals(
+            claims,
+            JsonWebEncryption.decrypt(
+                encryptedJwt = uncompressedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = 0
+            )
+        )
+    }
+
+    @Test
+    fun testDefaultMaxDecompressedSizeRejectsOversizedZipDef() = runTest {
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val recipientAsymmetricKey = AsymmetricKey.anonymous(
+            privateKey = recipientKey,
+            algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+        )
+        val claims = buildJsonObject {
+            put("vp_token", "A".repeat(JsonWebEncryption.DEFAULT_MAX_DECOMPRESSED_SIZE + 1024))
+        }
+        val oversizedJwe = JsonWebEncryption.encrypt(
+            claimsSet = claims,
+            recipientPublicKey = recipientKey.publicKey,
+            encAlg = Algorithm.A128GCM,
+            apu = null,
+            apv = null,
+            compressionLevel = 9
+        )
+        assertFailsWith<IllegalArgumentException> {
+            JsonWebEncryption.decrypt(
+                encryptedJwt = oversizedJwe,
+                recipientKey = recipientAsymmetricKey
+            )
+        }
+        assertEquals(
+            claims,
+            JsonWebEncryption.decrypt(
+                encryptedJwt = oversizedJwe,
+                recipientKey = recipientAsymmetricKey,
+                maxDecompressedSize = JsonWebEncryption.DEFAULT_MAX_DECOMPRESSED_SIZE + 4096
+            )
+        )
+    }
+
+    @Test
+    fun testZipHeaderValidation() = runTest {
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val recipientAsymmetricKey = AsymmetricKey.anonymous(
+            privateKey = recipientKey,
+            algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+        )
+        val body = Json.encodeToString(buildJsonObject { put("msg", "hello") }).encodeToByteArray()
+
+        for (invalidZipHeader in listOf(
+            buildJsonObject { put("zip", "GZIP") },
+            buildJsonObject { put("zip", 123) },
+            buildJsonObject { put("zip", JsonNull) },
+            buildJsonObject { put("zip", buildJsonObject {}) },
+        )) {
+            val jwe = encryptWithCustomHeaderAndBody(recipientKey.publicKey, invalidZipHeader, body)
+            assertFailsWith<IllegalArgumentException> {
+                JsonWebEncryption.decrypt(jwe, recipientAsymmetricKey)
+            }
         }
     }
 }

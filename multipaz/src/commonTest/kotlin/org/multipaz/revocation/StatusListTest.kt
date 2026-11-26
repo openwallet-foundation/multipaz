@@ -600,6 +600,25 @@ class StatusListTest {
         )
     }
 
+    @Test
+    fun testCompressedStatusListDecompressMaxSize() = runTest {
+        val builder = StatusList.Builder(bitsPerItem = 1, minSize = 80_000)
+        builder.addStatus(0, 1)
+        builder.addStatus(79_999, 1)
+        val compressed = builder.build().compress()
+
+        val decompressed = compressed.decompress(maxSize = 10_000)
+        assertEquals(1, decompressed[0])
+        assertEquals(1, decompressed[79_999])
+
+        assertFailsWith<IllegalArgumentException> {
+            compressed.decompress(maxSize = 9_999)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            compressed.decompress(maxSize = -1)
+        }
+    }
+
     suspend fun testRoundtrip(size: Int, bits: Int, useJwt: Boolean) {
         val map = mutableMapOf<Int, Int>()
         val statusCount = (1 shl bits)  // number of distinct status values

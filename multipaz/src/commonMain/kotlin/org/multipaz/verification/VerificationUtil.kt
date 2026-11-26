@@ -73,7 +73,6 @@ import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toNumericDateInstant
-import org.multipaz.util.zlibInflate
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.coroutines.cancellation.CancellationException
@@ -831,6 +830,8 @@ object VerificationUtil {
      * @param responseEncryptionKey the response encryption or `null` if the response isn't encrypted.
      * @param clientId optional `client_id` used for signed OpenID4VP Draft 24 requests; if `null`,
      *   `web-origin:<origin>` is used for Draft 24 handover computation.
+     * @param maxDecompressedSize maximum allowed size in bytes for a compressed JWE response
+     *   payload (`zip=DEF`). Defaults to [JsonWebEncryption.DEFAULT_MAX_DECOMPRESSED_SIZE].
      * @return a [OpenID4VPDcResponse] or [MdocApiDcResponse] with the cleartext response.
      */
     suspend fun decryptDcResponse(
@@ -839,6 +840,7 @@ object VerificationUtil {
         origin: String,
         responseEncryptionKey: AsymmetricKey?,
         clientId: String? = null,
+        maxDecompressedSize: Int = JsonWebEncryption.DEFAULT_MAX_DECOMPRESSED_SIZE,
     ): DcResponse {
         when (val exchangeProtocol = response["protocol"]!!.jsonPrimitive.content) {
             "openid4vp",
@@ -851,7 +853,8 @@ object VerificationUtil {
                         ?: throw IllegalStateException("Expected encrypted 'response' parameter")
                     JsonWebEncryption.decrypt(
                         encryptedJwt = encryptedResponse,
-                        recipientKey = responseEncryptionKey
+                        recipientKey = responseEncryptionKey,
+                        maxDecompressedSize = maxDecompressedSize,
                     )
                 } else {
                     val jwtResponse = dataObj["response"]?.jsonPrimitive?.content
@@ -1738,7 +1741,7 @@ object VerificationUtil {
             if (document.docFormat != "dc+sd-jwt") {
                 throw IllegalStateException("Unsupported OtherDocument format '${document.docFormat}'")
             }
-            val sdJwtKbCompactSerialization = document.data.toByteArray().zlibInflate().decodeToString()
+            val sdJwtKbCompactSerialization = document.decompressData().decodeToString()
 
             val sessionTranscriptBytes = Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,

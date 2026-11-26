@@ -3,6 +3,11 @@ package org.multipaz.util
 import kotlin.math.min
 
 /**
+ * Default maximum number of uncompressed bytes allowed by [inflate] and [zlibInflate] (4 MiB).
+ */
+const val DEFAULT_MAX_INFLATE_SIZE: Int = 4 * 1024 * 1024
+
+/**
  * Compresses data using DEFLATE algorithm according to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
  *
  * The implementation may not support [compressionLevel] and use a fixed level instead.
@@ -15,13 +20,17 @@ import kotlin.math.min
 expect suspend fun ByteArray.deflate(compressionLevel: Int = 5): ByteArray
 
 /**
- * Decompresses data compressed DEFLATE algorithm according to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
+ * Decompresses data compressed using the DEFLATE algorithm according to
+ * [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
  *
  * @receiver the compressed data to decompress.
+ * @param maxSize the maximum allowed number of uncompressed bytes. Defaults to
+ *   [DEFAULT_MAX_INFLATE_SIZE].
  * @return the decompressed data.
- * @throws IllegalArgumentException if the given data is invalid
+ * @throws IllegalArgumentException if [maxSize] is negative, if the given data is invalid,
+ *   or if the decompressed data exceeds [maxSize] bytes.
  */
-expect suspend fun ByteArray.inflate(): ByteArray
+expect suspend fun ByteArray.inflate(maxSize: Int = DEFAULT_MAX_INFLATE_SIZE): ByteArray
 
 
 /**
@@ -72,15 +81,19 @@ suspend fun ByteArray.zlibDeflate(compressionLevel: Int = 9): ByteArray =
 
 
 /**
- * Decompresses data compressed DEFLATE algorithm according to
+ * Decompresses data compressed using the DEFLATE algorithm according to
  * [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt) with zlib wrapper
  * [RFC 1950](https://www.ietf.org/rfc/rfc1950.txt).
  *
  * @receiver the compressed data to decompress.
+ * @param maxSize the maximum allowed number of uncompressed bytes. Defaults to
+ *   [DEFAULT_MAX_INFLATE_SIZE].
  * @return the decompressed data.
- * @throws IllegalArgumentException if the given data is invalid
+ * @throws IllegalArgumentException if [maxSize] is negative, if the given data is invalid,
+ *   or if the decompressed data exceeds [maxSize] bytes.
  */
-suspend fun ByteArray.zlibInflate(): ByteArray {
+suspend fun ByteArray.zlibInflate(maxSize: Int = DEFAULT_MAX_INFLATE_SIZE): ByteArray {
+    require(maxSize >= 0) { "maxSize must be non-negative, was $maxSize" }
     if (size < 6) {
         throw IllegalArgumentException("invalid compression (truncated)")
     }
@@ -94,7 +107,7 @@ suspend fun ByteArray.zlibInflate(): ByteArray {
     if ((flg and 0x20) != 0) {
         throw IllegalArgumentException("invalid compression (preset dictionary is not supported)")
     }
-    val data = sliceArray(2..<size - 4).inflate()
+    val data = sliceArray(2..<size - 4).inflate(maxSize = maxSize)
     val checksum = data.adler32()
     val expectedChecksum = sliceArray(size - 4..<size)
     if (!(checksum contentEquals expectedChecksum)) {

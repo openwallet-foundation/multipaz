@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -24,6 +25,12 @@ import kotlin.random.Random
  *  JSON Web Encryption (JWE) support routines
  */
 object JsonWebEncryption {
+    /**
+     * Default maximum allowed size in bytes for a decompressed JWE payload when the `zip`
+     * protected header parameter is present (2 MiB).
+     */
+    const val DEFAULT_MAX_DECOMPRESSED_SIZE: Int = 2 * 1024 * 1024
+
     /**
      * Encrypts a claim set using ECDH-ES.
      *
@@ -119,9 +126,13 @@ object JsonWebEncryption {
      *
      * @param encryptedJwt the compact serialization of the JWE.
      * @param recipientKey the recipients private key corresponding to the public key this was encrypted to.
+     * @param maxDecompressedSize the maximum allowed size in bytes for the decompressed payload when
+     *   the protected header specifies compression (`zip`). Defaults to
+     *   [DEFAULT_MAX_DECOMPRESSED_SIZE]. Passing `0` rejects compressed JWE payloads.
      * @return the decrypted claims set.
-     * @throws IllegalArgumentException if the JWE format, critical (`crit`) header parameters,
-     *   or algorithm is invalid or unsupported.
+     * @throws IllegalArgumentException if [maxDecompressedSize] is negative, if the JWE format,
+     *   critical (`crit`) header parameters, compression (`zip`), or algorithm is invalid or
+     *   unsupported, or if the decompressed payload exceeds [maxDecompressedSize] bytes.
      * @throws IllegalStateException if decryption fails.
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
@@ -135,8 +146,12 @@ object JsonWebEncryption {
     )
     suspend fun decrypt(
         encryptedJwt: String,
-        recipientKey: AsymmetricKey
+        recipientKey: AsymmetricKey,
+        maxDecompressedSize: Int = DEFAULT_MAX_DECOMPRESSED_SIZE,
     ): JsonObject {
+        require(maxDecompressedSize >= 0) {
+            "maxDecompressedSize must be non-negative, was $maxDecompressedSize"
+        }
         val splits = encryptedJwt.split(".")
         require(splits.size == 5)
         val (protectedHeaderB64, encryptedKeyB64, ivB64, cipherTextB64, authenticationTagB64) = splits
@@ -154,6 +169,21 @@ object JsonWebEncryption {
             Algorithm.A192GCM -> 192
             Algorithm.A256GCM -> 256
             else -> throw IllegalArgumentException("encAlg $encAlg not supported")
+        }
+
+        val compressionAlgorithm = protectedHeader["zip"]?.let { zipElement ->
+            require(zipElement is JsonPrimitive && zipElement.isString) {
+                "JWE 'zip' header parameter must be a string"
+            }
+            zipElement.content
+        }
+        if (compressionAlgorithm != null) {
+            if (compressionAlgorithm != "DEF") {
+                throw IllegalArgumentException("Unsupported compression algorithm $compressionAlgorithm")
+            }
+            if (maxDecompressedSize == 0) {
+                throw IllegalArgumentException("Compressed JWE payloads are not allowed")
+            }
         }
 
         val senderEphemeralKey = EcPublicKey.fromJwk(protectedHeader["epk"]!!.jsonObject)
@@ -182,19 +212,15 @@ object JsonWebEncryption {
             )
         }
 
-        val compressionAlgorithm = protectedHeader["zip"]?.jsonPrimitive?.content
-        if (compressionAlgorithm == null) {
-            return Json.decodeFromString(JsonObject.serializer(), clearText.decodeToString())
+        val payloadBytes = if (compressionAlgorithm == "DEF") {
+            clearText.inflate(maxSize = maxDecompressedSize)
+        } else {
+            clearText
         }
-        when (compressionAlgorithm) {
-            "DEF" -> {
-                return Json.decodeFromString(
-                    deserializer = JsonObject.serializer(),
-                    string = clearText.inflate().decodeToString()
-                )
-            }
-            else -> throw IllegalArgumentException("Unsupported compression algorithm $compressionAlgorithm")
-        }
+        return Json.decodeFromString(
+            deserializer = JsonObject.serializer(),
+            string = payloadBytes.decodeToString()
+        )
     }
 
     /**

@@ -222,7 +222,6 @@ class HybridKemPrivateKey private constructor(
      *
      * @throws UnsupportedOperationException always.
      */
-    @Throws(UnsupportedOperationException::class)
     override fun toPem(): String {
         throw UnsupportedOperationException(
             "PEM encoding is not defined for CFRG hybrid KEM private keys ($algorithm)"

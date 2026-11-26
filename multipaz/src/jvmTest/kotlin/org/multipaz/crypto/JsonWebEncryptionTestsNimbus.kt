@@ -16,16 +16,24 @@ import com.nimbusds.jwt.EncryptedJWT
 import com.nimbusds.jwt.JWTClaimsSet
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.junit.Test
+import org.multipaz.util.appendInt32
+import org.multipaz.verification.VerificationUtil
+import java.io.ByteArrayOutputStream
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
+import java.util.zip.Deflater
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class JsonWebEncryptionTestsNimbus {
 
@@ -122,5 +130,89 @@ class JsonWebEncryptionTestsNimbus {
         )
 
         assertEquals(claims, decryptedClaims)
+    }
+
+    @Test
+    fun testOversizedZipDefBombRejectedByDecryptDcResponse() = runTest {
+        val verifierKey = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        // Stream-deflate a 64 MiB JSON payload without ever holding 64 MiB uncompressed in RAM
+        val baos = ByteArrayOutputStream()
+        val deflater = Deflater(Deflater.BEST_COMPRESSION, /* nowrap = */ true)
+        try {
+            val outBuf = ByteArray(8192)
+            fun feedAndDrain(bytes: ByteArray) {
+                deflater.setInput(bytes)
+                while (!deflater.needsInput()) {
+                    val n = deflater.deflate(outBuf)
+                    if (n > 0) baos.write(outBuf, 0, n)
+                }
+            }
+            feedAndDrain("{\"vp_token\":{\"pid\":[\"".encodeToByteArray())
+            val chunk = ByteArray(64 * 1024) { 'A'.code.toByte() }
+            repeat(1024) {
+                feedAndDrain(chunk)
+            }
+            feedAndDrain("\"]}}".encodeToByteArray())
+            deflater.finish()
+            while (!deflater.finished()) {
+                val n = deflater.deflate(outBuf)
+                if (n > 0) baos.write(outBuf, 0, n)
+            }
+        } finally {
+            deflater.end()
+        }
+        val compressedPayload = baos.toByteArray()
+        assertTrue(compressedPayload.size < 128 * 1024)
+
+        val jwe = Crypto.createEcPrivateKey(EcCurve.P256).use { senderEphemeralKey ->
+            val protectedHeader = buildJsonObject {
+                put("alg", "ECDH-ES")
+                put("enc", Algorithm.A128GCM.joseAlgorithmIdentifier)
+                put("epk", senderEphemeralKey.publicKey.toJwk())
+                put("zip", "DEF")
+            }
+            val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
+            val algId = Algorithm.A128GCM.joseAlgorithmIdentifier!!.encodeToByteArray()
+            val cek = Crypto.keyAgreement(senderEphemeralKey, verifierKey.publicKey).use { sharedSecret ->
+                JsonWebEncryption.concatKDF(
+                    sharedSecretZ = sharedSecret,
+                    keyDataLenBits = 128,
+                    algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                    partyUInfo = buildByteString { appendInt32(0) },
+                    partyVInfo = buildByteString { appendInt32(0) },
+                    suppPubInfo = buildByteString { appendInt32(128) }
+                )
+            }
+            val nonce = Crypto.secureRandom.nextBytes(12)
+            val cipherTextWithTag = cek.use { key ->
+                Crypto.encrypt(
+                    algorithm = Algorithm.A128GCM,
+                    key = key,
+                    nonce = nonce,
+                    messagePlaintext = compressedPayload,
+                    aad = protectedHeaderB64.encodeToByteArray(),
+                )
+            }
+            val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
+            val authTag = cipherTextWithTag.copyOfRange(cipherTextWithTag.size - 16, cipherTextWithTag.size)
+            "$protectedHeaderB64..${nonce.toBase64Url()}.${cipherText.toBase64Url()}.${authTag.toBase64Url()}"
+        }
+
+        val response = buildJsonObject {
+            put("protocol", "openid4vp-v1-unsigned")
+            putJsonObject("data") { put("response", jwe) }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            VerificationUtil.decryptDcResponse(
+                response = response,
+                nonce = ByteString(ByteArray(16)),
+                origin = "https://verifier.invalid",
+                responseEncryptionKey = AsymmetricKey.anonymous(
+                    privateKey = verifierKey,
+                    algorithm = verifierKey.curve.defaultKeyAgreementAlgorithm
+                ),
+            )
+        }
     }
 }

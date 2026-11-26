@@ -5746,4 +5746,233 @@ class DeviceResponseTest {
         assertEquals(1, decrypted.otherDocuments.size)
         assertEquals(listOf(1), decrypted.otherDocuments.single().docRequestIds)
     }
+
+    @Test
+    fun otherDocumentDecompressionLimits() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            add(byteArrayOf(1, 2, 3))
+        }
+        val expectedSessionAudience = transcriptAudience(sessionTranscript)
+
+        // 1. Direct OtherDocument.decompressData() limit enforcement
+        val sampleBytes = "A".repeat(10_000).encodeToByteArray()
+        val sampleOtherDoc = OtherDocument(
+            docFormat = "dc+sd-jwt",
+            data = ByteString(sampleBytes.zlibDeflate())
+        )
+        assertContentEquals(sampleBytes, sampleOtherDoc.decompressData(maxSize = sampleBytes.size))
+        val directErr = assertFailsWith<IllegalArgumentException> {
+            sampleOtherDoc.decompressData(maxSize = sampleBytes.size - 1)
+        }
+        assertTrue(directErr.message!!.contains("exceeds maximum size"))
+        assertFailsWith<IllegalArgumentException> {
+            sampleOtherDoc.decompressData(maxSize = -1)
+        }
+
+        // 2. DeviceResponse.verify() enforces per-document default (1 MiB) and custom limits
+        val oversizedPayload = ByteArray(OtherDocument.DEFAULT_MAX_DECOMPRESSED_SIZE + 1024) {
+            'A'.code.toByte()
+        }
+        val oversizedResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(
+                OtherDocument(
+                    docFormat = "dc+sd-jwt",
+                    data = ByteString(oversizedPayload.zlibDeflate())
+                )
+            )
+        }
+        val parsedOversized = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(oversizedResponse.toDataItem())))
+        val oversizedErr = assertFailsWith<IllegalArgumentException> {
+            parsedOversized.verify(sessionTranscript = sessionTranscript, atTime = euPidTimeSigned)
+        }
+        assertTrue(oversizedErr.message!!.contains("exceeds maximum size"))
+
+        val validOtherDoc = arbitraryAudienceOtherDocument(sessionTranscript, audience = expectedSessionAudience)
+        val validOtherDocSize = validOtherDoc.decompressData().size
+        val singleValidResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(validOtherDoc)
+        }
+        val parsedSingleValid = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(singleValidResponse.toDataItem())))
+        val customPerDocErr = assertFailsWith<IllegalArgumentException> {
+            parsedSingleValid.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                maxOtherDocumentDecompressedSize = validOtherDocSize - 1,
+            )
+        }
+        assertTrue(customPerDocErr.message!!.contains("exceeds maximum size"))
+
+        // 3. DeviceResponse.verify() enforces aggregate total limit across multiple OtherDocuments
+        val multiValidResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(validOtherDoc)
+            addOtherDocument(validOtherDoc)
+        }
+        val parsedMultiValid = DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(multiValidResponse.toDataItem())))
+        val customTotalErr = assertFailsWith<IllegalArgumentException> {
+            parsedMultiValid.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = euPidTimeSigned,
+                maxOtherDocumentDecompressedSize = validOtherDocSize,
+                maxTotalOtherDocumentsDecompressedSize = (validOtherDocSize * 2) - 1,
+            )
+        }
+        assertTrue(customTotalErr.message!!.contains("exceeds maximum size"))
+
+        // Valid ~870 KiB SD-JWT+KB passes individually under default 1 MiB limit,
+        // while 5 copies (~4.3 MiB) exceed the default 4 MiB aggregate budget.
+        val originalSdJwt = SdJwt.fromCompactSerialization(euPidCredential.issuerProvidedData.decodeToString())
+        val euPidKeyInfo = euPidCredential.secureArea.getKeyInfo(euPidCredential.alias)
+        val largeSdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.X509CertifiedExplicit(originalSdJwt.x5c!!, euPidDsKey),
+            kbKey = euPidKeyInfo.publicKey,
+            claims = buildJsonObject { put("padding", "A".repeat(650_000)) },
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://example-issuer.com")
+                put("vct", EUPersonalID.EUPID_VCT)
+                put("nbf", (euPidTimeSigned - 1.days).epochSeconds)
+                put("exp", (euPidTimeSigned + 1.days).epochSeconds)
+            }
+        )
+        val largePresentation = largeSdJwt.present(
+            signingKey = AsymmetricKey.AnonymousSecureAreaBased(
+                alias = euPidCredential.alias,
+                secureArea = euPidCredential.secureArea,
+                keyInfo = euPidKeyInfo,
+            ),
+            nonce = expectedSessionAudience,
+            audience = expectedSessionAudience,
+            creationTime = euPidTimeSigned,
+        ).compactSerialization
+        val largeOtherDoc = OtherDocument(
+            docFormat = "dc+sd-jwt",
+            data = ByteString(largePresentation.encodeToByteArray().zlibDeflate())
+        )
+        val largeSize = largeOtherDoc.decompressData().size
+        assertTrue(largeSize < OtherDocument.DEFAULT_MAX_DECOMPRESSED_SIZE)
+        assertTrue(largeSize * 5 > DeviceResponse.DEFAULT_MAX_TOTAL_OTHER_DOCUMENTS_DECOMPRESSED_SIZE)
+
+        val singleLargeResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addOtherDocument(largeOtherDoc)
+        }
+        DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(singleLargeResponse.toDataItem())))
+            .verify(sessionTranscript = sessionTranscript, atTime = euPidTimeSigned)
+
+        val aggregateBombResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            repeat(5) {
+                addOtherDocument(largeOtherDoc)
+            }
+        }
+        val parsedAggregateBomb = DeviceResponse.fromDataItem(
+            Cbor.decode(Cbor.encode(aggregateBombResponse.toDataItem()))
+        )
+        val defaultAggregateErr = assertFailsWith<IllegalArgumentException> {
+            parsedAggregateBomb.verify(sessionTranscript = sessionTranscript, atTime = euPidTimeSigned)
+        }
+        assertTrue(defaultAggregateErr.message!!.contains("exceeds maximum size"))
+
+        // 4. EncryptedDocuments.decrypt() enforces per-document and aggregate limits
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encParams = EncryptionParameters.fromValues(encryptionKey.publicKey)
+        val encSessionTranscript = EncryptedDocuments.buildSessionTranscript(
+            originalSessionTranscript = sessionTranscript,
+            encryptionParameters = encParams
+        )
+        val expectedEncAudience = transcriptAudience(encSessionTranscript)
+        val encValidOtherDoc = arbitraryAudienceOtherDocument(encSessionTranscript, audience = expectedEncAudience)
+        val encValidDocSize = encValidOtherDoc.decompressData().size
+
+        val encSingleValidResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addEncryptedDocuments(
+                encryptionParameters = encParams,
+                docRequestIds = listOf(0)
+            ) {
+                addOtherDocument(encValidOtherDoc)
+            }
+        }
+        val decryptedSingleValid = DeviceResponse.fromDataItem(
+            Cbor.decode(Cbor.encode(encSingleValidResponse.toDataItem()))
+        ).encryptedDocuments.single().decrypt(
+            recipientPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
+            encryptionParameters = encParams,
+            sessionTranscript = sessionTranscript,
+            atTime = euPidTimeSigned,
+            maxOtherDocumentDecompressedSize = encValidDocSize,
+        )
+        assertEquals(1, decryptedSingleValid.otherDocuments.size)
+
+        val encOversizedResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addEncryptedDocuments(
+                encryptionParameters = encParams,
+                docRequestIds = listOf(0)
+            ) {
+                addOtherDocument(
+                    OtherDocument(
+                        docFormat = "dc+sd-jwt",
+                        data = ByteString(oversizedPayload.zlibDeflate())
+                    )
+                )
+            }
+        }
+        val encOversizedError = assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(encOversizedResponse.toDataItem())))
+                .encryptedDocuments.single().decrypt(
+                    recipientPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
+                    encryptionParameters = encParams,
+                    sessionTranscript = sessionTranscript,
+                    atTime = euPidTimeSigned,
+                )
+        }
+        val encOversizedCause = assertIs<IllegalArgumentException>(encOversizedError.cause)
+        assertTrue(encOversizedCause.message!!.contains("exceeds maximum size"))
+
+        val encAggregateBombResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addEncryptedDocuments(
+                encryptionParameters = encParams,
+                docRequestIds = listOf(0)
+            ) {
+                addOtherDocument(encValidOtherDoc)
+                addOtherDocument(encValidOtherDoc)
+            }
+        }
+        val encAggregateError = assertFailsWith<IllegalStateException> {
+            DeviceResponse.fromDataItem(Cbor.decode(Cbor.encode(encAggregateBombResponse.toDataItem())))
+                .encryptedDocuments.single().decrypt(
+                    recipientPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
+                    encryptionParameters = encParams,
+                    sessionTranscript = sessionTranscript,
+                    atTime = euPidTimeSigned,
+                    maxOtherDocumentDecompressedSize = encValidDocSize,
+                    maxTotalOtherDocumentsDecompressedSize = (encValidDocSize * 2) - 1,
+                )
+        }
+        val encAggregateCause = assertIs<IllegalArgumentException>(encAggregateError.cause)
+        assertTrue(encAggregateCause.message!!.contains("exceeds maximum size"))
+    }
 }

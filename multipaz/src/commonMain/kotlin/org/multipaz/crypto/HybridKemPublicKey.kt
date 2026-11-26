@@ -67,7 +67,6 @@ class HybridKemPublicKey(
      *
      * @throws UnsupportedOperationException always.
      */
-    @Throws(UnsupportedOperationException::class)
     override fun toPem(): String {
         throw UnsupportedOperationException(
             "PEM encoding is not defined for CFRG hybrid KEM public keys ($algorithm)"

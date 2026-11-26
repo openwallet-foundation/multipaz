@@ -91,7 +91,6 @@ import org.multipaz.util.UUID
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
-import org.multipaz.util.zlibInflate
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.verification.VerifierIdentity
@@ -1814,7 +1813,7 @@ private suspend fun handleGetDataMdoc(
             val lines = headerLines.toMutableList()
             lines.add(ResultLine("OtherDocument", otherDocument.docFormat))
             if (otherDocument.docFormat == "dc+sd-jwt") {
-                val compactSerialization = otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                val compactSerialization = otherDocument.decompressData().decodeToString()
                 val sessionTranscriptBytes = Tagged(
                     tagNumber = Tagged.ENCODED_CBOR,
                     taggedItem = Bstr(Cbor.encode(sessionTranscriptDataItem))
