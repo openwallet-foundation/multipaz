@@ -43,20 +43,29 @@ class CborMap(
             return MapBuilder(CborBuilder(dataItem), dataItem)
         }
 
-        internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, CborMap> {
+        internal fun decode(
+            encodedCbor: ByteArray,
+            offset: Int,
+            depth: Int = 0
+        ): Pair<Int, CborMap> {
             val lowBits = encodedCbor[offset].toInt().and(0x1f)
             if (lowBits == 31) {
                 // indefinite length
                 var cursor = offset + 1
                 val items = mutableMapOf<DataItem, DataItem>()
                 while (true) {
+                    if (cursor >= encodedCbor.size) {
+                        throw IllegalArgumentException(
+                            "Truncated indefinite-length map at offset $offset"
+                        )
+                    }
                     if (encodedCbor.getUInt8(cursor) == Cbor.BREAK) {
                         // BREAK code, we're done
                         cursor += 1
                         break
                     }
-                    val (nextItemOffset, keyItem) = Cbor.decode(encodedCbor, cursor)
-                    val (nextItemOffset2, valueItem) = Cbor.decode(encodedCbor, nextItemOffset)
+                    val (nextItemOffset, keyItem) = Cbor.decode(encodedCbor, cursor, depth)
+                    val (nextItemOffset2, valueItem) = Cbor.decode(encodedCbor, nextItemOffset, depth)
                     items.put(keyItem, valueItem)
                     check(nextItemOffset2 > cursor)
                     cursor = nextItemOffset2
@@ -64,13 +73,19 @@ class CborMap(
                 return Pair(cursor, CborMap(items, true))
             } else {
                 var (cursor, numItems) = Cbor.decodeLength(encodedCbor, offset)
-                val items = mutableMapOf<DataItem, DataItem>()
                 if (numItems == 0UL) {
                     return Pair(cursor, CborMap(mutableMapOf()))
                 }
+                val maxPairs = ((encodedCbor.size - cursor) / 2).toULong()
+                if (numItems > maxPairs) {
+                    throw IllegalArgumentException(
+                        "Map length $numItems exceeds maximum possible $maxPairs entries at offset $offset"
+                    )
+                }
+                val items = mutableMapOf<DataItem, DataItem>()
                 for (n in IntRange(0, numItems.toInt() - 1)) {
-                    val (nextItemOffset, keyItem) = Cbor.decode(encodedCbor, cursor)
-                    val (nextItemOffset2, valueItem) = Cbor.decode(encodedCbor, nextItemOffset)
+                    val (nextItemOffset, keyItem) = Cbor.decode(encodedCbor, cursor, depth)
+                    val (nextItemOffset2, valueItem) = Cbor.decode(encodedCbor, nextItemOffset, depth)
                     items.put(keyItem, valueItem)
                     check(nextItemOffset2 > cursor)
                     cursor = nextItemOffset2
@@ -97,11 +112,11 @@ class CborMap(
     }
 
     override fun hashCode(): Int {
-        var result = 0
-        for (item in items) {
-            result = 31*result + item.hashCode()
+        var acc = 0L
+        for ((key, value) in items) {
+            acc += CborHash.hashTwoInts64(CborHash.TAG_MAP_ENTRY, key.hashCode(), value.hashCode())
         }
-        return result
+        return CborHash.hashTwoLongs(CborHash.TAG_MAP, items.size.toLong(), acc)
     }
 
     override fun toString(): String {

@@ -37,19 +37,28 @@ class CborArray(
             return ArrayBuilder(CborBuilder(dataItem), dataItem)
         }
 
-        internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, CborArray> {
+        internal fun decode(
+            encodedCbor: ByteArray,
+            offset: Int,
+            depth: Int = 0
+        ): Pair<Int, CborArray> {
             val lowBits = encodedCbor[offset].toInt().and(0x1f)
             if (lowBits == 31) {
                 // indefinite length
                 var cursor = offset + 1
                 val items = mutableListOf<DataItem>()
                 while (true) {
+                    if (cursor >= encodedCbor.size) {
+                        throw IllegalArgumentException(
+                            "Truncated indefinite-length array at offset $offset"
+                        )
+                    }
                     if (encodedCbor.getUInt8(cursor) == Cbor.BREAK) {
                         // BREAK code, we're done
                         cursor += 1
                         break
                     }
-                    val (nextItemOffset, item) = Cbor.decode(encodedCbor, cursor)
+                    val (nextItemOffset, item) = Cbor.decode(encodedCbor, cursor, depth)
                     items.add(item)
                     check(nextItemOffset > cursor)
                     cursor = nextItemOffset
@@ -57,12 +66,18 @@ class CborArray(
                 return Pair(cursor, CborArray(items, true))
             } else {
                 var (cursor, numItems) = Cbor.decodeLength(encodedCbor, offset)
-                val items = mutableListOf<DataItem>()
                 if (numItems == 0UL) {
                     return Pair(cursor, CborArray(mutableListOf()))
                 }
+                val remaining = (encodedCbor.size - cursor).toULong()
+                if (numItems > remaining) {
+                    throw IllegalArgumentException(
+                        "Array length $numItems exceeds remaining $remaining bytes at offset $offset"
+                    )
+                }
+                val items = mutableListOf<DataItem>()
                 for (n in IntRange(0, numItems.toInt() - 1)) {
-                    val (nextItemOffset, item) = Cbor.decode(encodedCbor, cursor)
+                    val (nextItemOffset, item) = Cbor.decode(encodedCbor, cursor, depth)
                     items.add(item)
                     check(nextItemOffset > cursor)
                     cursor = nextItemOffset
@@ -87,13 +102,8 @@ class CborArray(
         return true
     }
 
-    override fun hashCode(): Int {
-        var result = 0
-        for (item in items) {
-            result = 31*result + item.hashCode()
-        }
-        return result
-    }
+    override fun hashCode(): Int =
+        CborHash.hashIntList(CborHash.TAG_ARRAY, items.size) { items[it].hashCode() }
 
     override fun toString(): String {
         val sb = StringBuilder("CborArray(")

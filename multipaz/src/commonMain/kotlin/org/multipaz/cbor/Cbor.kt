@@ -22,6 +22,8 @@ object Cbor {
     /** As defined in RFC 8949 3.2.1. The "break" stop code */
     const val BREAK: UByte = 0xffu
 
+    internal const val MAX_DECODE_DEPTH = 100
+
     private val HEX_DIGITS = "0123456789abcdef".toCharArray()
 
     internal fun encodeLength(
@@ -65,26 +67,46 @@ object Cbor {
     // field is invalid
     //
     internal fun decodeLength(encodedCbor: ByteArray, offset: Int): Pair<Int, ULong> {
-        try {
-            val firstByte = encodedCbor[offset].toInt()
-            val additionalInformation = firstByte and 0x1f
+        if (offset < 0 || offset >= encodedCbor.size) {
+            throw IllegalArgumentException("Out of data at offset $offset")
+        }
+        val firstByte = encodedCbor[offset].toInt()
+        val additionalInformation = firstByte and 0x1f
 
-            if (additionalInformation < 24) {
-                return Pair(offset + 1, additionalInformation.toULong())
-            }
+        if (additionalInformation < 24) {
+            return Pair(offset + 1, additionalInformation.toULong())
+        }
 
-            return when (additionalInformation) {
-                24 -> Pair(offset + 2, encodedCbor.getUInt8(offset + 1).toULong())
-                25 -> Pair(offset + 3, encodedCbor.getUInt16(offset + 1).toULong())
-                26 -> Pair(offset + 5, encodedCbor.getUInt32(offset + 1).toULong())
-                27 -> Pair(offset + 9, encodedCbor.getUInt64(offset + 1))
-                31 -> Pair(offset + 1, 0UL) // indefinite length
-                else -> throw IllegalArgumentException(
-                    "Illegal additional information value $additionalInformation at offset $offset"
-                )
+        val remaining = encodedCbor.size - offset
+        return when (additionalInformation) {
+            24 -> {
+                if (remaining < 2) {
+                    throw IllegalArgumentException("Out of data at offset $offset")
+                }
+                Pair(offset + 2, encodedCbor.getUInt8(offset + 1).toULong())
             }
-        } catch (e: IndexOutOfBoundsException) {
-            throw IllegalArgumentException("Out of data at offset $offset", e)
+            25 -> {
+                if (remaining < 3) {
+                    throw IllegalArgumentException("Out of data at offset $offset")
+                }
+                Pair(offset + 3, encodedCbor.getUInt16(offset + 1).toULong())
+            }
+            26 -> {
+                if (remaining < 5) {
+                    throw IllegalArgumentException("Out of data at offset $offset")
+                }
+                Pair(offset + 5, encodedCbor.getUInt32(offset + 1).toULong())
+            }
+            27 -> {
+                if (remaining < 9) {
+                    throw IllegalArgumentException("Out of data at offset $offset")
+                }
+                Pair(offset + 9, encodedCbor.getUInt64(offset + 1))
+            }
+            31 -> Pair(offset + 1, 0UL) // indefinite length
+            else -> throw IllegalArgumentException(
+                "Illegal additional information value $additionalInformation at offset $offset"
+            )
         }
     }
 
@@ -113,11 +135,19 @@ object Cbor {
      * @throws IllegalArgumentException if the data isn't valid CBOR.
      */
     @Throws(IllegalArgumentException::class)
-    fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, DataItem> {
+    fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, DataItem> =
+        decode(encodedCbor, offset, 0)
+
+    internal fun decode(encodedCbor: ByteArray, offset: Int, depth: Int): Pair<Int, DataItem> {
+        if (depth > MAX_DECODE_DEPTH) {
+            throw IllegalArgumentException(
+                "Maximum CBOR nesting depth ($MAX_DECODE_DEPTH) exceeded"
+            )
+        }
         // This is needed by Kotlin/JS which doesn't have the same array access semantics
         // as other platforms. In particular, one cannot rely on IndexOutOfBoundsException
         // being thrown.
-        if (offset >= encodedCbor.size) {
+        if (offset < 0 || offset >= encodedCbor.size) {
             throw IllegalArgumentException("Trying to access data out-of-bounds")
         }
         try {
@@ -145,7 +175,7 @@ object Cbor {
 
                 MajorType.BYTE_STRING -> {
                     if (additionalInformation == 31) {
-                        IndefLengthBstr.decode(encodedCbor, offset)
+                        IndefLengthBstr.decode(encodedCbor, offset, depth + 1)
                     } else {
                         Bstr.decode(encodedCbor, offset)
                     }
@@ -153,27 +183,30 @@ object Cbor {
 
                 MajorType.UNICODE_STRING -> {
                     if (additionalInformation == 31) {
-                        IndefLengthTstr.decode(encodedCbor, offset)
+                        IndefLengthTstr.decode(encodedCbor, offset, depth + 1)
                     } else {
                         Tstr.decode(encodedCbor, offset)
                     }
                 }
 
-                MajorType.ARRAY -> CborArray.decode(encodedCbor, offset)
-                MajorType.MAP -> CborMap.decode(encodedCbor, offset)
+                MajorType.ARRAY -> CborArray.decode(encodedCbor, offset, depth + 1)
+                MajorType.MAP -> CborMap.decode(encodedCbor, offset, depth + 1)
                 MajorType.TAG -> {
                     if (additionalInformation == 31) {
                         throw IllegalArgumentException(
                             "Additional information 31 not allowed for majorType 6"
                         )
                     }
-                    Tagged.decode(encodedCbor, offset)
+                    Tagged.decode(encodedCbor, offset, depth + 1)
                 }
 
                 MajorType.SPECIAL -> {
                     if (additionalInformation < 24) {
                         Simple.decode(encodedCbor, offset)
                     } else if (additionalInformation == 25) {
+                        if (encodedCbor.size - offset < 3) {
+                            throw IllegalArgumentException("Out of data at offset $offset")
+                        }
                         val raw = encodedCbor.getUInt16(offset + 1).toInt()
                         Pair(offset + 3, CborFloat(fromRawHalfFloat(raw)))
                     } else if (additionalInformation == 26) {
@@ -189,6 +222,8 @@ object Cbor {
             }
             check(newOffset > offset)
             return Pair(newOffset, item)
+        } catch (e: IllegalArgumentException) {
+            throw e
         } catch (e: IndexOutOfBoundsException) {
             throw IllegalArgumentException("Out of bounds decoding data", e)
         } catch (e: Exception) {
@@ -211,7 +246,7 @@ object Cbor {
         val (newOffset, item) = decode(encodedCbor, 0)
         if (newOffset != encodedCbor.size) {
             throw IllegalArgumentException(
-                "${newOffset - encodedCbor.size} bytes leftover after decoding"
+                "${encodedCbor.size - newOffset} bytes leftover after decoding"
             )
         }
         return item

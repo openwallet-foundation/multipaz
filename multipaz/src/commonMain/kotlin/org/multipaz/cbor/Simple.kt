@@ -48,7 +48,7 @@ class Simple(val value: UInt) : DataItem(MajorType.SPECIAL) {
 
     override fun equals(other: Any?): Boolean = other is Simple && value == other.value
 
-    override fun hashCode(): Int = value.hashCode()
+    override fun hashCode(): Int = CborHash.hashLong(CborHash.TAG_SIMPLE, value.toLong())
 
     override fun toString() = when (this) {
             FALSE -> "Simple(FALSE)"

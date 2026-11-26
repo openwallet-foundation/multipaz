@@ -20,13 +20,19 @@ class CborFloat(val value: Float) : DataItem(MajorType.SPECIAL) {
 
     companion object {
         internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, CborFloat> {
+            if (encodedCbor.size - offset < 5) {
+                throw IllegalArgumentException("Out of data at offset $offset")
+            }
             return Pair(offset + 5, CborFloat(Float.fromBits(encodedCbor.getInt32(offset + 1))))
         }
     }
 
     override fun equals(other: Any?): Boolean = other is CborFloat && value.equals(other.value)
 
-    override fun hashCode(): Int = value.hashCode()
+    override fun hashCode(): Int {
+        val bits = if (value == 0.0f) 0 else value.toBits()
+        return CborHash.hashLong(CborHash.TAG_FLOAT, bits.toLong())
+    }
 
     override fun toString(): String = "CborFloat($value)"
 }

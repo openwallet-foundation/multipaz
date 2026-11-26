@@ -144,9 +144,13 @@ class Tagged(val tagNumber: Long, val taggedItem: DataItem) : DataItem(MajorType
          */
         const val FULL_DATE_STRING = 1004L
 
-        internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, Tagged> {
+        internal fun decode(
+            encodedCbor: ByteArray,
+            offset: Int,
+            depth: Int = 0
+        ): Pair<Int, Tagged> {
             val (itemOffset, tagNumber) = Cbor.decodeLength(encodedCbor, offset)
-            val (newItemOffset, taggedItem) = Cbor.decode(encodedCbor, itemOffset)
+            val (newItemOffset, taggedItem) = Cbor.decode(encodedCbor, itemOffset, depth)
             return Pair(newItemOffset, Tagged(tagNumber.toLong(), taggedItem))
         }
     }
@@ -155,7 +159,8 @@ class Tagged(val tagNumber: Long, val taggedItem: DataItem) : DataItem(MajorType
     override fun equals(other: Any?): Boolean =
         other is Tagged && tagNumber == other.tagNumber && taggedItem == other.taggedItem
 
-    override fun hashCode(): Int = tagNumber.hashCode() + 31*taggedItem.hashCode()
+    override fun hashCode(): Int =
+        CborHash.hashTwoLongs(CborHash.TAG_TAGGED, tagNumber, taggedItem.hashCode().toLong())
 
     override fun toString(): String = "TaggedItem($tagNumber, $taggedItem)"
 

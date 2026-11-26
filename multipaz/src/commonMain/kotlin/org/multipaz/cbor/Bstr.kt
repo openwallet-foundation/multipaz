@@ -16,6 +16,12 @@ data class Bstr(val value: ByteArray) : DataItem(MajorType.BYTE_STRING) {
     companion object {
         internal fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, Bstr> {
             val (payloadBegin, length) = Cbor.decodeLength(encodedCbor, offset)
+            val remaining = (encodedCbor.size - payloadBegin).toULong()
+            if (length > remaining) {
+                throw IllegalArgumentException(
+                    "Byte string length $length exceeds remaining $remaining bytes at offset $offset"
+                )
+            }
             val payloadEnd = payloadBegin + length.toInt()
             val slice = encodedCbor.sliceArray(IntRange(payloadBegin, payloadEnd - 1))
             return Pair(payloadEnd, Bstr(slice))
@@ -26,7 +32,7 @@ data class Bstr(val value: ByteArray) : DataItem(MajorType.BYTE_STRING) {
 
     override fun equals(other: Any?): Boolean = other is Bstr && value.contentEquals(other.value)
 
-    override fun hashCode(): Int = value.contentHashCode()
+    override fun hashCode(): Int = CborHash.hashBytes(CborHash.TAG_BSTR, value)
 
     override fun toString(): String {
         val sb = StringBuilder("Bstr(")
