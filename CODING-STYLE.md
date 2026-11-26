@@ -172,6 +172,129 @@ with the following changes
     keys (`AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT`), verified boot (`GREEN`), GMS root CA
     attestation (`true`), and iOS release builds (`true`), with software attestation disabled (`false`).
 
+## Security, Parsing, and Verification
+
+### Untrusted Wire-Format Parsing and Resource Limits
+
+* **Validate unsigned wire lengths in `Long`/`ULong` before casting to `Int`:** Accumulate and range-check
+  multi-byte wire lengths (ASN.1, CBOR, etc.) against `0..remainingBytes` and `Int.MAX_VALUE` before calling
+  `.toInt()`, computing `offset + length`, or allocating buffers.
+
+* **Never rely on `IntRange` or `sliceArray` to catch negative lengths:** Inverted ranges (e.g.
+  `start..(start - 1)`) silently return an empty array instead of throwing; always validate bounds explicitly.
+
+* **Assert strict forward progress in parser loops:** Every `while (offset < end)` decode loop must assert
+  `nextOffset > offset` before continuing so malformed lengths cannot spin infinitely into `OutOfMemoryError`.
+
+* **Bound decompression across all peer inputs and KMP targets:** Never expose or invoke unbounded `inflate()` /
+  `zlibInflate()` on untrusted data. Pass an explicit `maxSize` enforced incrementally while streaming across
+  JVM/Android, iOS, and Web; close native/JDK `Inflater`/`Deflater` in `finally`; enforce aggregate limits
+  across collections of compressed items (e.g. `otherDocuments`); and validate compression headers (such as JWE
+  `zip`) before expensive cryptography.
+
+* **Cap recursion depth in decoders and debug printers:** Enforce an explicit `MAX_DECODE_DEPTH` in every
+  recursive decoder (`ASN1`, `Cbor`, nested containers) as well as recursive formatters (`ASN1.print`, diagnostic
+  printers).
+
+* **Use keyed hashing for maps keyed by untrusted values:** Hash-based collections populated from untrusted wire
+  keys (such as `CborMap`) must use per-process keyed hashing (e.g. `CborHash` / SipHash seeded from
+  `Crypto.secureRandom`) rather than predictable `ULong`/`String`/`ByteArray` `hashCode()`, with `hashCode()`
+  matching `equals()` semantics (order-independence, canonical NaN and `-0.0`).
+
+* **Do not rely on `catch (e: Exception)` for DoS containment:** `OutOfMemoryError` and `StackOverflowError` are
+  `Error`s and intentionally bypass `catch (e: Exception)`—enforce size, depth, and loop bounds before allocation
+  or recursion.
+
+### Fail-Closed Verification and Strict Claim Parsing
+
+* **Never commit fail-open security `TODO`s:** Never leave a `// TODO` stub returning `true` or skipping a
+  security predicate (e.g. `checkAudience = { true } // TODO`). Unimplemented checks must fail closed
+  (`throw UnsupportedOperationException` or reject) until implemented.
+
+* **Optional or nullable context must fail closed:** Nullable verification parameters (e.g.
+  `deviceRequest: DeviceRequest?`, `expectedAudience: String?`, `dcqlQuery: DcqlQuery?`) must never silently
+  skip a security check when `null` (no `expected == null || expected == actual`). Reject payloads that require
+  the missing context, or make the parameter non-nullable.
+
+* **Never derive expected values from untrusted input:** Expected `aud`, `nonce`, `client_id`, `vct`, or `docType`
+  must always originate from local verifier/wallet state or the original request—never fall back to reading the
+  expected value from the untrusted presentation itself (`expectedAudience ?: sdJwtKb.jwtBody["aud"]`).
+
+* **No permissive fallbacks in matching or dispatch:** Never fall back to catch-all candidate sets (e.g.
+  `vctMatchingIndices.ifEmpty { sdJwtIndices }`) or negative-only guards ("reject only if another request names
+  X"). Require an exact match or an explicit verifier-controlled allowlist (such as
+  `DocumentTypeRepository.vctMatches()`).
+
+* **Fail closed on out-of-bounds lookups and type-mismatched security claims:** Out-of-bounds status lookups
+  (e.g. `StatusList.get(index)`) must throw or report unknown/invalid rather than returning `0` (`VALID`). Never
+  use silent null-coercion (`.longOrNull`) on security claims (`exp`, `nbf`, `iat`) in a way that treats a
+  present-but-non-integer value (e.g. RFC 7519 floating-point `NumericDate` such as `1.76E9`) as absent and skips
+  validation; distinguish absent keys from present keys and handle or reject non-integer formats explicitly.
+
+* **Reject unknown critical protocol extensions:** Always validate JOSE `crit` headers (RFC 7515 §4.1.11 /
+  RFC 7516 §4.1.13) and reject malformed or unsupported critical extensions across every JWS/JWE verification and
+  decryption path.
+
+### Constraint Enforcement, Authorization, and Identity Binding
+
+* **Every parsed or persisted security field must have an enforcement site:** Do not parse or store security
+  constraints (`notAfter` on VICAL/RICAL, `isTrustAnchor`, `IssuanceState.configurationId`/`scope`, DCQL
+  `vct_values`/`doctype_value`/`claims`/`claim_sets`/`multiple`/`credential_sets`, SD-JWT `cnf`/`nbf`/`exp`,
+  launch URI `client_id`) without verifying they are enforced on every consumption path.
+
+* **Validate identity bindings centrally in constructors or factory methods:** Do not model security-bound pairs
+  (like `OpenID4VPRequesterIdentity(certChain, clientId)`) as plain unvalidated data classes constructed across
+  multiple call sites. Enforce prefix-to-certificate bindings (`x509_san_dns:` vs. leaf dNSName SAN, `x509_hash:`
+  vs. leaf DER SHA-256, launch URI vs. Request Object `client_id`, and untrusted `redirect_uri`/`response_uri`
+  FQDN fallback) centrally so no call site can omit them.
+
+* **Separate authentication from authorization on servers:** Verifying an access token and DPoP proof proves
+  authentication only. Always assert that caller-supplied identifiers (`credential_configuration_id`, `format`)
+  match the session's persisted authorization (`state.configurationId` / `state.scope`) before fetching personal
+  data or minting credentials, and enforce least-privilege scoping in backend data services (do not
+  unconditionally return `core` identity attributes for non-core scopes).
+
+* **Treat peer-supplied IDs as untrusted constraint selectors, not proof of fulfillment:** Cryptographic validity
+  proves *who signed* and *freshness*, not *query fulfillment*. After verifying signatures, enforce that the
+  verified credential's format, signed `vct`/`docType`, disclosed claims, `claim_sets`, `multiple`, and
+  `credential_sets` satisfy the original query, and reject empty or partial responses.
+
+* **Prevent proof-of-possession downgrade:** When a credential carries key-binding material (such as SD-JWT `cnf`
+  or mdoc `deviceKeyInfo`), require the corresponding holder proof (`kb+jwt` or `deviceSigned`) and reject
+  bare/keyless presentations.
+
+### Provenance Separation, Consent Parity, and Session Binding
+
+* **Strictly separate `issuerSignedClaims` and `deviceSignedClaims`:** Never add holder-signed data (SD-JWT
+  KB-JWT claims, mdoc/ZK `deviceSigned` elements) into `issuerSignedClaims`, never allow holder claims to
+  overwrite issuer claims in claim maps or satisfy issuer-only DCQL queries, and enforce MSO `keyAuthorizations`
+  on every device-signed element.
+
+* **Maintain a single source of truth from Consent to Wire Disclosure to Audit Log:** Derive the claims shown in
+  the consent UI, the claims filtered and serialized into the wire response (mdoc, SD-JWT VC, ZK, `chv_1`), and
+  the claims recorded in `EventPresentmentData` from the exact same approved match object (`match.claims`), never
+  re-reading raw `DcqlCredentialQuery.claims`.
+
+* **Bind cached consent, local auth, and pending responses to verified peer identity:** Across retries,
+  reconnects, or NFC retaps, never equate requests by structural shape alone (`isStructurallyEquivalent`).
+  Re-run peer authentication (`verifyReaderAuthentication()`), verify certificate chain and trust identity
+  consistency, cancel or re-prompt on mismatch, and record the actual verified recipient in the event log.
+
+* **Never strip unvalidated security claims from API outputs:** Server and facade layers must enforce validity
+  (`exp`, `nbf`, `notAfter`) before stripping standard metadata claims from processed responses.
+
+### Deprecated API Hygiene and Security KDoc Accuracy
+
+* **Never leave deprecated security-sensitive APIs unpatched:** When adding a security check to a replacement API
+  (such as `DeviceResponse.verify()`), remove the deprecated counterpart (`DeviceResponseParser`), delegate it to
+  the fixed implementation, or backport the check in the same change—never ship a vulnerable deprecated API with a
+  generic deprecation message.
+
+* **Keep KDoc security contracts accurate:** Never state in KDoc that a method verifies trust chains, audiences,
+  or performs "the same checks as X" unless every code path and parameter combination enforces it. When checks
+  such as trust-chain validation are the caller's responsibility (e.g. `PresentmentRecord.verify()`), state that
+  explicitly in KDoc.
+
 ## Java / JVM Target Versions
 
 * **JDK 21 Toolchain for JVM, Java 17 for Android:** The build uses `jvmToolchain(21)` across all
