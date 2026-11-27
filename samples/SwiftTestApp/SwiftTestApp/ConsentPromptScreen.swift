@@ -98,23 +98,28 @@ struct ConsentPromptScreen: View {
                                 encryptionTarget: EncryptionTarget(rawValue: selectedEncryptionTargetString)!,
                                 verifierOrigin: VerifierOrigin(rawValue: selectedVerifierOriginString)!
                             )
-                            let selection = try await promptModelRequestConsent(
-                                requester: requestData.requester,
-                                trustedRequesterIdentity: requestData.trustedRequesterIdentity,
-                                presentmentData: requestData.presentmentData,
-                                preselectedDocuments: [],
-                                onDocumentsInFocus: { documents in },
-                                transactionDataRendererRepository: viewModel.transactionDataRendererRepository,
-                                requesterHistory: viewModel.requesterHistory
-                            )
-                            if selection != nil {
-                                try? await viewModel.requesterHistory.recordShare(
+                            do {
+                                let selection = try await promptModelRequestConsent(
                                     requester: requestData.requester,
-                                    trustedRequesterIdentity: requestData.trustedRequesterIdentity
+                                    trustedRequesterIdentity: requestData.trustedRequesterIdentity,
+                                    presentmentData: requestData.presentmentData,
+                                    preselectedDocuments: [],
+                                    onDocumentsInFocus: { documents in },
+                                    transactionDataRendererRepository: viewModel.transactionDataRendererRepository,
+                                    requesterHistory: viewModel.requesterHistory
                                 )
-                                print("Selection: \(selection!)")
-                            } else {
-                                print("Consent prompt was dismissed!")
+                                if selection != nil {
+                                    try? await viewModel.requesterHistory.recordShare(
+                                        requester: requestData.requester,
+                                        trustedRequesterIdentity: requestData.trustedRequesterIdentity
+                                    )
+                                    print("Selection: \(selection!)")
+                                } else {
+                                    print("Consent prompt was dismissed!")
+                                }
+                            } catch {
+                                // A refusal is not a dismissal: the type's data has no renderer that can show it.
+                                print("Consent prompt was refused: \(error)")
                             }
                         }
                     }) {
@@ -855,13 +860,18 @@ private func calcRequestData(
             return nil
         },
         showConsentPromptFn: { requester, trustedRequesterIdentity, presentmentData, preselectedDocuments, onDocumentsInFocus in
-            return try! await promptModelSilentConsent(
-                requester: requester,
-                trustedRequesterIdentity: trustedRequesterIdentity,
-                presentmentData: presentmentData,
-                preselectedDocuments: preselectedDocuments,
-                onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
-            )
+            do {
+                return try await promptModelSilentConsent(
+                    requester: requester,
+                    trustedRequesterIdentity: trustedRequesterIdentity,
+                    presentmentData: presentmentData,
+                    preselectedDocuments: preselectedDocuments,
+                    onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
+                )
+            } catch {
+                print("Consent refused: \(error)")
+                return nil
+            }
         },
         domainsMdocSignature: ["mdoc"],
         domainsKeyBoundSdJwt: ["sdjwt"]

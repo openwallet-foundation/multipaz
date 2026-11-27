@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.multipaz.consent.ClassifyPurposesFn
 import org.multipaz.consent.ClassifyRiskFn
 import org.multipaz.consent.ClassifySimpleConsentFn
+import org.multipaz.consent.SimpleConsent
 import org.multipaz.consent.defaultClassifyPurposes
 import org.multipaz.consent.defaultClassifyRisk
 import org.multipaz.consent.defaultClassifySimpleConsent
@@ -27,6 +28,7 @@ import org.multipaz.presentment.PresentmentData
 import org.multipaz.presentment.PresentmentSelection
 import org.multipaz.presentment.RequesterHistory
 import org.multipaz.prompt.PlatformConsentOptions
+import org.multipaz.prompt.TransactionDataRendererNotAvailableException
 import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -44,7 +46,8 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @param imageLoader a [ImageLoader].
  * @param maxHeight the maximum height of the bottom sheet or `null` if no limit.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] to find renderers for
- *   transaction data in, or `null` to use only the built-in rendering.
+ *   transaction data in, or `null` to use only the built-in rendering, which is refused for a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer].
  * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
  *   credentials with [requester] before.
  * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
@@ -52,12 +55,18 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @param classifyRiskFn a function used to evaluate the [org.multipaz.consent.ConsentRiskAssessment]
  *   for the active selection.
  * @param classifySimpleConsentFn a function used to evaluate whether the request qualifies for a
- *   combined simple consent and biometric authentication prompt.
+ *   combined simple consent and biometric authentication prompt. It is not asked, and that prompt is
+ *   not used, when [presentmentData] holds transaction data of a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer], as that prompt draws no transaction data.
  * @param platformConsentOptions optional [PlatformConsentOptions] with platform-specific consent options.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Continue" button, returns the user's selection.
  * @param onCancel called when the sheet is dismissed.
+ * @param onRefused called when [presentmentData] holds transaction data of a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] and [transactionDataRendererRepository]
+ *   has no [TransactionDataRendererCompose] for it: such data is never approved with the built-in rendering,
+ *   so the sheet is hidden without drawing the consent. The exception names the transaction type. Defaults to [onCancel], which is what the verifier then sees.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +87,7 @@ fun ConsentModalBottomSheet(
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
     onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
+    onRefused: (TransactionDataRendererNotAvailableException) -> Unit = { onCancel() },
 ) {
     val initialSimpleConsent = remember(
         requester,
@@ -87,16 +97,14 @@ fun ConsentModalBottomSheet(
         classifySimpleConsentFn,
         platformConsentOptions,
     ) {
-        if (shouldShowOnBiometricPrompt(platformConsentOptions)) {
-            classifySimpleConsentFn(
-                requester,
-                trustedRequesterIdentity,
-                presentmentData,
-                presentmentData.defaultSelections(preselectedDocuments),
-            )
-        } else {
-            null
-        }
+        simpleConsentForBiometricPrompt(
+            requester = requester,
+            trustedRequesterIdentity = trustedRequesterIdentity,
+            presentmentData = presentmentData,
+            preselectedDocuments = preselectedDocuments,
+            classifySimpleConsentFn = classifySimpleConsentFn,
+            showOnBiometricPrompt = shouldShowOnBiometricPrompt(platformConsentOptions),
+        )
     }
     var showFullConsent by remember(
         requester,
@@ -154,8 +162,40 @@ fun ConsentModalBottomSheet(
                 coroutineScope.launch { sheetState.hide() }
                 onCancel()
             },
+            onRefused = {
+                coroutineScope.launch { sheetState.hide() }
+                onRefused(it)
+            },
         )
     }
+}
+
+/**
+ * The [SimpleConsent] to show on the embedded biometric prompt, or `null` to show the full consent.
+ *
+ * The embedded prompt draws no transaction data, so it is never used when [presentmentData] holds
+ * transaction data of a type that [org.multipaz.documenttype.TransactionType.requiresRenderer],
+ * whatever [classifySimpleConsentFn] would say, and [classifySimpleConsentFn] is not even asked.
+ *
+ * @param showOnBiometricPrompt whether the platform shows consent on its biometric prompt at all.
+ */
+internal fun simpleConsentForBiometricPrompt(
+    requester: Requester,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
+    presentmentData: PresentmentData,
+    preselectedDocuments: List<Document>,
+    classifySimpleConsentFn: ClassifySimpleConsentFn,
+    showOnBiometricPrompt: Boolean,
+): SimpleConsent? {
+    if (!showOnBiometricPrompt || presentmentData.allTransactionData.any { it.type.requiresRenderer }) {
+        return null
+    }
+    return classifySimpleConsentFn(
+        requester,
+        trustedRequesterIdentity,
+        presentmentData,
+        presentmentData.defaultSelections(preselectedDocuments),
+    )
 }
 
 internal expect fun shouldShowOnBiometricPrompt(

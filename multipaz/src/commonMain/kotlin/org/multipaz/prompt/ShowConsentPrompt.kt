@@ -13,6 +13,7 @@ import org.multipaz.presentment.RequesterHistory
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * A function that can be used to obtain consent and selection of credentials by the user.
@@ -25,6 +26,11 @@ import org.multipaz.trustmanagement.TrustMetadata
  *
  * Note that implementations *MUST* always call [onDocumentsInFocus], even if no user interaction
  * is happening.
+ *
+ * An implementation that draws its own consent has to refuse transaction data of a type that
+ * [org.multipaz.documenttype.TransactionType.requiresRenderer] and that it cannot show, by throwing
+ * [TransactionDataRendererNotAvailableException] before any selection is made. [promptModelRequestConsent]
+ * and [promptModelSilentConsent] already do.
  */
 typealias ShowConsentPromptFn = suspend (
     requester: Requester,
@@ -37,8 +43,17 @@ typealias ShowConsentPromptFn = suspend (
 /**
  * A [ShowConsentPromptFn] which doesn't show any consent prompt
  *
+ * Nothing is shown, so transaction data of a type that
+ * [org.multipaz.documenttype.TransactionType.requiresRenderer] can never be approved here: it is refused.
+ *
  * @return the result of calling [PresentmentData.select] passing [preselectedDocuments].
+ * @throws TransactionDataRendererNotAvailableException if [presentmentData] holds transaction data of a
+ *   type that [org.multipaz.documenttype.TransactionType.requiresRenderer].
  */
+@Throws(
+    CancellationException::class,
+    TransactionDataRendererNotAvailableException::class
+)
 suspend fun promptModelSilentConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
@@ -46,6 +61,15 @@ suspend fun promptModelSilentConsent(
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): PresentmentSelection? {
+    // Nothing is shown here, so there is no renderer that could show the data.
+    missingTransactionDataRenderer(presentmentData.allTransactionData, repository = null) { false }
+        ?.let {
+            throw TransactionDataRendererNotAvailableException(
+                typeIdentifier = it,
+                message = "Transaction type '$it' can only be approved when its data is shown, but " +
+                    "promptModelSilentConsent() shows nothing: use a consent prompt with a renderer for it",
+            )
+        }
     val ret = presentmentData.select(preselectedDocuments)
     onDocumentsInFocus(ret.matches.map { it.credential.document })
     return ret
@@ -64,7 +88,8 @@ suspend fun promptModelSilentConsent(
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
- *   find renderers for transaction data, or `null` to use only the built-in rendering.
+ *   find renderers for transaction data, or `null` to use only the built-in rendering, which is refused for a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer].
  * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
  *   credentials with [requester] before.
  * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s
@@ -78,7 +103,16 @@ suspend fun promptModelSilentConsent(
  *   conveying which credentials the user selected, if multiple options are available.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws TransactionDataRendererNotAvailableException if the transaction data holds a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] and has no renderer here.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class,
+    TransactionDataRendererNotAvailableException::class
+)
 suspend fun promptModelRequestConsent(
     requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,

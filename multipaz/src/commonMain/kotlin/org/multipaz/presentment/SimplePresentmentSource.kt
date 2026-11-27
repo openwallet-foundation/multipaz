@@ -13,6 +13,7 @@ import org.multipaz.mdoc.credential.KeylessMdocCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
+import org.multipaz.prompt.TransactionDataRendererRepository
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -39,7 +40,12 @@ import kotlin.time.Instant
  * @property requesterHistory a [RequesterHistory] for tracking relying party interactions or `null`.
  * @property getFaceMatcherFn a function returning the [FaceMatcher] to use or `null`.
  * @property resolveTrustFn a function which can be used to determine if a requester is trusted.
- * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
+ * @property transactionDataRendererRepository the [TransactionDataRendererRepository] the default consent
+ *   prompt finds renderers for transaction data in. Without it a transaction type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] is always refused. It is not used when
+ *   [showConsentPromptFn] is given: that function has to pass a repository to the prompt itself.
+ * @property showConsentPromptFn a [ShowConsentPromptFn] used to show a consent prompt when required, or `null`
+ *   for [promptModelRequestConsent] with [transactionDataRendererRepository].
  * @property preferSignatureToKeyAgreement whether to use mdoc ECDSA authentication even if mdoc MAC authentication
  *   is possible (ISO mdoc only).
  * @property domainsMdocSignature the domains to use for [KeyBoundMdocCredential] instances using
@@ -59,7 +65,8 @@ class SimplePresentmentSource(
     override val requesterHistory: RequesterHistory? = null,
     private val getFaceMatcherFn: () -> FaceMatcher? = { null },
     private val resolveTrustFn: suspend (requester: Requester) -> TrustedRequesterIdentity? = { null },
-    private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
+    val transactionDataRendererRepository: TransactionDataRendererRepository? = null,
+    private val showConsentPromptFn: ShowConsentPromptFn? = null,
     private val getBadgesFn: suspend (document: Document) -> List<DocumentBadge> = { document -> emptyList() },
     private val getFaceMatchingModeFn: suspend (
         credential: Credential,
@@ -91,12 +98,23 @@ class SimplePresentmentSource(
         preselectedDocuments: List<Document>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit
     ): PresentmentSelection? {
-        return showConsentPromptFn(
-            requester,
-            trustedRequesterIdentity,
-            presentmentData,
-            preselectedDocuments,
-            onDocumentsInFocus
+        val customFn = showConsentPromptFn
+        if (customFn != null) {
+            return customFn(
+                requester,
+                trustedRequesterIdentity,
+                presentmentData,
+                preselectedDocuments,
+                onDocumentsInFocus
+            )
+        }
+        return promptModelRequestConsent(
+            requester = requester,
+            trustedRequesterIdentity = trustedRequesterIdentity,
+            presentmentData = presentmentData,
+            preselectedDocuments = preselectedDocuments,
+            onDocumentsInFocus = onDocumentsInFocus,
+            transactionDataRendererRepository = transactionDataRendererRepository,
         )
     }
 

@@ -1252,6 +1252,7 @@ class SwiftConsentGoldenEcosystem private constructor(
 object GoldenTransitFareTransaction : TransactionType<GoldenTransitFareTransaction.Payload>(
     displayName = "Transit fare",
     identifier = "org.multipaz.golden.transit_fare",
+    requiresRenderer = true,
 ) {
     data class Fare(
         val id: String,

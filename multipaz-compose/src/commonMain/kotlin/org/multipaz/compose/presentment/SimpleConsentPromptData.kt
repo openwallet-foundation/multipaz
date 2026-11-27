@@ -126,7 +126,9 @@ data class SimpleConsentPromptData(
  * @param classifySimpleConsentFn the function used to classify whether the request qualifies as a
  *   [SimpleConsent]. Defaults to [defaultClassifySimpleConsent].
  * @return a [SimpleConsentPromptData] if the request qualifies as simple, or `null` if the full
- *   consent prompt should be displayed.
+ *   consent prompt should be displayed. It is `null`, and [classifySimpleConsentFn] is not asked, when
+ *   [presentmentData] holds transaction data of a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer], as a simple consent draws none.
  */
 suspend fun resolveSimpleConsentPromptData(
     requester: Requester,
@@ -136,6 +138,9 @@ suspend fun resolveSimpleConsentPromptData(
     selections: List<List<Int>> = presentmentData.defaultSelections(preselectedDocuments),
     classifySimpleConsentFn: ClassifySimpleConsentFn = ::defaultClassifySimpleConsent,
 ): SimpleConsentPromptData? {
+    if (presentmentData.allTransactionData.any { it.type.requiresRenderer }) {
+        return null
+    }
     val simpleConsent = classifySimpleConsentFn(
         requester,
         trustedRequesterIdentity,

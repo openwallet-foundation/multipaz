@@ -32,7 +32,8 @@ class ConsentPromptDialogModel():
      * @param onDocumentsInFocus called with the documents currently selected for the user, including when
      *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
      * @param transactionDataRendererRepository the [TransactionDataRendererRepository] the prompt uses to
-     *   find renderers for transaction data, or `null` to use only the built-in rendering.
+     *   find renderers for transaction data, or `null` to use only the built-in rendering, which is
+     *   refused for a type that [org.multipaz.documenttype.TransactionType.requiresRenderer].
      * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
      *   credentials with [requester] before.
      * @param classifyPurposesFn a function used to classify the [org.multipaz.consent.PresentmentPurpose]s

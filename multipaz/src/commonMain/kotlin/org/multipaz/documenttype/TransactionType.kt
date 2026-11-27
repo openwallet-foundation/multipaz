@@ -90,6 +90,32 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
+ * @param requiresRenderer whether the consent prompt must be able to draw this transaction data with
+ *  a [org.multipaz.prompt.TransactionDataRenderer] made for its UI toolkit, and refuses to show the
+ *  prompt when it can't. The built-in rendering shows only a heading and what the type's own
+ *  specification may require the person to read before approving is left out, so a type whose data
+ *  the person must see to give informed consent sets this. Defaults to `false` because most types
+ *  are drawn fully by the built-in screen; a type it cannot draw fully has to set this, as one that
+ *  forgets to is drawn as a heading only. The whole prompt is refused when any alternative offered to the person holds such
+ *  data without a usable renderer, also when they would have picked another one. A prompt that
+ *  shows nothing, such as [org.multipaz.prompt.promptModelSilentConsent], refuses such data too.
+ *
+ * Using it takes three steps, the last two in the wallet:
+ * ```
+ * // 1. The type sets the flag.
+ * object MyTransaction : TransactionType<MyPayload>("My transaction", "urn:example:tx", requiresRenderer = true)
+ * // 2. A renderer made for the UI toolkit in use is registered under the type's identifier.
+ * val renderers = TransactionDataRendererRepository().apply {
+ *     addRenderer(MyTransaction.identifier, MyTransactionRendererCompose())
+ * }
+ * // 3. The repository is passed to the presentment source, which hands it to the consent prompt.
+ * val source = SimplePresentmentSource(
+ *     documentStore = documentStore,
+ *     documentTypeRepository = documentTypeRepository,
+ *     transactionDataRendererRepository = renderers,
+ * )
+ * ```
+ * The testapp in #2196 has a complete example.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -97,6 +123,7 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
+    val requiresRenderer: Boolean = false,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.

@@ -1350,7 +1350,8 @@ public final class ConsentTestController {
 ///   - preselectedDocuments: list of documents that should be preselected.
 ///   - maxHeight: the maximum height of the view.
 ///   - transactionDataRendererRepository: the ``TransactionDataRendererRepository`` to find renderers for
-///     transaction data in, or `nil` to use only the built-in rendering.
+///     transaction data in, or `nil` to use only the built-in rendering, which is refused for a type that
+///     `TransactionType.requiresRenderer`.
 ///   - requesterHistory: an optional ``RequesterHistory`` used to query whether the user has shared
 ///     credentials with `requester` before.
 ///   - classifyPurposesFn: function used to classify the ``PresentmentPurpose``s of the request.
@@ -1359,6 +1360,11 @@ public final class ConsentTestController {
 ///   - onDocumentsInFocus: callback invoked with the list of documents currently in focus as the user changes selections.
 ///   - onConfirm: callback when the user presses the Continue button with the credentials that were selected.
 ///   - onCancel: callback when the user presses the Cancel button.
+///   - onRefused: callback, with nothing drawn, when `presentmentData` holds transaction data of a type that
+///     `TransactionType.requiresRenderer` and `transactionDataRendererRepository` has no
+///     ``TransactionDataRendererSwiftUi`` for it: such data is never approved with the built-in rendering.
+///     The exception names the transaction type. When `nil`, `onCancel` is called instead, which is what the
+///     verifier then sees.
 public struct Consent: View {
     let maxHeight: CGFloat
     let presentmentData: PresentmentData
@@ -1373,6 +1379,7 @@ public struct Consent: View {
     let onDocumentsInFocus: ((_ documents: [MultipazDocument]) -> Void)?
     let onConfirm: (_: PresentmentSelection) -> Void
     let onCancel: () -> Void
+    let onRefused: ((_: TransactionDataRendererNotAvailableException) -> Void)?
 
     public init(
         presentmentData: PresentmentData,
@@ -1402,7 +1409,8 @@ public struct Consent: View {
         testController: ConsentTestController? = nil,
         onDocumentsInFocus: ((_ documents: [MultipazDocument]) -> Void)? = nil,
         onConfirm: @escaping (_: PresentmentSelection) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onRefused: ((_: TransactionDataRendererNotAvailableException) -> Void)? = nil
     ) {
         self.presentmentData = presentmentData
         self.requester = requester
@@ -1417,6 +1425,7 @@ public struct Consent: View {
         self.onDocumentsInFocus = onDocumentsInFocus
         self.onConfirm = onConfirm
         self.onCancel = onCancel
+        self.onRefused = onRefused
     }
 
     @State private var path = NavigationPath()
@@ -1490,6 +1499,29 @@ public struct Consent: View {
     }
 
     public var body: some View {
+        if let missingRenderer = TransactionDataRendererRequirementKt.missingTransactionDataRenderer(
+            transactionData: presentmentData.allTransactionData,
+            repository: transactionDataRendererRepository,
+            isUsable: { KotlinBoolean(bool: $0 is TransactionDataRendererSwiftUi) }
+        ) {
+            Color.clear.onAppear {
+                Logger.shared.w(
+                    tag: "Consent",
+                    msg: "No usable renderer for transaction type '\(missingRenderer)', not showing consent"
+                )
+                if let onRefused {
+                    onRefused(TransactionDataRendererNotAvailableException(typeIdentifier: missingRenderer))
+                } else {
+                    onCancel()
+                }
+            }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         let requesterDisplayData = buildRequesterDisplayData(
             requester: requester,
             trustedRequesterIdentity: trustedRequesterIdentity

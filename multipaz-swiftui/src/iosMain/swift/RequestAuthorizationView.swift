@@ -38,7 +38,9 @@ final class RequestAuthorizationViewModel: ObservableObject {
             return
         }
         let message: String
-        if kotlinException is PresentmentCannotSatisfyRequestException ||
+        if kotlinException is TransactionDataRendererNotAvailableException {
+            message = Self.refusedMessage
+        } else if kotlinException is PresentmentCannotSatisfyRequestException ||
             kotlinException is Iso18015ResponseException ||
             kotlinException is DcqlCredentialQueryException {
             message = "The request could not be satisfied"
@@ -49,6 +51,21 @@ final class RequestAuthorizationViewModel: ObservableObject {
         } else {
             message = "Something went wrong"
         }
+        await showError(message, cancel: cancel)
+    }
+
+    /// Shows that the request was refused because transaction data it holds cannot be shown, then cancels.
+    func refuse(_ exception: TransactionDataRendererNotAvailableException, cancel: @escaping () -> Void) async {
+        Logger.shared.w(
+            tag: Self.TAG,
+            msg: "Refused: no usable renderer for transaction type '\(exception.typeIdentifier)'"
+        )
+        await showError(Self.refusedMessage, cancel: cancel)
+    }
+
+    private static let refusedMessage = "Its transaction details can't be shown"
+
+    private func showError(_ message: String, cancel: @escaping () -> Void) async {
         withAnimation(.easeInOut(duration: 0.25)) {
             self.errorMessage = message
             self.isLoading = false
@@ -264,6 +281,10 @@ final class RequestAuthorizationViewModel: ObservableObject {
 ///   - `"Face match failed"` when biometric face matching fails or is canceled
 ///     (``FaceNotMatchedException``).
 ///   - `"Something went wrong"` for any other unexpected error.
+/// - If the request holds transaction data of a type that `TransactionType.requiresRenderer` and the
+///   `transactionDataRendererRepository` has no ``TransactionDataRendererSwiftUi`` for it, the consent
+///   prompt is not drawn: this view shows `"Its transaction details can't be shown"` for 2 seconds, then
+///   calls `cancel()` on the request context. The refusal is logged with the transaction type.
 public struct RequestAuthorizationView : View {
 
     private let startFn: @MainActor (RequestAuthorizationViewModel) -> Void
@@ -284,7 +305,8 @@ public struct RequestAuthorizationView : View {
     ///   - requestContext: An ``ISO18013MobileDocumentRequestContext`` which includes the request.
     ///   - getPresentmentSource: A function to asynchronously return a ``PresentmentSource`` which is used as the source of truth for presentment.
     ///   - transactionDataRendererRepository: The ``TransactionDataRendererRepository`` to find renderers for
-    ///     transaction data in, or `nil` to use only the built-in rendering.
+    ///     transaction data in, or `nil` to use only the built-in rendering, which is refused for a type that
+    ///     `TransactionType.requiresRenderer`.
     public init(
         requestContext: ISO18013MobileDocumentRequestContext,
         getPresentmentSource: @escaping () async -> PresentmentSource,
@@ -342,7 +364,8 @@ public struct RequestAuthorizationView : View {
     ///   - requestContext: An ``ISO18013MobileDocumentRawRequestContext`` which includes the raw request.
     ///   - getPresentmentSource: A function to asynchronously return a ``PresentmentSource`` which is used as the source of truth for presentment.
     ///   - transactionDataRendererRepository: The ``TransactionDataRendererRepository`` to find renderers for
-    ///     transaction data in, or `nil` to use only the built-in rendering.
+    ///     transaction data in, or `nil` to use only the built-in rendering, which is refused for a type that
+    ///     `TransactionType.requiresRenderer`.
     @available(iOS 27.3, *)
     public init(
         requestContext: ISO18013MobileDocumentRawRequestContext,
@@ -375,7 +398,8 @@ public struct RequestAuthorizationView : View {
     ///   - requestContext: An ``OpenID4VPRawRequestContext`` which includes the raw OpenID4VP request.
     ///   - getPresentmentSource: A function to asynchronously return a ``PresentmentSource`` which is used as the source of truth for presentment.
     ///   - transactionDataRendererRepository: The ``TransactionDataRendererRepository`` to find renderers for
-    ///     transaction data in, or `nil` to use only the built-in rendering.
+    ///     transaction data in, or `nil` to use only the built-in rendering, which is refused for a type that
+    ///     `TransactionType.requiresRenderer`.
     @available(iOS 27.3, *)
     public init(
         requestContext: OpenID4VPRawRequestContext,
@@ -420,6 +444,13 @@ public struct RequestAuthorizationView : View {
                     },
                     onCancel: {
                         cancelFn(viewModel)
+                    },
+                    onRefused: { exception in
+                        Task {
+                            await viewModel.refuse(exception) {
+                                cancelFn(viewModel)
+                            }
+                        }
                     }
                 )
             }

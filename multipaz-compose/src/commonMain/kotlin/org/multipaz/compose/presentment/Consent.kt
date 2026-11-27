@@ -246,7 +246,9 @@ import org.multipaz.presentment.RequesterHistory
 import org.multipaz.presentment.RequesterHistoryEntry
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataContext
+import org.multipaz.prompt.TransactionDataRendererNotAvailableException
 import org.multipaz.prompt.TransactionDataRendererRepository
+import org.multipaz.prompt.missingTransactionDataRenderer
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
@@ -347,7 +349,8 @@ private const val TAG = "Consent"
  *   if the user didn't preselect.
  * @param imageLoader a [ImageLoader].
  * @param transactionDataRendererRepository the [TransactionDataRendererRepository] to find renderers for
- *   transaction data in, or `null` to use only the built-in rendering.
+ *   transaction data in, or `null` to use only the built-in rendering, which is refused for a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer].
  * @param requesterHistory an optional [RequesterHistory] used to query whether the user has shared
  *   credentials with [requester] before.
  * @param classifyPurposesFn function used to classify the [PresentmentPurpose]s of the request.
@@ -356,6 +359,10 @@ private const val TAG = "Consent"
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Continue" button, returns the user's selection.
  * @param onCancel called when the sheet is dismissed.
+ * @param onRefused called, with nothing drawn, when [presentmentData] holds transaction data of a type that
+ *   [org.multipaz.documenttype.TransactionType.requiresRenderer] and [transactionDataRendererRepository]
+ *   has no [TransactionDataRendererCompose] for it: such data is never approved with the built-in rendering.
+ *   The exception names the transaction type. Defaults to [onCancel], which is what the verifier then sees.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -373,7 +380,22 @@ fun Consent(
     onDocumentsInFocus: (documents: List<Document>) -> Unit,
     onConfirm: (selection: PresentmentSelection) -> Unit,
     onCancel: () -> Unit = {},
+    onRefused: (TransactionDataRendererNotAvailableException) -> Unit = { onCancel() },
 ) {
+    val missingRenderer = remember(presentmentData, transactionDataRendererRepository) {
+        missingTransactionDataRenderer(
+            transactionData = presentmentData.allTransactionData,
+            repository = transactionDataRendererRepository,
+            isUsable = { it is TransactionDataRendererCompose },
+        )
+    }
+    if (missingRenderer != null) {
+        LaunchedEffect(missingRenderer) {
+            Logger.w(TAG, "No usable renderer for transaction type '$missingRenderer', not showing consent")
+            onRefused(TransactionDataRendererNotAvailableException(missingRenderer))
+        }
+        return
+    }
     val navController = rememberNavController()
     val appInfo = remember {
         requester.appId?.let {

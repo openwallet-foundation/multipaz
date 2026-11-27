@@ -364,6 +364,37 @@ enum ConsentGoldenScreenshotRunner {
                 }
             }
 
+            // 2.3b transit_fare_requires_renderer_refused
+            // The transit fare type requires a renderer. With none for SwiftUI `Consent` must draw nothing
+            // and call `onRefused` with the type, not `onCancel`, and must not fall back to the built-in
+            // rendering.
+            do {
+                let pair = eco.trustedProximityRequester(rpId: SwiftConsentGoldenEcosystem.companion.RP_METRO_TRANSIT)
+                let pd = try await eco.executeTransitFareCannedDcql(cannedRequestId: "payment_transaction_only_conf")
+                final class Counter { var cancelled = 0; var refusedTypes: [String] = [] }
+                let counter = Counter()
+                let refusedView = Consent(
+                    presentmentData: pd,
+                    requester: pair.requester,
+                    trustedRequesterIdentity: pair.trustedRequesterIdentity,
+                    transactionDataRendererRepository: nil,
+                    onDocumentsInFocus: { _ in },
+                    onConfirm: { _ in },
+                    onCancel: { counter.cancelled += 1 },
+                    onRefused: { counter.refusedTypes.append($0.typeIdentifier) }
+                )
+                let refusedController = UIHostingController(rootView: AnyView(refusedView))
+                hostVC.mount(refusedController)
+                try await Task.sleep(nanoseconds: 500_000_000)
+                hostVC.unmount(refusedController)
+                if counter.cancelled != 0 || counter.refusedTypes.count != 1 {
+                    mismatches.append(
+                        "02_transactions/transit_fare_requires_renderer_refused: onCancel called " +
+                            "\(counter.cancelled) times, onRefused with \(counter.refusedTypes), expected 0 and one type"
+                    )
+                }
+            }
+
             // 2.4 ap2_payment_delegate
             do {
                 let pair = eco.trustedWebRequester(
