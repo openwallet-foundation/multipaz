@@ -3,6 +3,7 @@ package com.android.identity.android.util
 import android.nfc.FormatException
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
+import android.nfc.tech.IsoDep
 import android.os.Build
 import android.util.Pair
 import com.android.identity.android.mdoc.transport.MdocConnectionMethodTcp
@@ -25,8 +26,85 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.Arrays
 
+internal interface IsoDepTransceiver {
+    val maxTransceiveLength: Int
+    val isExtendedLengthApduSupported: Boolean
+    val isConnected: Boolean
+    var timeout: Int
+    fun connect()
+    fun close()
+    fun transceive(data: ByteArray): ByteArray
+}
+
+internal class AndroidIsoDepTransceiver(
+    private val isoDep: IsoDep,
+) : IsoDepTransceiver {
+    override val maxTransceiveLength: Int
+        get() = isoDep.maxTransceiveLength
+
+    override val isExtendedLengthApduSupported: Boolean
+        get() = isoDep.isExtendedLengthApduSupported
+
+    override val isConnected: Boolean
+        get() = isoDep.isConnected
+
+    override var timeout: Int
+        get() = isoDep.timeout
+        set(value) {
+            isoDep.timeout = value
+        }
+
+    override fun connect() = isoDep.connect()
+
+    override fun close() = isoDep.close()
+
+    override fun transceive(data: ByteArray): ByteArray = isoDep.transceive(data)
+}
+
 object NfcUtil {
     private const val TAG = "NfcUtil"
+
+    internal const val MAX_APDU_OVERHEAD_SIZE = 9
+    internal const val SHORT_COMMAND_DATA_OVERHEAD_SIZE = 5
+    internal const val MAX_COMMAND_DATA_FIELD_LENGTH = 0xffff
+    internal const val MAX_RESPONSE_DATA_FIELD_LENGTH = 0x10000
+
+    private fun effectiveDataFieldMaxLength(
+        maxTransceiveLength: Int,
+        peerMaxLength: Long,
+        protocolLimit: Int,
+    ): Int {
+        val maxForTag = maxTransceiveLength - MAX_APDU_OVERHEAD_SIZE
+        require(maxForTag > 0) {
+            "maxTransceiveLength ($maxTransceiveLength) must be greater than $MAX_APDU_OVERHEAD_SIZE"
+        }
+        require(peerMaxLength > 0L) {
+            "peerMaxLength ($peerMaxLength) must be positive"
+        }
+        return minOf(
+            maxForTag.toLong(),
+            peerMaxLength,
+            protocolLimit.toLong(),
+        ).toInt()
+    }
+
+    internal fun effectiveCommandDataFieldMaxLength(
+        maxTransceiveLength: Int,
+        peerMaxLength: Long,
+    ): Int = effectiveDataFieldMaxLength(
+        maxTransceiveLength = maxTransceiveLength,
+        peerMaxLength = peerMaxLength,
+        protocolLimit = MAX_COMMAND_DATA_FIELD_LENGTH,
+    )
+
+    internal fun effectiveResponseDataFieldMaxLength(
+        maxTransceiveLength: Int,
+        peerMaxLength: Long,
+    ): Int = effectiveDataFieldMaxLength(
+        maxTransceiveLength = maxTransceiveLength,
+        peerMaxLength = peerMaxLength,
+        protocolLimit = MAX_RESPONSE_DATA_FIELD_LENGTH,
+    )
 
     // Defined by NFC Forum
     @JvmField
@@ -114,17 +192,19 @@ object NfcUtil {
 
     @JvmStatic
     fun createApduReadBinary(offset: Int, length: Int): ByteArray {
+        require(length in 1..MAX_RESPONSE_DATA_FIELD_LENGTH) {
+            "Length $length out of range 1..$MAX_RESPONSE_DATA_FIELD_LENGTH"
+        }
         val baos = ByteArrayOutputStream()
         baos.write(0x00)
         baos.write(0xb0)
-        baos.write(offset / 0x100)
+        baos.write((offset shr 8) and 0xff)
         baos.write(offset and 0xff)
-        require(length != 0) { "Length cannot be zero" }
-        if (length < 0x100) {
+        if (length <= 0x100) {
             baos.write(length and 0xff)
         } else {
             baos.write(0x00)
-            baos.write(length / 0x100)
+            baos.write((length shr 8) and 0xff)
             baos.write(length and 0xff)
         }
         return baos.toByteArray()

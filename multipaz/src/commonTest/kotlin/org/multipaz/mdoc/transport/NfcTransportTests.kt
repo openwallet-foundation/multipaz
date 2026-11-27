@@ -86,9 +86,17 @@ class NfcTransportTests {
             if (failNextTransceive) {
                 throw NfcTagLostException("Tag was lost during transceive")
             }
-            transcript.appendLine("${command.toString().truncateTo(100)} (${command.encode().size} bytes)")
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            transcript.appendLine("${command.toString().truncateTo(100)} (${encodedCommand.size} bytes)")
             val response = transport.processApdu(command)
-            transcript.appendLine("${response.toString().truncateTo(100)} (${response.encode().size} bytes)")
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            transcript.appendLine("${response.toString().truncateTo(100)} (${encodedResponse.size} bytes)")
             return response
         }
     }
@@ -148,16 +156,16 @@ CommandApdu(cla=0, ins=164, p1=4, p2=12, payload=ByteString(size=7 hex=a00000024
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=1028 hex=538204000000000000000000000... (1037 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=2052 hex=5382080000000000000000000000000000000000... (2054 bytes)
-CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=65272 hex=5383019000000000000000000... (65279 bytes)
+CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=65270 hex=5383019000000000000000000... (65277 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
-CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=37133 hex=00000000000000000000000000... (37142 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=65272 hex=538303200000000000000000000000000000000... (65274 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=65272 hex=000000000000000000000000000000000000000... (65274 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=65272 hex=000000000000000000000000000000000000000... (65274 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65272) (7 bytes)
-ResponseApdu(status=36864, payload=ByteString(size=8989 hex=0000000000000000000000000000000000000000... (8991 bytes)
+CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=37135 hex=00000000000000000000000000... (37144 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=65270 hex=538303200000000000000000000000000000000... (65272 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65270) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=65270 hex=000000000000000000000000000000000000000... (65272 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65270) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=65270 hex=000000000000000000000000000000000000000... (65272 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=65270) (7 bytes)
+ResponseApdu(status=36864, payload=ByteString(size=8995 hex=0000000000000000000000000000000000000000... (8997 bytes)
 close
             """.trimIndent().trim(),
             tag.transcript.toString().trim()
@@ -208,22 +216,22 @@ close
             """
 CommandApdu(cla=0, ins=164, p1=4, p2=12, payload=ByteString(size=7 hex=a0000002480400), le=0) (12 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
-CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=4089 hex=53822800000000000000000000... (4096 bytes)
+CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=4087 hex=53822800000000000000000000... (4094 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
-CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=4089 hex=00000000000000000000000000... (4096 bytes)
+CommandApdu(cla=16, ins=195, p1=0, p2=0, payload=ByteString(size=4087 hex=00000000000000000000000000... (4094 bytes)
 ResponseApdu(status=36864, payload=ByteString(size=0)) (2 bytes)
-CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=2066 hex=000000000000000000000000000... (2075 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=4089 hex=5382500000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
-ResponseApdu(status=24832, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4089) (7 bytes)
-ResponseApdu(status=24871, payload=ByteString(size=4089 hex=0000000000000000000000000000000000000000... (4091 bytes)
-CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=39) (5 bytes)
-ResponseApdu(status=36864, payload=ByteString(size=39 hex=000000000000000000000000000000000000000000... (41 bytes)
+CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=2070 hex=000000000000000000000000000... (2079 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=4087 hex=5382500000000000000000000000000000000000... (4089 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4087) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=4087 hex=0000000000000000000000000000000000000000... (4089 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4087) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=4087 hex=0000000000000000000000000000000000000000... (4089 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4087) (7 bytes)
+ResponseApdu(status=24832, payload=ByteString(size=4087 hex=0000000000000000000000000000000000000000... (4089 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=4087) (7 bytes)
+ResponseApdu(status=24881, payload=ByteString(size=4087 hex=0000000000000000000000000000000000000000... (4089 bytes)
+CommandApdu(cla=0, ins=192, p1=0, p2=0, payload=ByteString(size=0), le=49) (5 bytes)
+ResponseApdu(status=36864, payload=ByteString(size=49 hex=000000000000000000000000000000000000000000... (51 bytes)
 close
             """.trimIndent().trim(),
             tag.transcript.toString().trim()
@@ -503,5 +511,97 @@ close
         NfcTransportMdoc.onDeactivated()
         assertEquals(MdocTransport.State.FAILED, mdoc2.state.value)
         mdoc2.close()
+    }
+
+    /**
+     * Verifies that [NfcTransportMdocReader] leaves 9 bytes for extended-length Command APDU
+     * framing (catching the prior `- 7` off-by-2 overflow on final `ENVELOPE` chunks) and keeps
+     * APDUs in short form when `maxTransceiveLength = 261`.
+     */
+    @Test
+    fun testExtendedLengthBoundaryAtMaxTransceiveLength() = runTest {
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        for (maxLen in listOf(300, 4096)) {
+            val targetSizes = listOf(maxLen - 9, maxLen - 8, maxLen - 7, 2 * (maxLen - 9))
+            for (targetDo53Size in targetSizes) {
+                val mdoc = NfcTransportMdoc(
+                    role = MdocRole.MDOC,
+                    options = MdocTransportOptions(),
+                    connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
+                )
+                val mdocReader = NfcTransportMdocReader(
+                    role = MdocRole.MDOC_READER,
+                    options = MdocTransportOptions(),
+                    connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
+                )
+                val tag = LoopbackIsoTag(mdoc)
+                tag.maxTransceiveLength = maxLen
+                mdocReader.setTag(tag)
+
+                mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+                mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
+
+                val request = ByteArray(targetDo53Size - 4) { (it and 0xff).toByte() }
+                assertEquals(targetDo53Size, encapsulateInDo53(ByteString(request)).size)
+                val response = ByteArray(targetDo53Size - 4) { ((it + 1) and 0xff).toByte() }
+
+                mdocReader.sendMessage(request)
+                assertContentEquals(request, mdoc.waitForMessage())
+                mdoc.sendMessage(response)
+                assertContentEquals(response, mdocReader.waitForMessage())
+
+                mdoc.close()
+                mdocReader.close()
+            }
+        }
+
+        // Verify short-APDU-only Android maxTransceiveLength = 261 keeps all ENVELOPE/GET RESPONSE APDUs in short form
+        val mdoc = NfcTransportMdoc(
+            role = MdocRole.MDOC,
+            options = MdocTransportOptions(),
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
+        )
+        val mdocReader = NfcTransportMdocReader(
+            role = MdocRole.MDOC_READER,
+            options = MdocTransportOptions(),
+            connectionMethod = MdocConnectionMethod.Nfc(0xffff, 0x10000)
+        )
+        val seenCommands = mutableListOf<CommandApdu>()
+        val tag = object : NfcIsoTag() {
+            override val maxTransceiveLength: Int = 261
+            override suspend fun close() {}
+            override suspend fun updateDialogMessage(message: String) {}
+            override suspend fun transceive(command: CommandApdu): ResponseApdu {
+                val encodedCommand = command.encode()
+                check(encodedCommand.size <= maxTransceiveLength) {
+                    "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+                }
+                seenCommands.add(command)
+                val response = mdoc.processApdu(command)
+                val encodedResponse = response.encode()
+                check(encodedResponse.size <= maxTransceiveLength) {
+                    "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+                }
+                return response
+            }
+        }
+        mdocReader.setTag(tag)
+        mdoc.open(eSenderKeyBytes = buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+        mdocReader.open(eSenderKeyBytes = buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
+
+        val request = ByteArray(600) { (it and 0xff).toByte() }
+        val response = ByteArray(600) { ((it + 1) and 0xff).toByte() }
+        mdocReader.sendMessage(request)
+        assertContentEquals(request, mdoc.waitForMessage())
+        mdoc.sendMessage(response)
+        assertContentEquals(response, mdocReader.waitForMessage())
+
+        assertTrue(seenCommands.filter { it.ins == Nfc.INS_ENVELOPE || it.ins == Nfc.INS_GET_RESPONSE }
+            .all { it.payload.size < 0x100 && it.le <= 0x100 })
+
+        mdoc.close()
+        mdocReader.close()
     }
 }

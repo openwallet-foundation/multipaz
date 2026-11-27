@@ -21,7 +21,6 @@ import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.util.Logger
 import kotlin.concurrent.Volatile
-import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -324,8 +323,8 @@ class NfcCceTransportMdocReader(
                     val messageToSend = writingQueue.receive()
                     numSentViaNfc += 1
                     Logger.i(TAG, "Sending message over NFC of length ${messageToSend.size}")
-                    val maxCmdLen = min(nfcTag.maxTransceiveLength, min(apduCommandMaxSize, 65530))
-                    val maxRespLen = min(nfcTag.maxTransceiveLength, min(apduResponseMaxSize, 65530))
+                    val maxCmdLen = nfcTag.effectiveCommandDataFieldMaxLength(apduCommandMaxSize.toLong())
+                    val maxRespLen = nfcTag.effectiveResponseDataFieldMaxLength(apduResponseMaxSize.toLong())
                     val responseMessage = nfcTag.nfcCceTransact(
                         message = messageToSend,
                         commandDataFieldMaxLength = maxCmdLen,

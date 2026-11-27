@@ -25,6 +25,7 @@ import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcCceTransportMdoc
 import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
+import org.multipaz.mdoc.transport.encapsulateInDo53
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NdefMessage
 import org.multipaz.nfc.Nfc
@@ -241,12 +242,11 @@ class ScanMdocReaderTest {
      * Loopback [NfcIsoTag] backed by [MdocNfcEngagementHelper] (for NDEF Static or Negotiated Handover).
      */
     private class NdefLoopbackIsoTag(
-        private val engagementHelper: MdocNfcEngagementHelper
+        private val engagementHelper: MdocNfcEngagementHelper,
+        override val maxTransceiveLength: Int = 65536,
     ) : NfcIsoTag() {
         var closed: Boolean = false
             private set
-
-        override val maxTransceiveLength: Int = 65536
 
         override suspend fun close() {
             closed = true
@@ -255,13 +255,23 @@ class ScanMdocReaderTest {
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
-            if (command.ins == Nfc.INS_SELECT &&
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            val response = if (command.ins == Nfc.INS_SELECT &&
                 command.p1 == Nfc.INS_SELECT_P1_APPLICATION &&
                 command.payload != Nfc.NDEF_APPLICATION_ID
             ) {
-                return ResponseApdu(status = Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+                ResponseApdu(status = Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+            } else {
+                engagementHelper.processApdu(command)
             }
-            return engagementHelper.processApdu(command)
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            return response
         }
     }
 
@@ -272,13 +282,12 @@ class ScanMdocReaderTest {
     private class AidRoutingLoopbackIsoTag(
         private val cceHelper: MdocNfcCceEngagementHelper? = null,
         private val ndefHelper: MdocNfcEngagementHelper? = null,
+        override val maxTransceiveLength: Int = 65536,
     ) : NfcIsoTag() {
         val selectedAids = mutableListOf<ByteString>()
         private var activeAid: ByteString? = null
         var closed: Boolean = false
             private set
-
-        override val maxTransceiveLength: Int = 65536
 
         override suspend fun close() {
             closed = true
@@ -287,9 +296,13 @@ class ScanMdocReaderTest {
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
-            if (command.ins == Nfc.INS_SELECT && command.p1 == Nfc.INS_SELECT_P1_APPLICATION) {
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            val response = if (command.ins == Nfc.INS_SELECT && command.p1 == Nfc.INS_SELECT_P1_APPLICATION) {
                 selectedAids.add(command.payload)
-                return when (command.payload) {
+                when (command.payload) {
                     Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID -> if (cceHelper != null) {
                         activeAid = command.payload
                         cceHelper.processApdu(command)
@@ -309,12 +322,18 @@ class ScanMdocReaderTest {
                         ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
                     }
                 }
+            } else {
+                when (activeAid) {
+                    Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID -> cceHelper!!.processApdu(command)
+                    Nfc.NDEF_APPLICATION_ID -> ndefHelper!!.processApdu(command)
+                    else -> ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+                }
             }
-            return when (activeAid) {
-                Nfc.ISO_MDOC_NFC_CCE_APPLICATION_ID -> cceHelper!!.processApdu(command)
-                Nfc.NDEF_APPLICATION_ID -> ndefHelper!!.processApdu(command)
-                else -> ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND)
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
             }
+            return response
         }
     }
 
@@ -327,12 +346,11 @@ class ScanMdocReaderTest {
     private class NfcCceLoopbackIsoTag(
         private val engagementHelper: MdocNfcCceEngagementHelper,
         private val failAfterHandoverWithTagLost: Boolean = false,
+        override val maxTransceiveLength: Int = 65536,
     ) : NfcIsoTag() {
         var closed: Boolean = false
             private set
         private var envelopeCommandsSeen: Int = 0
-
-        override val maxTransceiveLength: Int = 65536
 
         override suspend fun close() {
             closed = true
@@ -341,13 +359,22 @@ class ScanMdocReaderTest {
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
             if (command.ins == Nfc.INS_ENVELOPE) {
                 envelopeCommandsSeen += 1
                 if (failAfterHandoverWithTagLost && envelopeCommandsSeen > 1) {
                     throw NfcTagLostException("Tag lost during NFC CCE data transfer")
                 }
             }
-            return engagementHelper.processApdu(command)
+            val response = engagementHelper.processApdu(command)
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            return response
         }
     }
 
@@ -1121,5 +1148,130 @@ class ScanMdocReaderTest {
         assertEquals(p384ReaderKey.publicKey, parsedNdefRe.eReaderKey)
         assertTrue(parsedNdefRe.connectionMethods.isEmpty())
         assertEquals(reWithKeyAndOtherInfo.otherInfo, parsedNdefRe.otherInfo)
+    }
+
+    @Test
+    fun nfcCceNfcOnlyRespectsSmallMaxTransceiveLength() = runTest {
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        lateinit var mdocTransport: NfcCceTransportMdoc
+        lateinit var engagementHelper: MdocNfcCceEngagementHelper
+        engagementHelper = MdocNfcCceEngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _, _ -> },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error -> fail("Unexpected engagement error: $error") },
+            handoverPicker = { null },
+        )
+        mdocTransport = NfcCceTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
+
+        val tag = NfcCceLoopbackIsoTag(
+            engagementHelper = engagementHelper,
+            maxTransceiveLength = 100,
+        )
+        val reader = FakeNfcTagReader(tags = listOf(tag))
+
+        val outcome = reader.scanMdocReader(
+            message = "Keep holding phone near reader",
+            options = MdocTransportOptions(),
+            handoverOptions = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey),
+            transportFactory = FakeMdocTransportFactory(),
+            selectConnectionMethod = { methods -> methods.first() },
+            negotiatedHandoverConnectionMethods = emptyList(),
+            context = coroutineContext,
+            onHandover = { scanResult ->
+                val request = Cbor.encode(
+                    buildCborMap {
+                        put("request", Bstr(ByteArray(250) { (it and 0xff).toByte() }))
+                    }
+                )
+                val response = Cbor.encode(
+                    buildCborMap {
+                        put("response", Bstr(ByteArray(320) { ((it * 3) and 0xff).toByte() }))
+                    }
+                )
+                scanResult.transport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+                mdocTransport.sendMessage(response)
+                scanResult.transport.sendMessage(request)
+                assertContentEquals(request, mdocTransport.waitForMessage())
+                assertContentEquals(response, scanResult.transport.waitForMessage())
+                scanResult.transport.close()
+                assertEquals(MdocTransport.State.CLOSED, scanResult.transport.state.value)
+                "cce-small-tag-ok"
+            }
+        )
+        assertEquals("cce-small-tag-ok", outcome)
+        mdocTransport.close()
+    }
+
+    @Test
+    fun nfcCceExtendedLengthBoundaryAt300Bytes() = runTest {
+        val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val maxTransceiveLen = 300
+
+        // Target DO'53' encapsulated sizes covering exact single-chunk and multi-chunk 9-byte boundaries:
+        // 291 (+9=300), 292 (chunks 291+1), 294 (previously overflowed -6), 300, and 582 (2*291).
+        for (targetDo53Size in listOf(291, 292, 294, 300, 582)) {
+            lateinit var mdocTransport: NfcCceTransportMdoc
+            lateinit var engagementHelper: MdocNfcCceEngagementHelper
+            engagementHelper = MdocNfcCceEngagementHelper(
+                eDeviceKey = eDeviceKey.publicKey,
+                onHandoverComplete = { _, _, _, _ -> },
+                onMessageReceived = { message ->
+                    mdocTransport.onMessageReceivedViaNfc(message)
+                },
+                onError = { error -> fail("Unexpected engagement error at size=$targetDo53Size: $error") },
+                handoverPicker = { null },
+            )
+            mdocTransport = NfcCceTransportMdoc(
+                sendMessageViaNfc = { message ->
+                    engagementHelper.sendMessage(message)
+                    true
+                }
+            )
+            mdocTransport.open(buildDeviceEngagement(eDeviceKey.publicKey) {}.eDeviceKeyBytes)
+
+            val tag = NfcCceLoopbackIsoTag(
+                engagementHelper = engagementHelper,
+                maxTransceiveLength = maxTransceiveLen,
+            )
+            val reader = FakeNfcTagReader(tags = listOf(tag))
+
+            // DO'53' header is 4 bytes (0x53 0x82 len_hi len_lo) for payloads in 256..65535.
+            val request = ByteArray(targetDo53Size - 4) { (it and 0xff).toByte() }
+            assertEquals(targetDo53Size, encapsulateInDo53(ByteString(request)).size)
+            val response = ByteArray(targetDo53Size - 4) { ((it + 1) and 0xff).toByte() }
+
+            val ok = reader.scanMdocReader(
+                message = null,
+                options = MdocTransportOptions(),
+                handoverOptions = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey),
+                transportFactory = FakeMdocTransportFactory(),
+                selectConnectionMethod = { methods -> methods.first() },
+                negotiatedHandoverConnectionMethods = emptyList(),
+                context = coroutineContext,
+                onHandover = { scanResult ->
+                    scanResult.transport.open(buildDeviceEngagement(eReaderKey.publicKey) {}.eDeviceKeyBytes)
+                    mdocTransport.sendMessage(response)
+                    scanResult.transport.sendMessage(request)
+                    assertContentEquals(request, mdocTransport.waitForMessage())
+                    assertContentEquals(response, scanResult.transport.waitForMessage())
+                    scanResult.transport.close()
+                    true
+                }
+            )
+            assertEquals(true, ok)
+            mdocTransport.close()
+        }
     }
 }

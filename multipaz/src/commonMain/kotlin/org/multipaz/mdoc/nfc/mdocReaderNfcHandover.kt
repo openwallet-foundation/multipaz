@@ -199,8 +199,17 @@ suspend fun mdocReaderNfcHandover(
             Logger.i(TAG, "Successfully selected NFC CCE AID")
             Logger.d(TAG, "payload: ${selectApplicationResponse.payload.toByteArray().toHex()}")
             val payload = Cbor.decode(selectApplicationResponse.payload.toByteArray())
-            val apduCommandMaxSize = payload[0].asNumber.toInt()
-            val apduResponseMaxSize = payload.getOrNull(1)?.asNumber?.toInt() ?: 65536
+            val apduCommandMaxSizeLong = payload[0].asNumber
+            require(apduCommandMaxSizeLong in 1L..CommandApdu.MAX_COMMAND_DATA_FIELD_LENGTH.toLong()) {
+                "apduCommandMaxSize out of range: $apduCommandMaxSizeLong"
+            }
+            val apduCommandMaxSize = apduCommandMaxSizeLong.toInt()
+            val apduResponseMaxSizeLong = payload.getOrNull(1)?.asNumber
+                ?: CommandApdu.MAX_RESPONSE_DATA_FIELD_LENGTH.toLong()
+            require(apduResponseMaxSizeLong in 1L..CommandApdu.MAX_RESPONSE_DATA_FIELD_LENGTH.toLong()) {
+                "apduResponseMaxSize out of range: $apduResponseMaxSizeLong"
+            }
+            val apduResponseMaxSize = apduResponseMaxSizeLong.toInt()
             Logger.i(
                 TAG,
                 "mdoc indicates APDU max command length is $apduCommandMaxSize, max response length is $apduResponseMaxSize"
@@ -238,11 +247,15 @@ suspend fun mdocReaderNfcHandover(
     val ccFile = tag.readBinary(0, 15)
     check(ccFile.size == 15) { "CC file is ${ccFile.size} bytes, expected 15" }
 
+    val mle = ccFile.getUInt16(3).toInt()
+    val mlc = ccFile.getUInt16(5).toInt()
+    check(mle > 0) { "Invalid MLe $mle in CC file" }
+
     val ndefFileId = ccFile.getUInt16(9).toInt()
 
     tag.selectFile(ndefFileId)
 
-    val initialNdefMessage = tag.ndefReadMessage()
+    val initialNdefMessage = tag.ndefReadMessage(maxLe = mle)
     if (Logger.isDebugEnabled) {
         Logger.dHex(TAG, "Initial NDEF message", initialNdefMessage.encode())
     }
@@ -271,13 +284,16 @@ suspend fun mdocReaderNfcHandover(
     // Select the service, the resulting NDEF message is specified in
     // in Tag NDEF Exchange Protocol Technical Specification Version 1.0
     // section 4.3 TNEP Status Message
+    check(mlc > 0) { "Invalid MLc $mlc in CC file" }
     Logger.i(TAG, "Service parameter record found, continuing with Negotiated Handover")
     val serviceSelectionResponse = tag.ndefTransact(
-        NdefMessage(listOf(
+        ndefMessage = NdefMessage(listOf(
             ServiceSelectRecord(Nfc.SERVICE_NAME_CONNECTION_HANDOVER).toNdefRecord()
         )),
-        hspr.wtInt,
-        hspr.nWait
+        wtInt = hspr.wtInt,
+        nWait = hspr.nWait,
+        maxLc = mlc,
+        maxLe = mle,
     )
 
     val tnepStatusRecord = serviceSelectionResponse.records.find { TnepStatusRecord.fromNdefRecord(it) != null }
@@ -292,7 +308,13 @@ suspend fun mdocReaderNfcHandover(
         readerEngagement = options.readerEngagement,
         random = options.random,
     )
-    val hsMessage = tag.ndefTransact(hrMessage, hspr.wtInt, hspr.nWait)
+    val hsMessage = tag.ndefTransact(
+        ndefMessage = hrMessage,
+        wtInt = hspr.wtInt,
+        nWait = hspr.nWait,
+        maxLc = mlc,
+        maxLe = mle,
+    )
 
     val bleUuid = extractBleUuid(negotiatedHandoverConnectionMethods)
     Logger.i(TAG, "Supplementing with UUID $bleUuid")
@@ -382,8 +404,8 @@ private suspend fun mdocReaderNfcCceHandover(
 
     val encodedCceHandoverSelect = tag.nfcCceTransact(
         message = ByteString(encodedCceHandoverRequest),
-        commandDataFieldMaxLength = min(tag.maxTransceiveLength, apduCommandMaxSize),
-        responseDataFieldMaxLength = min(tag.maxTransceiveLength, apduResponseMaxSize)
+        commandDataFieldMaxLength = tag.effectiveCommandDataFieldMaxLength(apduCommandMaxSize.toLong()),
+        responseDataFieldMaxLength = tag.effectiveResponseDataFieldMaxLength(apduResponseMaxSize.toLong()),
     ).toByteArray()
     Logger.dCbor(TAG, "CCE Handover Select", encodedCceHandoverSelect)
 
@@ -526,14 +548,15 @@ internal suspend fun NfcIsoTag.nfcCceTransact(
 ): ByteString {
     val encMessage = encapsulateInDo53(message)
 
-    val maxChunkSize = commandDataFieldMaxLength
+    val maxChunkSize = effectiveCommandDataFieldMaxLength(commandDataFieldMaxLength.toLong())
+    val maxResponseSize = effectiveResponseDataFieldMaxLength(responseDataFieldMaxLength.toLong())
     val offsets = 0 until encMessage.size step maxChunkSize
     var lastEnvelopeResponse: ResponseApdu? = null
     for (offset in offsets) {
         val moreDataComing = (offset != offsets.last)
         val size = min(maxChunkSize, encMessage.size - offset)
         val le = if (!moreDataComing) {
-            responseDataFieldMaxLength
+            maxResponseSize
         } else {
             0
         }
@@ -567,9 +590,9 @@ internal suspend fun NfcIsoTag.nfcCceTransact(
     } else {
         // More bytes are coming, have to use GET RESPONSE to get the rest
 
-        var leForGetResponse = responseDataFieldMaxLength
+        var leForGetResponse = maxResponseSize
         if (lastEnvelopeResponse.status.and(0xff) != 0) {
-            leForGetResponse = lastEnvelopeResponse.status.and(0xff)
+            leForGetResponse = min(lastEnvelopeResponse.status.and(0xff), maxResponseSize)
         }
         while (true) {
             Logger.i(TAG, "Sending GET RESPONSE")
@@ -598,7 +621,7 @@ internal suspend fun NfcIsoTag.nfcCceTransact(
                  * maximum length of the response data field that is supported
                  * by both the mdoc and the mdoc reader.
                  */
-                leForGetResponse = responseDataFieldMaxLength
+                leForGetResponse = maxResponseSize
             } else if (response.status.and(0xff00) == 0x6100) {
                 /* If Le < the number of available bytes ≤ Le + 255, the
                  * mdoc shall include as many bytes in the response as
@@ -607,7 +630,7 @@ internal suspend fun NfcIsoTag.nfcCceTransact(
                  * mdoc reader shall respond with a GET RESPONSE command where
                  * Le is set to XX.
                  */
-                leForGetResponse = response.status.and(0xff)
+                leForGetResponse = min(response.status.and(0xff), maxResponseSize)
             } else {
                 throw NfcCommandFailedException(
                     "Unexpected GET RESPONSE status ${response.statusHexString}",

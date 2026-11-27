@@ -30,6 +30,8 @@ import com.android.identity.android.mdoc.transport.DataTransportBle
 import com.android.identity.android.mdoc.transport.DataTransportBleCentralClientMode
 import com.android.identity.android.mdoc.transport.DataTransportNfc
 import com.android.identity.android.mdoc.transport.DataTransportOptions
+import com.android.identity.android.util.AndroidIsoDepTransceiver
+import com.android.identity.android.util.IsoDepTransceiver
 import com.android.identity.android.util.NfcUtil
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -46,6 +48,7 @@ import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 import org.multipaz.mdoc.role.MdocRole
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.Arrays
 import java.util.Locale
@@ -358,14 +361,14 @@ class VerificationHelper internal constructor(
         )
     }
 
-    private fun transceive(isoDep: IsoDep, apdu: ByteArray): ByteArray {
+    private fun transceive(isoDep: IsoDepTransceiver, apdu: ByteArray): ByteArray {
         Logger.dHex(TAG, "transceive: Sending APDU", apdu)
         val ret = isoDep.transceive(apdu)
         Logger.dHex(TAG, "transceive: Received APDU", ret)
         return ret
     }
 
-    private fun readBinary(isoDep: IsoDep, offset: Int, size: Int): ByteArray? {
+    private fun readBinary(isoDep: IsoDepTransceiver, offset: Int, size: Int): ByteArray? {
         val apdu: ByteArray
         val ret: ByteArray
         apdu = NfcUtil.createApduReadBinary(offset, size)
@@ -377,7 +380,16 @@ class VerificationHelper internal constructor(
         return Arrays.copyOfRange(ret, 0, ret.size - 2)
     }
 
-    private fun ndefReadMessage(isoDep: IsoDep, tWaitMillis: Double, _nWait: Int): ByteArray? {
+    internal fun ndefReadMessage(
+        isoDep: IsoDepTransceiver,
+        tWaitMillis: Double,
+        _nWait: Int,
+        maxLe: Int = NfcUtil.MAX_RESPONSE_DATA_FIELD_LENGTH,
+    ): ByteArray? {
+        val maxChunkLen = NfcUtil.effectiveResponseDataFieldMaxLength(
+            isoDep.maxTransceiveLength,
+            maxLe.toLong(),
+        )
         var nWait = _nWait
         var apdu: ByteArray
         var ret: ByteArray
@@ -386,8 +398,11 @@ class VerificationHelper internal constructor(
             apdu = NfcUtil.createApduReadBinary(0x0000, 2)
             ret = transceive(isoDep, apdu)
             if (ret.size != 4 || ret[2] != 0x90.toByte() || ret[3] != 0x00.toByte()) {
-                Logger.eHex(TAG, "ndefReadMessage: Malformed response for first " +
-                            "READ_BINARY command for length, ret", ret)
+                Logger.eHex(
+                    TAG,
+                    "ndefReadMessage: Malformed response for first READ_BINARY command for length, ret",
+                    ret,
+                )
                 return null
             }
             replyLen = (ret[0].toInt() and 0xff) * 256 + (ret[1].toInt() and 0xff)
@@ -401,7 +416,7 @@ class VerificationHelper internal constructor(
                 Logger.d(TAG, "ndefReadMessage: NDEF message with length 0 and $nWait time extensions left")
                 try {
                     val waitMillis = Math.ceil(tWaitMillis).toLong()
-                    Logger.d(TAG,"ndefReadMessage: Sleeping $waitMillis ms")
+                    Logger.d(TAG, "ndefReadMessage: Sleeping $waitMillis ms")
                     Thread.sleep(waitMillis)
                 } catch (e: InterruptedException) {
                     throw RuntimeException("Unexpected interrupt", e)
@@ -412,20 +427,46 @@ class VerificationHelper internal constructor(
                 return null
             }
         } while (true)
-        apdu = NfcUtil.createApduReadBinary(0x0002, replyLen)
-        ret = transceive(isoDep, apdu)
-        if (ret.size != replyLen + 2 || ret[replyLen] != 0x90.toByte() || ret[replyLen + 1] != 0x00.toByte()) {
-            Logger.eHex(TAG, "Malformed response for second READ_BINARY command for payload, ret", ret)
-            return null
+        val baos = ByteArrayOutputStream(replyLen)
+        var offset = 2
+        var remaining = replyLen
+        while (remaining > 0) {
+            val toRead = minOf(remaining, maxChunkLen)
+            val chunk = readBinary(isoDep, offset, toRead) ?: return null
+            if (chunk.isEmpty() || chunk.size > remaining) {
+                Logger.e(
+                    TAG,
+                    "ndefReadMessage: Unexpected READ_BINARY chunk size ${chunk.size} with $remaining remaining",
+                )
+                return null
+            }
+            baos.write(chunk)
+            offset += chunk.size
+            remaining -= chunk.size
         }
-        return ret.copyOfRange(0, ret.size - 2)
+        return baos.toByteArray()
     }
 
     @Throws(IOException::class)
-    private fun ndefTransact(
-        isoDep: IsoDep, ndefMessage: ByteArray,
-        tWaitMillis: Double, nWait: Int
+    internal fun ndefTransact(
+        isoDep: IsoDepTransceiver,
+        ndefMessage: ByteArray,
+        tWaitMillis: Double,
+        nWait: Int,
+        maxLc: Int = 255,
+        maxLe: Int = NfcUtil.MAX_RESPONSE_DATA_FIELD_LENGTH,
     ): ByteArray? {
+        require(maxLc > 0) { "maxLc ($maxLc) must be positive" }
+        NfcUtil.effectiveResponseDataFieldMaxLength(isoDep.maxTransceiveLength, maxLe.toLong())
+        val maxUpdateDataSize = minOf(
+            255,
+            isoDep.maxTransceiveLength - NfcUtil.SHORT_COMMAND_DATA_OVERHEAD_SIZE,
+            maxLc,
+        )
+        require(maxUpdateDataSize >= 2) {
+            "Effective UPDATE BINARY data size ($maxUpdateDataSize) must be at least 2"
+        }
+
         var apdu: ByteArray
         var ret: ByteArray
         Logger.dHex(TAG, "ndefTransact: writing NDEF message", ndefMessage)
@@ -445,7 +486,7 @@ class VerificationHelper internal constructor(
         //
         // For debugging, this optimization can be turned off by setting this to |true|:
         val bypassUpdateBinaryOptimization = false
-        if (!bypassUpdateBinaryOptimization && ndefMessage.size < 256 - 2) {
+        if (!bypassUpdateBinaryOptimization && ndefMessage.size + 2 <= maxUpdateDataSize) {
             Logger.d(TAG, "ndefTransact: using single UPDATE_BINARY command")
             val data = ByteArray(ndefMessage.size + 2)
             data[0] = 0.toByte()
@@ -469,11 +510,11 @@ class VerificationHelper internal constructor(
             }
 
             // Subsequent commands are UPDATE_BINARY with payload, chopped into bits no longer
-            // than 255 bytes each
+            // than maxUpdateDataSize bytes each
             var offset = 0
             var remaining = ndefMessage.size
             while (remaining > 0) {
-                val numBytesToWrite = remaining.coerceAtMost(255)
+                val numBytesToWrite = remaining.coerceAtMost(maxUpdateDataSize)
                 val bytesToWrite = ndefMessage.copyOfRange(offset, offset + numBytesToWrite)
                 apdu = NfcUtil.createApduUpdateBinary(offset + 2, bytesToWrite)
                 ret = transceive(isoDep, apdu)
@@ -506,24 +547,30 @@ class VerificationHelper internal constructor(
         }
 
         // Now read NDEF file...
-        val receivedNdefMessage = ndefReadMessage(isoDep, tWaitMillis, nWait) ?: return null
+        val receivedNdefMessage = ndefReadMessage(isoDep, tWaitMillis, nWait, maxLe) ?: return null
         Logger.dHex(TAG, "ndefTransact: read NDEF message", receivedNdefMessage)
         return receivedNdefMessage
     }
 
     private fun startNfcHandover() {
+        startNfcHandover(AndroidIsoDepTransceiver(nfcIsoDep!!), runAsync = true)
+    }
+
+    internal fun addNegotiatedHandoverListeningTransportForTesting(transport: DataTransport) {
+        negotiatedHandoverListeningTransports.add(transport)
+    }
+
+    internal fun startNfcHandover(isoDep: IsoDepTransceiver, runAsync: Boolean = true) {
         Logger.i(TAG, "Starting NFC handover thread")
         val timeMillisBegin = System.currentTimeMillis()
         if (negotiatedHandoverListeningTransports.size == 0) {
             Logger.w(TAG, "Negotiated Handover will not work - no listening connections configured")
         }
-        val isoDep = nfcIsoDep
-        val transceiverThread: Thread = object : Thread() {
-            override fun run() {
+        val handoverRunnable = Runnable {
                 var ret: ByteArray?
                 var apdu: ByteArray
                 try {
-                    isoDep!!.connect()
+                    isoDep.connect()
                     isoDep.timeout = 20 * 1000 // 20 seconds
                     apdu =
                         NfcUtil.createApduApplicationSelect(NfcUtil.AID_FOR_TYPE_4_TAG_NDEF_APPLICATION)
@@ -549,11 +596,15 @@ class VerificationHelper internal constructor(
                         )
                     }
 
+                    val mle = (ccFile[3].toInt() and 0xff) * 256 + (ccFile[4].toInt() and 0xff)
+                    val mlc = (ccFile[5].toInt() and 0xff) * 256 + (ccFile[6].toInt() and 0xff)
+                    check(mle > 0) { "Invalid MLe $mle in CC file" }
+
                     // TODO: look at mapping version in ccFile
                     val ndefFileId =
                         (ccFile[9].toInt() and 0xff) * 256 + (ccFile[10].toInt() and 0xff)
                     Logger.d(TAG, String.format(Locale.US, "NDEF file id: 0x%04x", ndefFileId))
-                    apdu = NfcUtil.createApduSelectFile(NfcUtil.NDEF_FILE_ID)
+                    apdu = NfcUtil.createApduSelectFile(ndefFileId)
                     ret = transceive(isoDep, apdu)
                     if (!Arrays.equals(ret, NfcUtil.STATUS_WORD_OK)) {
                         Logger.eHex(TAG, "Error selecting NDEF file, ret", ret)
@@ -561,7 +612,7 @@ class VerificationHelper internal constructor(
                     }
 
                     // First see if we should use negotiated handover..
-                    val initialNdefMessage = ndefReadMessage(isoDep, 1.0, 0)
+                    val initialNdefMessage = ndefReadMessage(isoDep, 1.0, 0, mle)
                     if (initialNdefMessage == null) {
                         throw IllegalStateException("Error reading initial NDEF message")
                     }
@@ -594,8 +645,9 @@ class VerificationHelper internal constructor(
                             EngagementMethod.NFC_STATIC_HANDOVER
                         )
                         reportDeviceEngagementReceived(hs.connectionMethods)
-                        return
+                        return@Runnable
                     }
+                    check(mlc > 0) { "Invalid MLc $mlc in CC file" }
                     Logger.d(TAG, "Service Parameter for urn:nfc:sn:handover found - negotiated handover")
                     val spr = NfcUtil.parseServiceParameterRecord(handoverServiceRecord)
                     Logger.d(TAG, String.format(
@@ -608,7 +660,10 @@ class VerificationHelper internal constructor(
                     ret = ndefTransact(
                         isoDep,
                         NfcUtil.createNdefMessageServiceSelect("urn:nfc:sn:handover"),
-                        spr.tWaitMillis, spr.nWait
+                        spr.tWaitMillis,
+                        spr.nWait,
+                        mlc,
+                        mle,
                     )
                     checkNotNull(ret) { "Service selection: no response" }
                     val tnepStatusRecord = NfcUtil.findTnepStatusRecord(ret)
@@ -635,7 +690,7 @@ class VerificationHelper internal constructor(
                         options
                     ) // TODO: pass ReaderEngagement message
                     Logger.dHex(TAG, "Handover Request sent", hrMessage)
-                    val hsMessage = ndefTransact(isoDep, hrMessage, spr.tWaitMillis, spr.nWait)
+                    val hsMessage = ndefTransact(isoDep, hrMessage, spr.tWaitMillis, spr.nWait, mlc, mle)
                         ?: throw IllegalStateException("Handover Request failed")
                     Logger.dHex(TAG, "Handover Select received", hsMessage)
                     val elapsedTime = System.currentTimeMillis() - timeMillisBegin
@@ -695,14 +750,17 @@ class VerificationHelper internal constructor(
                     reportError(t)
                 } finally {
                     try {
-                        isoDep?.close()
+                        isoDep.close()
                     } catch (ignored: Throwable) {
                     }
                     nfcIsoDep = null
                 }
-            }
         }
-        transceiverThread.start()
+        if (runAsync) {
+            Thread(handoverRunnable).start()
+        } else {
+            handoverRunnable.run()
+        }
     }
 
     /**

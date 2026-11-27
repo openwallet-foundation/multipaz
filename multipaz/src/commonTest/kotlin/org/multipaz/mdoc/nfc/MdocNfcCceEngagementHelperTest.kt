@@ -18,6 +18,8 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
@@ -25,6 +27,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
+import org.multipaz.mdoc.engagement.buildReaderEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -32,6 +35,7 @@ import org.multipaz.mdoc.transport.MdocTransportException
 import org.multipaz.mdoc.transport.NfcCceTransportMdoc
 import org.multipaz.mdoc.transport.NfcCceTransportMdocReader
 import org.multipaz.nfc.CommandApdu
+import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.NfcCommandFailedException
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.NfcTagLostException
@@ -99,14 +103,15 @@ class MdocNfcCceEngagementHelperTest {
      * In-memory [NfcIsoTag] that routes [transceive] calls to [MdocNfcCceEngagementHelper.processApdu],
      * records the APDU transcript, and tracks `close()` invocations.
      */
-    class LoopbackIsoTag(val engagementHelper: MdocNfcCceEngagementHelper): NfcIsoTag() {
+    class LoopbackIsoTag(
+        val engagementHelper: MdocNfcCceEngagementHelper,
+        override val maxTransceiveLength: Int = 65536,
+    ): NfcIsoTag() {
         val transcript = StringBuilder()
+        val commands = mutableListOf<CommandApdu>()
         var failNextTransceive = false
         var closeCount = 0
         val closedDeferred = CompletableDeferred<Unit>()
-
-        override val maxTransceiveLength: Int
-            get() = 65536
 
         override suspend fun close() {
             closeCount++
@@ -120,8 +125,17 @@ class MdocNfcCceEngagementHelperTest {
             if (failNextTransceive) {
                 throw NfcTagLostException("Tag was lost during transceive")
             }
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            commands.add(command)
             transcript.appendLine("$command")
             val response = engagementHelper.processApdu(command)
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
             transcript.appendLine("$response")
             return response
         }
@@ -250,11 +264,11 @@ class MdocNfcCceEngagementHelperTest {
             """
                 CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=256)
                 ResponseApdu(status=36864, payload=ByteString(size=11 hex=a20019ffff011a00010000))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=92 hex=535aa100a20063312e31018201d818584ba401022001215820db1b6d2cc5e6baebd12fb76d4fa40957659832e41cade15db9038f37ef5ba321225820b0361e208471bb94a687089c4957fc4d9983abe04cdeeb155bcd690640137727), le=65536)
+                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=92 hex=535aa100a20063312e31018201d818584ba401022001215820db1b6d2cc5e6baebd12fb76d4fa40957659832e41cade15db9038f37ef5ba321225820b0361e208471bb94a687089c4957fc4d9983abe04cdeeb155bcd690640137727), le=65527)
                 ResponseApdu(status=36864, payload=ByteString(size=100 hex=5362a100a40063312e31018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c058006a203f504f5))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65530)
+                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65527)
                 ResponseApdu(status=36864, payload=ByteString(size=13 hex=530ba164646174614401020304))
-                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65530)
+                CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65527)
                 close
             """.trimIndent().trim(),
             tag.transcript.toString().trim()
@@ -893,6 +907,120 @@ class MdocNfcCceEngagementHelperTest {
         mdocReaderTransport.close()
         assertEquals(1, tag.closeCount)
         mdocTransport.close()
+    }
+
+    /**
+     * Verifies that [mdocReaderNfcHandover] splits `CCEHandoverRequest` and `GET RESPONSE`
+     * APDUs so that every encoded Command and Response APDU fits within [NfcIsoTag.maxTransceiveLength]
+     * across small (100), short-APDU-only Android (261), and extended-length boundary (300) limits.
+     */
+    @Test
+    fun testCceHandoverRespectsMaxTransceiveLength() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val eReaderKey = getEReaderKey()
+        val bleUuid = UUID(1UL, 2UL)
+        val methods = listOf(
+            MdocConnectionMethod.Ble.DirectL2capCentral(uuid = bleUuid, psm = 192),
+            MdocConnectionMethod.Ble.GattCentral(uuid = bleUuid),
+        )
+        val largeReaderEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
+            addOtherInfo(-7L, Bstr(ByteArray(210) { (it and 0xff).toByte() }))
+        }
+
+        for (maxLen in listOf(100, 261, 300)) {
+            val engagementHelper = MdocNfcCceEngagementHelper(
+                eDeviceKey = eDeviceKey.publicKey,
+                onHandoverComplete = { _, _, _, _ -> },
+                onMessageReceived = {},
+                onError = { error -> fail("Unexpected error at maxLen=$maxLen: $error") },
+                handoverPicker = { offered -> offered.first() },
+            )
+            val tag = LoopbackIsoTag(engagementHelper, maxTransceiveLength = maxLen)
+            val handoverResult = mdocReaderNfcHandover(
+                tag = tag,
+                negotiatedHandoverConnectionMethods = methods,
+                options = MdocReaderNfcHandoverOptions(
+                    cceEReaderKey = eReaderKey,
+                    readerEngagement = largeReaderEngagement,
+                )
+            )
+            assertNotNull(handoverResult)
+            assertEquals(MdocHandoverType.CCE_HANDOVER, handoverResult.type)
+            assertTrue(tag.commands.count { it.ins == Nfc.INS_ENVELOPE } >= 2)
+            assertTrue(tag.commands.all { it.encode().size <= maxLen })
+
+            if (maxLen == 100) {
+                val getResponses = tag.commands.filter { it.ins == Nfc.INS_GET_RESPONSE }
+                assertTrue(getResponses.isNotEmpty())
+                assertTrue(getResponses.all { it.le <= 91 })
+            }
+            if (maxLen == 261) {
+                val dataCommands = tag.commands.filter { it.ins == Nfc.INS_ENVELOPE || it.ins == Nfc.INS_GET_RESPONSE }
+                assertTrue(dataCommands.all { it.payload.size < 0x100 && it.le <= 0x100 })
+            }
+        }
+    }
+
+    /**
+     * Verifies that out-of-range `CCESelectResponse` limits and tags whose
+     * [NfcIsoTag.maxTransceiveLength] cannot accommodate the 9-byte Case 4E Command APDU overhead
+     * are rejected cleanly rather than overflowing or truncating.
+     */
+    @Test
+    fun testCceRejectsInvalidMaxSizesAndTooSmallTag() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val engagementHelper = MdocNfcCceEngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { _, _, _, _ -> },
+            onMessageReceived = {},
+            onError = { error -> fail("Unexpected error: $error") },
+            handoverPicker = { null },
+        )
+
+        class CustomSelectResponseTag(
+            private val cmdMax: Long,
+            private val respMax: Long,
+            override val maxTransceiveLength: Int = 65536,
+        ) : NfcIsoTag() {
+            override suspend fun close() {}
+            override suspend fun updateDialogMessage(message: String) {}
+            override suspend fun transceive(command: CommandApdu): ResponseApdu {
+                if (command.isApplicationSelect) {
+                    val map = buildCborMap {
+                        put(0, cmdMax)
+                        put(1, respMax)
+                    }
+                    return ResponseApdu(Nfc.RESPONSE_STATUS_SUCCESS, ByteString(Cbor.encode(map)))
+                }
+                return engagementHelper.processApdu(command)
+            }
+        }
+
+        for (badCmd in listOf(0L, -1L, 65536L, 0x100000000L)) {
+            assertFailsWith<IllegalArgumentException> {
+                mdocReaderNfcHandover(
+                    tag = CustomSelectResponseTag(cmdMax = badCmd, respMax = 65536L),
+                    negotiatedHandoverConnectionMethods = emptyList(),
+                )
+            }
+        }
+        for (badResp in listOf(0L, -1L, 65537L, 0x100000000L)) {
+            assertFailsWith<IllegalArgumentException> {
+                mdocReaderNfcHandover(
+                    tag = CustomSelectResponseTag(cmdMax = 65535L, respMax = badResp),
+                    negotiatedHandoverConnectionMethods = emptyList(),
+                )
+            }
+        }
+
+        val tooSmallTag = CustomSelectResponseTag(cmdMax = 65535L, respMax = 65536L, maxTransceiveLength = 9)
+        assertFailsWith<IllegalArgumentException> {
+            tooSmallTag.nfcCceTransact(
+                message = ByteString(byteArrayOf(1, 2, 3)),
+                commandDataFieldMaxLength = 100,
+                responseDataFieldMaxLength = 100,
+            )
+        }
     }
 }
 
