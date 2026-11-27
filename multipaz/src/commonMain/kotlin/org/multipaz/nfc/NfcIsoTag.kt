@@ -5,8 +5,11 @@ import org.multipaz.util.getUInt16
 import org.multipaz.util.putUInt16
 import kotlinx.coroutines.delay
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.ByteStringBuilder
+import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
 import org.multipaz.util.Logger
+import kotlin.math.min
 import kotlin.time.Duration
 
 /**
@@ -24,6 +27,36 @@ abstract class NfcIsoTag {
      * This varies depending on the NFC tag reader hardware.
      */
     abstract val maxTransceiveLength: Int
+
+    internal fun effectiveCommandDataFieldMaxLength(peerMaxLength: Long): Int {
+        val maxForTag = maxTransceiveLength - CommandApdu.MAX_OVERHEAD_SIZE
+        require(maxForTag > 0) {
+            "maxTransceiveLength ($maxTransceiveLength) must be greater than ${CommandApdu.MAX_OVERHEAD_SIZE}"
+        }
+        require(peerMaxLength > 0L) {
+            "peerMaxLength ($peerMaxLength) must be positive"
+        }
+        return minOf(
+            maxForTag.toLong(),
+            peerMaxLength,
+            CommandApdu.MAX_COMMAND_DATA_FIELD_LENGTH.toLong()
+        ).toInt()
+    }
+
+    internal fun effectiveResponseDataFieldMaxLength(peerMaxLength: Long): Int {
+        val maxForTag = maxTransceiveLength - CommandApdu.MAX_OVERHEAD_SIZE
+        require(maxForTag > 0) {
+            "maxTransceiveLength ($maxTransceiveLength) must be greater than ${CommandApdu.MAX_OVERHEAD_SIZE}"
+        }
+        require(peerMaxLength > 0L) {
+            "peerMaxLength ($peerMaxLength) must be positive"
+        }
+        return minOf(
+            maxForTag.toLong(),
+            peerMaxLength,
+            CommandApdu.MAX_RESPONSE_DATA_FIELD_LENGTH.toLong()
+        ).toInt()
+    }
 
     /**
      * Sends an APDU to the tag and waits for a response APDU.
@@ -178,7 +211,18 @@ abstract class NfcIsoTag {
     suspend fun ndefReadMessage(
         wtInt: Int = 0,
         nWait: Int = 0
+    ): NdefMessage = ndefReadMessage(
+        wtInt = wtInt,
+        nWait = nWait,
+        maxLe = CommandApdu.MAX_RESPONSE_DATA_FIELD_LENGTH,
+    )
+
+    internal suspend fun ndefReadMessage(
+        wtInt: Int = 0,
+        nWait: Int = 0,
+        maxLe: Int,
     ): NdefMessage {
+        val maxChunkLen = effectiveResponseDataFieldMaxLength(maxLe.toLong())
         var nWaitCounter = nWait
         var replyLen: Int
         do {
@@ -197,7 +241,24 @@ abstract class NfcIsoTag {
                 throw IllegalStateException("NDEF message with length 0 but no time extensions left")
             }
         } while (true)
-        return NdefMessage.fromEncoded(readBinary(2, replyLen))
+        if (replyLen <= maxChunkLen) {
+            return NdefMessage.fromEncoded(readBinary(2, replyLen))
+        }
+        val builder = ByteStringBuilder()
+        var offset = 2
+        var remaining = replyLen
+        while (remaining > 0) {
+            val toRead = min(remaining, maxChunkLen)
+            val chunk = readBinary(offset, toRead)
+            check(chunk.isNotEmpty()) { "READ BINARY returned empty data while $remaining bytes remained" }
+            check(chunk.size <= remaining) {
+                "READ BINARY returned ${chunk.size} bytes, exceeding remaining $remaining bytes"
+            }
+            builder.append(chunk)
+            offset += chunk.size
+            remaining -= chunk.size
+        }
+        return NdefMessage.fromEncoded(builder.toByteString().toByteArray())
     }
 
     /**
@@ -214,7 +275,34 @@ abstract class NfcIsoTag {
         wtInt: Int,
         nWait: Int,
         onMessageSent: (suspend () -> Unit)? = null
+    ): NdefMessage = ndefTransact(
+        ndefMessage = ndefMessage,
+        wtInt = wtInt,
+        nWait = nWait,
+        maxLc = 255,
+        maxLe = CommandApdu.MAX_RESPONSE_DATA_FIELD_LENGTH,
+        onMessageSent = onMessageSent,
+    )
+
+    internal suspend fun ndefTransact(
+        ndefMessage: NdefMessage,
+        wtInt: Int,
+        nWait: Int,
+        maxLc: Int,
+        maxLe: Int,
+        onMessageSent: (suspend () -> Unit)? = null
     ): NdefMessage {
+        require(maxLc > 0) { "maxLc ($maxLc) must be positive" }
+        effectiveResponseDataFieldMaxLength(maxLe.toLong())
+        val maxUpdateDataSize = minOf(
+            255,
+            maxTransceiveLength - CommandApdu.SHORT_COMMAND_DATA_OVERHEAD_SIZE,
+            maxLc
+        )
+        require(maxUpdateDataSize >= 2) {
+            "Effective UPDATE BINARY data size ($maxUpdateDataSize) must be at least 2"
+        }
+
         val encodedNdefMessage = ndefMessage.encode()
         Logger.dHex(TAG, "ndefTransact: Sending NDEF message", encodedNdefMessage)
 
@@ -232,7 +320,7 @@ abstract class NfcIsoTag {
         //   UPDATE_BINARY Command.
         //
         // For debugging, this optimization can be turned off by setting this to |true|:
-        if (!NDEF_TRANSACT_BYPASS_UPDATE_BINARY_OPTIMIZATION && encodedNdefMessage.size < 256 - 2) {
+        if (!NDEF_TRANSACT_BYPASS_UPDATE_BINARY_OPTIMIZATION && encodedNdefMessage.size + 2 <= maxUpdateDataSize) {
             updateBinary(
                 0, buildByteString { appendUInt16(encodedNdefMessage.size).append(encodedNdefMessage) }.toByteArray()
             )
@@ -241,11 +329,11 @@ abstract class NfcIsoTag {
             updateBinary(0, buildByteString { appendUInt16(0) }.toByteArray())
 
             // Subsequent commands are UPDATE_BINARY with payload, chopped into bits no longer
-            // than 255 bytes each
+            // than maxUpdateDataSize bytes each
             var offset = 0
             var remaining = encodedNdefMessage.size
             while (remaining > 0) {
-                val numBytesToWrite = remaining.coerceAtMost(255)
+                val numBytesToWrite = remaining.coerceAtMost(maxUpdateDataSize)
                 val bytesToWrite = encodedNdefMessage.copyOfRange(offset, offset + numBytesToWrite)
                 updateBinary(offset + 2, bytesToWrite)
                 remaining -= numBytesToWrite
@@ -265,7 +353,7 @@ abstract class NfcIsoTag {
         }
 
         // Now read NDEF file...
-        val responseMessage = ndefReadMessage(wtInt, nWait)
+        val responseMessage = ndefReadMessage(wtInt = wtInt, nWait = nWait, maxLe = maxLe)
         if (Logger.isDebugEnabled) {
             Logger.dHex(TAG, "ndefTransact: Received NDEF message", responseMessage.encode())
         }

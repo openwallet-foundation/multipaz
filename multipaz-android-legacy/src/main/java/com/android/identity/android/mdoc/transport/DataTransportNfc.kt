@@ -20,9 +20,13 @@ import android.nfc.NdefRecord
 import android.nfc.cardemulation.HostApduService
 import android.nfc.tech.IsoDep
 import android.util.Pair
+import com.android.identity.android.util.AndroidIsoDepTransceiver
+import com.android.identity.android.util.IsoDepTransceiver
 import com.android.identity.android.util.NfcUtil
 import com.android.identity.mdoc.connectionmethod.MdocConnectionMethod
 import com.android.identity.mdoc.connectionmethod.MdocConnectionMethodNfc
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.nfc.CommandApdu
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -44,6 +48,7 @@ class DataTransportNfc(
     options: DataTransportOptions
 ) : DataTransport(context, role, options) {
     var _isoDep: IsoDep? = null
+    private var isoDepTransceiver: IsoDepTransceiver? = null
 
     var listenerRemainingChunks: ArrayList<ByteArray>? = null
     var listenerTotalChunks = 0
@@ -142,6 +147,11 @@ class DataTransportNfc(
      */
     fun setIsoDep(isoDep: IsoDep) {
         this._isoDep = isoDep
+        this.isoDepTransceiver = AndroidIsoDepTransceiver(isoDep)
+    }
+
+    internal fun setIsoDepTransceiverForTesting(transceiver: IsoDepTransceiver) {
+        this.isoDepTransceiver = transceiver
     }
 
     private fun listenerSendResponse(apdu: ByteArray) {
@@ -381,50 +391,15 @@ class DataTransportNfc(
         p1: Int,
         p2: Int,
         data: ByteArray?,
-        le: Int): ByteArray {
-        val baos = ByteArrayOutputStream()
-        baos.write(cla)
-        baos.write(ins)
-        baos.write(p1)
-        baos.write(p2)
-        var hasExtendedLc = false
-        if (data == null) {
-            baos.write(0)
-        } else if (data.size < 256) {
-            baos.write(data.size)
-        } else {
-            hasExtendedLc = true
-            baos.write(0x00)
-            baos.write(data.size / 0x100)
-            baos.write(data.size and 0xff)
-        }
-        if (data != null && data.size > 0) {
-            try {
-                baos.write(data)
-            } catch (e: IOException) {
-                throw IllegalStateException(e)
-            }
-        }
-        if (le > 0) {
-            if (le == 256) {
-                baos.write(0x00)
-            } else if (le < 256) {
-                baos.write(le)
-            } else {
-                if (!hasExtendedLc) {
-                    baos.write(0x00)
-                }
-                if (le == 65536) {
-                    baos.write(0x00)
-                    baos.write(0x00)
-                } else {
-                    baos.write(le / 0x100)
-                    baos.write(le and 0xff)
-                }
-            }
-        }
-        return baos.toByteArray()
-    }
+        le: Int,
+    ): ByteArray = CommandApdu(
+        cla = cla,
+        ins = ins,
+        p1 = p1,
+        p2 = p2,
+        payload = ByteString(data ?: ByteArray(0)),
+        le = le,
+    ).encode()
 
     private fun encapsulateInDo53(data: ByteArray): ByteArray {
         val baos = ByteArrayOutputStream()
@@ -504,13 +479,32 @@ class DataTransportNfc(
     }
 
     private fun connectAsMdocReader() {
-        if (_isoDep == null) {
+        val isoDep = isoDepTransceiver ?: _isoDep?.let { AndroidIsoDepTransceiver(it) }
+        if (isoDep == null) {
             reportError(Error("NFC IsoDep not set"))
             return
         }
-        val maxTransceiveLength = Math.min(connectionMethod.commandDataFieldMaxLength.toInt(), _isoDep!!.maxTransceiveLength)
-        Logger.d(TAG, "maxTransceiveLength: $maxTransceiveLength")
-        Logger.d(TAG, "isExtendedLengthApduSupported: ${_isoDep!!.isExtendedLengthApduSupported}")
+        val commandDataFieldMaxLength: Int
+        val responseDataFieldMaxLength: Int
+        try {
+            commandDataFieldMaxLength = NfcUtil.effectiveCommandDataFieldMaxLength(
+                isoDep.maxTransceiveLength,
+                connectionMethod.commandDataFieldMaxLength,
+            )
+            responseDataFieldMaxLength = NfcUtil.effectiveResponseDataFieldMaxLength(
+                isoDep.maxTransceiveLength,
+                connectionMethod.responseDataFieldMaxLength,
+            )
+        } catch (e: IllegalArgumentException) {
+            reportError(e)
+            return
+        }
+        Logger.d(
+            TAG,
+            "maxTransceiveLength: ${isoDep.maxTransceiveLength}, " +
+                "cmdMax=$commandDataFieldMaxLength, respMax=$responseDataFieldMaxLength",
+        )
+        Logger.d(TAG, "isExtendedLengthApduSupported: ${isoDep.isExtendedLengthApduSupported}")
         val transceiverThread: Thread = object : Thread() {
             override fun run() {
                 try {
@@ -522,13 +516,13 @@ class DataTransportNfc(
                         NfcUtil.AID_FOR_MDL_DATA_TRANSFER, 0
                     )
                     Logger.dHex(TAG, "selectCommand", selectCommand)
-                    val selectResponse = _isoDep!!.transceive(selectCommand)
+                    val selectResponse = isoDep.transceive(selectCommand)
                     Logger.dHex(TAG, "selectResponse", selectResponse)
                     if (!Arrays.equals(selectResponse, NfcUtil.STATUS_WORD_OK)) {
                         reportError(Error("Unexpected response to AID SELECT"))
                         return
                     }
-                    while (_isoDep!!.isConnected) {
+                    while (isoDep.isConnected) {
                         var messageToSend: ByteArray? = null
                         try {
                             messageToSend = writerQueue.poll(1000, TimeUnit.MILLISECONDS)
@@ -545,9 +539,7 @@ class DataTransportNfc(
                         Logger.dHex(TAG, "Sending message", messageToSend)
                         val data = encapsulateInDo53(messageToSend)
 
-                        // Less 7 for the APDU header and 3 for LE
-                        //
-                        val maxChunkSize = maxTransceiveLength - 10
+                        val maxChunkSize = commandDataFieldMaxLength
                         var offset = 0
                         var lastEnvelopeResponse: ByteArray? = null
                         do {
@@ -560,7 +552,7 @@ class DataTransportNfc(
                             System.arraycopy(data, offset, chunk, 0, size)
                             var le = 0
                             if (!moreChunksComing) {
-                                le = maxTransceiveLength
+                                le = responseDataFieldMaxLength
                             }
                             val envelopeCommand = buildApdu(
                                 if (moreChunksComing) 0x10 else 0x00,
@@ -568,7 +560,7 @@ class DataTransportNfc(
                             )
                             Logger.dHex(TAG, "envelopeCommand", envelopeCommand)
                             val t0 = System.currentTimeMillis()
-                            val envelopeResponse = _isoDep!!.transceive(envelopeCommand)
+                            val envelopeResponse = isoDep.transceive(envelopeCommand)
                             val t1 = System.currentTimeMillis()
                             val durationSec = (t1 - t0) / 1000.0
                             val bitsPerSec =
@@ -611,9 +603,9 @@ class DataTransportNfc(
                             //
                             val baos = ByteArrayOutputStream()
                             baos.write(lastEnvelopeResponse, 0, erl - 2)
-                            var leForGetResponse = maxTransceiveLength - 10
+                            var leForGetResponse = responseDataFieldMaxLength
                             if (status and 0xff != 0) {
-                                leForGetResponse = status and 0xff
+                                leForGetResponse = minOf(status and 0xff, responseDataFieldMaxLength)
                             }
                             while (true) {
                                 val grCommand = buildApdu(
@@ -621,7 +613,7 @@ class DataTransportNfc(
                                     0xc0, 0x00, 0x00, null, leForGetResponse
                                 )
                                 val t0 = System.currentTimeMillis()
-                                val grResponse = _isoDep!!.transceive(grCommand)
+                                val grResponse = isoDep.transceive(grCommand)
                                 val t1 = System.currentTimeMillis()
                                 val durationSec = (t1 - t0) / 1000.0
                                 val bitsPerSec =
@@ -641,7 +633,8 @@ class DataTransportNfc(
                                     return
                                 }
                                 val grrStatus =
-                                    (grResponse[grrl - 2].toInt() and 0xff) * 0x100 + (grResponse[grrl - 1].toInt() and 0xff)
+                                    (grResponse[grrl - 2].toInt() and 0xff) * 0x100 +
+                                        (grResponse[grrl - 1].toInt() and 0xff)
                                 baos.write(grResponse, 0, grrl - 2)
 
                                 // TODO: add runaway check
@@ -659,7 +652,7 @@ class DataTransportNfc(
                                      * maximum length of the response data field that is supported
                                      * by both the mdoc and the mdoc reader.
                                      */
-                                    leForGetResponse = maxTransceiveLength - 10
+                                    leForGetResponse = responseDataFieldMaxLength
                                 } else if (grrStatus and 0xff00 == 0x6100) {
                                     /* If Le < the number of available bytes ≤ Le + 255, the
                                      * mdoc shall include as many bytes in the response as
@@ -668,9 +661,10 @@ class DataTransportNfc(
                                      * mdoc reader shall respond with a GET RESPONSE command where
                                      * Le is set to XX.
                                      */
-                                    leForGetResponse = grrStatus and 0xff
+                                    leForGetResponse = minOf(grrStatus and 0xff, responseDataFieldMaxLength)
                                 } else {
-                                    reportError(Error("Expected GetResponse APDU status $status"))
+                                    reportError(Error("Expected GetResponse APDU status $grrStatus"))
+                                    return
                                 }
                             }
                             encapsulatedMessage = baos.toByteArray()
@@ -691,6 +685,7 @@ class DataTransportNfc(
                 }
                 Logger.d(TAG, "Ending transceiver thread")
                 _isoDep = null
+                isoDepTransceiver = null
             }
         }
         transceiverThread.start()

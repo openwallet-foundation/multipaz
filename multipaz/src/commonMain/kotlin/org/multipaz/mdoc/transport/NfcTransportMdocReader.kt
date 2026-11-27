@@ -92,13 +92,11 @@ class NfcTransportMdocReader(
     fun setTag(tag: NfcIsoTag) {
         this.tag = tag
         this.tagClosed = false
-        commandDataFieldMaxLength = min(
-            connectionMethod.commandDataFieldMaxLength.toInt(),
-            tag.maxTransceiveLength - 7
+        commandDataFieldMaxLength = tag.effectiveCommandDataFieldMaxLength(
+            connectionMethod.commandDataFieldMaxLength
         )
-        responseDataFieldMaxLength = min(
-            connectionMethod.responseDataFieldMaxLength.toInt(),
-            tag.maxTransceiveLength - 7
+        responseDataFieldMaxLength = tag.effectiveResponseDataFieldMaxLength(
+            connectionMethod.responseDataFieldMaxLength
         )
     }
 
@@ -205,7 +203,7 @@ class NfcTransportMdocReader(
 
             var leForGetResponse = responseDataFieldMaxLength
             if (lastEnvelopeResponse.status.and(0xff) != 0) {
-                leForGetResponse = lastEnvelopeResponse.status.and(0xff)
+                leForGetResponse = min(lastEnvelopeResponse.status.and(0xff), responseDataFieldMaxLength)
             }
             while (true) {
                 Logger.i(TAG, "Sending GET RESPONSE")
@@ -243,7 +241,7 @@ class NfcTransportMdocReader(
                      * mdoc reader shall respond with a GET RESPONSE command where
                      * Le is set to XX.
                      */
-                    leForGetResponse = response.status.and(0xff)
+                    leForGetResponse = min(response.status.and(0xff), responseDataFieldMaxLength)
                 } else {
                     throw NfcCommandFailedException(
                         "Unexpected GET RESPONSE status ${response.statusHexString}",

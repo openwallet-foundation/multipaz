@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.nfc
 
+import org.multipaz.cbor.Bstr
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
@@ -21,6 +22,8 @@ import org.multipaz.nfc.ServiceParameterRecord
 import org.multipaz.nfc.ServiceSelectRecord
 import org.multipaz.util.UUID
 import org.multipaz.util.fromHex
+import org.multipaz.util.getUInt16
+import org.multipaz.util.putUInt16
 import org.multipaz.util.toHex
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
@@ -75,11 +78,15 @@ class MdocNfcEngagementHelperTest {
      * In-memory [NfcIsoTag] that forwards [transceive] calls to [MdocNfcEngagementHelper.processApdu]
      * and records a complete APDU transcript.
      */
-    class LoopbackIsoTag(val engagementHelper: MdocNfcEngagementHelper): NfcIsoTag() {
+    class LoopbackIsoTag(
+        val engagementHelper: MdocNfcEngagementHelper,
+        override val maxTransceiveLength: Int = 65536,
+        private val overrideCcMle: Int? = null,
+        private val overrideCcMlc: Int? = null,
+    ): NfcIsoTag() {
         val transcript = StringBuilder()
-
-        override val maxTransceiveLength: Int
-            get() = 65536
+        val commands = mutableListOf<CommandApdu>()
+        private var lastSelectedFileId: Int = 0
 
         override suspend fun close() {
             transcript.appendLine("close")
@@ -88,8 +95,35 @@ class MdocNfcEngagementHelperTest {
         override suspend fun updateDialogMessage(message: String) {}
 
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            commands.add(command)
+            if (command.ins == Nfc.INS_SELECT && command.p1 == Nfc.INS_SELECT_P1_FILE) {
+                lastSelectedFileId = command.payload.getUInt16(0).toInt()
+            }
             transcript.appendLine("${command}")
-            val response = engagementHelper.processApdu(command)
+            var response = engagementHelper.processApdu(command)
+            if (command.ins == Nfc.INS_READ_BINARY &&
+                lastSelectedFileId == Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID &&
+                response.status == Nfc.RESPONSE_STATUS_SUCCESS &&
+                response.payload.size == 15 &&
+                (overrideCcMle != null || overrideCcMlc != null)
+            ) {
+                val ccBytes = response.payload.toByteArray()
+                if (overrideCcMle != null) {
+                    ccBytes.putUInt16(3, overrideCcMle.toUInt())
+                }
+                if (overrideCcMlc != null) {
+                    ccBytes.putUInt16(5, overrideCcMlc.toUInt())
+                }
+                response = ResponseApdu(response.status, ByteString(ccBytes))
+            }
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
             transcript.appendLine("${response}")
             return response
         }
@@ -785,6 +819,154 @@ class MdocNfcEngagementHelperTest {
             val hsMsg = tag.ndefTransact(customHrMsg, hspr.wtInt, hspr.nWait)
             assertTrue(completed)
             assertTrue(hsMsg.records.isNotEmpty())
+        }
+    }
+
+    /**
+     * Verifies that NFCv1 Static Handover chunks NDEF `READ BINARY` commands to respect both
+     * [NfcIsoTag.maxTransceiveLength] (`100`, short-APDU `261`) and the Capability Container `MLe`
+     * limit (`59`), and still succeeds when read-only tags advertise `MLc = 0`.
+     */
+    @Test
+    fun testStaticHandoverRespectsMaxTransceiveLengthAndMle() = runTest {
+        val staticMethods = getConnectionMethods()
+        val eDeviceKeyPub = getEDeviceKeyPub()
+
+        val scenarios = listOf(
+            Triple(100, null, null),
+            Triple(261, null, null),
+            Triple(65536, 59, 0),
+        )
+        for ((maxLen, mle, mlc) in scenarios) {
+            val engagementHelper = MdocNfcEngagementHelper(
+                eDeviceKey = eDeviceKeyPub,
+                onHandoverComplete = { _, _, _ -> },
+                onError = { error -> fail("Unexpected error: $error") },
+                staticHandoverMethods = staticMethods,
+            )
+            val tag = LoopbackIsoTag(
+                engagementHelper = engagementHelper,
+                maxTransceiveLength = maxLen,
+                overrideCcMle = mle,
+                overrideCcMlc = mlc,
+            )
+            val result = mdocReaderNfcHandover(
+                tag = tag,
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                ),
+            )
+            assertNotNull(result)
+            assertEquals(MdocHandoverType.STATIC_HANDOVER, result.type)
+            assertEquals(staticMethods, result.connectionMethods)
+
+            val readCommands = tag.commands.filter { it.ins == Nfc.INS_READ_BINARY }
+            assertTrue(readCommands.size > 3)
+            assertTrue(readCommands.all { it.encode().size <= maxLen })
+            if (maxLen == 261) {
+                assertTrue(readCommands.all { it.encode().size == 5 && it.le <= 0x100 })
+            }
+            if (mle != null) {
+                assertTrue(readCommands.all { it.le <= mle })
+            }
+        }
+
+        // Invalid MLe = 0 in CC file must fail cleanly
+        val invalidMleHelper = MdocNfcEngagementHelper(
+            eDeviceKey = eDeviceKeyPub,
+            onHandoverComplete = { _, _, _ -> },
+            onError = { error -> fail("Unexpected error: $error") },
+            staticHandoverMethods = staticMethods,
+        )
+        assertFailsWith<IllegalStateException> {
+            mdocReaderNfcHandover(
+                tag = LoopbackIsoTag(invalidMleHelper, overrideCcMle = 0),
+                negotiatedHandoverConnectionMethods = emptyList(),
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY
+                ),
+            )
+        }
+    }
+
+    /**
+     * Verifies that NFCv1 Negotiated Handover chunks `UPDATE BINARY` (`ndefTransact`) and
+     * `READ BINARY` (`ndefReadMessage`) commands so every APDU stays within
+     * [NfcIsoTag.maxTransceiveLength] (`100`, `253`, `261`) as well as Capability Container
+     * `MLc` (`20`) and `MLe` (`25`), and rejects `MLc = 0` for Negotiated Handover.
+     */
+    @Test
+    fun testNegotiatedHandoverRespectsMaxTransceiveLengthAndMlcMle() = runTest {
+        val connectionMethods = getConnectionMethods()
+        val eDeviceKeyPub = getEDeviceKeyPub()
+        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val largeReaderEngagement = buildReaderEngagement(eReaderKey = eReaderKey.publicKey) {
+            addOtherInfo(-7L, Bstr(ByteArray(300) { (it and 0xff).toByte() }))
+        }
+
+        val scenarios = listOf(
+            Triple(100, null, null),
+            Triple(253, null, null),
+            Triple(261, null, null),
+            Triple(65536, 25, 20),
+        )
+        for ((maxLen, mle, mlc) in scenarios) {
+            val engagementHelper = MdocNfcEngagementHelper(
+                eDeviceKey = eDeviceKeyPub,
+                onHandoverComplete = { _, _, _ -> },
+                onError = { error -> fail("Unexpected error: $error") },
+                negotiatedHandoverPicker = { methods -> methods.first() },
+            )
+            val tag = LoopbackIsoTag(
+                engagementHelper = engagementHelper,
+                maxTransceiveLength = maxLen,
+                overrideCcMle = mle,
+                overrideCcMlc = mlc,
+            )
+            val result = mdocReaderNfcHandover(
+                tag = tag,
+                negotiatedHandoverConnectionMethods = connectionMethods,
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                    readerEngagement = largeReaderEngagement,
+                    random = Random(42),
+                ),
+            )
+            assertNotNull(result)
+            assertEquals(MdocHandoverType.NEGOTIATED_HANDOVER, result.type)
+            assertEquals(listOf(connectionMethods.first()), result.connectionMethods)
+
+            val updateCommands = tag.commands.filter { it.ins == Nfc.INS_UPDATE_BINARY }
+            val readCommands = tag.commands.filter { it.ins == Nfc.INS_READ_BINARY }
+            assertTrue(updateCommands.size > 3)
+            assertTrue(readCommands.size > 3)
+            if (maxLen == 261) {
+                assertTrue(readCommands.all { it.encode().size == 5 && it.le <= 0x100 })
+            }
+            if (mlc != null) {
+                assertTrue(updateCommands.all { it.payload.size <= mlc })
+            }
+            if (mle != null) {
+                assertTrue(readCommands.all { it.le <= mle })
+            }
+        }
+
+        // Negotiated Handover must reject MLc = 0 in CC file
+        val zeroMlcHelper = MdocNfcEngagementHelper(
+            eDeviceKey = eDeviceKeyPub,
+            onHandoverComplete = { _, _, _ -> },
+            onError = { error -> fail("Unexpected error: $error") },
+            negotiatedHandoverPicker = { methods -> methods.first() },
+        )
+        assertFailsWith<IllegalStateException> {
+            mdocReaderNfcHandover(
+                tag = LoopbackIsoTag(zeroMlcHelper, overrideCcMle = 256, overrideCcMlc = 0),
+                negotiatedHandoverConnectionMethods = connectionMethods,
+                options = MdocReaderNfcHandoverOptions(
+                    engagementType = MdocReaderNfcEngagementType.NFC_CONNECTION_HANDOVER_ONLY,
+                ),
+            )
         }
     }
 }

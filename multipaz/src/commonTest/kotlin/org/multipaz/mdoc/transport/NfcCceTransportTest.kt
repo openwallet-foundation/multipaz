@@ -20,6 +20,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
+import org.multipaz.mdoc.nfc.MdocNfcCceEngagementHelper
+import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
+import org.multipaz.mdoc.nfc.mdocReaderNfcHandover
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
@@ -36,6 +39,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -562,8 +566,9 @@ class NfcCceTransportTest {
      * In-memory [NfcIsoTag] that encapsulates queued [responses] in BER-TLV `DO'53'` or throws
      * [NfcTagLostException] when [failTransceive] is `true`.
      */
-    private class FakeNfcCceTag : NfcIsoTag() {
-        override val maxTransceiveLength: Int = 65536
+    private class FakeNfcCceTag(
+        override val maxTransceiveLength: Int = 65536,
+    ) : NfcIsoTag() {
         var failTransceive = false
         var closed = false
         val responses = Channel<ByteString>(Channel.UNLIMITED)
@@ -578,11 +583,113 @@ class NfcCceTransportTest {
             if (failTransceive) {
                 throw NfcTagLostException("Tag lost")
             }
+            val encodedCommand = command.encode()
+            check(encodedCommand.size <= maxTransceiveLength) {
+                "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
             val respPayload = responses.receive()
-            return ResponseApdu(
+            val response = ResponseApdu(
                 status = Nfc.RESPONSE_STATUS_SUCCESS,
                 payload = encapsulateInDo53(respPayload)
             )
+            val encodedResponse = response.encode()
+            check(encodedResponse.size <= maxTransceiveLength) {
+                "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+            }
+            return response
+        }
+    }
+
+    /**
+     * Verifies that when [NfcCceTransportMdocReader] has a secondary transport and a constrained
+     * [NfcIsoTag.maxTransceiveLength] (`100`, `261`, `300`), sending messages larger than
+     * `maxTransceiveLength` succeeds over NFC without overflowing APDUs or failing over to BLE.
+     */
+    @Test
+    fun readerCceTransportRespectsMaxTransceiveLengthWithoutBleFailover() = runTest {
+        withContext(Dispatchers.Default) {
+            val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+
+            for (maxLen in listOf(100, 261, 300)) {
+                lateinit var mdocTransport: NfcCceTransportMdoc
+                lateinit var engagementHelper: MdocNfcCceEngagementHelper
+                engagementHelper = MdocNfcCceEngagementHelper(
+                    eDeviceKey = eDeviceKey.publicKey,
+                    onHandoverComplete = { _, _, _, _ -> },
+                    onMessageReceived = { message ->
+                        mdocTransport.onMessageReceivedViaNfc(message)
+                    },
+                    onError = { error -> fail("Unexpected error at maxLen=$maxLen: $error") },
+                    handoverPicker = { methods -> methods.first() },
+                )
+
+                val tag = object : NfcIsoTag() {
+                    override val maxTransceiveLength: Int = maxLen
+                    override suspend fun close() {}
+                    override suspend fun updateDialogMessage(message: String) {}
+                    override suspend fun transceive(command: CommandApdu): ResponseApdu {
+                        val encodedCommand = command.encode()
+                        check(encodedCommand.size <= maxTransceiveLength) {
+                            "Command APDU is ${encodedCommand.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+                        }
+                        val response = engagementHelper.processApdu(command)
+                        val encodedResponse = response.encode()
+                        check(encodedResponse.size <= maxTransceiveLength) {
+                            "Response APDU is ${encodedResponse.size} bytes which exceeds maxTransceiveLength of $maxTransceiveLength bytes"
+                        }
+                        return response
+                    }
+                }
+
+                val secondaryReader = FakeSecondaryTransport(role = MdocRole.MDOC_READER)
+                val handoverResult = mdocReaderNfcHandover(
+                    tag = tag,
+                    negotiatedHandoverConnectionMethods = listOf(secondaryReader.connectionMethod),
+                    options = MdocReaderNfcHandoverOptions(cceEReaderKey = eReaderKey),
+                )
+                assertEquals(1, handoverResult!!.connectionMethods.size)
+
+                mdocTransport = NfcCceTransportMdoc(
+                    sendMessageViaNfc = { message ->
+                        engagementHelper.sendMessage(message)
+                        true
+                    }
+                )
+                mdocTransport.setExpectTransport(true, secondaryReader.connectionMethod)
+                mdocTransport.open(senderKey)
+
+                val reader = NfcCceTransportMdocReader(
+                    nfcTag = tag,
+                    negotiatedTransport = secondaryReader,
+                    apduCommandMaxSize = handoverResult.apduCommandMaxSize,
+                    apduResponseMaxSize = handoverResult.apduResponseMaxSize,
+                )
+                reader.open(senderKey)
+
+                val request = Cbor.encode(buildCborMap {
+                    put("data", ByteArray(400) { (it and 0xff).toByte() })
+                    put("seq", 0L)
+                })
+                val response = Cbor.encode(buildCborMap {
+                    put("data", ByteArray(400) { ((it + 1) and 0xff).toByte() })
+                    put("seq", 1L)
+                })
+                mdocTransport.sendMessage(response)
+                reader.sendMessage(request)
+
+                assertContentEquals(request, withTimeout(5.seconds) { mdocTransport.waitForMessage() })
+                assertContentEquals(response, withTimeout(5.seconds) { reader.waitForMessage() })
+
+                val stats = reader.stats
+                assertEquals(false, stats.nfcDisconnectedDuringTransaction)
+                assertEquals(1, stats.nfcHybridNumSentViaNfc)
+                assertEquals(1, stats.nfcHybridNumReceivedFirstOnNfc)
+                assertEquals(MdocTransport.State.CONNECTED, reader.state.value)
+
+                reader.close()
+                mdocTransport.close()
+            }
         }
     }
 }

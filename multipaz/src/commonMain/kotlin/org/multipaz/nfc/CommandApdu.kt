@@ -87,6 +87,28 @@ data class CommandApdu(
 
     companion object {
         /**
+         * Maximum framing overhead bytes added by [encode] to a Command APDU (`CLA INS P1 P2`,
+         * 3-byte extended `Lc`, and 2-byte extended `Le`).
+         */
+        internal const val MAX_OVERHEAD_SIZE = 9
+
+        /**
+         * Framing overhead bytes added by [encode] to a short Command APDU with command data
+         * and no `Le` (`CLA INS P1 P2`, 1-byte short `Lc`).
+         */
+        internal const val SHORT_COMMAND_DATA_OVERHEAD_SIZE = 5
+
+        /**
+         * Maximum length of a Command APDU data field (`Lc`) per ISO/IEC 7816-4.
+         */
+        internal const val MAX_COMMAND_DATA_FIELD_LENGTH = 0xffff
+
+        /**
+         * Maximum length of a Response APDU data field (`Le`) per ISO/IEC 7816-4.
+         */
+        internal const val MAX_RESPONSE_DATA_FIELD_LENGTH = 0x10000
+
+        /**
          * Decodes an APDU.
          *
          * @param encoded the bytes of the APDU
