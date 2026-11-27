@@ -324,9 +324,10 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
 
     override suspend fun verifySdJwtResponse(
         transactionData: TransactionData<Payload>,
-        responseClaims: Map<String, JsonElement>
+        responseClaims: Map<String, JsonElement>,
+        kbDisclosures: List<String>
     ) {
-        super.verifySdJwtResponse(transactionData, responseClaims)
+        super.verifySdJwtResponse(transactionData, responseClaims, kbDisclosures)
         if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
             val amount = responseClaims["amount"]?.jsonPrimitive?.doubleOrNull
                 ?: throw IllegalStateException("Missing 'amount' in transaction response")

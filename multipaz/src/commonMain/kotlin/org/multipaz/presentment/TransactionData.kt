@@ -2,13 +2,17 @@ package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
+import org.multipaz.documenttype.SdJwtTransactionResponse
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Protocol through which transaction data was received.
@@ -56,8 +60,12 @@ class TransactionData<PayloadT: Any>(
      *
      * @param credential one of the credentials in the [Document] being considered
      * @return true if transaction can be processed, false if it cannot
+     * @throws IllegalArgumentException if the transaction data itself is malformed, which is not a
+     *   property of [credential] (see [TransactionType.isApplicable]).
+     * @throws CancellationException if the coroutine is cancelled
      */
-    suspend fun isApplicable(credential: Credential) = type.isApplicable(this, credential)
+    @Throws(IllegalArgumentException::class, CancellationException::class)
+    suspend fun isApplicable(credential: Credential): Boolean = type.isApplicable(this, credential)
 
     /**
      * Generates device-signed data elements for an Mdoc credential.
@@ -88,6 +96,23 @@ class TransactionData<PayloadT: Any>(
     ): Map<String, JsonElement> = type.generateSdJwtResponseClaims(this, credential, userInput, docRequestId)
 
     /**
+     * Generates the Key Binding JWT claims and the disclosures that follow the Key Binding JWT
+     * for an SD-JWT credential (see [TransactionType.generateSdJwtResponse]).
+     *
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return the claims and the disclosures to add to the presentation
+     * @throws CancellationException if the coroutine is cancelled
+     */
+    @Throws(CancellationException::class)
+    suspend fun generateSdJwtResponse(
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): SdJwtTransactionResponse = type.generateSdJwtResponse(this, credential, userInput, docRequestId)
+
+    /**
      * Verifies transaction response returned in an Mdoc presentation.
      *
      * @param responseElements key-value-map for values returned in the mdoc presentation
@@ -98,13 +123,84 @@ class TransactionData<PayloadT: Any>(
     /**
      * Verifies transaction response returned in an SD-JWT presentation.
      *
-     * @param responseClaims claims returned in the Key Binding JWT
+     * @param responseClaims claims returned in the Key Binding JWT, see [sdJwtResponseClaims]
+     * @param kbDisclosures the disclosures that follow the Key Binding JWT, if any
+     * @throws IllegalStateException if the response does not match this transaction data
      */
-    suspend fun verifySdJwtResponse(responseClaims: Map<String, JsonElement>) =
-        type.verifySdJwtResponse(this, responseClaims)
+    @Throws(IllegalStateException::class, CancellationException::class)
+    suspend fun verifySdJwtResponse(
+        responseClaims: Map<String, JsonElement>,
+        kbDisclosures: List<String>
+    ) = type.verifySdJwtResponse(this, responseClaims, kbDisclosures)
+
+    /**
+     * The claims of the Key Binding JWT body [kbJwtBody] that make up the response of this type: the
+     * object under [TransactionType.kbJwtResponseClaimName] when the type nests its claims, else every
+     * claim other than the Key Binding JWT's own (see [TransactionType.nestSdJwtResponseClaims]).
+     */
+    internal fun sdJwtResponseClaims(kbJwtBody: JsonObject): Map<String, JsonElement> =
+        if (type.nestSdJwtResponseClaims) {
+            kbJwtBody[type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
+        } else {
+            kbJwtBody.filterKeys { it !in KB_JWT_OWN_CLAIMS }
+        }
 
     /**
      * Creates equivalent transaction data for use in ISO 18013-5 protocols.
      */
     fun serializeIso18013Request(): DataItem = type.serializeIso18013Request(payload)
+
+    companion object {
+        /**
+         * The Key Binding JWT's own claims (RFC 9901 §4.3) and the transaction data hashes OpenID4VP
+         * puts beside them: no transaction type may set these.
+         */
+        internal val KB_JWT_OWN_CLAIMS = setOf(
+            "iat", "aud", "nonce", "sd_hash", "transaction_data_hashes", "transaction_data_hashes_alg",
+        )
+
+        /**
+         * The `typ` header of a Key Binding JWT that signs all of [transactionData], as decided by
+         * each transaction type over all of its own items (see [TransactionType.sdJwtKbType]), or
+         * `kb+jwt` when none asks for another.
+         *
+         * @throws IllegalArgumentException if two transaction types ask for different values.
+         */
+        @Throws(IllegalArgumentException::class)
+        internal fun sdJwtKbType(transactionData: List<TransactionData<*>>): String {
+            val requested = transactionData
+                .groupBy { it.type }
+                .mapNotNull { (type, items) -> type.sdJwtKbTypeFor(items) }
+                .distinct()
+            require(requested.size <= 1) {
+                "Transaction types ask for different Key Binding JWT types: $requested"
+            }
+            return requested.singleOrNull() ?: "kb+jwt"
+        }
+
+        /**
+         * Lets each transaction type check, before the consent prompt, its own items for one
+         * credential that one response will answer together, so a request that could only fail
+         * after the person approved is refused up front (see [TransactionType.validateTogether]).
+         *
+         * @param transactionData the OpenID4VP items for one credential.
+         * @throws IllegalArgumentException if a type finds its items cannot be answered together.
+         */
+        @Throws(IllegalArgumentException::class)
+        internal fun validateTogether(transactionData: List<TransactionData<*>>) {
+            transactionData.groupBy { it.type }.forEach { (type, items) -> type.validateTogetherFor(items) }
+        }
+
+        // Every item was grouped under this type, so their payloads are its PayloadT.
+        @Suppress("UNCHECKED_CAST")
+        private fun <PayloadT : Any> TransactionType<PayloadT>.validateTogetherFor(
+            items: List<TransactionData<*>>
+        ) = validateTogether(items as List<TransactionData<PayloadT>>)
+
+        // Every item was grouped under this type, so their payloads are its PayloadT.
+        @Suppress("UNCHECKED_CAST")
+        private fun <PayloadT : Any> TransactionType<PayloadT>.sdJwtKbTypeFor(
+            items: List<TransactionData<*>>
+        ): String? = sdJwtKbType(items as List<TransactionData<PayloadT>>)
+    }
 }

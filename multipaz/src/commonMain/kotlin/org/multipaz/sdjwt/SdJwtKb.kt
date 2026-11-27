@@ -32,8 +32,11 @@ import org.multipaz.util.toNumericDateInstant
  *
  * This class is immutable.
  *
- * @property compactSerialization the compact serialization of the SD-JWT+KB.
+ * @property compactSerialization the compact serialization of the SD-JWT+KB, without the
+ *   [kbDisclosures] of a Delegated SD-JWT, if any.
  * @property sdJwt The SD-JWT part of the SD-JWT+KB.
+ * @property kbDisclosures the disclosures that follow the Key Binding JWT in a Delegated SD-JWT
+ *   (see [fromDelegatedCompactSerialization]), empty for an ordinary SD-JWT+KB.
  * @throws IllegalArgumentException if the given compact serialization is malformed.
  */
 class SdJwtKb private constructor(
@@ -41,7 +44,8 @@ class SdJwtKb private constructor(
     val sdJwt: SdJwt,
     private val kbHeader: String,
     private val kbBody: String,
-    private val kbSignature: String
+    private val kbSignature: String,
+    val kbDisclosures: List<String> = emptyList(),
 ) {
     /**
      * The header of the Key Binding JWT.
@@ -73,6 +77,11 @@ class SdJwtKb private constructor(
      * @param checkAudience a function to check that the audience in the KB JWT is as expected.
      * @param checkCreationTime a function to check that the creation time in the KB JWT is as expected.
      * @param transactionData transaction data that was sent with the request.
+     * @param expectedType the `typ` the KB-JWT must have: `kb+jwt`, as RFC 9901 §4.3 requires. A
+     *   profile that defines its own passes it, such as Delegate SD-JWT's `kb+sd-jwt` (§5.1.4).
+     *   A Delegated presentation, which ends with disclosures after the KB-JWT, is parsed with
+     *   [fromDelegatedCompactSerialization]; its [kbDisclosures] are not checked here, the
+     *   transaction types that returned them check them.
      * @return the processed SD-JWT payload.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
@@ -82,11 +91,12 @@ class SdJwtKb private constructor(
         checkNonce: (nonce: String) -> Boolean,
         checkAudience: (audience: String) -> Boolean,
         checkCreationTime: (creationTime: Instant) -> Boolean,
-        transactionData: List<TransactionData<*>> = listOf()
+        transactionData: List<TransactionData<*>> = listOf(),
+        expectedType: String = "kb+jwt",
     ): JsonObject {
         val typHeader = (jwtHeader["typ"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-        if (typHeader != "kb+jwt") {
-            throw IllegalStateException("KB-JWT header 'typ' must be 'kb+jwt', got '$typHeader'")
+        if (typHeader != expectedType) {
+            throw IllegalStateException("KB-JWT header 'typ' must be '$expectedType', got '$typHeader'")
         }
         val kbKey = sdJwt.kbKey
             ?: throw IllegalStateException("SD-JWT does not contain a key-binding key in 'cnf'")
@@ -123,8 +133,8 @@ class SdJwtKb private constructor(
                 throw IllegalStateException("Unexpected 'transaction_data_hashes' in ISO 18013-5 presentation")
             }
             for (transaction in transactionData) {
-                val responseClaims = jwtBody[transaction.type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
-                transaction.verifySdJwtResponse(responseClaims)
+                // ISO/IEC 18013-5 has no place for disclosures after the Key Binding JWT.
+                transaction.verifySdJwtResponse(transaction.sdJwtResponseClaims(jwtBody), kbDisclosures)
             }
         } else {
             if (hashes == null) {
@@ -164,6 +174,47 @@ class SdJwtKb private constructor(
     }
 
     companion object {
+        /**
+         * Creates a [SdJwtKb] from the Delegated SD-JWT compact serialization of
+         * draft-ietf-oauth-delegate-sd-jwt §5.1.1, as [SdJwt.presentWithKbDisclosures] produces it:
+         * `<SD-JWT>~~<KB-JWT>~<Disclosure 1>~...~<Disclosure M>~`.
+         *
+         * The result is the SD-JWT+KB made of the SD-JWT and the KB-JWT, with the disclosures that
+         * follow the KB-JWT in [kbDisclosures]. A chain of several Key Binding SD-JWTs is not
+         * supported.
+         *
+         * @param compactSerialization the compact serialization of the Delegated SD-JWT.
+         * @return a [SdJwtKb] instance.
+         * @throws IllegalArgumentException if the given compact serialization is malformed, does not
+         *   have exactly one `~~`, or has no disclosure after the KB-JWT.
+         */
+        suspend fun fromDelegatedCompactSerialization(compactSerialization: String): SdJwtKb {
+            val separator = compactSerialization.indexOf("~~")
+            require(separator >= 0 && compactSerialization.indexOf("~~", separator + 1) < 0) {
+                "A Delegated SD-JWT has exactly one '~~' between the SD-JWT and the Key Binding JWT"
+            }
+            require(compactSerialization.endsWith('~')) {
+                "A Delegated SD-JWT ends with '~' after the last disclosure"
+            }
+            // The part after "~~" is `<KB-JWT>~<Disclosure 1>~...~<Disclosure M>~`.
+            val components = compactSerialization.substring(separator + 2).removeSuffix("~").split("~")
+            val kbJwt = components.first()
+            val kbDisclosures = components.drop(1)
+            require(kbDisclosures.isNotEmpty() && kbDisclosures.none { it.isEmpty() }) {
+                "A Delegated SD-JWT has at least one disclosure after the Key Binding JWT, none empty"
+            }
+            // The SD-JWT+KB made of the SD-JWT and the Key Binding JWT: its sd_hash covers the SD-JWT only.
+            val sdJwtKb = fromCompactSerialization(compactSerialization.take(separator + 1) + kbJwt)
+            return SdJwtKb(
+                compactSerialization = sdJwtKb.compactSerialization,
+                sdJwt = sdJwtKb.sdJwt,
+                kbHeader = sdJwtKb.kbHeader,
+                kbBody = sdJwtKb.kbBody,
+                kbSignature = sdJwtKb.kbSignature,
+                kbDisclosures = kbDisclosures,
+            )
+        }
+
         /**
          * Creates a [SdJwtKb] from compact serialization.
          *
