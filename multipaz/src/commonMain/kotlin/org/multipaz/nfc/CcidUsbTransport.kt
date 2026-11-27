@@ -94,6 +94,10 @@ internal interface CcidUsbTransport {
     /** Raw USB descriptors for parsing the CCID functional descriptor (`0x21`), if available. */
     val rawDescriptors: ByteArray?
 
+    /** USB Device Release Number (`bcdDevice`, e.g. `"2.14"`), if available from the USB device descriptor. */
+    val deviceVersion: String?
+        get() = rawDescriptors?.let { CcidUsbTransport.parseBcdDevice(it) }
+
     /** Whether the claimed CCID interface exposes an interrupt-IN endpoint. */
     val hasInterruptEndpoint: Boolean
 
@@ -149,6 +153,7 @@ internal interface CcidUsbTransport {
         /** USB interface class for Chip/Smart Card Interface Devices (CCID). */
         const val USB_CLASS_CSCID = 0x0B
 
+        private const val USB_DT_DEVICE = 0x01
         private const val USB_DT_CONFIG = 0x02
         private const val USB_DT_INTERFACE = 0x04
         private const val USB_DT_ENDPOINT = 0x05
@@ -157,6 +162,20 @@ internal interface CcidUsbTransport {
         private const val USB_ENDPOINT_XFERTYPE_MASK = 0x03
         private const val USB_ENDPOINT_XFER_BULK = 0x02
         private const val USB_ENDPOINT_XFER_INT = 0x03
+
+        /**
+         * Parses the USB `bcdDevice` release version (e.g. `"2.14"`) from the leading 18-byte
+         * `USB_DT_DEVICE` (`0x01`) descriptor in [rawDescriptors], or returns `null` if absent.
+         */
+        internal fun parseBcdDevice(rawDescriptors: ByteArray): String? {
+            if (rawDescriptors.size < 18) return null
+            val len = rawDescriptors[0].toInt() and 0xFF
+            val type = rawDescriptors[1].toInt() and 0xFF
+            if (len < 18 || type != USB_DT_DEVICE) return null
+            val minor = rawDescriptors[12].toInt() and 0xFF
+            val major = rawDescriptors[13].toInt() and 0xFF
+            return "${major.toString(16)}.${minor.toString(16).padStart(2, '0')}"
+        }
 
         /**
          * Extracts the descriptor slice belonging to the active USB configuration (`USB_DT_CONFIG`)

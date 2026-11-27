@@ -15,6 +15,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.SynchronizedLock
 import org.multipaz.util.fromHex
+import org.multipaz.util.toHex
 import org.multipaz.util.withLock
 import kotlin.concurrent.Volatile
 import kotlin.test.Test
@@ -23,6 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -731,10 +733,466 @@ class NfcTagReaderUsbTest {
         }
     }
 
+    /**
+     * Verifies that [CcidDriver] detects the ACS ACR122U (`072F:2200`), parses `bcdDevice` from
+     * the USB device descriptor, queries and decodes the ACR122U firmware version via
+     * `FF 00 48 00 00`, skips all `E0 00` ACS escape commands during both [CcidDriver.connect] and
+     * [CcidDriver.disconnect] (even when `pollingFrameData` is supplied), and still transceives
+     * APDUs normally.
+     */
+    @Test
+    fun ccidDriverSkipsAcsEscapeCommandsOnAcr122u() = runTest {
+        val rawDesc = buildWalletMateDescriptors(
+            dwMechanical = 0,
+            dwFeatures = 0x000204BA,
+            maxMsgLen = 271,
+            bcdDevice = 0x0214
+        )
+        for (pollingFrame in listOf(null, "6a0281030000".fromHex())) {
+            val sentCommands = mutableListOf<ByteArray>()
+            val transport = object : CcidUsbTransport {
+                override val deviceName: String = "FakeAcr122u"
+                override val vendorId: Int = 0x072F
+                override val productId: Int = 0x2200
+                override val interfaceId: Int = 0
+                override val rawDescriptors: ByteArray = rawDesc
+                override val hasInterruptEndpoint: Boolean = false
+                override val interruptMaxPacketSize: Int = 0
+                var isOpen = false
+
+                override fun open() {
+                    isOpen = true
+                }
+
+                override fun close() {
+                    isOpen = false
+                }
+
+                override fun bulkTransferOut(data: ByteArray, timeout: Duration): Int {
+                    sentCommands.add(data.copyOf())
+                    return data.size
+                }
+
+                override fun bulkTransferIn(buffer: ByteArray, timeout: Duration): Int {
+                    val lastCmd = sentCommands.last()
+                    val respType: Byte
+                    val payload: ByteArray
+                    when (lastCmd[0]) {
+                        0x6B.toByte() -> {
+                            respType = 0x83.toByte()
+                            val esc = lastCmd.copyOfRange(10, lastCmd.size)
+                            payload = if (esc.contentEquals("ff00480000".fromHex())) {
+                                "ACR122U214".encodeToByteArray()
+                            } else {
+                                ByteArray(0)
+                            }
+                        }
+                        0x62.toByte() -> {
+                            respType = 0x80.toByte()
+                            payload = "3b8f8001804f0ca000000306030001000000006a".fromHex()
+                        }
+                        0x6F.toByte() -> {
+                            respType = 0x80.toByte()
+                            payload = byteArrayOf(0x90.toByte(), 0x00)
+                        }
+                        else -> {
+                            respType = 0x81.toByte()
+                            payload = ByteArray(0)
+                        }
+                    }
+                    val pkt = ByteArray(10 + payload.size)
+                    pkt[0] = respType
+                    CcidDriver.writeInt32Le(pkt, 1, payload.size)
+                    pkt[6] = lastCmd[6]
+                    payload.copyInto(pkt, destinationOffset = 10)
+                    pkt.copyInto(buffer)
+                    return pkt.size
+                }
+
+                override fun interruptTransferIn(buffer: ByteArray, timeout: Duration): Int = 0
+            }
+
+            val driver = CcidDriver(
+                transport = transport,
+                pollingFrameData = pollingFrame
+            )
+            driver.connect()
+            assertTrue(transport.isOpen)
+            assertTrue(driver.isAcr122u)
+            assertEquals("2.14", transport.deviceVersion)
+            assertEquals("ACR122U214", driver.firmwareVersion)
+            assertEquals(251, driver.maxCommandLength)
+            val connectEscapes = sentCommands
+                .filter { it[0] == 0x6B.toByte() }
+                .map { it.copyOfRange(10, it.size).toHex() }
+            assertEquals(
+                listOf("ff00480000"),
+                connectEscapes,
+                "ACR122U must only receive FF 00 48 00 00 firmware query on connect"
+            )
+
+            val resp = driver.transceive("00a4040007d2760000850101".fromHex())
+            assertContentEquals(byteArrayOf(0x90.toByte(), 0x00), resp)
+
+            driver.disconnect()
+            assertFalse(transport.isOpen)
+            assertNull(driver.firmwareVersion)
+            assertEquals(
+                listOf(0x6B.toByte(), 0x62.toByte(), 0x6F.toByte()),
+                sentCommands.map { it[0] },
+                "ACR122U must not receive PC_to_RDR_Escape commands on disconnect"
+            )
+        }
+    }
+
+    /**
+     * Verifies that if an ACS reader replies to the 2-byte `E0 00 01 20` polling-type escape command
+     * with a non-ACS response (such as an empty payload or card status word `6F 00`), [CcidDriver]
+     * neither falls back to the 1-byte `E0 00 00 20` command nor sends `E0 00 01 20 02 00 00` on
+     * [CcidDriver.disconnect].
+     */
+    @Test
+    fun ccidDriverRejectsNonAcsEscapePollingResponseAndSkipsDisconnectEscape() = runTest {
+        val rawDesc = buildWalletMateDescriptors(dwMechanical = 0, dwFeatures = 0x000204BA, maxMsgLen = 271)
+        for (escapeReply in listOf(ByteArray(0), "6f00".fromHex())) {
+            val escapePayloads = mutableListOf<ByteArray>()
+            val transport = object : CcidUsbTransport {
+                override val deviceName: String = "FakeAcsQuirkyReader"
+                override val vendorId: Int = 0x072F
+                override val productId: Int = 0x2299
+                override val interfaceId: Int = 0
+                override val rawDescriptors: ByteArray = rawDesc
+                override val hasInterruptEndpoint: Boolean = false
+                override val interruptMaxPacketSize: Int = 0
+                private var lastSeq: Byte = 0
+                private var lastMsgType: Byte = 0
+
+                override fun open() {}
+                override fun close() {}
+
+                override fun bulkTransferOut(data: ByteArray, timeout: Duration): Int {
+                    lastMsgType = data[0]
+                    lastSeq = data[6]
+                    if (lastMsgType == 0x6B.toByte()) {
+                        escapePayloads.add(data.copyOfRange(10, data.size))
+                    }
+                    return data.size
+                }
+
+                override fun bulkTransferIn(buffer: ByteArray, timeout: Duration): Int {
+                    val respType = if (lastMsgType == 0x6B.toByte()) 0x83.toByte() else 0x80.toByte()
+                    val payload = if (lastMsgType == 0x6B.toByte()) escapeReply else ByteArray(0)
+                    val pkt = ByteArray(10 + payload.size)
+                    pkt[0] = respType
+                    CcidDriver.writeInt32Le(pkt, 1, payload.size)
+                    pkt[6] = lastSeq
+                    payload.copyInto(pkt, destinationOffset = 10)
+                    pkt.copyInto(buffer)
+                    return pkt.size
+                }
+
+                override fun interruptTransferIn(buffer: ByteArray, timeout: Duration): Int = 0
+            }
+
+            val driver = CcidDriver(transport = transport)
+            driver.connect()
+            assertEquals(1, escapePayloads.size)
+            assertEquals("e0000120020300", escapePayloads[0].toHex())
+
+            driver.disconnect()
+            assertEquals(
+                1,
+                escapePayloads.size,
+                "Expected no 1-byte fallback or disconnect escape command when 2-byte response=${escapeReply.toHex()}"
+            )
+        }
+    }
+
+    /**
+     * Verifies that on an ACR1252U-style ACS reader (`072F:223B`), both an ACS error escape
+     * payload (`E1 00 00 01 00`) and a CCID escape error status (`0x40`) for the 2-byte polling
+     * command cleanly fall back to the 1-byte `E0 00 00 20 01 03` command without enabling the
+     * 2-byte disconnect command.
+     */
+    @Test
+    fun ccidDriverFallsBackToOneBytePollingOnAcsErrorResponse() = runTest {
+        val rawDesc = buildWalletMateDescriptors(dwMechanical = 0, dwFeatures = 0x000404BA, maxMsgLen = 271)
+        for (returnCcidError in listOf(false, true)) {
+            val escapePayloads = mutableListOf<ByteArray>()
+            val transport = object : CcidUsbTransport {
+                override val deviceName: String = "FakeAcr1252u"
+                override val vendorId: Int = 0x072F
+                override val productId: Int = 0x223B
+                override val interfaceId: Int = 0
+                override val rawDescriptors: ByteArray = rawDesc
+                override val hasInterruptEndpoint: Boolean = false
+                override val interruptMaxPacketSize: Int = 0
+                private var lastCmd: ByteArray = ByteArray(0)
+
+                override fun open() {}
+                override fun close() {}
+
+                override fun bulkTransferOut(data: ByteArray, timeout: Duration): Int {
+                    lastCmd = data.copyOf()
+                    if (data[0] == 0x6B.toByte()) {
+                        escapePayloads.add(data.copyOfRange(10, data.size))
+                    }
+                    return data.size
+                }
+
+                override fun bulkTransferIn(buffer: ByteArray, timeout: Duration): Int {
+                    val esc = lastCmd.copyOfRange(10, lastCmd.size)
+                    val isTwoBytePoll = esc.contentEquals("e0000120020300".fromHex())
+                    val pkt: ByteArray
+                    if (isTwoBytePoll && returnCcidError) {
+                        pkt = ByteArray(10)
+                        pkt[0] = 0x83.toByte()
+                        pkt[6] = lastCmd[6]
+                        pkt[7] = 0x41 // Command failed
+                        pkt[8] = 0x00
+                    } else {
+                        val payload = if (isTwoBytePoll) {
+                            "e100000100".fromHex()
+                        } else {
+                            "e10000000103".fromHex()
+                        }
+                        pkt = ByteArray(10 + payload.size)
+                        pkt[0] = 0x83.toByte()
+                        CcidDriver.writeInt32Le(pkt, 1, payload.size)
+                        pkt[6] = lastCmd[6]
+                        payload.copyInto(pkt, destinationOffset = 10)
+                    }
+                    pkt.copyInto(buffer)
+                    return pkt.size
+                }
+
+                override fun interruptTransferIn(buffer: ByteArray, timeout: Duration): Int = 0
+            }
+
+            val driver = CcidDriver(transport = transport)
+            driver.connect()
+            assertEquals(listOf("e0000120020300", "e00000200103"), escapePayloads.map { it.toHex() })
+            driver.disconnect()
+            assertEquals(2, escapePayloads.size)
+        }
+    }
+
+    /**
+     * Verifies that [CcidDriver.transceive] invalidates its cached `isCardPoweredOn` state after
+     * both USB I/O timeouts ([IOException]) and CCID command errors ([CcidException]), so the next
+     * [CcidDriver.transceive] issues a fresh `PC_to_RDR_IccPowerOn` (`0x62`).
+     */
+    @Test
+    fun ccidDriverInvalidatesPowerOnAfterIoAndCcidExceptions() = runTest {
+        val rawDesc = buildWalletMateDescriptors(dwMechanical = 0, dwFeatures = 0x000204BA, maxMsgLen = 271)
+        val sentMsgTypes = mutableListOf<Byte>()
+        var failNextXfrWithTimeout = false
+        var failNextXfrWithCcidError = false
+        var lastCmd = ByteArray(0)
+
+        val transport = object : CcidUsbTransport {
+            override val deviceName: String = "FakeRecoveryReader"
+            override val vendorId: Int = 0x1234
+            override val productId: Int = 0x5678
+            override val interfaceId: Int = 0
+            override val rawDescriptors: ByteArray = rawDesc
+            override val hasInterruptEndpoint: Boolean = false
+            override val interruptMaxPacketSize: Int = 0
+
+            override fun open() {}
+            override fun close() {}
+
+            override fun bulkTransferOut(data: ByteArray, timeout: Duration): Int {
+                lastCmd = data.copyOf()
+                sentMsgTypes.add(data[0])
+                return data.size
+            }
+
+            override fun bulkTransferIn(buffer: ByteArray, timeout: Duration): Int {
+                if (lastCmd[0] == 0x6F.toByte() && failNextXfrWithTimeout) {
+                    failNextXfrWithTimeout = false
+                    return -1
+                }
+                if (lastCmd[0] == 0x6F.toByte() && failNextXfrWithCcidError) {
+                    failNextXfrWithCcidError = false
+                    val errPkt = ByteArray(10)
+                    errPkt[0] = 0x80.toByte()
+                    errPkt[6] = lastCmd[6]
+                    errPkt[7] = 0x41
+                    errPkt[8] = 0xFE.toByte() // ICC_MUTE
+                    errPkt.copyInto(buffer)
+                    return errPkt.size
+                }
+                val payload = when (lastCmd[0]) {
+                    0x62.toByte() -> "3b8f8001804f0ca000000306030001000000006a".fromHex()
+                    0x6F.toByte() -> byteArrayOf(0x90.toByte(), 0x00)
+                    else -> ByteArray(0)
+                }
+                val pkt = ByteArray(10 + payload.size)
+                pkt[0] = 0x80.toByte()
+                CcidDriver.writeInt32Le(pkt, 1, payload.size)
+                pkt[6] = lastCmd[6]
+                payload.copyInto(pkt, destinationOffset = 10)
+                pkt.copyInto(buffer)
+                return pkt.size
+            }
+
+            override fun interruptTransferIn(buffer: ByteArray, timeout: Duration): Int = 0
+        }
+
+        val driver = CcidDriver(transport = transport)
+        driver.connect()
+        try {
+            assertContentEquals(byteArrayOf(0x90.toByte(), 0x00), driver.transceive("00a4040000".fromHex()))
+            assertContentEquals(byteArrayOf(0x90.toByte(), 0x00), driver.transceive("00a4040000".fromHex()))
+            assertEquals(1, sentMsgTypes.count { it == 0x62.toByte() })
+
+            // Simulate bulk-in timeout -> IOException
+            failNextXfrWithTimeout = true
+            assertFailsWith<IOException> {
+                driver.transceive("00a4040000".fromHex())
+            }
+            assertContentEquals(byteArrayOf(0x90.toByte(), 0x00), driver.transceive("00a4040000".fromHex()))
+            assertEquals(2, sentMsgTypes.count { it == 0x62.toByte() })
+
+            // Simulate CCID ICC_MUTE -> CcidException
+            failNextXfrWithCcidError = true
+            assertFailsWith<CcidException> {
+                driver.transceive("00a4040000".fromHex())
+            }
+            assertContentEquals(byteArrayOf(0x90.toByte(), 0x00), driver.transceive("00a4040000".fromHex()))
+            assertEquals(3, sentMsgTypes.count { it == 0x62.toByte() })
+        } finally {
+            driver.disconnect()
+        }
+    }
+
+    /**
+     * Verifies that [CcidDriver.connect] succeeds even when querying ACR122U firmware via
+     * `FF 00 48 00 00` fails or returns non-ASCII bytes, and cleanly strips a trailing `90 00`
+     * status word if present.
+     */
+    @Test
+    fun ccidDriverAcr122uConnectSucceedsWhenFirmwareQueryFailsOrReturnsNonAscii() = runTest {
+        val rawDesc = buildWalletMateDescriptors(dwMechanical = 0, dwFeatures = 0x000204BA, maxMsgLen = 271)
+        data class FirmwareCase(
+            val label: String,
+            val replyPayload: ByteArray?,
+            val returnCcidError: Boolean,
+            val expectedVersion: String?,
+        )
+        val cases = listOf(
+            FirmwareCase("timeout", replyPayload = null, returnCcidError = false, expectedVersion = null),
+            FirmwareCase("ccidError", replyPayload = ByteArray(0), returnCcidError = true, expectedVersion = null),
+            FirmwareCase("empty", replyPayload = ByteArray(0), returnCcidError = false, expectedVersion = null),
+            FirmwareCase("nonAscii", replyPayload = "e100000100".fromHex(), returnCcidError = false, expectedVersion = null),
+            FirmwareCase(
+                "asciiWithSw",
+                replyPayload = "ACR122U207".encodeToByteArray() + byteArrayOf(0x90.toByte(), 0x00),
+                returnCcidError = false,
+                expectedVersion = "ACR122U207"
+            ),
+        )
+
+        for (case in cases) {
+            var lastCmd = ByteArray(0)
+            val transport = object : CcidUsbTransport {
+                override val deviceName: String = "FakeAcr122u-${case.label}"
+                override val vendorId: Int = 0x072F
+                override val productId: Int = 0x2200
+                override val interfaceId: Int = 0
+                override val rawDescriptors: ByteArray = rawDesc
+                override val hasInterruptEndpoint: Boolean = false
+                override val interruptMaxPacketSize: Int = 0
+
+                override fun open() {}
+                override fun close() {}
+
+                override fun bulkTransferOut(data: ByteArray, timeout: Duration): Int {
+                    lastCmd = data.copyOf()
+                    return data.size
+                }
+
+                override fun bulkTransferIn(buffer: ByteArray, timeout: Duration): Int {
+                    if (lastCmd[0] == 0x6B.toByte()) {
+                        if (case.replyPayload == null) {
+                            return -1
+                        }
+                        val pkt = ByteArray(10 + case.replyPayload.size)
+                        pkt[0] = 0x83.toByte()
+                        pkt[6] = lastCmd[6]
+                        if (case.returnCcidError) {
+                            pkt[7] = 0x41
+                            pkt[8] = 0x00
+                        } else {
+                            CcidDriver.writeInt32Le(pkt, 1, case.replyPayload.size)
+                            case.replyPayload.copyInto(pkt, destinationOffset = 10)
+                        }
+                        pkt.copyInto(buffer)
+                        return pkt.size
+                    }
+                    val payload = when (lastCmd[0]) {
+                        0x62.toByte() -> "3b8f8001804f0ca000000306030001000000006a".fromHex()
+                        0x6F.toByte() -> byteArrayOf(0x90.toByte(), 0x00)
+                        else -> ByteArray(0)
+                    }
+                    val pkt = ByteArray(10 + payload.size)
+                    pkt[0] = 0x80.toByte()
+                    CcidDriver.writeInt32Le(pkt, 1, payload.size)
+                    pkt[6] = lastCmd[6]
+                    payload.copyInto(pkt, destinationOffset = 10)
+                    pkt.copyInto(buffer)
+                    return pkt.size
+                }
+
+                override fun interruptTransferIn(buffer: ByteArray, timeout: Duration): Int = 0
+            }
+
+            val driver = CcidDriver(transport = transport)
+            driver.connect()
+            try {
+                assertEquals(case.expectedVersion, driver.firmwareVersion, "case=${case.label}")
+                assertContentEquals(
+                    byteArrayOf(0x90.toByte(), 0x00),
+                    driver.transceive("00a4040000".fromHex()),
+                    "transceive should still succeed for case=${case.label}"
+                )
+            } finally {
+                driver.disconnect()
+                assertNull(driver.firmwareVersion, "case=${case.label}")
+            }
+        }
+    }
+
+    /**
+     * Verifies [CcidUsbTransport.parseBcdDevice] formatting across BCD versions and non-device descriptors.
+     */
+    @Test
+    fun parseBcdDeviceFormatsUsbDeviceDescriptorVersion() {
+        fun makeDeviceDesc(bcdDevice: Int): ByteArray = ByteArray(18).also {
+            it[0] = 18
+            it[1] = 0x01
+            it[12] = (bcdDevice and 0xFF).toByte()
+            it[13] = ((bcdDevice ushr 8) and 0xFF).toByte()
+        }
+
+        assertEquals("2.14", CcidUsbTransport.parseBcdDevice(makeDeviceDesc(0x0214)))
+        assertEquals("2.07", CcidUsbTransport.parseBcdDevice(makeDeviceDesc(0x0207)))
+        assertEquals("10.02", CcidUsbTransport.parseBcdDevice(makeDeviceDesc(0x1002)))
+
+        val nonDeviceDesc = ByteArray(18).also {
+            it[0] = 9
+            it[1] = 0x02
+        }
+        assertNull(CcidUsbTransport.parseBcdDevice(nonDeviceDesc))
+        assertNull(CcidUsbTransport.parseBcdDevice(ByteArray(17) { 0x01 }))
+    }
+
     private fun buildWalletMateDescriptors(
         dwMechanical: Int,
         dwFeatures: Int,
         maxMsgLen: Int,
+        bcdDevice: Int? = null,
     ): ByteArray {
         // 9-byte Interface descriptor (0x04) + 54-byte CCID descriptor (0x21) + 3 * 7-byte Endpoint descriptors (0x05)
         val ifaceDesc = byteArrayOf(
@@ -755,6 +1213,23 @@ class NfcTagReaderUsbTest {
         val epIntIn = byteArrayOf(7, 0x05, 0x81.toByte(), 0x03, 0x08, 0x00, 0x10)
         val epBulkOut = byteArrayOf(7, 0x05, 0x02, 0x02, 0x40, 0x00, 0x00)
         val epBulkIn = byteArrayOf(7, 0x05, 0x82.toByte(), 0x02, 0x40, 0x00, 0x00)
-        return ifaceDesc + ccidDesc + epIntIn + epBulkOut + epBulkIn
+        val body = ifaceDesc + ccidDesc + epIntIn + epBulkOut + epBulkIn
+        if (bcdDevice == null) {
+            return body
+        }
+        val devDesc = ByteArray(18).also {
+            it[0] = 18
+            it[1] = 0x01
+            it[12] = (bcdDevice and 0xFF).toByte()
+            it[13] = ((bcdDevice ushr 8) and 0xFF).toByte()
+        }
+        val totalLen = 9 + body.size
+        val cfgDesc = byteArrayOf(
+            9, 0x02,
+            (totalLen and 0xFF).toByte(),
+            ((totalLen ushr 8) and 0xFF).toByte(),
+            1, 1, 0, 0x80.toByte(), 50
+        )
+        return devDesc + cfgDesc + body
     }
 }

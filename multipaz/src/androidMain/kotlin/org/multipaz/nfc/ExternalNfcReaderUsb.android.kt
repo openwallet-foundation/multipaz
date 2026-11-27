@@ -65,6 +65,12 @@ internal class AndroidCcidUsbTransport(
     override val productId: Int
         get() = device.productId
 
+    override val deviceVersion: String?
+        get() {
+            val version: String? = device.version
+            return version?.takeIf { it.isNotEmpty() } ?: super.deviceVersion
+        }
+
     override val interfaceId: Int
         get() = usbInterface?.id ?: requestedInterfaceIndex
 
