@@ -187,7 +187,7 @@ class TestAppSettingsModel private constructor(
         }
         bind(presentmentShowConsentPrompt, "presentmentShowConsentPrompt", true)
         bind(presentmentUseEmbeddedBiometricPrompt, "presentmentUseEmbeddedBiometricPrompt", true)
-        bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", false)
+        bind(presentmentUseTransactionDataRenderers, "presentmentUseTransactionDataRenderers", true)
         bind(presentmentRequireAuthentication, "presentmentRequireAuthentication", true)
         bind(presentmentPreferSignatureToKeyAgreement, "presentmentPreferSignatureToKeyAgreement", false)
         bind(presentmentFaceMatcher, "presentmentFaceMatcher", "MobileFaceNet")

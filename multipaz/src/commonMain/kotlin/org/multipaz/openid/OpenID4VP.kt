@@ -812,9 +812,18 @@ object OpenID4VP {
     ): Map<String, JsonElement> {
         val transactionResponse = mutableMapOf<String, JsonElement>()
         for (data in transactionData) {
+            val userInput = transactionUserInput[data.type.identifier]
+            // Refuse to sign a transaction that requires explicit acceptance unless the wallet
+            // actually collected it. This keeps presentment fail-closed when no consent prompt
+            // was shown or no application renderer was registered for the type.
+            check(data.type.isPresentationAllowed(userInput)) {
+                "Can't present transaction '${data.type.identifier}': it requires the holder " +
+                    "to accept its contents, but no acceptance was collected. The application may " +
+                    "be out of date or have no transaction data renderer for this type."
+            }
             val responseClaims = data.generateSdJwtResponseClaims(
                 credential as Credential,
-                transactionUserInput[data.type.identifier],
+                userInput,
                 docRequestId
             )
             if (responseClaims.isNotEmpty()) {

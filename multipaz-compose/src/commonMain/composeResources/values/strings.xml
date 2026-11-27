@@ -170,6 +170,12 @@
     <string name="credential_presentment_payment_tx_no_tip">No tip</string>
     <string name="credential_presentment_generic_tx_also_approved">This %1$s transaction will also be approved:</string>
     <string name="credential_presentment_generic_tx_approved">This %1$s transaction will be approved:</string>
+    <string name="credential_presentment_text_acceptance_tx_approved">By continuing with this transaction you agree to the following:</string>
+    <string name="credential_presentment_text_acceptance_tx_also_approved">By continuing with this transaction you agree to the following, and your identity will also be shared:</string>
+    <string name="credential_presentment_text_acceptance_tx_expires">Expires: %1$s</string>
+    <string name="credential_presentment_text_acceptance_tx_review_hint">Open the full agreement and accept it before continuing.</string>
+    <string name="credential_presentment_text_acceptance_tx_accept_checkbox">I have read and agree to the terms above.</string>
+    <string name="credential_presentment_text_acceptance_tx_scroll_hint">Scroll to the end of the agreement to accept it.</string>
     <string name="claim_value_boolean_true">True</string>
     <string name="claim_value_boolean_false">False</string>
 

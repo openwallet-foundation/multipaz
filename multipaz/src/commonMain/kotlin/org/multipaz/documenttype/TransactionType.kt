@@ -246,6 +246,48 @@ abstract class TransactionType<PayloadT: Any>(
     }
 
     /**
+     * Whether presenting this transaction requires the holder to explicitly accept it.
+     *
+     * When `true`, presentment is refused unless [isUserInputAccepted] accepts the user input
+     * collected by the wallet. A wallet must therefore only offer such a type when it has an
+     * application-provided renderer that shows the complete payload and collects the acceptance:
+     * the built-in generic rendering only shows the transaction type name, which is not enough
+     * for the holder to know what they are approving.
+     *
+     * The default is `false`, because most transaction types do not depend on the holder
+     * approving their contents (for example, a transaction that only carries a receipt).
+     */
+    open val requiresUserAcceptance: Boolean = false
+
+    /**
+     * Determines whether [userInput] approves this transaction.
+     *
+     * Only consulted when [requiresUserAcceptance] is `true`. The default rejects every input,
+     * including `null`, so a type that overrides [requiresUserAcceptance] must also override this
+     * to say which input counts as acceptance. A missing override therefore refuses presentment
+     * instead of silently signing a transaction the holder never accepted.
+     *
+     * @param userInput the input the wallet collected for this transaction, or `null` if none was
+     *  collected (for example, because consent was silent).
+     * @return `true` if the input is sufficient to present the transaction.
+     */
+    open fun isUserInputAccepted(userInput: TransactionUserInput?): Boolean = false
+
+    /**
+     * Determines whether this transaction may be included in a response.
+     *
+     * This is the check presentment uses before generating transaction response elements. It is
+     * fail-closed: a transaction that [requiresUserAcceptance] is refused unless
+     * [isUserInputAccepted] accepts the collected input, which means a wallet that cannot render
+     * the transaction (and therefore cannot collect an acceptance) refuses to present it.
+     *
+     * @param userInput the input the wallet collected for this transaction, or `null`.
+     * @return `true` if the transaction may be presented.
+     */
+    fun isPresentationAllowed(userInput: TransactionUserInput?): Boolean =
+        !requiresUserAcceptance || isUserInputAccepted(userInput)
+
+    /**
      * Generates device-signed data elements for an Mdoc credential.
      *
      * Used for Case 1 (ISO 18013-5) and Case 4 (OpenID4VP).

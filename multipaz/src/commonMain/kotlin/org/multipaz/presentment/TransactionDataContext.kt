@@ -30,6 +30,13 @@ import org.multipaz.request.TrustedRequesterIdentity
  * @property purposes the inferred [PresentmentPurpose]s for the current selection.
  * @property userInput the input the user has given for this type so far, or `null`.
  * @property onUserInputChanged called when the user changes their input.
+ * @property isScrolledToBottom whether the details page has been scrolled to its end. This is
+ *   always `true` in the summary. A details view can use it to require the user to read the whole
+ *   transaction before confirming, for example by enabling an acceptance checkbox only at the end.
+ * @property onContinueAllowedChanged called by the renderer when the user's ability to continue
+ *   changes. A renderer that requires an explicit action, such as accepting contract terms, reports
+ *   `false` until that action is complete and `true` afterwards. The consent prompt keeps its
+ *   continue action disabled while any visible transaction reports `false`.
  */
 class TransactionDataContext(
     val transactionData: List<TransactionData<*>>,
@@ -39,4 +46,6 @@ class TransactionDataContext(
     val purposes: Set<PresentmentPurpose> = emptySet(),
     val userInput: TransactionUserInput?,
     val onUserInputChanged: (userInput: TransactionUserInput) -> Unit,
+    val isScrolledToBottom: Boolean = true,
+    val onContinueAllowedChanged: (allowed: Boolean) -> Unit = {},
 )

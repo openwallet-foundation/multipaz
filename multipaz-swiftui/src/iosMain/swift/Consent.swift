@@ -1092,15 +1092,20 @@ private struct TransactionDetailsView: View {
     let purposes: Set<PresentmentPurpose>
     let userInput: TransactionUserInput?
     let onUserInputChanged: (TransactionUserInput) -> Void
+    let onContinueAllowedChanged: (Bool) -> Void
     let isActive: Bool
     let onScrollMetricsChange: ((CGFloat, CGFloat) -> Void)?
+    @State private var isScrolledToBottom = false
 
     var body: some View {
         SmartSheet(
             maxHeight: maxHeight,
             updateDetents: false,
             isActive: isActive,
-            onScrollMetricsChange: onScrollMetricsChange
+            onScrollMetricsChange: onScrollMetricsChange,
+            onAtBottomChange: { atBottom in
+                isScrolledToBottom = atBottom
+            }
         ) {
         } content: {
             if let details = target.renderer.details {
@@ -1111,7 +1116,11 @@ private struct TransactionDetailsView: View {
                     hasClaims: target.hasClaims,
                     purposes: purposes,
                     userInput: userInput,
-                    onUserInputChanged: onUserInputChanged
+                    onUserInputChanged: onUserInputChanged,
+                    isScrolledToBottom: isScrolledToBottom,
+                    onContinueAllowedChanged: { allowed in
+                        onContinueAllowedChanged(allowed.boolValue)
+                    }
                 ))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
@@ -1422,6 +1431,7 @@ public struct Consent: View {
     @State private var path = NavigationPath()
     @State private var selections: [Int] = []
     @State private var transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]] = [:]
+    @State private var continueAllowed: [PresentmentCredentialMatch: [String: Bool]] = [:]
     @State private var sheetHeight: CGFloat = 450
     @State private var isSheetScrollable: Bool = false
     @State private var coolOffComplete: Bool = false
@@ -1504,6 +1514,18 @@ public struct Consent: View {
         let currentSelection: PresentmentSelection? = selections.isEmpty
             ? nil
             : presentmentData.toPresentmentSelection(selections: kotlinSelections, transactionUserInput: [:])
+        let canContinue: Bool = {
+            guard let currentSelection = currentSelection else { return true }
+            for match in currentSelection.matches {
+                let allowedForMatch = continueAllowed[match] ?? [:]
+                for data in match.transactionData {
+                    if allowedForMatch[data.type.identifier] == false {
+                        return false
+                    }
+                }
+            }
+            return true
+        }()
         let encryptionTargets: [EncryptionTargetInfo] = {
             guard let currentSelection = currentSelection else { return [] }
             var list: [EncryptionTargetInfo] = []
@@ -1542,6 +1564,8 @@ public struct Consent: View {
                         transactionDataRendererRepository: transactionDataRendererRepository,
                         selections: selections,
                         transactionUserInput: $transactionUserInput,
+                        continueAllowed: $continueAllowed,
+                        canContinue: canContinue,
                         sheetHeight: $sheetHeight,
                         isSheetScrollable: $isSheetScrollable,
                         coolOffComplete: $coolOffComplete,
@@ -1755,6 +1779,11 @@ public struct Consent: View {
                                     var current = transactionUserInput[target.match] ?? [:]
                                     current[target.identifier] = input
                                     transactionUserInput[target.match] = current
+                                },
+                                onContinueAllowedChanged: { allowed in
+                                    var current = continueAllowed[target.match] ?? [:]
+                                    current[target.identifier] = allowed
+                                    continueAllowed[target.match] = current
                                 },
                                 isActive: true,
                                 onScrollMetricsChange: onMetrics
@@ -2295,6 +2324,8 @@ private struct ConsentMain: View {
     let transactionDataRendererRepository: TransactionDataRendererRepository?
     let selections: [Int]
     @Binding var transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]]
+    @Binding var continueAllowed: [PresentmentCredentialMatch: [String: Bool]]
+    let canContinue: Bool
     @Binding var sheetHeight: CGFloat
     @Binding var isSheetScrollable: Bool
     @Binding var coolOffComplete: Bool
@@ -2414,6 +2445,11 @@ private struct ConsentMain: View {
                                 current[typeId] = input
                                 transactionUserInput[match] = current
                             },
+                            onContinueAllowedChanged: { match, typeId, allowed in
+                                var current = continueAllowed[match] ?? [:]
+                                current[typeId] = allowed
+                                continueAllowed[match] = current
+                            },
                             onShowDocumentDetails: onShowDocumentDetails,
                             onShowTransactionDetails: onShowTransactionDetails,
                             onNavigateToPickSolution: {
@@ -2445,6 +2481,7 @@ private struct ConsentMain: View {
                 requireCoolOff: riskLevel == .highRisk,
                 isTesting: isTesting,
                 coolOffComplete: $coolOffComplete,
+                canContinue: canContinue,
                 onScrollDown: scrollDown,
                 onConfirm: {
                     onConfirm(presentmentData.toPresentmentSelection(
@@ -2463,6 +2500,7 @@ private struct ConsentButtonFooter: View {
     let requireCoolOff: Bool
     let isTesting: Bool
     @Binding var coolOffComplete: Bool
+    let canContinue: Bool
     let onScrollDown: () -> Void
     let onConfirm: () -> Void
     let onCancel: () -> Void
@@ -2472,6 +2510,8 @@ private struct ConsentButtonFooter: View {
     var body: some View {
         let showMoreButton = !isAtBottom
         let isWaiting = requireCoolOff && !showMoreButton && !coolOffComplete
+        let isBlocked = !canContinue && !showMoreButton
+        let isDisabled = isWaiting || isBlocked
         let effectiveProgress: CGFloat = isTesting ? (isWaiting ? 0.35 : 0.0) : coolOffProgress
         let buttonText: String = {
             if showMoreButton {
@@ -2499,13 +2539,13 @@ private struct ConsentButtonFooter: View {
             Button(action: {
                 if showMoreButton {
                     onScrollDown()
-                } else if !isWaiting {
+                } else if !isDisabled {
                     onConfirm()
                 }
             }) {
                 Text(buttonText)
                     .font(.headline)
-                    .foregroundStyle(isWaiting ? Color.primary.opacity(0.6) : Color.white)
+                    .foregroundStyle(isDisabled ? Color.primary.opacity(0.6) : Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background {
@@ -2518,6 +2558,9 @@ private struct ConsentButtonFooter: View {
                                         .fill(Color.accentColor.opacity(0.28))
                                         .frame(width: geo.size.width * effectiveProgress)
                                 }
+                            } else if isBlocked {
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.12))
                             } else {
                                 Rectangle()
                                     .fill(Color.accentColor)
@@ -2527,7 +2570,7 @@ private struct ConsentButtonFooter: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(isWaiting)
+            .disabled(isDisabled)
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -2565,6 +2608,7 @@ private struct UseCaseSection: View {
     let selectionIndex: Int
     let transactionUserInput: [PresentmentCredentialMatch: [String: TransactionUserInput]]
     let onTransactionUserInputChanged: (PresentmentCredentialMatch, String, TransactionUserInput) -> Void
+    let onContinueAllowedChanged: (PresentmentCredentialMatch, String, Bool) -> Void
     let onShowDocumentDetails: (DocumentDetailsTarget) -> Void
     let onShowTransactionDetails: (TransactionDetailsTarget) -> Void
     let onNavigateToPickSolution: () -> Void
@@ -2679,6 +2723,10 @@ private struct UseCaseSection: View {
                                                 userInput: transactionUserInput[match]?[identifier],
                                                 onUserInputChanged: { userInput in
                                                     onTransactionUserInputChanged(match, identifier, userInput)
+                                                },
+                                                isScrolledToBottom: true,
+                                                onContinueAllowedChanged: { allowed in
+                                                    onContinueAllowedChanged(match, identifier, allowed.boolValue)
                                                 }
                                             ))
                                             if renderer.details != nil {

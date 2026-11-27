@@ -15,9 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.multipaz.compose.presentment.TransactionDataRendererCompose
+import org.multipaz.compose.presentment.textAcceptanceTransactionRenderer
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.presentment.TransactionDataContext
 import org.multipaz.prompt.TransactionDataRendererRepository
+import org.multipaz.utopia.knowntypes.TextAcceptanceTransaction
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.round
@@ -39,6 +41,7 @@ val testAppTransactionDataRenderers = TransactionDataRendererRepository().apply 
     )
     addRenderer(TransitFareTransaction.identifier, transitFareRenderer)
     addRenderer(PrescriptionPickupTransaction.identifier, prescriptionPickupRenderer)
+    addRenderer(TextAcceptanceTransaction.identifier, textAcceptanceTransactionRenderer)
 }
 
 private val tipOptions = listOf(0.0 to "No tip", 10.0 to "10%", 15.0 to "15%", 20.0 to "20%")

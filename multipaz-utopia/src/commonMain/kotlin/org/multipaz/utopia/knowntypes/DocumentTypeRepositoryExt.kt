@@ -32,8 +32,14 @@ fun DocumentTypeRepository.addUtopiaTypes(locale: String = LocalizedStrings.getC
     addDocumentType(UtopiaNaturalization.getDocumentType(locale))
     addTransactionType(PingTransaction)
     addTransactionType(PaymentTransaction)
+    addTransactionType(TextAcceptanceTransaction)
     addExtraSingleDocumentCannedRequest(
         createEUPersonalIDWithTransactionCannedRequest(
+            getDocumentTypeForMdoc(EUPersonalID.EUPID_NAMESPACE)!!
+        )
+    )
+    addExtraSingleDocumentCannedRequest(
+        createEUPersonalIDWithTextAcceptanceCannedRequest(
             getDocumentTypeForMdoc(EUPersonalID.EUPID_NAMESPACE)!!
         )
     )
@@ -80,6 +86,41 @@ private fun createEUPersonalIDWithTransactionCannedRequest(
             )
         )
     )
+)
+
+private fun createEUPersonalIDWithTextAcceptanceCannedRequest(
+    eupidDocumentType: DocumentType
+) = SingleDocumentCannedRequest(
+    id = "withTextAcceptance",
+    displayName = "EU PID with Text Acceptance",
+    mdocRequest = MdocCannedRequest(
+        docType = eupidDocumentType.mdocDocumentType!!.docType,
+        useZkp = false,
+        portraitEquivalenceRequest = null,
+        namespacesToRequest = listOf(
+            makeMdocNamespaceRequest(
+                mdocDocumentType = eupidDocumentType.mdocDocumentType!!,
+                namespace = EUPersonalID.EUPID_NAMESPACE,
+                dataElementsToRequest = mapOf(
+                    "family_name" to false,
+                    "given_name" to false,
+                    "birth_date" to false,
+                )
+            )
+        )
+    ),
+    jsonRequest = JsonCannedRequest(
+        vct = eupidDocumentType.jsonDocumentType!!.vct,
+        claimsToRequest = makeClaimsToRequest(
+            jsonDocumentType = eupidDocumentType.jsonDocumentType!!,
+            claimsToRequest = listOf(
+                "family_name",
+                "given_name",
+                "birthdate"
+            )
+        )
+    ),
+    transactionData = listOf(TextAcceptanceTransaction.sampleData)
 )
 
 private fun makeMdocNamespaceRequest(
