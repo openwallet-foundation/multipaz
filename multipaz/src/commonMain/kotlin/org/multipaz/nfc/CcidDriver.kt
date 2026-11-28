@@ -79,6 +79,13 @@ internal class CcidDriver(
     private var listener: CcidDriverListener? = null
     private var interruptJob: Job? = null
 
+    internal val isAcr122u: Boolean
+        get() = transport.vendorId == VENDOR_ID_ACS && transport.productId == PRODUCT_ID_ACS_ACR122U
+
+    @Volatile
+    internal var firmwareVersion: String? = null
+        private set
+
     private fun nextSequence(): Byte = sequenceLock.withLock {
         val seq = nextSequenceNumber
         nextSequenceNumber = (seq + 1) and 0xFF
@@ -94,6 +101,7 @@ internal class CcidDriver(
      * @throws IOException if the connection to the device fails or interface cannot be claimed.
      */
     override fun connect() {
+        firmwareVersion = null
         transport.open()
         isConnected = true
         val chaining = computeSupportsCcidChaining()
@@ -115,10 +123,14 @@ internal class CcidDriver(
         cachedSupportsCcidChaining = chaining
         cachedMaxCcidDataLength = maxCcidLen
         cachedMaxCommandLength = maxCmdLen
+        val vidHex = transport.vendorId.toString(16).padStart(4, '0')
+        val pidHex = transport.productId.toString(16).padStart(4, '0')
+        val versionSuffix = transport.deviceVersion?.let { ", bcdDevice=$it" } ?: ""
         Logger.i(
             TAG,
             "Connected to CCID device ${transport.deviceName} " +
-                "(interface id=${transport.interfaceId}), maxCommandLength=$maxCommandLength"
+                "(vid=0x$vidHex, pid=0x$pidHex$versionSuffix, interface id=${transport.interfaceId}), " +
+                "maxCommandLength=$maxCommandLength"
         )
         configureContactlessPollingForIsoDep()
         startInterruptListener()
@@ -138,40 +150,17 @@ internal class CcidDriver(
     private fun configureContactlessPollingForIsoDep() {
         var hardwarePollingConfigured = false
         var twoBytePollingType = false
-        if (transport.vendorId == VENDOR_ID_ACS) {
-            val frame = pollingFrameData
-            var ecpPayloadAccepted = false
-            if (frame != null && frame.size in 2..256 && frame[0] == 0x6A.toByte()) {
-                try {
-                    // ACS WalletMate II ECP payload configuration (E0 00 00 3B <len> <payload after 6A>).
-                    // Note: The E0 00 00 xx escape command framing and 0x20 PICC polling parameter format
-                    // come from publicly available ACS ACR1252U/ACR1552U reference manuals. The 0x3B
-                    // register and Bit 7 (0x80) of E0 00 01 20 were identified via black-box USB probing
-                    // of a retail WalletMate II (reading E0 00 00 3B 00 returned 01 00 00 02 90 00,
-                    // matching the publicly documented 6A 01 00 00 02 polling frame without the leading
-                    // 0x6A byte).
-                    val payload = frame.copyOfRange(1, frame.size)
-                    val setEcpCmd = ByteArray(5 + payload.size)
-                    setEcpCmd[0] = 0xE0.toByte()
-                    setEcpCmd[1] = 0x00
-                    setEcpCmd[2] = 0x00
-                    setEcpCmd[3] = 0x3B
-                    setEcpCmd[4] = payload.size.toByte()
-                    payload.copyInto(setEcpCmd, destinationOffset = 5)
-                    val ecpResp = sendEscapeCommand(setEcpCmd)
-                    if (ecpResp.size >= 2 &&
-                        ecpResp[ecpResp.size - 2] == 0x90.toByte() &&
-                        ecpResp[ecpResp.size - 1] == 0x00.toByte()
-                    ) {
-                        Logger.d(TAG, "ACS 0x3B ECP payload response: ${ecpResp.toHex()}")
-                        ecpPayloadAccepted = true
-                    }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Logger.d(TAG, "ACS hardware ECP payload configuration not supported: ${e.message}")
-                }
+        val frame = pollingFrameData
+        if (isAcr122u) {
+            queryAndLogAcr122uFirmwareVersion()
+            // ACR122U firmware does not implement the newer ACS E0 00 ... escape commands and
+            // forwards those bytes over RF directly to the presented ISO-DEP target as Command APDUs.
+            Logger.i(TAG, "Skipping ACS E0 00 PICC polling escape commands on ACR122U")
+            if (frame != null) {
+                Logger.i(TAG, "Reader does not support hardware polling frame ${frame.toHex()}")
             }
-
+        } else if (transport.vendorId == VENDOR_ID_ACS) {
+            val ecpPayloadAccepted = tryConfigureAcsEcpPayload(frame)
             try {
                 // WalletMate II / ACR1552U 2-byte Set PICC Polling Type:
                 // E0 00 01 20 02 <byte1> 00
@@ -183,46 +172,175 @@ internal class CcidDriver(
                 val resp = sendEscapeCommand(
                     byteArrayOf(0xE0.toByte(), 0x00, 0x01, 0x20, 0x02, pollTypeByte1, 0x00)
                 )
-                twoBytePollingType = true
-                val ecpBitActive = resp.size >= 6 && (resp[5].toInt() and 0x80) != 0
-                if (frame != null) {
-                    if (ecpPayloadAccepted && ecpBitActive) {
-                        hardwarePollingConfigured = true
-                        Logger.i(
-                            TAG,
-                            "Reader enabled hardware polling frame ${frame.toHex()} (PICC polling type: ${resp.toHex()})"
-                        )
-                    } else {
-                        Logger.i(
-                            TAG,
-                            "Reader does not support hardware polling frame ${frame.toHex()} (PICC polling type: ${resp.toHex()})"
-                        )
-                    }
+                if (isValidAcsTwoBytePollingResponse(resp)) {
+                    twoBytePollingType = true
+                    val ecpBitActive = (resp[5].toInt() and 0x80) != 0
+                    hardwarePollingConfigured = logTwoBytePollingResult(
+                        frame = frame,
+                        ecpPayloadAccepted = ecpPayloadAccepted,
+                        ecpBitActive = ecpBitActive,
+                        resp = resp
+                    )
+                } else if (isAcsEscapeProtocolResponse(resp)) {
+                    Logger.d(
+                        TAG,
+                        "2-byte ACS PICC Polling Type returned ACS error response (${resp.toHex()}), trying 1-byte command"
+                    )
+                    tryConfigureAcsOneBytePollingType(frame)
                 } else {
-                    Logger.i(TAG, "Configured ACS 2-byte PICC Polling Type: ${resp.toHex()}")
+                    Logger.w(
+                        TAG,
+                        "Unexpected non-ACS response to 2-byte PICC Polling Type (${resp.toHex()}); " +
+                            "skipping ACS escape polling configuration"
+                    )
+                    if (frame != null) {
+                        Logger.i(TAG, "Reader does not support hardware polling frame ${frame.toHex()}")
+                    }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Logger.d(TAG, "2-byte ACS PICC Polling Type not supported, trying 1-byte command: ${e.message}")
-                if (frame != null) {
-                    Logger.i(TAG, "Reader does not support hardware polling frame ${frame.toHex()}")
-                }
-                try {
-                    // Older ACS readers (e.g. ACR1252U) 1-byte Set PICC Operating Parameter / Polling Type:
-                    // E0 00 00 20 01 03 -> Bit 0 = ISO/IEC 14443 Type A, Bit 1 = ISO/IEC 14443 Type B.
-                    val resp = sendEscapeCommand(
-                        byteArrayOf(0xE0.toByte(), 0x00, 0x00, 0x20, 0x01, 0x03)
-                    )
-                    Logger.i(TAG, "Configured ACS 1-byte PICC Polling Type: ${resp.toHex()}")
-                } catch (e2: Exception) {
-                    if (e2 is CancellationException) throw e2
-                    Logger.d(TAG, "Failed to configure ACS PICC Polling Type: ${e2.message}")
-                }
+                tryConfigureAcsOneBytePollingType(frame)
             }
         }
         isHardwarePollingConfigured = hardwarePollingConfigured
         usesTwoBytePollingTypeCommand = twoBytePollingType
     }
+
+    private fun queryAndLogAcr122uFirmwareVersion() {
+        try {
+            val resp = sendEscapeCommand(CMD_ACR122U_GET_FIRMWARE_VERSION)
+            val decoded = decodeFirmwareVersionString(resp)
+            if (decoded != null) {
+                firmwareVersion = decoded
+                Logger.i(TAG, "ACR122U firmware version: $decoded (${resp.toHex()})")
+            } else if (resp.isNotEmpty()) {
+                Logger.i(TAG, "ACR122U firmware version response (raw): ${resp.toHex()}")
+            } else {
+                Logger.i(TAG, "ACR122U firmware version response was empty")
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.w(TAG, "Failed to query ACR122U firmware version: ${e.message}")
+        }
+    }
+
+    private fun decodeFirmwareVersionString(resp: ByteArray): String? {
+        val withoutSw = if (
+            resp.size > 2 &&
+            resp[resp.size - 2] == 0x90.toByte() &&
+            resp[resp.size - 1] == 0x00.toByte()
+        ) {
+            resp.copyOfRange(0, resp.size - 2)
+        } else {
+            resp
+        }
+        var end = withoutSw.size
+        while (end > 0 && withoutSw[end - 1].isTrailingFirmwarePadding()) {
+            end--
+        }
+        if (end == 0) return null
+        for (i in 0 until end) {
+            val b = withoutSw[i].toInt() and 0xFF
+            if (b !in 0x20..0x7E) return null
+        }
+        return withoutSw.decodeToString(0, end)
+    }
+
+    private fun Byte.isTrailingFirmwarePadding(): Boolean =
+        this == 0x00.toByte() ||
+            this == ' '.code.toByte() ||
+            this == '\t'.code.toByte() ||
+            this == '\r'.code.toByte() ||
+            this == '\n'.code.toByte()
+
+    private fun tryConfigureAcsEcpPayload(frame: ByteArray?): Boolean {
+        if (frame == null || frame.size !in 2..256 || frame[0] != 0x6A.toByte()) {
+            return false
+        }
+        try {
+            // ACS WalletMate II ECP payload configuration (E0 00 00 3B <len> <payload after 6A>).
+            // Note: The E0 00 00 xx escape command framing and 0x20 PICC polling parameter format
+            // come from publicly available ACS ACR1252U/ACR1552U reference manuals. The 0x3B
+            // register and Bit 7 (0x80) of E0 00 01 20 were identified via black-box USB probing
+            // of a retail WalletMate II (reading E0 00 00 3B 00 returned 01 00 00 02 90 00,
+            // matching the publicly documented 6A 01 00 00 02 polling frame without the leading
+            // 0x6A byte).
+            val payload = frame.copyOfRange(1, frame.size)
+            val setEcpCmd = ByteArray(5 + payload.size)
+            setEcpCmd[0] = 0xE0.toByte()
+            setEcpCmd[1] = 0x00
+            setEcpCmd[2] = 0x00
+            setEcpCmd[3] = 0x3B
+            setEcpCmd[4] = payload.size.toByte()
+            payload.copyInto(setEcpCmd, destinationOffset = 5)
+            val ecpResp = sendEscapeCommand(setEcpCmd)
+            if (ecpResp.size >= 2 &&
+                ecpResp[ecpResp.size - 2] == 0x90.toByte() &&
+                ecpResp[ecpResp.size - 1] == 0x00.toByte()
+            ) {
+                Logger.d(TAG, "ACS 0x3B ECP payload response: ${ecpResp.toHex()}")
+                return true
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.d(TAG, "ACS hardware ECP payload configuration not supported: ${e.message}")
+        }
+        return false
+    }
+
+    private fun logTwoBytePollingResult(
+        frame: ByteArray?,
+        ecpPayloadAccepted: Boolean,
+        ecpBitActive: Boolean,
+        resp: ByteArray,
+    ): Boolean {
+        if (frame == null) {
+            Logger.i(TAG, "Configured ACS 2-byte PICC Polling Type: ${resp.toHex()}")
+            return false
+        }
+        return if (ecpPayloadAccepted && ecpBitActive) {
+            Logger.i(
+                TAG,
+                "Reader enabled hardware polling frame ${frame.toHex()} (PICC polling type: ${resp.toHex()})"
+            )
+            true
+        } else {
+            Logger.i(
+                TAG,
+                "Reader does not support hardware polling frame ${frame.toHex()} (PICC polling type: ${resp.toHex()})"
+            )
+            false
+        }
+    }
+
+    private fun tryConfigureAcsOneBytePollingType(frame: ByteArray?) {
+        if (frame != null) {
+            Logger.i(TAG, "Reader does not support hardware polling frame ${frame.toHex()}")
+        }
+        try {
+            // Older ACS readers (e.g. ACR1252U) 1-byte Set PICC Operating Parameter / Polling Type:
+            // E0 00 00 20 01 03 -> Bit 0 = ISO/IEC 14443 Type A, Bit 1 = ISO/IEC 14443 Type B.
+            val resp = sendEscapeCommand(
+                byteArrayOf(0xE0.toByte(), 0x00, 0x00, 0x20, 0x01, 0x03)
+            )
+            Logger.i(TAG, "Configured ACS 1-byte PICC Polling Type: ${resp.toHex()}")
+        } catch (e2: Exception) {
+            if (e2 is CancellationException) throw e2
+            Logger.d(TAG, "Failed to configure ACS PICC Polling Type: ${e2.message}")
+        }
+    }
+
+    private fun isValidAcsTwoBytePollingResponse(resp: ByteArray): Boolean =
+        resp.size >= 7 &&
+            resp[0] == 0xE1.toByte() &&
+            resp[1] == 0x00.toByte() &&
+            resp[2] == 0x00.toByte() &&
+            resp[3] == 0x00.toByte() &&
+            resp[4] == 0x02.toByte()
+
+    private fun isAcsEscapeProtocolResponse(resp: ByteArray): Boolean =
+        resp.size >= 4 && resp[0] == 0xE1.toByte()
 
     /**
      * Sends a vendor-specific `PC_to_RDR_Escape` (`0x6B`) command to the CCID reader and returns
@@ -278,12 +396,12 @@ internal class CcidDriver(
      */
     override suspend fun powerCycleCard(fieldOffDelay: Duration): Boolean {
         if (!isConnected) return false
+        isCardPoweredOn = false
         return try {
             withContext(nfcIoDispatcher) {
                 val powerOffCommand = powerOff()
                 sendAndReceive(powerOffCommand)
             }
-            isCardPoweredOn = false
             delay(fieldOffDelay)
             for (attempt in 1..6) {
                 if (!isConnected) return false
@@ -323,11 +441,12 @@ internal class CcidDriver(
         isCardPoweredOn = false
         isHardwarePollingConfigured = false
         usesTwoBytePollingTypeCommand = false
+        firmwareVersion = null
         interruptJob?.cancel()
         interruptJob = null
         driverJob.cancel()
         usbLock.withLock {
-            if (wasConnected && transport.vendorId == VENDOR_ID_ACS) {
+            if (wasConnected && transport.vendorId == VENDOR_ID_ACS && !isAcr122u) {
                 if (wasHardwarePolling) {
                     try {
                         sendEscapeCommandInternal(CMD_ACS_DEFAULT_ECP_PAYLOAD)
@@ -398,54 +517,58 @@ internal class CcidDriver(
     override fun transceive(commandApdu: ByteArray): ByteArray {
         if (!isConnected) throw IOException("Driver is not connected.")
 
-        if (!isCardPoweredOn) {
-            val powerOnCommand = powerOn()
-            val powerOnResponseBytes = sendAndReceive(powerOnCommand)
-            val powerOnResponse = parseDataBlockResponse(powerOnResponseBytes)
-            // The ATR is returned on power on. A valid ATR is typically longer than 2 bytes.
-            if (powerOnResponse.size <= 2) {
-                throw CcidException("Failed to power on card. Invalid ATR received.")
-            }
-            isCardPoweredOn = true
-        }
-
-        val maxCcidLen = maxCcidDataLength
-        val response: ByteArray = if (commandApdu.size <= maxCcidLen) {
-            val xfrBlock = createXfrBlock(commandApdu, wLevelParameter = 0)
-            val responseBytes = sendAndReceive(xfrBlock)
-            parseDataBlockResponse(responseBytes)
-        } else {
-            // Send APDU using CCID block chaining
-            Logger.i(
-                TAG,
-                "Sending APDU of ${commandApdu.size} bytes using CCID block chaining in chunks of $maxCcidLen"
-            )
-            val offsets = 0 until commandApdu.size step maxCcidLen
-            var lastResponse = ByteArray(0)
-            for (offset in offsets) {
-                val isFirst = (offset == 0)
-                val isLast = (offset + maxCcidLen >= commandApdu.size)
-                val chunkSize = min(maxCcidLen, commandApdu.size - offset)
-                val chunkBytes = commandApdu.copyOfRange(offset, offset + chunkSize)
-                val wLevel: Short = when {
-                    isFirst -> 1 // 0x0001: First block of command APDU
-                    !isLast -> 3 // 0x0003: Intermediate block (another block is to follow)
-                    else -> 2    // 0x0002: Last block (continues command APDU and ends command)
+        try {
+            if (!isCardPoweredOn) {
+                val powerOnCommand = powerOn()
+                val powerOnResponseBytes = sendAndReceive(powerOnCommand)
+                val powerOnResponse = parseDataBlockResponse(powerOnResponseBytes)
+                // The ATR is returned on power on. A valid ATR is typically longer than 2 bytes.
+                if (powerOnResponse.size <= 2) {
+                    throw CcidException("Failed to power on card. Invalid ATR received.")
                 }
-                val xfrBlock = createXfrBlock(chunkBytes, wLevelParameter = wLevel)
-                val responseBytes = sendAndReceive(xfrBlock)
-                lastResponse = parseDataBlockResponse(responseBytes)
+                isCardPoweredOn = true
             }
-            lastResponse
-        }
 
-        if (response.size < 2) {
-            // If response is invalid, the card might have been removed.
+            val maxCcidLen = maxCcidDataLength
+            val response: ByteArray = if (commandApdu.size <= maxCcidLen) {
+                val xfrBlock = createXfrBlock(commandApdu, wLevelParameter = 0)
+                val responseBytes = sendAndReceive(xfrBlock)
+                parseDataBlockResponse(responseBytes)
+            } else {
+                // Send APDU using CCID block chaining
+                Logger.i(
+                    TAG,
+                    "Sending APDU of ${commandApdu.size} bytes using CCID block chaining in chunks of $maxCcidLen"
+                )
+                val offsets = 0 until commandApdu.size step maxCcidLen
+                var lastResponse = ByteArray(0)
+                for (offset in offsets) {
+                    val isFirst = (offset == 0)
+                    val isLast = (offset + maxCcidLen >= commandApdu.size)
+                    val chunkSize = min(maxCcidLen, commandApdu.size - offset)
+                    val chunkBytes = commandApdu.copyOfRange(offset, offset + chunkSize)
+                    val wLevel: Short = when {
+                        isFirst -> 1 // 0x0001: First block of command APDU
+                        !isLast -> 3 // 0x0003: Intermediate block (another block is to follow)
+                        else -> 2    // 0x0002: Last block (continues command APDU and ends command)
+                    }
+                    val xfrBlock = createXfrBlock(chunkBytes, wLevelParameter = wLevel)
+                    val responseBytes = sendAndReceive(xfrBlock)
+                    lastResponse = parseDataBlockResponse(responseBytes)
+                }
+                lastResponse
+            }
+
+            if (response.size < 2) {
+                // If response is invalid, the card might have been removed.
+                throw CcidException("Invalid response from card")
+            }
+
+            return response
+        } catch (e: IOException) {
             isCardPoweredOn = false
-            throw CcidException("Invalid response from card")
+            throw e
         }
-
-        return response
     }
 
     private fun createXfrBlock(data: ByteArray, wLevelParameter: Short = 0): ByteArray {
@@ -721,8 +844,9 @@ internal class CcidDriver(
         private val MAX_TIME_EXTENSION_DURATION = 30.seconds
         private const val MAX_RESPONSE_LENGTH = 65546
 
-        // USB Vendor IDs
+        // USB Vendor and Product IDs
         internal const val VENDOR_ID_ACS = 0x072F // Advanced Card Systems Ltd. (1839)
+        internal const val PRODUCT_ID_ACS_ACR122U = 0x2200
 
         // CCID Message Types
         private const val PC_TO_RDR_ICCPOWERON: Byte = 0x62
@@ -734,6 +858,11 @@ internal class CcidDriver(
         private const val RDR_TO_PC_SLOTSTATUS: Byte = 0x81.toByte()
         private const val RDR_TO_PC_ESCAPE: Byte = 0x83.toByte()
         private const val RDR_TO_PC_NOTIFYSLOTCHANGE: Byte = 0x50
+
+        // ACR122U Escape Command
+        private val CMD_ACR122U_GET_FIRMWARE_VERSION = byteArrayOf(
+            0xFF.toByte(), 0x00, 0x48, 0x00, 0x00
+        )
 
         // ACS Escape Commands
         private val CMD_ACS_DEFAULT_ECP_PAYLOAD = byteArrayOf(

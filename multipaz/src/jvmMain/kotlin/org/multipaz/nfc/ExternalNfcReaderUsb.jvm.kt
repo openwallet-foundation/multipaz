@@ -565,6 +565,9 @@ internal class JvmCcidUsbTransport(
     private var cachedRawDescriptors: ByteArray? = null
 
     @Volatile
+    private var cachedDeviceVersion: String? = null
+
+    @Volatile
     private var resolvedDeviceName: String = when (selector) {
         is JvmUsbDeviceSelector.ByVidPid ->
             String.format("USB %04X:%04X", selector.vendorId, selector.productId)
@@ -591,6 +594,9 @@ internal class JvmCcidUsbTransport(
 
     override val rawDescriptors: ByteArray?
         get() = cachedRawDescriptors
+
+    override val deviceVersion: String?
+        get() = cachedDeviceVersion ?: super.deviceVersion
 
     override val hasInterruptEndpoint: Boolean
         get() = resolvedEndpoints?.interruptInAddress != null
@@ -768,6 +774,7 @@ internal class JvmCcidUsbTransport(
                     if (cfg != null && devDescBytes != null) devDescBytes + cfg else cfg
                 }
                 cachedRawDescriptors = rawDesc
+                cachedDeviceVersion = devDescBytes?.let { CcidUsbTransport.parseBcdDevice(it) }
 
                 val endpoints = if (rawDesc != null) {
                     CcidUsbTransport.findCcidInterfaceEndpoints(
@@ -829,6 +836,7 @@ internal class JvmCcidUsbTransport(
             devHandle = null
             ctx = null
             resolvedEndpoints = null
+            cachedDeviceVersion = null
 
             if (libusb != null && handle != null && ifaceId != null) {
                 try {
